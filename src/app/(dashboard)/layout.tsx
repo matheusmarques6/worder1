@@ -86,6 +86,7 @@ const navigation = [
 ]
 
 const analyticsNav = [
+  { name: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
   { name: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
   { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon },
   { name: 'Google Ads', href: '/analytics/google', icon: GoogleIcon },
