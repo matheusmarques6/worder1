@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
 import { getSupabaseClient } from '@/lib/api-utils';
 
 const SHOPIFY_API_VERSION = '2024-10';

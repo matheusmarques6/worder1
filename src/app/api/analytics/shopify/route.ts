@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const SHOPIFY_API_VERSION = '2024-10';
 
 // Helper to make Shopify REST API calls
@@ -94,7 +96,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Database not configured' });
     }
 
-    const { searchParams } = new URL(request.url);
+    const searchParams = request.nextUrl.searchParams;
     const period = searchParams.get('period') || '7d';
     const { start, end, prevStart, prevEnd } = getDateRange(period);
 
