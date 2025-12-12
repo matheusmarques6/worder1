@@ -110,7 +110,7 @@ export default function DashboardLayout({
   const [addStoreModalOpen, setAddStoreModalOpen] = useState(false)
   const pathname = usePathname()
   
-  const { stores, currentStore, setCurrentStore, addStore } = useStoreStore()
+  const { stores, currentStore, setStores, setCurrentStore, addStore } = useStoreStore()
 
   // Get store initials
   const getInitials = (name: string) => {
