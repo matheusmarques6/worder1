@@ -1,349 +1,397 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
-import { SupabaseClient } from '@supabase/supabase-js';
 
-let _supabase: SupabaseClient | null = null;
-function getDb(): SupabaseClient {
-  if (!_supabase) {
-    _supabase = getSupabaseClient();
-    if (!_supabase) throw new Error('Database not configured');
+const SHOPIFY_API_VERSION = '2024-10';
+
+// Helper to make Shopify REST API calls
+async function shopifyRest(shopDomain: string, accessToken: string, endpoint: string) {
+  const url = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/${endpoint}`;
+  const response = await fetch(url, {
+    headers: {
+      'X-Shopify-Access-Token': accessToken,
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Shopify API error: ${response.status}`);
   }
-  return _supabase;
+  
+  return response.json();
 }
 
-const supabase = new Proxy({} as SupabaseClient, {
-  get(_, prop) { return (getDb() as any)[prop]; }
-});
-
-function getDateRange(period: string): { startDate: Date; endDate: Date; prevStartDate: Date; prevEndDate: Date } {
-  const now = new Date();
-  now.setHours(23, 59, 59, 999);
+// Helper to make Shopify GraphQL API calls
+async function shopifyGraphQL(shopDomain: string, accessToken: string, query: string, variables?: any) {
+  const url = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'X-Shopify-Access-Token': accessToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query, variables }),
+  });
   
-  let startDate: Date;
-  let days: number;
+  if (!response.ok) {
+    throw new Error(`Shopify GraphQL error: ${response.status}`);
+  }
+  
+  return response.json();
+}
 
+// Get date range based on period
+function getDateRange(period: string): { start: string; end: string; prevStart: string; prevEnd: string } {
+  const now = new Date();
+  const end = now.toISOString().split('T')[0];
+  
+  let daysBack: number;
   switch (period) {
     case 'today':
-      startDate = new Date(now);
-      startDate.setHours(0, 0, 0, 0);
-      days = 1;
+      daysBack = 0;
       break;
     case 'yesterday':
-      startDate = new Date(now);
-      startDate.setDate(startDate.getDate() - 1);
-      startDate.setHours(0, 0, 0, 0);
-      const endYesterday = new Date(startDate);
-      endYesterday.setHours(23, 59, 59, 999);
-      const prevStart = new Date(startDate);
-      prevStart.setDate(prevStart.getDate() - 1);
-      return { 
-        startDate, 
-        endDate: endYesterday, 
-        prevStartDate: prevStart,
-        prevEndDate: new Date(startDate.getTime() - 1)
-      };
+      daysBack = 1;
+      break;
     case '7d':
-      startDate = new Date(now);
-      startDate.setDate(startDate.getDate() - 6);
-      startDate.setHours(0, 0, 0, 0);
-      days = 7;
+      daysBack = 6;
       break;
     case '30d':
-      startDate = new Date(now);
-      startDate.setDate(startDate.getDate() - 29);
-      startDate.setHours(0, 0, 0, 0);
-      days = 30;
+      daysBack = 29;
       break;
     case '90d':
-      startDate = new Date(now);
-      startDate.setDate(startDate.getDate() - 89);
-      startDate.setHours(0, 0, 0, 0);
-      days = 90;
+      daysBack = 89;
       break;
     default:
-      startDate = new Date(now);
-      startDate.setDate(startDate.getDate() - 6);
-      startDate.setHours(0, 0, 0, 0);
-      days = 7;
+      daysBack = 6;
   }
-
-  // Previous period
-  const prevEndDate = new Date(startDate.getTime() - 1);
+  
+  const startDate = new Date(now);
+  startDate.setDate(startDate.getDate() - daysBack);
+  const start = startDate.toISOString().split('T')[0];
+  
+  // Previous period for comparison
+  const prevEndDate = new Date(startDate);
+  prevEndDate.setDate(prevEndDate.getDate() - 1);
+  const prevEnd = prevEndDate.toISOString().split('T')[0];
+  
   const prevStartDate = new Date(prevEndDate);
-  prevStartDate.setDate(prevStartDate.getDate() - days + 1);
-  prevStartDate.setHours(0, 0, 0, 0);
-
-  return { startDate, endDate: now, prevStartDate, prevEndDate };
+  prevStartDate.setDate(prevStartDate.getDate() - daysBack);
+  const prevStart = prevStartDate.toISOString().split('T')[0];
+  
+  return { start, end, prevStart, prevEnd };
 }
 
+// Calculate percentage change
 function calcChange(current: number, previous: number): number {
   if (previous === 0) return current > 0 ? 100 : 0;
   return ((current - previous) / previous) * 100;
 }
 
-function formatDateLabel(date: Date): string {
-  return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-}
-
 export async function GET(request: NextRequest) {
-  const period = request.nextUrl.searchParams.get('period') || '7d';
-
   try {
-    const { startDate, endDate, prevStartDate, prevEndDate } = getDateRange(period);
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return NextResponse.json({ success: false, error: 'Database not configured' });
+    }
 
-    // Get stores
-    const { data: stores } = await supabase
+    const { searchParams } = new URL(request.url);
+    const period = searchParams.get('period') || '7d';
+    const { start, end, prevStart, prevEnd } = getDateRange(period);
+
+    // Get store credentials from database
+    const { data: stores, error: storesError } = await supabase
       .from('shopify_stores')
-      .select('id')
-      .eq('is_active', true);
+      .select('id, shop_domain, access_token, shop_name')
+      .eq('is_active', true)
+      .limit(1);
 
-    if (!stores || stores.length === 0) {
-      return NextResponse.json({
-        success: false,
+    if (storesError || !stores || stores.length === 0) {
+      return NextResponse.json({ 
+        success: false, 
         error: 'Nenhuma loja conectada',
+        needsConnection: true
       });
     }
 
-    const storeIds = stores.map(s => s.id);
+    const store = stores[0];
+    const { shop_domain, access_token } = store;
 
-    // Fetch current period orders
-    const { data: currentOrders } = await supabase
-      .from('shopify_orders')
-      .select('*')
-      .in('store_id', storeIds)
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString());
+    if (!access_token) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Token de acesso não encontrado. Reconecte a loja.',
+        needsConnection: true
+      });
+    }
 
-    // Fetch previous period orders
-    const { data: prevOrders } = await supabase
-      .from('shopify_orders')
-      .select('*')
-      .in('store_id', storeIds)
-      .gte('created_at', prevStartDate.toISOString())
-      .lte('created_at', prevEndDate.toISOString());
+    // ========================================
+    // FETCH ALL DATA FROM SHOPIFY API
+    // ========================================
+    
+    // 1. Get orders for current period
+    const ordersCurrentUrl = `orders.json?status=any&created_at_min=${start}T00:00:00Z&created_at_max=${end}T23:59:59Z&limit=250`;
+    const ordersCurrentData = await shopifyRest(shop_domain, access_token, ordersCurrentUrl);
+    const ordersCurrent = ordersCurrentData.orders || [];
 
-    const orders = currentOrders || [];
-    const previousOrders = prevOrders || [];
+    // 2. Get orders for previous period (for comparison)
+    const ordersPrevUrl = `orders.json?status=any&created_at_min=${prevStart}T00:00:00Z&created_at_max=${prevEnd}T23:59:59Z&limit=250`;
+    const ordersPrevData = await shopifyRest(shop_domain, access_token, ordersPrevUrl);
+    const ordersPrev = ordersPrevData.orders || [];
 
-    // ============================================
-    // CALCULATE CURRENT PERIOD METRICS
-    // ============================================
+    // 3. Get all customers
+    const customersData = await shopifyRest(shop_domain, access_token, 'customers.json?limit=250');
+    const customers = customersData.customers || [];
+
+    // 4. Get products
+    const productsData = await shopifyRest(shop_domain, access_token, 'products.json?limit=100');
+    const products = productsData.products || [];
+
+    // ========================================
+    // PROCESS CURRENT PERIOD DATA
+    // ========================================
+    
     let vendasBrutas = 0;
-    let descontos = 0;
-    let devolucoes = 0;
-    let cobrancasFrete = 0;
-    let tributos = 0;
+    let totalDescontos = 0;
+    let totalFrete = 0;
+    let totalTax = 0;
+    let totalRefunds = 0;
+    let pedidosPagos = 0;
     let pedidosProcessados = 0;
-    const customerIds = new Set<string>();
-    const returningCustomerIds = new Set<string>();
-    const productSales: Record<string, { nome: string; vendas: number; quantidade: number }> = {};
-    const salesByDay: Record<string, number> = {};
-    const salesByChannel: Record<string, number> = {};
+    
+    const productSalesMap: Record<string, { name: string; revenue: number; quantity: number }> = {};
+    const channelSalesMap: Record<string, number> = {};
+    const customerEmails: Record<string, number> = {};
+    const dailySalesMap: Record<string, number> = {};
+    const dailyAvgMap: Record<string, { total: number; count: number }> = {};
 
-    orders.forEach(order => {
+    ordersCurrent.forEach((order: any) => {
       const totalPrice = parseFloat(order.total_price || '0');
-      const totalDiscount = parseFloat(order.total_discounts || '0');
-      const totalTax = parseFloat(order.total_tax || '0');
-      const totalShipping = parseFloat(order.total_shipping || '0');
-
-      // Vendas brutas (todos os pedidos, não só pagos)
-      vendasBrutas += totalPrice + totalDiscount;
-      descontos += totalDiscount;
-      tributos += totalTax;
-      cobrancasFrete += totalShipping;
-
-      // Devoluções
-      if (order.financial_status === 'refunded' || order.financial_status === 'partially_refunded') {
-        devolucoes += totalPrice;
+      const discounts = parseFloat(order.total_discounts || '0');
+      const shipping = parseFloat(order.total_shipping_price_set?.shop_money?.amount || '0');
+      const tax = parseFloat(order.total_tax || '0');
+      
+      // Count paid orders
+      if (['paid', 'partially_paid'].includes(order.financial_status)) {
+        vendasBrutas += totalPrice;
+        pedidosPagos++;
       }
-
-      // Pedidos processados (fulfilled)
+      
+      totalDescontos += discounts;
+      totalFrete += shipping;
+      totalTax += tax;
+      
+      // Fulfilled = processed
       if (order.fulfillment_status === 'fulfilled') {
         pedidosProcessados++;
       }
-
-      // Clientes
-      if (order.customer_id) {
-        if (customerIds.has(order.customer_id)) {
-          returningCustomerIds.add(order.customer_id);
-        }
-        customerIds.add(order.customer_id);
+      
+      // Refunds
+      if (order.refunds?.length > 0) {
+        order.refunds.forEach((refund: any) => {
+          refund.refund_line_items?.forEach((item: any) => {
+            totalRefunds += parseFloat(item.subtotal || '0');
+          });
+        });
       }
-
-      // Vendas por produto
-      const lineItems = order.line_items || [];
-      lineItems.forEach((item: any) => {
-        const productName = item.title || item.name || 'Produto sem nome';
-        const productId = item.product_id?.toString() || productName;
-        if (!productSales[productId]) {
-          productSales[productId] = { nome: productName, vendas: 0, quantidade: 0 };
+      
+      // Product sales
+      (order.line_items || []).forEach((item: any) => {
+        const name = item.title || 'Unknown';
+        if (!productSalesMap[name]) {
+          productSalesMap[name] = { name, revenue: 0, quantity: 0 };
         }
-        productSales[productId].vendas += parseFloat(item.price || '0') * (item.quantity || 1);
-        productSales[productId].quantidade += item.quantity || 1;
+        productSalesMap[name].revenue += parseFloat(item.price || '0') * (item.quantity || 1);
+        productSalesMap[name].quantity += item.quantity || 1;
       });
-
-      // Vendas por dia
-      const orderDate = new Date(order.created_at);
-      const dayKey = formatDateLabel(orderDate);
-      salesByDay[dayKey] = (salesByDay[dayKey] || 0) + totalPrice;
-
-      // Vendas por canal (usando a loja como canal ou source_name se disponível)
-      const channel = order.source_name || 'Online Store';
-      salesByChannel[channel] = (salesByChannel[channel] || 0) + totalPrice;
+      
+      // Channel sales
+      const channel = order.source_name || 'web';
+      channelSalesMap[channel] = (channelSalesMap[channel] || 0) + totalPrice;
+      
+      // Customer tracking for recurrence
+      const email = order.email || order.customer?.email;
+      if (email) {
+        customerEmails[email] = (customerEmails[email] || 0) + 1;
+      }
+      
+      // Daily aggregation
+      const date = order.created_at?.split('T')[0];
+      if (date) {
+        dailySalesMap[date] = (dailySalesMap[date] || 0) + totalPrice;
+        if (!dailyAvgMap[date]) {
+          dailyAvgMap[date] = { total: 0, count: 0 };
+        }
+        dailyAvgMap[date].total += totalPrice;
+        dailyAvgMap[date].count += 1;
+      }
     });
 
-    // ============================================
-    // CALCULATE PREVIOUS PERIOD METRICS
-    // ============================================
-    let prevVendasBrutas = 0;
-    let prevDescontos = 0;
-    let prevDevolucoes = 0;
-    let prevCobrancasFrete = 0;
-    let prevTributos = 0;
-    let prevPedidosProcessados = 0;
-    const prevCustomerIds = new Set<string>();
-    const prevReturningCustomerIds = new Set<string>();
-    const prevSalesByDay: Record<string, number> = {};
-    const prevProductSales: Record<string, number> = {};
+    // ========================================
+    // PROCESS PREVIOUS PERIOD DATA
+    // ========================================
+    
+    let vendasBrutasPrev = 0;
+    let totalDescontosPrev = 0;
+    let totalFretePrev = 0;
+    let totalRefundsPrev = 0;
+    let pedidosPagosPrev = 0;
+    let pedidosProcessadosPrev = 0;
+    const customerEmailsPrev: Record<string, number> = {};
 
-    previousOrders.forEach(order => {
+    ordersPrev.forEach((order: any) => {
       const totalPrice = parseFloat(order.total_price || '0');
-      const totalDiscount = parseFloat(order.total_discounts || '0');
-      const totalTax = parseFloat(order.total_tax || '0');
-      const totalShipping = parseFloat(order.total_shipping || '0');
-
-      prevVendasBrutas += totalPrice + totalDiscount;
-      prevDescontos += totalDiscount;
-      prevTributos += totalTax;
-      prevCobrancasFrete += totalShipping;
-
-      if (order.financial_status === 'refunded' || order.financial_status === 'partially_refunded') {
-        prevDevolucoes += totalPrice;
+      
+      if (['paid', 'partially_paid'].includes(order.financial_status)) {
+        vendasBrutasPrev += totalPrice;
+        pedidosPagosPrev++;
       }
-
+      
+      totalDescontosPrev += parseFloat(order.total_discounts || '0');
+      totalFretePrev += parseFloat(order.total_shipping_price_set?.shop_money?.amount || '0');
+      
       if (order.fulfillment_status === 'fulfilled') {
-        prevPedidosProcessados++;
+        pedidosProcessadosPrev++;
       }
-
-      if (order.customer_id) {
-        if (prevCustomerIds.has(order.customer_id)) {
-          prevReturningCustomerIds.add(order.customer_id);
-        }
-        prevCustomerIds.add(order.customer_id);
+      
+      if (order.refunds?.length > 0) {
+        order.refunds.forEach((refund: any) => {
+          refund.refund_line_items?.forEach((item: any) => {
+            totalRefundsPrev += parseFloat(item.subtotal || '0');
+          });
+        });
       }
-
-      // Vendas por dia (para comparação no gráfico)
-      const orderDate = new Date(order.created_at);
-      const dayKey = formatDateLabel(orderDate);
-      prevSalesByDay[dayKey] = (prevSalesByDay[dayKey] || 0) + totalPrice;
-
-      // Vendas por produto anterior
-      const lineItems = order.line_items || [];
-      lineItems.forEach((item: any) => {
-        const productId = item.product_id?.toString() || item.title || 'unknown';
-        prevProductSales[productId] = (prevProductSales[productId] || 0) + parseFloat(item.price || '0') * (item.quantity || 1);
-      });
+      
+      const email = order.email || order.customer?.email;
+      if (email) {
+        customerEmailsPrev[email] = (customerEmailsPrev[email] || 0) + 1;
+      }
     });
 
-    // ============================================
-    // BUILD RESPONSE
-    // ============================================
-    const vendasLiquidas = vendasBrutas - descontos - devolucoes;
-    const prevVendasLiquidas = prevVendasBrutas - prevDescontos - prevDevolucoes;
-    const totalVendas = vendasLiquidas + cobrancasFrete;
-    const prevTotalVendas = prevVendasLiquidas + prevCobrancasFrete;
+    // ========================================
+    // CALCULATE METRICS
+    // ========================================
+    
+    // Recurring customers
+    const totalCustomers = Object.keys(customerEmails).length;
+    const recurringCustomers = Object.values(customerEmails).filter(c => c > 1).length;
+    const taxaClientesRecorrentes = totalCustomers > 0 ? (recurringCustomers / totalCustomers) * 100 : 0;
 
-    const taxaClientesRecorrentes = customerIds.size > 0 
-      ? (returningCustomerIds.size / customerIds.size) * 100 
-      : 0;
-    const prevTaxaClientesRecorrentes = prevCustomerIds.size > 0 
-      ? (prevReturningCustomerIds.size / prevCustomerIds.size) * 100 
-      : 0;
+    const totalCustomersPrev = Object.keys(customerEmailsPrev).length;
+    const recurringCustomersPrev = Object.values(customerEmailsPrev).filter(c => c > 1).length;
+    const taxaClientesRecorrentesPrev = totalCustomersPrev > 0 ? (recurringCustomersPrev / totalCustomersPrev) * 100 : 0;
 
-    const ticketMedio = orders.length > 0 ? totalVendas / orders.length : 0;
-    const prevTicketMedio = previousOrders.length > 0 ? prevTotalVendas / previousOrders.length : 0;
+    // Calculated values
+    const vendasLiquidas = vendasBrutas - totalDescontos - totalRefunds;
+    const vendasLiquidasPrev = vendasBrutasPrev - totalDescontosPrev - totalRefundsPrev;
+    
+    const valorMedioPedido = pedidosPagos > 0 ? vendasBrutas / pedidosPagos : 0;
+    const valorMedioPedidoPrev = pedidosPagosPrev > 0 ? vendasBrutasPrev / pedidosPagosPrev : 0;
 
-    // Build sales by day array for chart
-    const dayMs = 24 * 60 * 60 * 1000;
-    const vendasPorDia = [];
-    for (let d = new Date(startDate); d <= endDate; d = new Date(d.getTime() + dayMs)) {
-      const dayKey = formatDateLabel(d);
-      vendasPorDia.push({
-        date: dayKey,
-        vendas: salesByDay[dayKey] || 0,
-        anterior: prevSalesByDay[dayKey] || 0,
-      });
-    }
+    // Top products
+    const vendasPorProduto = Object.values(productSalesMap)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10)
+      .map(p => ({
+        nome: p.name,
+        vendas: p.revenue,
+        quantidade: p.quantity,
+      }));
 
-    // Build products array
-    const vendasPorProduto = Object.entries(productSales)
-      .map(([id, data]) => ({
-        nome: data.nome,
-        vendas: data.vendas,
-        quantidade: data.quantidade,
-        change: calcChange(data.vendas, prevProductSales[id] || 0),
-      }))
-      .sort((a, b) => b.vendas - a.vendas)
-      .slice(0, 10);
-
-    // Build channels array
-    const vendasPorCanal = Object.entries(salesByChannel)
+    // Channel breakdown
+    const vendasPorCanal = Object.entries(channelSalesMap)
       .map(([nome, vendas]) => ({ nome, vendas }))
       .sort((a, b) => b.vendas - a.vendas);
 
+    // Chart data - fill in missing days
+    const chartData: Array<{ date: string; value: number; label: string }> = [];
+    const currentDate = new Date(start);
+    const endDate = new Date(end);
+    
+    while (currentDate <= endDate) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      chartData.push({
+        date: dateStr,
+        value: dailySalesMap[dateStr] || 0,
+        label: currentDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Average order value chart
+    const valorMedioChartData = chartData.map(d => ({
+      date: d.date,
+      label: d.label,
+      value: dailyAvgMap[d.date] ? dailyAvgMap[d.date].total / dailyAvgMap[d.date].count : 0,
+    }));
+
+    // ========================================
+    // RETURN RESPONSE
+    // ========================================
+    
     return NextResponse.json({
       success: true,
       data: {
         // Main KPIs
         vendasBrutas,
-        vendasBrutasChange: calcChange(vendasBrutas, prevVendasBrutas),
+        vendasBrutasChange: calcChange(vendasBrutas, vendasBrutasPrev),
+        
         taxaClientesRecorrentes,
-        taxaClientesRecorrentesChange: taxaClientesRecorrentes - prevTaxaClientesRecorrentes,
+        taxaClientesRecorrentesChange: calcChange(taxaClientesRecorrentes, taxaClientesRecorrentesPrev),
+        
         pedidosProcessados,
-        pedidosProcessadosChange: calcChange(pedidosProcessados, prevPedidosProcessados),
-        pedidos: orders.length,
-        pedidosChange: calcChange(orders.length, previousOrders.length),
-
+        pedidosProcessadosChange: calcChange(pedidosProcessados, pedidosProcessadosPrev),
+        
+        pedidos: ordersCurrent.length,
+        pedidosChange: calcChange(ordersCurrent.length, ordersPrev.length),
+        
         // Detalhamento
-        descontos,
-        descontosChange: calcChange(descontos, prevDescontos),
-        devolucoes,
-        devolucoesChange: calcChange(devolucoes, prevDevolucoes),
+        totalDescontos,
+        descontosChange: calcChange(totalDescontos, totalDescontosPrev),
+        
+        totalDevolucoes: totalRefunds,
+        devolucoesChange: calcChange(totalRefunds, totalRefundsPrev),
+        
         vendasLiquidas,
-        vendasLiquidasChange: calcChange(vendasLiquidas, prevVendasLiquidas),
-        cobrancasFrete,
-        cobrancasFreteChange: calcChange(cobrancasFrete, prevCobrancasFrete),
-        tributos,
-        tributosChange: calcChange(tributos, prevTributos),
-        totalVendas,
-        totalVendasChange: calcChange(totalVendas, prevTotalVendas),
-
-        // Ticket médio
-        ticketMedio,
-        ticketMedioChange: calcChange(ticketMedio, prevTicketMedio),
-
-        // Clientes
-        clientesNovos: customerIds.size - returningCustomerIds.size,
-        clientesRecorrentes: returningCustomerIds.size,
-
-        // Dados para gráficos
-        vendasPorDia,
-        vendasPorProduto,
+        vendasLiquidasChange: calcChange(vendasLiquidas, vendasLiquidasPrev),
+        
+        totalFrete,
+        freteChange: calcChange(totalFrete, totalFretePrev),
+        
+        totalTributos: totalTax,
+        tributosChange: 0,
+        
+        // Valor médio
+        valorMedioPedido,
+        valorMedioPedidoChange: calcChange(valorMedioPedido, valorMedioPedidoPrev),
+        
+        // Charts
+        chartData,
+        valorMedioChartData,
+        
+        // Breakdowns
         vendasPorCanal,
-      },
-      period: {
-        start: startDate.toISOString(),
-        end: endDate.toISOString(),
-        prevStart: prevStartDate.toISOString(),
-        prevEnd: prevEndDate.toISOString(),
+        vendasPorProduto,
+        
+        // Period info
+        periodo: {
+          inicio: start,
+          fim: end,
+          label: period,
+        },
+        
+        // Store info
+        loja: {
+          nome: store.shop_name,
+          dominio: store.shop_domain,
+        },
       },
     });
 
   } catch (error: any) {
-    console.error('Shopify Analytics error:', error);
-    return NextResponse.json({
-      success: false,
-      error: error.message,
-    }, { status: 500 });
+    console.error('Shopify Analytics API error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 }

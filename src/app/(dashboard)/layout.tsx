@@ -138,6 +138,31 @@ export default function DashboardLayout({
     setMobileOpen(false)
   }, [pathname])
 
+  // Load stores from database on mount
+  useEffect(() => {
+    const loadStores = async () => {
+      try {
+        const response = await fetch('/api/stores')
+        const result = await response.json()
+        if (result.success && result.stores?.length > 0) {
+          const formattedStores = result.stores.map((s: any) => ({
+            id: s.id,
+            name: s.shop_name || s.shop_domain,
+            domain: s.shop_domain,
+            isActive: s.is_active,
+          }))
+          setStores(formattedStores)
+          if (!currentStore && formattedStores.length > 0) {
+            setCurrentStore(formattedStores[0])
+          }
+        }
+      } catch (error) {
+        console.error('Error loading stores:', error)
+      }
+    }
+    loadStores()
+  }, [])
+
   // Listen for openAddStoreModal event from other components
   useEffect(() => {
     const handleOpenAddStoreModal = () => {

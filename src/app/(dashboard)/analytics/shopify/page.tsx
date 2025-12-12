@@ -173,7 +173,9 @@ export default function ShopifyAnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState('7d')
-  const [data, setData] = useState<ShopifyAnalytics | null>(null)
+  const [data, setData] = useState<any>(null)
+  const [hasStore, setHasStore] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const periods = [
     { id: 'today', label: 'Hoje' },
@@ -184,15 +186,23 @@ export default function ShopifyAnalyticsPage() {
   ]
 
   const fetchData = async () => {
+    setError(null)
     try {
+      // Fetch data directly from Shopify API
       const response = await fetch(`/api/analytics/shopify?period=${selectedPeriod}`)
       const result = await response.json()
       
       if (result.success) {
+        setHasStore(true)
         setData(result.data)
+      } else if (result.needsConnection) {
+        setHasStore(false)
+      } else {
+        setError(result.error || 'Erro ao carregar dados')
       }
-    } catch (error) {
-      console.error('Error fetching Shopify analytics:', error)
+    } catch (err: any) {
+      console.error('Error fetching Shopify analytics:', err)
+      setError('Erro de conexão')
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
@@ -208,29 +218,6 @@ export default function ShopifyAnalyticsPage() {
     fetchData()
   }
 
-  const handleSync = async () => {
-    setIsRefreshing(true)
-    try {
-      const response = await fetch('/api/shopify/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const result = await response.json()
-      if (result.success) {
-        alert(`✅ ${result.message || 'Sincronização concluída!'}`)
-        fetchData()
-      } else {
-        alert(`❌ Erro: ${result.error || 'Erro desconhecido'}`)
-      }
-    } catch (error: any) {
-      console.error('Sync error:', error)
-      alert(`❌ Erro de conexão: ${error.message}`)
-    } finally {
-      setIsRefreshing(false)
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
@@ -239,13 +226,48 @@ export default function ShopifyAnalyticsPage() {
     )
   }
 
+  if (!hasStore) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center">
+        <div className="w-16 h-16 bg-dark-800 rounded-2xl flex items-center justify-center mb-4">
+          <ShoppingCart className="w-8 h-8 text-dark-400" />
+        </div>
+        <h2 className="text-xl font-semibold text-white mb-2">Nenhuma loja conectada</h2>
+        <p className="text-dark-400 mb-6 max-w-md">
+          Conecte sua loja Shopify para começar a ver seus dados de vendas em tempo real.
+        </p>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('openAddStoreModal'))}
+          className="flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-medium transition-colors"
+        >
+          <span className="text-lg">+</span>
+          Conectar Loja Shopify
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
+      {/* Error Banner */}
+      {error && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400">
+          {error}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Shopify Analytics</h1>
-          <p className="text-dark-400 mt-1">Análise detalhada das vendas da sua loja</p>
+          <p className="text-dark-400 mt-1">
+            Análise detalhada das vendas da sua loja
+            {data?.loja?.nome && (
+              <span className="ml-2 text-xs text-primary-400">
+                • {data.loja.nome}
+              </span>
+            )}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -266,14 +288,14 @@ export default function ShopifyAnalyticsPage() {
             ))}
           </div>
 
-          {/* Sync Button */}
+          {/* Refresh Button */}
           <button
-            onClick={handleSync}
+            onClick={handleRefresh}
             disabled={isRefreshing}
             className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Sincronizar
+            {isRefreshing ? 'Atualizando...' : 'Atualizar'}
           </button>
         </div>
       </div>
@@ -389,13 +411,13 @@ export default function ShopifyAnalyticsPage() {
           
           <div className="space-y-1">
             <DetailRow label="Vendas brutas" value={data?.vendasBrutas || 0} change={data?.vendasBrutasChange} />
-            <DetailRow label="Descontos" value={data?.descontos || 0} change={data?.descontosChange} isNegative />
-            <DetailRow label="Devoluções" value={data?.devolucoes || 0} change={data?.devolucoesChange} isNegative />
+            <DetailRow label="Descontos" value={data?.totalDescontos || 0} change={data?.descontosChange} isNegative />
+            <DetailRow label="Devoluções" value={data?.totalDevolucoes || 0} change={data?.devolucoesChange} isNegative />
             <DetailRow label="Vendas líquidas" value={data?.vendasLiquidas || 0} change={data?.vendasLiquidasChange} />
-            <DetailRow label="Cobranças de frete" value={data?.cobrancasFrete || 0} change={data?.cobrancasFreteChange} />
-            <DetailRow label="Tributos" value={data?.tributos || 0} change={data?.tributosChange} />
+            <DetailRow label="Cobranças de frete" value={data?.totalFrete || 0} change={data?.freteChange} />
+            <DetailRow label="Tributos" value={data?.totalTributos || 0} change={data?.tributosChange} />
             <div className="pt-2 mt-2 border-t border-dark-600">
-              <DetailRow label="Total de vendas" value={data?.totalVendas || 0} change={data?.totalVendasChange} />
+              <DetailRow label="Total de vendas" value={data?.vendasBrutas || 0} change={data?.vendasBrutasChange} />
             </div>
           </div>
         </motion.div>
@@ -461,10 +483,10 @@ export default function ShopifyAnalyticsPage() {
         >
           <h3 className="text-lg font-semibold text-white mb-2">Valor médio do pedido</h3>
           <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-bold text-white">{formatCurrency(data?.ticketMedio || 0)}</p>
-            {data?.ticketMedioChange !== undefined && (
-              <span className={`text-sm ${data.ticketMedioChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {formatPercent(data.ticketMedioChange)}
+            <p className="text-3xl font-bold text-white">{formatCurrency(data?.valorMedioPedido || 0)}</p>
+            {data?.valorMedioPedidoChange !== undefined && (
+              <span className={`text-sm ${data.valorMedioPedidoChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {formatPercent(data.valorMedioPedidoChange)}
               </span>
             )}
           </div>
