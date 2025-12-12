@@ -14,7 +14,8 @@ async function fetchAllOrders(shopDomain: string, accessToken: string): Promise<
   const maxPages = 10; // Safety limit - 2500 orders max
   
   while (nextPageUrl && pageCount < maxPages) {
-    const response = await fetch(nextPageUrl, {
+    const url: string = nextPageUrl;
+    const response: Response = await fetch(url, {
       headers: {
         'X-Shopify-Access-Token': accessToken,
         'Content-Type': 'application/json',
@@ -47,7 +48,7 @@ async function fetchAllOrders(shopDomain: string, accessToken: string): Promise<
 
 // Fetch customers
 async function fetchCustomers(shopDomain: string, accessToken: string): Promise<any[]> {
-  const response = await fetch(
+  const response: Response = await fetch(
     `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250`,
     {
       headers: {

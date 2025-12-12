@@ -4,9 +4,9 @@ import { getSupabaseClient } from '@/lib/api-utils';
 const SHOPIFY_API_VERSION = '2024-10';
 
 // Helper to make Shopify REST API calls
-async function shopifyRest(shopDomain: string, accessToken: string, endpoint: string) {
+async function shopifyRest(shopDomain: string, accessToken: string, endpoint: string): Promise<any> {
   const url = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/${endpoint}`;
-  const response = await fetch(url, {
+  const response: Response = await fetch(url, {
     headers: {
       'X-Shopify-Access-Token': accessToken,
       'Content-Type': 'application/json',
@@ -21,9 +21,9 @@ async function shopifyRest(shopDomain: string, accessToken: string, endpoint: st
 }
 
 // Helper to make Shopify GraphQL API calls
-async function shopifyGraphQL(shopDomain: string, accessToken: string, query: string, variables?: any) {
+async function shopifyGraphQL(shopDomain: string, accessToken: string, query: string, variables?: any): Promise<any> {
   const url = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
-  const response = await fetch(url, {
+  const response: Response = await fetch(url, {
     method: 'POST',
     headers: {
       'X-Shopify-Access-Token': accessToken,
