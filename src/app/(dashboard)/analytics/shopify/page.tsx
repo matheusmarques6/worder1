@@ -218,10 +218,14 @@ export default function ShopifyAnalyticsPage() {
       })
       const result = await response.json()
       if (result.success) {
+        alert(`✅ ${result.message || 'Sincronização concluída!'}`)
         fetchData()
+      } else {
+        alert(`❌ Erro: ${result.error || 'Erro desconhecido'}`)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Sync error:', error)
+      alert(`❌ Erro de conexão: ${error.message}`)
     } finally {
       setIsRefreshing(false)
     }
