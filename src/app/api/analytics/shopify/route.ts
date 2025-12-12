@@ -155,6 +155,7 @@ async function fetchCustomersBatch(
 }
 
 // ===== Get Date Range =====
+// Shopify "Últimos 7 dias" = hoje + 7 dias anteriores = 8 dias no total
 function getDateRange(period: string): { startDate: string; endDate: string; startISO: string; endISO: string } {
   const now = new Date();
   const end = new Date(now);
@@ -170,16 +171,16 @@ function getDateRange(period: string): { startDate: string; endDate: string; sta
       end.setDate(end.getDate() - 1);
       break;
     case '7d':
-      daysBack = 6;
+      daysBack = 7; // 8 dias total (hoje + 7 anteriores) - igual ao Shopify
       break;
     case '30d':
-      daysBack = 29;
+      daysBack = 30; // 31 dias total
       break;
     case '90d':
-      daysBack = 89;
+      daysBack = 90; // 91 dias total
       break;
     default:
-      daysBack = 6;
+      daysBack = 7;
   }
 
   const start = new Date(period === 'yesterday' ? end : now);
@@ -332,15 +333,15 @@ export async function GET(request: NextRequest) {
       if (key.startsWith('id:')) {
         const id = Number(key.slice(3));
         const customer = customerMap.get(id);
-        const ocLifetime = customer ? Number(customer.orders_count || 0) : 0;
+        const ocLifetime = customer ? Number(customer.orders_count || 0) : qtyInPeriod;
 
         let isReturning = false;
 
+        // Cliente é recorrente se já comprou antes deste período
         if (ocLifetime > qtyInPeriod) {
           isReturning = true;
         } else if (ocLifetime === qtyInPeriod && qtyInPeriod >= 2) {
-          isReturning = true;
-        } else if (qtyInPeriod >= 2 && ocLifetime >= 2) {
+          // Todos os pedidos do cliente são neste período, mas fez 2+
           isReturning = true;
         }
 
@@ -350,7 +351,7 @@ export async function GET(request: NextRequest) {
           firstTimeKeys.add(key);
         }
       } else {
-        // Email only - if 2+ orders in period, consider returning
+        // Email only (guest checkout) - se comprou 2+ vezes no período
         if (qtyInPeriod >= 2) {
           returningKeys.add(key);
         } else {
@@ -365,6 +366,8 @@ export async function GET(request: NextRequest) {
     const taxaClientesRecorrentes = denomRec > 0 
       ? Number(((clientesRecorrentes / denomRec) * 100).toFixed(2)) 
       : 0;
+
+    console.log(`Customers: total=${clientesTotalPeriodo}, returning=${clientesRecorrentes}, firstTime=${clientesPrimeiraVez}, rate=${taxaClientesRecorrentes}%`);
 
     // ========================================
     // 6. CALCULATE SALES KPIs
@@ -396,9 +399,22 @@ export async function GET(request: NextRequest) {
       vendasBrutas += toNum(o.total_line_items_price);
       descontos += toNum(o.total_discounts || 0);
 
-      // Channel tracking
-      const channel = o.source_name || 'web';
-      channelMap.set(channel, (channelMap.get(channel) || 0) + toNum(o.total_price || 0));
+      // Channel tracking - usar nome legível
+      let channelName = o.source_name || 'web';
+      // Mapear nomes de canais conhecidos
+      if (channelName === 'shopify_draft_order') {
+        channelName = 'Draft Orders';
+      } else if (channelName === 'web') {
+        channelName = 'Online Store';
+      } else if (channelName === 'pos') {
+        channelName = 'POS';
+      } else if (/^\d+$/.test(channelName)) {
+        // Se for apenas números (ID de app), tentar usar outro campo
+        channelName = o.channel_information?.channel_definition?.handle || 
+                      o.processing_method || 
+                      `App (${channelName.substring(0, 8)}...)`;
+      }
+      channelMap.set(channelName, (channelMap.get(channelName) || 0) + toNum(o.total_price || 0));
 
       // Products
       if (Array.isArray(o.line_items) && !o.cancelled_at) {
@@ -592,6 +608,7 @@ export async function GET(request: NextRequest) {
         clientesTotalPeriodo,
         clientesRecorrentes,
         clientesPrimeiraVez,
+        clientesNovos: clientesPrimeiraVez, // Alias para o frontend
 
         // Period info
         periodo: {
