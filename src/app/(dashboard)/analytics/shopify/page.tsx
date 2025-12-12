@@ -355,7 +355,7 @@ export default function ShopifyAnalyticsPage() {
 
           <div className="h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data?.vendasPorDia || []}>
+              <AreaChart data={data?.chartData || []}>
                 <defs>
                   <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -367,8 +367,8 @@ export default function ShopifyAnalyticsPage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
-                <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(v) => `R$ ${(v/1000).toFixed(0)}k`} />
+                <XAxis dataKey="label" stroke="#6b7280" fontSize={12} />
+                <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(v: number) => `R$ ${(v/1000).toFixed(0)}k`} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#1f2937',
@@ -379,22 +379,12 @@ export default function ShopifyAnalyticsPage() {
                 />
                 <Area
                   type="monotone"
-                  dataKey="vendas"
+                  dataKey="value"
                   stroke="#3b82f6"
                   strokeWidth={2}
                   fillOpacity={1}
                   fill="url(#colorVendas)"
-                  name="Período atual"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="anterior"
-                  stroke="#22c55e"
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  fillOpacity={1}
-                  fill="url(#colorAnterior)"
-                  name="Período anterior"
+                  name="Vendas"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -446,7 +436,7 @@ export default function ShopifyAnalyticsPage() {
                   dataKey="vendas"
                   nameKey="nome"
                 >
-                  {(data?.vendasPorCanal || []).map((entry, index) => (
+                  {(data?.vendasPorCanal || []).map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -463,7 +453,7 @@ export default function ShopifyAnalyticsPage() {
           </div>
 
           <div className="mt-4 space-y-2">
-            {(data?.vendasPorCanal || []).map((canal, index) => (
+            {(data?.vendasPorCanal || []).map((canal: any, index: number) => (
               <div key={canal.nome} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
@@ -512,7 +502,7 @@ export default function ShopifyAnalyticsPage() {
           <h3 className="text-lg font-semibold text-white mb-4">Total de vendas por produto</h3>
           
           <div className="space-y-3">
-            {(data?.vendasPorProduto || []).slice(0, 5).map((produto, index) => (
+            {(data?.vendasPorProduto || []).slice(0, 5).map((produto: any, index: number) => (
               <div key={produto.nome} className="flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-white truncate">{produto.nome}</p>
