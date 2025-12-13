@@ -332,7 +332,7 @@ export default function EmailAnalyticsPage() {
     await fetchData()
   }
 
-  // Not connected state
+  // Not connected state - show better UI with connection option
   if (!isLoading && data && !data.connected) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
@@ -341,12 +341,53 @@ export default function EmailAnalyticsPage() {
           <p className="text-dark-400">Métricas detalhadas das suas campanhas de email marketing</p>
         </div>
         
-        <EmptyState
-          title="Klaviyo não conectado"
-          description="Conecte sua conta do Klaviyo para ver as métricas de email marketing em tempo real."
-          actionLabel="Conectar Klaviyo"
-          onAction={() => window.location.href = '/settings?tab=integrations'}
-        />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center justify-center py-16 px-8 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+        >
+          {/* Klaviyo Icon */}
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#28c76f]/20 to-[#28c76f]/10 flex items-center justify-center mb-6 border border-[#28c76f]/30">
+            <span className="text-[#28c76f] font-bold text-3xl">K</span>
+          </div>
+          
+          <h3 className="text-xl font-semibold text-white mb-2">Conecte seu Klaviyo</h3>
+          <p className="text-dark-400 text-center max-w-md mb-8">
+            Para visualizar métricas de campanhas, flows, taxa de abertura, cliques e receita gerada por email marketing, conecte sua conta do Klaviyo.
+          </p>
+          
+          {/* Features list */}
+          <div className="grid grid-cols-2 gap-4 mb-8 text-sm">
+            <div className="flex items-center gap-2 text-dark-300">
+              <Eye className="w-4 h-4 text-blue-400" />
+              Taxa de Abertura
+            </div>
+            <div className="flex items-center gap-2 text-dark-300">
+              <MousePointer className="w-4 h-4 text-green-400" />
+              Taxa de Clique
+            </div>
+            <div className="flex items-center gap-2 text-dark-300">
+              <DollarSign className="w-4 h-4 text-primary-400" />
+              Receita por Email
+            </div>
+            <div className="flex items-center gap-2 text-dark-300">
+              <Zap className="w-4 h-4 text-purple-400" />
+              Automações e Flows
+            </div>
+          </div>
+
+          <button
+            onClick={() => window.location.href = '/settings?tab=integrations'}
+            className="flex items-center gap-2 px-6 py-3 bg-[#28c76f] hover:bg-[#22a85c] text-white rounded-xl font-medium transition-colors"
+          >
+            <LinkIcon className="w-4 h-4" />
+            Conectar Klaviyo
+          </button>
+          
+          <p className="text-xs text-dark-500 mt-4">
+            Você será redirecionado para a página de integrações
+          </p>
+        </motion.div>
       </div>
     )
   }

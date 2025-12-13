@@ -23,45 +23,50 @@ export async function GET(request: NextRequest) {
       .select('id, shop_name, shop_domain, is_active, total_orders, total_customers, total_products, total_revenue, last_sync_at, created_at')
       .eq('is_active', true);
 
-    // Check Klaviyo
-    const { data: klaviyoAccount, error: klaviyoError } = await supabase
+    // Check Klaviyo - using maybeSingle to avoid error when no record exists
+    const { data: klaviyoAccounts, error: klaviyoError } = await supabase
       .from('klaviyo_accounts')
       .select('id, account_name, is_active, last_sync_at, total_profiles, total_campaigns, total_flows')
       .eq('is_active', true)
-      .limit(1)
-      .single();
+      .limit(1);
+    
+    const klaviyoAccount = klaviyoAccounts && klaviyoAccounts.length > 0 ? klaviyoAccounts[0] : null;
 
-    // Check Meta (Facebook)
-    const { data: metaAccount } = await supabase
+    // Check Meta (Facebook) - using array query to avoid error
+    const { data: metaAccounts } = await supabase
       .from('meta_ad_accounts')
       .select('id, account_name, is_active, last_sync_at')
       .eq('is_active', true)
-      .limit(1)
-      .single();
+      .limit(1);
+    
+    const metaAccount = metaAccounts && metaAccounts.length > 0 ? metaAccounts[0] : null;
 
-    // Check Google
-    const { data: googleAccount } = await supabase
+    // Check Google - using array query to avoid error
+    const { data: googleAccounts } = await supabase
       .from('google_ad_accounts')
       .select('id, account_name, is_active, last_sync_at')
       .eq('is_active', true)
-      .limit(1)
-      .single();
+      .limit(1);
+    
+    const googleAccount = googleAccounts && googleAccounts.length > 0 ? googleAccounts[0] : null;
 
-    // Check TikTok
-    const { data: tiktokAccount } = await supabase
+    // Check TikTok - using array query to avoid error
+    const { data: tiktokAccounts } = await supabase
       .from('tiktok_ad_accounts')
       .select('id, advertiser_name, is_active, last_sync_at')
       .eq('is_active', true)
-      .limit(1)
-      .single();
+      .limit(1);
+    
+    const tiktokAccount = tiktokAccounts && tiktokAccounts.length > 0 ? tiktokAccounts[0] : null;
 
-    // Check WhatsApp
-    const { data: whatsappAccount } = await supabase
+    // Check WhatsApp - using array query to avoid error
+    const { data: whatsappAccounts } = await supabase
       .from('whatsapp_accounts')
       .select('id, phone_number, is_active, created_at')
       .eq('is_active', true)
-      .limit(1)
-      .single();
+      .limit(1);
+    
+    const whatsappAccount = whatsappAccounts && whatsappAccounts.length > 0 ? whatsappAccounts[0] : null;
 
     // Format last sync time
     const formatLastSync = (dateStr: string | null) => {

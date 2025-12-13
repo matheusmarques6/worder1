@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Settings,
@@ -294,7 +295,10 @@ const KlaviyoConfigModal = ({
 };
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('integrations');
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
+  
+  const [activeTab, setActiveTab] = useState(tabFromUrl || 'integrations');
   const [isLoading, setIsLoading] = useState(true);
   const [loadingIntegration, setLoadingIntegration] = useState<string | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
@@ -303,6 +307,13 @@ export default function SettingsPage() {
   const [apiKey] = useState('worder_sk_live_xxxxxxxxxxxxxxxxxxxxx');
   
   const { stores } = useStoreStore();
+
+  // Update tab when URL changes
+  useEffect(() => {
+    if (tabFromUrl && settingsTabs.some(t => t.id === tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   // Fetch integrations status
   const fetchIntegrations = useCallback(async () => {
