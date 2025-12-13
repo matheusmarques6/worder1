@@ -234,24 +234,36 @@ const KlaviyoConfigModal = ({
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
-  onSave: (apiKey: string) => Promise<void>;
+  onSave: (privateKey: string, publicKey: string) => Promise<void>;
 }) => {
-  const [apiKey, setApiKey] = useState('');
+  const [privateKey, setPrivateKey] = useState('');
+  const [publicKey, setPublicKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleSave = async () => {
-    if (!apiKey.trim()) return;
+    if (!privateKey.trim()) {
+      setError('Private API Key é obrigatória');
+      return;
+    }
+    if (!publicKey.trim()) {
+      setError('Public API Key é obrigatória');
+      return;
+    }
+    if (publicKey.trim().length !== 6) {
+      setError('Public API Key deve ter 6 caracteres');
+      return;
+    }
     setIsLoading(true);
     setError(null);
     
     try {
-      await onSave(apiKey);
+      await onSave(privateKey, publicKey);
       // If successful, modal will be closed by parent
     } catch (err: any) {
-      setError(err.message || 'Erro ao conectar. Verifique sua API Key.');
+      setError(err.message || 'Erro ao conectar. Verifique suas API Keys.');
     } finally {
       setIsLoading(false);
     }
@@ -275,24 +287,62 @@ const KlaviyoConfigModal = ({
         </div>
         
         <div className="space-y-4">
+          {/* Private API Key */}
           <div>
-            <label className="block text-sm text-dark-400 mb-2">Private API Key</label>
+            <label className="block text-sm text-dark-400 mb-2">
+              Private API Key <span className="text-red-400">*</span>
+            </label>
             <input
               type="password"
-              value={apiKey}
+              value={privateKey}
               onChange={(e) => {
-                setApiKey(e.target.value);
+                setPrivateKey(e.target.value);
                 setError(null);
               }}
               placeholder="pk_xxxxxxxxxxxxxxxx"
               className={cn(
                 "w-full px-4 py-2 bg-dark-800 border rounded-xl text-white placeholder-dark-500 focus:outline-none transition-colors",
-                error ? "border-red-500/50 focus:border-red-500" : "border-dark-700 focus:border-primary-500"
+                error && !privateKey.trim() ? "border-red-500/50 focus:border-red-500" : "border-dark-700 focus:border-primary-500"
               )}
             />
-            <p className="text-xs text-dark-500 mt-2">
-              Encontre em: Klaviyo → Account → Settings → API Keys
+            <p className="text-xs text-dark-500 mt-1">
+              Para ler dados (campanhas, flows, métricas, revenue)
             </p>
+          </div>
+
+          {/* Public API Key */}
+          <div>
+            <label className="block text-sm text-dark-400 mb-2">
+              Public API Key / Site ID <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              value={publicKey}
+              onChange={(e) => {
+                setPublicKey(e.target.value.toUpperCase());
+                setError(null);
+              }}
+              placeholder="XXXXXX"
+              maxLength={6}
+              className={cn(
+                "w-full px-4 py-2 bg-dark-800 border rounded-xl text-white placeholder-dark-500 focus:outline-none transition-colors font-mono tracking-wider",
+                error && !publicKey.trim() ? "border-red-500/50 focus:border-red-500" : "border-dark-700 focus:border-primary-500"
+              )}
+            />
+            <p className="text-xs text-dark-500 mt-1">
+              Para tracking de eventos no site (6 caracteres)
+            </p>
+          </div>
+
+          <div className="text-xs text-dark-400 bg-dark-800/50 p-3 rounded-lg space-y-2">
+            <p className="font-medium text-dark-300">📍 Onde encontrar:</p>
+            <div className="space-y-1">
+              <p><span className="text-primary-400">Private Key:</span> Settings → API Keys → Create Private API Key</p>
+              <p><span className="text-primary-400">Public Key:</span> Settings → API Keys → (topo da página)</p>
+            </div>
+            <div className="mt-2 pt-2 border-t border-dark-700/50">
+              <p className="font-medium text-yellow-400/80 text-[10px]">⚠️ IMPORTANTE: Ao criar a Private Key, selecione "Full Access" ou habilite os scopes: accounts, campaigns, flows, lists, profiles, metrics, events</p>
+            </div>
           </div>
           
           {error && (
@@ -304,7 +354,7 @@ const KlaviyoConfigModal = ({
           
           <button
             onClick={handleSave}
-            disabled={!apiKey.trim() || isLoading}
+            disabled={!privateKey.trim() || !publicKey.trim() || isLoading}
             className="w-full py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 disabled:text-dark-500 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
           >
             {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -504,12 +554,15 @@ export default function SettingsPage() {
   };
 
   // Handle Klaviyo save
-  const handleKlaviyoSave = async (apiKeyValue: string) => {
+  const handleKlaviyoSave = async (privateKey: string, publicKey: string) => {
     try {
       const response = await fetch('/api/klaviyo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: apiKeyValue }),
+        body: JSON.stringify({ 
+          apiKey: privateKey,
+          publicKey: publicKey || null
+        }),
       });
 
       const data = await response.json();

@@ -584,11 +584,18 @@ async function fetchProfileCount(apiKey: string): Promise<number> {
 // ============================================
 export async function POST(request: NextRequest) {
   try {
-    const { apiKey } = await request.json();
+    const { apiKey, publicKey } = await request.json();
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'API Key é obrigatória' },
+        { error: 'Private API Key é obrigatória' },
+        { status: 400 }
+      );
+    }
+
+    if (!publicKey) {
+      return NextResponse.json(
+        { error: 'Public API Key é obrigatória' },
         { status: 400 }
       );
     }
@@ -601,7 +608,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[Klaviyo] Verifying API Key...');
+    // Validate public key format (should be 6 characters)
+    if (publicKey.length !== 6) {
+      return NextResponse.json(
+        { error: 'Public API Key deve ter 6 caracteres' },
+        { status: 400 }
+      );
+    }
+
+    console.log('[Klaviyo] Verifying API Keys...');
+    console.log('[Klaviyo] Public Key:', publicKey);
     
     // Verify API key by fetching account info
     let accountData;
@@ -665,6 +681,7 @@ export async function POST(request: NextRequest) {
     const { error: upsertError } = await supabase.from('klaviyo_accounts').upsert({
       organization_id: organizationId,
       api_key: apiKey,
+      public_key: publicKey || null,
       account_id: accountId,
       account_name: accountName,
       is_active: true,
@@ -735,34 +752,60 @@ export async function GET(request: NextRequest) {
       const testResults: any = {
         timestamp: new Date().toISOString(),
         accountId: klaviyoAccount.account_id,
-        tests: {}
+        accountName: klaviyoAccount.account_name,
+        publicKey: klaviyoAccount.public_key || 'Não configurada',
+        apiKeyPrefix: klaviyoAccount.api_key?.substring(0, 10) + '...',
+        tests: {},
+        requiredScopes: [
+          'accounts:read',
+          'campaigns:read', 
+          'flows:read',
+          'lists:read',
+          'profiles:read',
+          'metrics:read',
+          'events:read',
+          'segments:read'
+        ],
+        instructions: 'Se algum teste falhar com 403, a API Key não tem permissão. Crie uma nova key com Full Access ou os scopes listados acima.'
       };
 
-      // Test 1: Get Account
+      // Test 1: Get Account (requires accounts:read)
       try {
         const accountRes = await klaviyoFetch(klaviyoAccount.api_key, '/accounts');
         testResults.tests.accounts = {
           success: true,
+          scope: 'accounts:read ✅',
           count: accountRes.data?.length || 0,
-          data: accountRes.data?.[0]?.attributes || null
+          data: accountRes.data?.[0]?.attributes?.contact_information || null
         };
       } catch (e: any) {
-        testResults.tests.accounts = { success: false, error: e.message };
+        testResults.tests.accounts = { 
+          success: false, 
+          scope: 'accounts:read ❌',
+          error: e.message,
+          fix: 'API Key precisa do scope accounts:read'
+        };
       }
 
-      // Test 2: Get Lists
+      // Test 2: Get Lists (requires lists:read)
       try {
         const listsRes = await klaviyoFetch(klaviyoAccount.api_key, '/lists');
         testResults.tests.lists = {
           success: true,
+          scope: 'lists:read ✅',
           count: listsRes.data?.length || 0,
           names: listsRes.data?.slice(0, 5).map((l: any) => l.attributes?.name) || []
         };
       } catch (e: any) {
-        testResults.tests.lists = { success: false, error: e.message };
+        testResults.tests.lists = { 
+          success: false, 
+          scope: 'lists:read ❌',
+          error: e.message,
+          fix: 'API Key precisa do scope lists:read'
+        };
       }
 
-      // Test 3: Get Campaigns
+      // Test 3: Get Campaigns (requires campaigns:read)
       try {
         const campsRes = await klaviyoFetch(
           klaviyoAccount.api_key, 
@@ -770,26 +813,46 @@ export async function GET(request: NextRequest) {
         );
         testResults.tests.campaigns = {
           success: true,
+          scope: 'campaigns:read ✅',
           count: campsRes.data?.length || 0,
-          names: campsRes.data?.slice(0, 5).map((c: any) => c.attributes?.name) || []
+          names: campsRes.data?.slice(0, 5).map((c: any) => ({
+            name: c.attributes?.name,
+            status: c.attributes?.status,
+            sendTime: c.attributes?.send_time
+          })) || []
         };
       } catch (e: any) {
-        testResults.tests.campaigns = { success: false, error: e.message };
+        testResults.tests.campaigns = { 
+          success: false, 
+          scope: 'campaigns:read ❌',
+          error: e.message,
+          fix: 'API Key precisa do scope campaigns:read'
+        };
       }
 
-      // Test 4: Get Flows
+      // Test 4: Get Flows (requires flows:read)
       try {
         const flowsRes = await klaviyoFetch(klaviyoAccount.api_key, '/flows');
         testResults.tests.flows = {
           success: true,
+          scope: 'flows:read ✅',
           count: flowsRes.data?.length || 0,
-          names: flowsRes.data?.slice(0, 5).map((f: any) => f.attributes?.name) || []
+          names: flowsRes.data?.slice(0, 5).map((f: any) => ({
+            name: f.attributes?.name,
+            status: f.attributes?.status,
+            trigger: f.attributes?.trigger_type
+          })) || []
         };
       } catch (e: any) {
-        testResults.tests.flows = { success: false, error: e.message };
+        testResults.tests.flows = { 
+          success: false, 
+          scope: 'flows:read ❌',
+          error: e.message,
+          fix: 'API Key precisa do scope flows:read'
+        };
       }
 
-      // Test 5: Get Metrics
+      // Test 5: Get Metrics (requires metrics:read)
       try {
         const metricsRes = await klaviyoFetch(klaviyoAccount.api_key, '/metrics');
         const placedOrders = metricsRes.data?.filter((m: any) => 
@@ -797,18 +860,25 @@ export async function GET(request: NextRequest) {
         ) || [];
         testResults.tests.metrics = {
           success: true,
+          scope: 'metrics:read ✅',
           totalCount: metricsRes.data?.length || 0,
           placedOrderMetrics: placedOrders.map((m: any) => ({
             id: m.id,
             name: m.attributes?.name,
-            integration: m.attributes?.integration?.name
-          }))
+            integration: m.attributes?.integration?.name || m.attributes?.integration?.category
+          })),
+          importantMetrics: metricsRes.data?.slice(0, 10).map((m: any) => m.attributes?.name) || []
         };
       } catch (e: any) {
-        testResults.tests.metrics = { success: false, error: e.message };
+        testResults.tests.metrics = { 
+          success: false, 
+          scope: 'metrics:read ❌',
+          error: e.message,
+          fix: 'API Key precisa do scope metrics:read'
+        };
       }
 
-      // Test 6: Get Profiles count
+      // Test 6: Get Profiles count (requires profiles:read)
       try {
         const profilesRes = await klaviyoFetch(
           klaviyoAccount.api_key, 
@@ -816,11 +886,52 @@ export async function GET(request: NextRequest) {
         );
         testResults.tests.profiles = {
           success: true,
+          scope: 'profiles:read ✅',
           totalCount: profilesRes.meta?.total || 0
         };
       } catch (e: any) {
-        testResults.tests.profiles = { success: false, error: e.message };
+        testResults.tests.profiles = { 
+          success: false, 
+          scope: 'profiles:read ❌',
+          error: e.message,
+          fix: 'API Key precisa do scope profiles:read'
+        };
       }
+
+      // Test 7: Get Events count (requires events:read)
+      try {
+        const eventsRes = await klaviyoFetch(
+          klaviyoAccount.api_key, 
+          '/events?page[size]=1'
+        );
+        testResults.tests.events = {
+          success: true,
+          scope: 'events:read ✅',
+          recentEvent: eventsRes.data?.[0]?.attributes?.event_properties?.['$event_id'] ? 'Há eventos' : 'Sem eventos recentes'
+        };
+      } catch (e: any) {
+        testResults.tests.events = { 
+          success: false, 
+          scope: 'events:read ❌',
+          error: e.message,
+          fix: 'API Key precisa do scope events:read'
+        };
+      }
+
+      // Summary
+      const allTests = Object.values(testResults.tests) as any[];
+      const passed = allTests.filter(t => t.success).length;
+      const failed = allTests.filter(t => !t.success).length;
+      
+      testResults.summary = {
+        passed,
+        failed,
+        total: allTests.length,
+        status: failed === 0 ? '✅ TODAS AS PERMISSÕES OK' : `❌ ${failed} PERMISSÃO(ÕES) FALTANDO`,
+        recommendation: failed > 0 
+          ? 'Crie uma nova Private API Key com Full Access ou adicione os scopes faltando'
+          : 'API Key configurada corretamente!'
+      };
 
       return NextResponse.json(testResults);
     }
@@ -828,6 +939,7 @@ export async function GET(request: NextRequest) {
     // Trigger quick sync if requested
     if (action === 'sync') {
       const syncErrors: string[] = [];
+      const syncStart = Date.now();
       
       try {
         await quickSyncKlaviyoData(
@@ -840,16 +952,39 @@ export async function GET(request: NextRequest) {
         syncErrors.push(`Main error: ${err.message}`);
       }
 
+      const syncDuration = Date.now() - syncStart;
+
       // Refresh account data
-      const { data: refreshed } = await supabase
+      const { data: refreshed, error: refreshError } = await supabase
         .from('klaviyo_accounts')
         .select('*')
         .eq('id', klaviyoAccount.id)
         .single();
 
+      if (refreshError) {
+        console.error('[Klaviyo] Refresh error:', refreshError.message);
+      }
+
+      // Get actual counts from database
+      const { count: dbCampaigns } = await supabase
+        .from('campaign_metrics')
+        .select('id', { count: 'exact' })
+        .eq('organization_id', klaviyoAccount.organization_id);
+
+      const { count: dbFlows } = await supabase
+        .from('flow_metrics')
+        .select('id', { count: 'exact' })
+        .eq('organization_id', klaviyoAccount.organization_id);
+
+      const { count: dbLists } = await supabase
+        .from('klaviyo_lists')
+        .select('id', { count: 'exact' })
+        .eq('organization_id', klaviyoAccount.organization_id);
+
       return NextResponse.json({
         connected: true,
         synced: true,
+        syncDuration: `${syncDuration}ms`,
         errors: syncErrors.length > 0 ? syncErrors : undefined,
         account: {
           id: refreshed?.account_id || klaviyoAccount.account_id,
@@ -858,8 +993,20 @@ export async function GET(request: NextRequest) {
           campaigns: refreshed?.total_campaigns || 0,
           flows: refreshed?.total_flows || 0,
           lists: refreshed?.total_lists || 0,
-          lastSync: refreshed?.last_sync_at || new Date().toISOString(),
+          lastSync: refreshed?.last_sync_at || klaviyoAccount.last_sync_at,
+          publicKey: refreshed?.public_key || null,
         },
+        database: {
+          campaigns: dbCampaigns || 0,
+          flows: dbFlows || 0,
+          lists: dbLists || 0,
+        },
+        debug: {
+          organizationId: klaviyoAccount.organization_id,
+          lastSyncBefore: klaviyoAccount.last_sync_at,
+          lastSyncAfter: refreshed?.last_sync_at,
+          updated: refreshed?.last_sync_at !== klaviyoAccount.last_sync_at
+        }
       });
     }
 
@@ -888,58 +1035,60 @@ export async function GET(request: NextRequest) {
 // QUICK SYNC - Simplified version for Vercel timeout
 // ============================================
 async function quickSyncKlaviyoData(organizationId: string, apiKey: string, errors: string[] = []) {
-  console.log('[Klaviyo Quick Sync] Starting...');
+  console.log('[Klaviyo Quick Sync] Starting for org:', organizationId);
   
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 30);
-  
-  const startStr = startDate.toISOString().split('T')[0];
-  const endStr = endDate.toISOString().split('T')[0];
-
   let profileCount = 0;
-  let lists: any[] = [];
-  let metricId: string | null = null;
+  let listsCount = 0;
+  let campaignsCount = 0;
+  let flowsCount = 0;
 
-  // 1. Get profile count (quick)
+  // 1. Get profile count
   try {
-    profileCount = await fetchProfileCount(apiKey);
-    console.log(`[Klaviyo Quick Sync] Profile count: ${profileCount}`);
+    const response = await klaviyoFetch(apiKey, '/profiles?page[size]=1');
+    profileCount = response.meta?.total || 0;
+    console.log(`[Klaviyo Quick Sync] Profiles: ${profileCount}`);
   } catch (e: any) {
-    console.error('[Klaviyo Quick Sync] Profile count error:', e.message);
-    errors.push(`Profile count: ${e.message}`);
+    console.error('[Klaviyo Quick Sync] Profile error:', e.message);
+    errors.push(`Profiles: ${e.message}`);
   }
   
-  // 2. Get lists (quick)
+  // 2. Get and save lists
   try {
-    lists = await fetchLists(apiKey);
-    console.log(`[Klaviyo Quick Sync] Found ${lists.length} lists`);
-    for (const list of lists.slice(0, 5)) { // Limit to 5 lists
-      await supabase.from('klaviyo_lists').upsert({
+    const response = await klaviyoFetch(apiKey, '/lists');
+    const lists = response.data || [];
+    listsCount = lists.length;
+    console.log(`[Klaviyo Quick Sync] Lists found: ${listsCount}`);
+    
+    for (const list of lists.slice(0, 10)) {
+      // Get profile count for each list
+      let listProfileCount = 0;
+      try {
+        const profilesRes = await klaviyoFetch(apiKey, `/lists/${list.id}/profiles?page[size]=1`);
+        listProfileCount = profilesRes.meta?.total || 0;
+      } catch (e) {
+        // Ignore
+      }
+      
+      const { error } = await supabase.from('klaviyo_lists').upsert({
         organization_id: organizationId,
-        klaviyo_list_id: list.klaviyo_list_id,
-        name: list.name,
-        profile_count: list.profile_count,
-        opt_in_process: list.opt_in_process,
+        klaviyo_list_id: list.id,
+        name: list.attributes?.name || 'Unnamed List',
+        profile_count: listProfileCount,
+        opt_in_process: list.attributes?.opt_in_process || 'single_opt_in',
         updated_at: new Date().toISOString(),
       }, { onConflict: 'organization_id,klaviyo_list_id' });
+      
+      if (error) {
+        console.error('[Klaviyo Quick Sync] List upsert error:', error.message);
+      }
+      await sleep(50);
     }
-    console.log(`[Klaviyo Quick Sync] Synced ${Math.min(lists.length, 5)} lists`);
   } catch (e: any) {
     console.error('[Klaviyo Quick Sync] Lists error:', e.message);
     errors.push(`Lists: ${e.message}`);
   }
-
-  // 3. Get metric ID (needed for revenue)
-  try {
-    metricId = await findPlacedOrderMetricId(apiKey);
-    console.log(`[Klaviyo Quick Sync] Metric ID: ${metricId}`);
-  } catch (e: any) {
-    console.error('[Klaviyo Quick Sync] Metric ID error:', e.message);
-    errors.push(`Metric ID: ${e.message}`);
-  }
   
-  // 4. Get campaigns (simplified - without individual revenue calls)
+  // 3. Get and save ALL campaigns (not filtered by date)
   try {
     const response = await klaviyoFetch(
       apiKey, 
@@ -947,96 +1096,122 @@ async function quickSyncKlaviyoData(organizationId: string, apiKey: string, erro
     );
     
     const allCampaigns = response.data || [];
-    console.log(`[Klaviyo Quick Sync] Found ${allCampaigns.length} total campaigns`);
+    console.log(`[Klaviyo Quick Sync] Total campaigns from API: ${allCampaigns.length}`);
     
-    const start = new Date(startStr);
-    const end = new Date(endStr);
-    end.setHours(23, 59, 59, 999);
+    // Save ALL campaigns, not just sent ones
+    const campaignsToSave = allCampaigns.slice(0, 20); // Limit to 20 for speed
+    campaignsCount = campaignsToSave.length;
     
-    // Filter and limit campaigns
-    const campaignsInPeriod = allCampaigns
-      .filter((camp: any) => {
-        const sendTime = camp.attributes?.send_time;
-        if (!sendTime) return false;
-        const campDate = new Date(sendTime);
-        return campDate >= start && campDate <= end && !camp.attributes?.archived;
-      })
-      .slice(0, 5); // Limit to 5 campaigns for speed
-    
-    console.log(`[Klaviyo Quick Sync] Campaigns in period: ${campaignsInPeriod.length}`);
-    
-    for (const camp of campaignsInPeriod) {
-      await supabase.from('campaign_metrics').upsert({
+    for (const camp of campaignsToSave) {
+      const status = camp.attributes?.status || 'unknown';
+      const sendTime = camp.attributes?.send_time || null;
+      const scheduledTime = camp.attributes?.scheduled_time || null;
+      
+      const { error } = await supabase.from('campaign_metrics').upsert({
         organization_id: organizationId,
         klaviyo_campaign_id: camp.id,
         name: camp.attributes?.name || 'Unnamed Campaign',
-        status: camp.attributes?.status || 'unknown',
-        sent_at: camp.attributes?.send_time,
+        status: status,
+        sent_at: sendTime || scheduledTime, // Use scheduled if not sent
         updated_at: new Date().toISOString(),
       }, { onConflict: 'organization_id,klaviyo_campaign_id' });
+      
+      if (error) {
+        console.error('[Klaviyo Quick Sync] Campaign upsert error:', error.message);
+      }
     }
-    console.log(`[Klaviyo Quick Sync] Synced ${campaignsInPeriod.length} campaigns (basic info)`);
+    console.log(`[Klaviyo Quick Sync] Saved ${campaignsCount} campaigns`);
   } catch (e: any) {
-    console.error('[Klaviyo Quick Sync] Campaign error:', e.message);
+    console.error('[Klaviyo Quick Sync] Campaigns error:', e.message);
     errors.push(`Campaigns: ${e.message}`);
   }
 
-  // 5. Get flows (simplified - without individual revenue calls)
+  // 4. Get and save ALL flows (not just active)
   try {
     const response = await klaviyoFetch(apiKey, '/flows');
-    const allFlows = (response.data || [])
+    const allFlows = response.data || [];
+    console.log(`[Klaviyo Quick Sync] Total flows from API: ${allFlows.length}`);
+    
+    // Save all non-draft flows
+    const flowsToSave = allFlows
       .filter((f: any) => f.attributes?.status !== 'draft')
-      .slice(0, 5); // Limit to 5 flows
+      .slice(0, 20);
+    flowsCount = flowsToSave.length;
     
-    console.log(`[Klaviyo Quick Sync] Found ${allFlows.length} active flows`);
-    
-    for (const flow of allFlows) {
-      await supabase.from('flow_metrics').upsert({
-        organization_id: organizationId,
-        klaviyo_flow_id: flow.id,
-        name: flow.attributes?.name || 'Unnamed Flow',
-        status: flow.attributes?.status || 'unknown',
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'organization_id,klaviyo_flow_id' });
+    // If no non-draft flows, save draft ones too
+    if (flowsCount === 0 && allFlows.length > 0) {
+      flowsCount = Math.min(allFlows.length, 20);
+      for (const flow of allFlows.slice(0, 20)) {
+        const { error } = await supabase.from('flow_metrics').upsert({
+          organization_id: organizationId,
+          klaviyo_flow_id: flow.id,
+          name: flow.attributes?.name || 'Unnamed Flow',
+          status: flow.attributes?.status || 'unknown',
+          trigger_type: flow.attributes?.trigger_type || null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'organization_id,klaviyo_flow_id' });
+        
+        if (error) {
+          console.error('[Klaviyo Quick Sync] Flow upsert error:', error.message);
+        }
+      }
+    } else {
+      for (const flow of flowsToSave) {
+        const { error } = await supabase.from('flow_metrics').upsert({
+          organization_id: organizationId,
+          klaviyo_flow_id: flow.id,
+          name: flow.attributes?.name || 'Unnamed Flow',
+          status: flow.attributes?.status || 'unknown',
+          trigger_type: flow.attributes?.trigger_type || null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'organization_id,klaviyo_flow_id' });
+        
+        if (error) {
+          console.error('[Klaviyo Quick Sync] Flow upsert error:', error.message);
+        }
+      }
     }
-    console.log(`[Klaviyo Quick Sync] Synced ${allFlows.length} flows (basic info)`);
+    console.log(`[Klaviyo Quick Sync] Saved ${flowsCount} flows`);
   } catch (e: any) {
-    console.error('[Klaviyo Quick Sync] Flow error:', e.message);
+    console.error('[Klaviyo Quick Sync] Flows error:', e.message);
     errors.push(`Flows: ${e.message}`);
   }
 
-  // 6. Update account stats
+  // 5. Update account stats - THIS IS CRITICAL
+  const now = new Date().toISOString();
+  console.log(`[Klaviyo Quick Sync] Updating account stats at ${now}...`);
+  
   try {
-    const campaignCount = await supabase
-      .from('campaign_metrics')
-      .select('id', { count: 'exact' })
-      .eq('organization_id', organizationId);
-    
-    const flowCount = await supabase
-      .from('flow_metrics')
-      .select('id', { count: 'exact' })
-      .eq('organization_id', organizationId);
-    
-    const listCount = await supabase
-      .from('klaviyo_lists')
-      .select('id', { count: 'exact' })
-      .eq('organization_id', organizationId);
-    
-    await supabase.from('klaviyo_accounts').update({
-      total_profiles: profileCount,
-      total_campaigns: campaignCount.count || 0,
-      total_flows: flowCount.count || 0,
-      total_lists: listCount.count || 0,
-      last_sync_at: new Date().toISOString(),
-    }).eq('organization_id', organizationId);
+    const { error: updateError, data: updateData } = await supabase
+      .from('klaviyo_accounts')
+      .update({
+        total_profiles: profileCount,
+        total_campaigns: campaignsCount,
+        total_flows: flowsCount,
+        total_lists: listsCount,
+        last_sync_at: now,
+      })
+      .eq('organization_id', organizationId)
+      .select();
 
-    console.log('[Klaviyo Quick Sync] Updated account stats');
+    if (updateError) {
+      console.error('[Klaviyo Quick Sync] Account update ERROR:', updateError.message);
+      errors.push(`Account update: ${updateError.message}`);
+    } else {
+      console.log('[Klaviyo Quick Sync] Account updated successfully:', updateData);
+    }
   } catch (e: any) {
-    console.error('[Klaviyo Quick Sync] Update stats error:', e.message);
-    errors.push(`Update stats: ${e.message}`);
+    console.error('[Klaviyo Quick Sync] Account update exception:', e.message);
+    errors.push(`Account update exception: ${e.message}`);
   }
 
-  console.log('[Klaviyo Quick Sync] Complete!');
+  console.log('[Klaviyo Quick Sync] Complete!', {
+    profiles: profileCount,
+    lists: listsCount,
+    campaigns: campaignsCount,
+    flows: flowsCount,
+    errors: errors.length
+  });
 }
 
 // ============================================

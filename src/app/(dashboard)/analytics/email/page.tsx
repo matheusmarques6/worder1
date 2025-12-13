@@ -28,6 +28,10 @@ import {
   AlertCircle,
   Loader2,
   Link as LinkIcon,
+  Activity,
+  Radio,
+  ShoppingCart,
+  Globe,
 } from 'lucide-react'
 
 // Types
@@ -76,6 +80,14 @@ interface EmailData {
     id: string
     name: string
     lastSync: string
+    publicKey?: string
+  }
+  tracking?: {
+    enabled: boolean
+    siteId: string
+    eventsToday: number
+    eventsThisWeek: number
+    activeOnSite: number
   }
   kpis?: {
     openRate: KPI
@@ -519,6 +531,122 @@ export default function EmailAnalyticsPage() {
           loading={isLoading}
         />
       </div>
+
+      {/* Diagnostic Alert - When no data */}
+      {!isLoading && data?.connected && campaigns.length === 0 && flows.length === 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-medium text-yellow-400 mb-1">Nenhum dado encontrado</h3>
+              <p className="text-sm text-dark-300 mb-3">
+                Isso pode acontecer por dois motivos:
+              </p>
+              <ul className="text-sm text-dark-400 space-y-1 mb-3">
+                <li>• A conta Klaviyo não tem campanhas ou flows criados</li>
+                <li>• A Private API Key não tem as permissões necessárias</li>
+              </ul>
+              <div className="flex gap-2">
+                <a
+                  href="/api/klaviyo?action=test"
+                  target="_blank"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 text-sm rounded-lg transition-colors"
+                >
+                  <Activity className="w-4 h-4" />
+                  Executar Diagnóstico
+                </a>
+                <button
+                  onClick={() => window.location.href = '/settings?tab=integrations'}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-dark-300 text-sm rounded-lg transition-colors"
+                >
+                  Reconectar Klaviyo
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tracking & Site Events Section */}
+      {data?.tracking && (
+        <div className="bg-gradient-to-br from-dark-800/70 to-dark-800/50 rounded-xl p-6 border border-dark-700/50">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-500/20 rounded-lg">
+                <Radio className="w-5 h-5 text-green-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Tracking do Site</h2>
+                <p className="text-xs text-dark-400">Eventos capturados via Public API Key</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${data.tracking.enabled ? 'bg-green-400 animate-pulse' : 'bg-dark-500'}`} />
+              <span className={`text-xs ${data.tracking.enabled ? 'text-green-400' : 'text-dark-400'}`}>
+                {data.tracking.enabled ? 'Ativo' : 'Inativo'}
+              </span>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Site ID */}
+            <div className="bg-dark-900/50 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Globe className="w-4 h-4 text-dark-400" />
+                <span className="text-xs text-dark-400">Site ID</span>
+              </div>
+              <span className="font-mono text-lg font-bold text-white tracking-wider">
+                {data.tracking.siteId || '-'}
+              </span>
+            </div>
+            
+            {/* Active on Site */}
+            <div className="bg-dark-900/50 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Activity className="w-4 h-4 text-green-400" />
+                <span className="text-xs text-dark-400">Ativos no Site</span>
+              </div>
+              <span className="text-lg font-bold text-white">
+                {formatNumber(data.tracking.activeOnSite || 0)}
+              </span>
+            </div>
+            
+            {/* Events Today */}
+            <div className="bg-dark-900/50 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Zap className="w-4 h-4 text-yellow-400" />
+                <span className="text-xs text-dark-400">Eventos Hoje</span>
+              </div>
+              <span className="text-lg font-bold text-white">
+                {formatNumber(data.tracking.eventsToday || 0)}
+              </span>
+            </div>
+            
+            {/* Events This Week */}
+            <div className="bg-dark-900/50 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <ShoppingCart className="w-4 h-4 text-blue-400" />
+                <span className="text-xs text-dark-400">Eventos (7 dias)</span>
+              </div>
+              <span className="text-lg font-bold text-white">
+                {formatNumber(data.tracking.eventsThisWeek || 0)}
+              </span>
+            </div>
+          </div>
+          
+          {/* Event Types Legend */}
+          <div className="mt-4 pt-4 border-t border-dark-700/50">
+            <p className="text-xs text-dark-500 mb-2">Tipos de eventos capturados:</p>
+            <div className="flex flex-wrap gap-3 text-xs">
+              <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded">Viewed Product</span>
+              <span className="px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded">Added to Cart</span>
+              <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded">Started Checkout</span>
+              <span className="px-2 py-1 bg-purple-500/10 text-purple-400 rounded">Placed Order</span>
+              <span className="px-2 py-1 bg-cyan-500/10 text-cyan-400 rounded">Active on Site</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Funnel */}
       {funnel.length > 0 && (

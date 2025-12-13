@@ -91,29 +91,34 @@ export async function GET(request: NextRequest) {
     const { startDate, endDate } = getDateRange(period);
     const { startDate: prevStart, endDate: prevEnd } = getPreviousPeriod(period);
 
-    // Fetch campaigns from database (current period)
-    const { data: campaigns } = await supabase
+    // Fetch ALL campaigns from database (for display purposes)
+    // We need to show all campaigns, even if they don't have a sent_at date
+    const { data: allCampaignsFromDb } = await supabase
       .from('campaign_metrics')
       .select('*')
       .eq('organization_id', organizationId)
-      .gte('sent_at', startDate.toISOString())
-      .lte('sent_at', endDate.toISOString())
-      .order('sent_at', { ascending: false });
+      .order('sent_at', { ascending: false, nullsFirst: false });
 
-    // Fetch campaigns from previous period for comparison
-    const { data: prevCampaigns } = await supabase
-      .from('campaign_metrics')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .gte('sent_at', prevStart.toISOString())
-      .lte('sent_at', prevEnd.toISOString());
+    // Filter campaigns by period for metrics calculation
+    const campaigns = (allCampaignsFromDb || []).filter(c => {
+      if (!c.sent_at) return false; // Only count campaigns that were actually sent
+      const sentDate = new Date(c.sent_at);
+      return sentDate >= startDate && sentDate <= endDate;
+    });
 
-    // Fetch flows from database (all active flows)
+    // Previous period campaigns for comparison
+    const prevCampaigns = (allCampaignsFromDb || []).filter(c => {
+      if (!c.sent_at) return false;
+      const sentDate = new Date(c.sent_at);
+      return sentDate >= prevStart && sentDate <= prevEnd;
+    });
+
+    // Fetch flows from database (all flows, regardless of status)
     const { data: flows } = await supabase
       .from('flow_metrics')
       .select('*')
       .eq('organization_id', organizationId)
-      .order('revenue', { ascending: false });
+      .order('revenue', { ascending: false, nullsFirst: false });
 
     // Fetch lists
     const { data: lists } = await supabase
@@ -127,6 +132,9 @@ export async function GET(request: NextRequest) {
     const allPrevCampaigns = prevCampaigns || [];
     const allFlows = flows || [];
     const allLists = lists || [];
+    
+    // All campaigns for display (including draft/scheduled)
+    const allCampaignsForDisplay = allCampaignsFromDb || [];
 
     // ============================================
     // CURRENT PERIOD - CAMPAIGN METRICS
@@ -217,6 +225,14 @@ export async function GET(request: NextRequest) {
         id: klaviyoAccount.account_id,
         name: klaviyoAccount.account_name,
         lastSync: klaviyoAccount.last_sync_at,
+        publicKey: klaviyoAccount.public_key || null,
+      },
+      tracking: {
+        enabled: !!klaviyoAccount.public_key,
+        siteId: klaviyoAccount.public_key || '',
+        eventsToday: 0, // TODO: Implement event tracking from Klaviyo API
+        eventsThisWeek: 0,
+        activeOnSite: 0,
       },
       kpis: {
         openRate: {
@@ -265,7 +281,7 @@ export async function GET(request: NextRequest) {
         flowRevenue: flowRevenue,
       },
       funnel: funnelData,
-      campaigns: allCampaigns.slice(0, 20).map(c => ({
+      campaigns: allCampaignsForDisplay.slice(0, 20).map(c => ({
         id: c.id,
         klaviyoId: c.klaviyo_campaign_id,
         name: c.name,
@@ -282,8 +298,7 @@ export async function GET(request: NextRequest) {
         sentAt: c.sent_at,
       })),
       flows: allFlows
-        .filter(f => f.status === 'live' || f.status === 'manual')
-        .slice(0, 10)
+        .slice(0, 20) // Show all flows, not just live/manual
         .map(f => ({
           id: f.id,
           klaviyoId: f.klaviyo_flow_id,
@@ -304,6 +319,11 @@ export async function GET(request: NextRequest) {
         name: l.name,
         profileCount: l.profile_count || 0,
       })),
+      totalCounts: {
+        campaigns: allCampaignsForDisplay.length,
+        flows: allFlows.length,
+        lists: allLists.length,
+      },
       period: {
         current: {
           start: startDate.toISOString(),
