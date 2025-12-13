@@ -106,6 +106,47 @@ export async function GET(request: NextRequest) {
 
     // Build summary
     const connectedStores = storeTests.filter(s => s.status.includes('CONECTADO')).length;
+
+    // 5. Check Klaviyo account
+    let klaviyoDebug: any = { found: false };
+    try {
+      const { data: klaviyoAccounts, error: klaviyoError } = await supabase
+        .from('klaviyo_accounts')
+        .select('*');
+      
+      if (klaviyoError) {
+        klaviyoDebug = { 
+          found: false, 
+          error: klaviyoError.message,
+          code: klaviyoError.code,
+          hint: 'Tabela klaviyo_accounts pode não existir. Execute o SQL de schema.'
+        };
+      } else {
+        klaviyoDebug = {
+          found: true,
+          totalAccounts: klaviyoAccounts?.length || 0,
+          accounts: klaviyoAccounts?.map(k => ({
+            id: k.id,
+            organization_id: k.organization_id,
+            account_id: k.account_id,
+            account_name: k.account_name,
+            is_active: k.is_active,
+            total_profiles: k.total_profiles,
+            total_campaigns: k.total_campaigns,
+            total_flows: k.total_flows,
+            last_sync_at: k.last_sync_at,
+            hasApiKey: !!k.api_key,
+          })) || [],
+          activeAccounts: klaviyoAccounts?.filter(k => k.is_active).length || 0,
+        };
+      }
+    } catch (e: any) {
+      klaviyoDebug = { 
+        found: false, 
+        error: e.message,
+        hint: 'Erro ao consultar tabela klaviyo_accounts'
+      };
+    }
     
     return NextResponse.json({
       success: true,
@@ -115,7 +156,9 @@ export async function GET(request: NextRequest) {
         connectedStores,
         totalOrdersInDb: ordersCount || 0,
         ordersError: ordersError?.message || null,
+        klaviyoConnected: klaviyoDebug.activeAccounts > 0,
       },
+      klaviyo: klaviyoDebug,
       stores: storeTests,
       sampleOrders: sampleOrders || [],
       rawStoreData: stores?.map(s => ({

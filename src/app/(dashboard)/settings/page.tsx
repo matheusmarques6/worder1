@@ -234,18 +234,27 @@ const KlaviyoConfigModal = ({
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
-  onSave: (apiKey: string) => void;
+  onSave: (apiKey: string) => Promise<void>;
 }) => {
   const [apiKey, setApiKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleSave = async () => {
     if (!apiKey.trim()) return;
     setIsLoading(true);
-    await onSave(apiKey);
-    setIsLoading(false);
+    setError(null);
+    
+    try {
+      await onSave(apiKey);
+      // If successful, modal will be closed by parent
+    } catch (err: any) {
+      setError(err.message || 'Erro ao conectar. Verifique sua API Key.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -267,18 +276,31 @@ const KlaviyoConfigModal = ({
         
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-dark-400 mb-2">API Key</label>
+            <label className="block text-sm text-dark-400 mb-2">Private API Key</label>
             <input
               type="password"
               value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setError(null);
+              }}
               placeholder="pk_xxxxxxxxxxxxxxxx"
-              className="w-full px-4 py-2 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+              className={cn(
+                "w-full px-4 py-2 bg-dark-800 border rounded-xl text-white placeholder-dark-500 focus:outline-none transition-colors",
+                error ? "border-red-500/50 focus:border-red-500" : "border-dark-700 focus:border-primary-500"
+              )}
             />
             <p className="text-xs text-dark-500 mt-2">
               Encontre em: Klaviyo → Account → Settings → API Keys
             </p>
           </div>
+          
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+              <span className="text-sm text-red-400">{error}</span>
+            </div>
+          )}
           
           <button
             onClick={handleSave}
@@ -286,7 +308,7 @@ const KlaviyoConfigModal = ({
             className="w-full py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 disabled:text-dark-500 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
           >
             {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-            Conectar
+            {isLoading ? 'Conectando...' : 'Conectar'}
           </button>
         </div>
       </motion.div>
@@ -429,12 +451,11 @@ export default function SettingsPage() {
         if (data.authUrl) {
           window.location.href = data.authUrl;
         } else {
-          alert('Erro ao iniciar conexão. Configure as credenciais no .env');
+          console.error('Erro ao iniciar conexão. Configure as credenciais no .env');
         }
       }
     } catch (error) {
       console.error('Connect error:', error);
-      alert('Erro ao conectar integração');
     } finally {
       setLoadingIntegration(null);
     }
@@ -495,15 +516,34 @@ export default function SettingsPage() {
 
       if (response.ok && data.success) {
         setShowKlaviyoModal(false);
-        alert('Klaviyo conectado com sucesso!');
-        // Refresh integrations to get real status
-        fetchIntegrations();
+        
+        // Update local state immediately to show connected
+        setIntegrations(prev => prev.map(i => 
+          i.id === 'klaviyo' 
+            ? { 
+                ...i, 
+                connected: true, 
+                status: 'healthy' as const, 
+                lastSync: 'Agora',
+                stats: data.account ? {
+                  Account: data.account.name,
+                  Profiles: data.account.profiles?.toLocaleString() || '0',
+                } : undefined
+              }
+            : i
+        ));
+        
+        // Refresh from server after a delay
+        setTimeout(() => fetchIntegrations(), 2000);
       } else {
-        alert(data.error || 'Erro ao conectar Klaviyo');
+        // Show error in modal instead of alert
+        console.error('Klaviyo error:', data.error);
+        throw new Error(data.error || 'Erro ao conectar Klaviyo');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Klaviyo save error:', error);
-      alert('Erro de conexão. Verifique sua internet e tente novamente.');
+      // Re-throw to let modal handle it
+      throw error;
     }
   };
 

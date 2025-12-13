@@ -23,14 +23,24 @@ export async function GET(request: NextRequest) {
       .select('id, shop_name, shop_domain, is_active, total_orders, total_customers, total_products, total_revenue, last_sync_at, created_at')
       .eq('is_active', true);
 
-    // Check Klaviyo - using maybeSingle to avoid error when no record exists
-    const { data: klaviyoAccounts, error: klaviyoError } = await supabase
-      .from('klaviyo_accounts')
-      .select('id, account_name, is_active, last_sync_at, total_profiles, total_campaigns, total_flows')
-      .eq('is_active', true)
-      .limit(1);
-    
-    const klaviyoAccount = klaviyoAccounts && klaviyoAccounts.length > 0 ? klaviyoAccounts[0] : null;
+    // Check Klaviyo - query simples primeiro para ver se a tabela existe
+    let klaviyoAccount = null;
+    try {
+      const { data: klaviyoAccounts, error: klaviyoError } = await supabase
+        .from('klaviyo_accounts')
+        .select('*')  // Select all to avoid column errors
+        .eq('is_active', true)
+        .limit(1);
+      
+      if (klaviyoError) {
+        console.error('[Integration Status] Klaviyo query error:', klaviyoError.message);
+      } else {
+        klaviyoAccount = klaviyoAccounts && klaviyoAccounts.length > 0 ? klaviyoAccounts[0] : null;
+        console.log('[Integration Status] Klaviyo account found:', !!klaviyoAccount);
+      }
+    } catch (e: any) {
+      console.error('[Integration Status] Klaviyo error:', e.message);
+    }
 
     // Check Meta (Facebook) - using array query to avoid error
     const { data: metaAccounts } = await supabase
