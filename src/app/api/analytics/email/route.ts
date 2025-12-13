@@ -139,40 +139,40 @@ export async function GET(request: NextRequest) {
     // ============================================
     // CURRENT PERIOD - CAMPAIGN METRICS
     // ============================================
-    const totalSent = allCampaigns.reduce((sum, c) => sum + (c.sent || c.recipients || 0), 0);
-    const totalDelivered = allCampaigns.reduce((sum, c) => sum + (c.delivered || 0), 0);
-    const totalOpened = allCampaigns.reduce((sum, c) => sum + (c.opened || 0), 0);
-    const totalClicked = allCampaigns.reduce((sum, c) => sum + (c.clicked || 0), 0);
-    const totalBounced = allCampaigns.reduce((sum, c) => sum + (c.bounced || 0), 0);
-    const totalUnsubscribed = allCampaigns.reduce((sum, c) => sum + (c.unsubscribed || 0), 0);
-    const totalCampaignRevenue = allCampaigns.reduce((sum, c) => sum + parseFloat(c.revenue || '0'), 0);
-    const totalCampaignConversions = allCampaigns.reduce((sum, c) => sum + (c.conversions || 0), 0);
+    const totalSent = allCampaigns.reduce((sum, c) => sum + (Number(c.sent) || Number(c.recipients) || 0), 0);
+    const totalDelivered = allCampaigns.reduce((sum, c) => sum + (Number(c.delivered) || 0), 0);
+    const totalOpened = allCampaigns.reduce((sum, c) => sum + (Number(c.opened) || 0), 0);
+    const totalClicked = allCampaigns.reduce((sum, c) => sum + (Number(c.clicked) || 0), 0);
+    const totalBounced = allCampaigns.reduce((sum, c) => sum + (Number(c.bounced) || 0), 0);
+    const totalUnsubscribed = allCampaigns.reduce((sum, c) => sum + (Number(c.unsubscribed) || 0), 0);
+    const totalCampaignRevenue = allCampaigns.reduce((sum, c) => sum + (Number(c.revenue) || 0), 0);
+    const totalCampaignConversions = allCampaigns.reduce((sum, c) => sum + (Number(c.conversions) || 0), 0);
 
     // ============================================
     // PREVIOUS PERIOD - CAMPAIGN METRICS
     // ============================================
-    const prevTotalSent = allPrevCampaigns.reduce((sum, c) => sum + (c.sent || c.recipients || 0), 0);
-    const prevTotalDelivered = allPrevCampaigns.reduce((sum, c) => sum + (c.delivered || 0), 0);
-    const prevTotalOpened = allPrevCampaigns.reduce((sum, c) => sum + (c.opened || 0), 0);
-    const prevTotalClicked = allPrevCampaigns.reduce((sum, c) => sum + (c.clicked || 0), 0);
-    const prevTotalBounced = allPrevCampaigns.reduce((sum, c) => sum + (c.bounced || 0), 0);
-    const prevTotalUnsubscribed = allPrevCampaigns.reduce((sum, c) => sum + (c.unsubscribed || 0), 0);
-    const prevCampaignRevenue = allPrevCampaigns.reduce((sum, c) => sum + parseFloat(c.revenue || '0'), 0);
-    const prevCampaignConversions = allPrevCampaigns.reduce((sum, c) => sum + (c.conversions || 0), 0);
+    const prevTotalSent = allPrevCampaigns.reduce((sum, c) => sum + (Number(c.sent) || Number(c.recipients) || 0), 0);
+    const prevTotalDelivered = allPrevCampaigns.reduce((sum, c) => sum + (Number(c.delivered) || 0), 0);
+    const prevTotalOpened = allPrevCampaigns.reduce((sum, c) => sum + (Number(c.opened) || 0), 0);
+    const prevTotalClicked = allPrevCampaigns.reduce((sum, c) => sum + (Number(c.clicked) || 0), 0);
+    const prevTotalBounced = allPrevCampaigns.reduce((sum, c) => sum + (Number(c.bounced) || 0), 0);
+    const prevTotalUnsubscribed = allPrevCampaigns.reduce((sum, c) => sum + (Number(c.unsubscribed) || 0), 0);
+    const prevCampaignRevenue = allPrevCampaigns.reduce((sum, c) => sum + (Number(c.revenue) || 0), 0);
+    const prevCampaignConversions = allPrevCampaigns.reduce((sum, c) => sum + (Number(c.conversions) || 0), 0);
 
     // ============================================
     // FLOW METRICS
     // ============================================
-    const flowTriggered = allFlows.reduce((sum, f) => sum + (f.triggered || 0), 0);
-    const flowOpened = allFlows.reduce((sum, f) => sum + (f.opened || 0), 0);
-    const flowClicked = allFlows.reduce((sum, f) => sum + (f.clicked || 0), 0);
-    const flowRevenue = allFlows.reduce((sum, f) => sum + parseFloat(f.revenue || '0'), 0);
-    const flowConversions = allFlows.reduce((sum, f) => sum + (f.conversions || 0), 0);
+    const flowTriggered = allFlows.reduce((sum, f) => sum + (Number(f.triggered) || 0), 0);
+    const flowOpened = allFlows.reduce((sum, f) => sum + (Number(f.opened) || 0), 0);
+    const flowClicked = allFlows.reduce((sum, f) => sum + (Number(f.clicked) || 0), 0);
+    const flowRevenue = allFlows.reduce((sum, f) => sum + (Number(f.revenue) || 0), 0);
+    const flowConversions = allFlows.reduce((sum, f) => sum + (Number(f.conversions) || 0), 0);
 
     // ============================================
     // LIST METRICS
     // ============================================
-    const totalSubscribers = allLists.reduce((sum, l) => sum + (l.profile_count || 0), 0);
+    const totalSubscribers = allLists.reduce((sum, l) => sum + (Number(l.profile_count) || 0), 0);
 
     // ============================================
     // CALCULATE RATES - CURRENT PERIOD
@@ -281,38 +281,63 @@ export async function GET(request: NextRequest) {
         flowRevenue: flowRevenue,
       },
       funnel: funnelData,
-      campaigns: allCampaignsForDisplay.slice(0, 20).map(c => ({
-        id: c.id,
-        klaviyoId: c.klaviyo_campaign_id,
-        name: c.name,
-        status: c.status,
-        type: 'campaign',
-        sent: c.sent || c.recipients || 0,
-        delivered: c.delivered || 0,
-        opened: c.opened || 0,
-        clicked: c.clicked || 0,
-        converted: c.conversions || 0,
-        revenue: parseFloat(c.revenue || '0'),
-        openRate: c.open_rate?.toFixed(1) || '0',
-        clickRate: c.click_rate?.toFixed(1) || '0',
-        sentAt: c.sent_at,
-      })),
+      campaigns: allCampaignsForDisplay.slice(0, 20).map(c => {
+        // Safe number conversion for all fields
+        const sent = Number(c.sent) || Number(c.recipients) || 0;
+        const delivered = Number(c.delivered) || 0;
+        const opened = Number(c.opened) || 0;
+        const clicked = Number(c.clicked) || 0;
+        const conversions = Number(c.conversions) || 0;
+        const revenue = Number(c.revenue) || 0;
+        const openRate = Number(c.open_rate) || 0;
+        const clickRate = Number(c.click_rate) || 0;
+        
+        return {
+          id: c.id,
+          klaviyoId: c.klaviyo_campaign_id,
+          name: c.name,
+          status: c.status,
+          type: 'campaign',
+          sent,
+          delivered,
+          opened,
+          clicked,
+          converted: conversions,
+          revenue,
+          openRate: openRate.toFixed(1),
+          clickRate: clickRate.toFixed(1),
+          sentAt: c.sent_at,
+        };
+      }),
       flows: allFlows
-        .slice(0, 20) // Show all flows, not just live/manual
-        .map(f => ({
-          id: f.id,
-          klaviyoId: f.klaviyo_flow_id,
-          name: f.name,
-          status: f.status,
-          type: 'flow',
-          triggered: f.triggered || 0,
-          opened: f.opened || 0,
-          clicked: f.clicked || 0,
-          revenue: parseFloat(f.revenue || '0'),
-          conversions: f.conversions || 0,
-          openRate: f.open_rate?.toFixed(1) || '0',
-          clickRate: f.click_rate?.toFixed(1) || '0',
-        })),
+        .slice(0, 20)
+        .map(f => {
+          // Safe number conversion for all fields
+          const triggered = Number(f.triggered) || 0;
+          const received = Number(f.received) || 0;
+          const opened = Number(f.opened) || 0;
+          const clicked = Number(f.clicked) || 0;
+          const conversions = Number(f.conversions) || 0;
+          const revenue = Number(f.revenue) || 0;
+          const openRate = Number(f.open_rate) || 0;
+          const clickRate = Number(f.click_rate) || 0;
+          
+          return {
+            id: f.id,
+            klaviyoId: f.klaviyo_flow_id,
+            name: f.name,
+            status: f.status,
+            type: 'flow',
+            triggered,
+            received,
+            opened,
+            clicked,
+            revenue,
+            conversions,
+            openRate: openRate.toFixed(1),
+            clickRate: clickRate.toFixed(1),
+          };
+        }),
       lists: allLists.map(l => ({
         id: l.id,
         klaviyoId: l.klaviyo_list_id,

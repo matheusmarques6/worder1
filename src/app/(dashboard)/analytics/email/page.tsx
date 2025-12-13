@@ -337,10 +337,33 @@ export default function EmailAnalyticsPage() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    // Trigger Klaviyo sync first
+    setError(null)
+    
     try {
-      await fetch('/api/klaviyo?action=sync')
-    } catch {}
+      // Trigger Klaviyo sync first - wait for it to complete
+      console.log('[Email Analytics] Starting sync...')
+      const syncResponse = await fetch('/api/klaviyo?action=sync')
+      const syncResult = await syncResponse.json()
+      
+      if (syncResult.error) {
+        console.warn('[Email Analytics] Sync warning:', syncResult.error)
+      } else {
+        console.log('[Email Analytics] Sync complete:', {
+          duration: syncResult.syncDuration,
+          campaigns: syncResult.database?.campaigns,
+          flows: syncResult.database?.flows,
+        })
+      }
+      
+      // Small delay to ensure database is updated
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+    } catch (err) {
+      console.error('[Email Analytics] Sync error:', err)
+      // Continue to fetch data even if sync fails
+    }
+    
+    // Fetch updated data
     await fetchData()
   }
 
