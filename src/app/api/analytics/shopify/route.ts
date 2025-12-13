@@ -296,7 +296,7 @@ export async function GET(request: NextRequest) {
     // ========================================
     // 4. CUSTOMER RECURRENCE ANALYSIS
     // ========================================
-    const periodOrders = orders.filter((o: any) => !o.test);
+    const periodOrders = orders.filter((o: any) => !o.test && !o.cancelled_at);
     const emailToIdMap = new Map<string, number>();
     const uniqueCustomerIds = new Set<number>();
 
@@ -408,8 +408,14 @@ export async function GET(request: NextRequest) {
     const channelMap = new Map<string, number>();
 
     for (const o of orders) {
+      // Ignorar pedidos de teste
       if (o.test) continue;
-      if (o.cancelled_at) pedidosCancelados++;
+      
+      // Contar cancelados mas NÃO incluir nas métricas (igual Shopify)
+      if (o.cancelled_at) {
+        pedidosCancelados++;
+        continue; // IMPORTANTE: não incluir nas vendas
+      }
 
       // Vendas brutas = soma dos itens (antes de descontos)
       vendasBrutas += toNum(o.total_line_items_price);
@@ -425,15 +431,19 @@ export async function GET(request: NextRequest) {
       } else if (channelName === 'pos') {
         channelName = 'POS';
       } else if (/^\d+$/.test(channelName)) {
-        // Se for apenas números (ID de app), tentar usar outro campo
-        channelName = o.channel_information?.channel_definition?.handle || 
-                      o.processing_method || 
-                      `App (${channelName.substring(0, 8)}...)`;
+        // Se for ID numérico de app, usar app_id ou nome do referring_site
+        // O Shopify usa o nome do app que está registrado
+        const appName = o.app_title || o.source_identifier || null;
+        if (appName) {
+          channelName = appName;
+        } else {
+          channelName = `App (${channelName.substring(0, 8)}...)`;
+        }
       }
       channelMap.set(channelName, (channelMap.get(channelName) || 0) + toNum(o.total_price || 0));
 
-      // Products
-      if (Array.isArray(o.line_items) && !o.cancelled_at) {
+      // Products - só pedidos não cancelados
+      if (Array.isArray(o.line_items)) {
         for (const item of o.line_items) {
           const key = `${item.product_id}_${item.variant_id}`;
           if (!produtosMap.has(key)) {
