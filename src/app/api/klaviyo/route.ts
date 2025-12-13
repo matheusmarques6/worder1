@@ -887,6 +887,194 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(testResults);
     }
 
+    // DEBUG: Test Reporting API directly
+    if (action === 'debug-metrics') {
+      console.log('[Klaviyo Debug] Testing Reporting API...');
+      
+      const debugResult: any = {
+        timestamp: new Date().toISOString(),
+        tests: {}
+      };
+
+      // 1. Get campaigns list first
+      try {
+        const campaignsRes = await klaviyoFetch(
+          klaviyoAccount.api_key,
+          '/campaigns?filter=equals(messages.channel,"email")'
+        );
+        const allCampaigns = campaignsRes.data || [];
+        const sentCampaigns = allCampaigns.filter((c: any) => 
+          (c.attributes?.status || '').toLowerCase() === 'sent'
+        );
+        
+        debugResult.campaigns = {
+          total: allCampaigns.length,
+          sent: sentCampaigns.length,
+          firstSentId: sentCampaigns[0]?.id || null,
+          firstSentName: sentCampaigns[0]?.attributes?.name || null,
+        };
+      } catch (e: any) {
+        debugResult.campaigns = { error: e.message };
+      }
+
+      // 2. Get flows list
+      try {
+        const flowsRes = await klaviyoFetch(klaviyoAccount.api_key, '/flows');
+        const allFlows = flowsRes.data || [];
+        const liveFlows = allFlows.filter((f: any) => 
+          (f.attributes?.status || '').toLowerCase() === 'live'
+        );
+        
+        debugResult.flows = {
+          total: allFlows.length,
+          live: liveFlows.length,
+          firstLiveId: liveFlows[0]?.id || null,
+          firstLiveName: liveFlows[0]?.attributes?.name || null,
+        };
+      } catch (e: any) {
+        debugResult.flows = { error: e.message };
+      }
+
+      // 3. Find Metric ID
+      let metricId: string | null = null;
+      try {
+        const metricsRes = await klaviyoFetch(klaviyoAccount.api_key, '/metrics?page[size]=100');
+        const metrics = metricsRes.data || [];
+        const placedOrder = metrics.find((m: any) => m.attributes?.name === 'Placed Order');
+        metricId = placedOrder?.id || null;
+        
+        debugResult.metricId = {
+          found: !!metricId,
+          id: metricId,
+          totalMetrics: metrics.length,
+          metricNames: metrics.slice(0, 10).map((m: any) => m.attributes?.name)
+        };
+      } catch (e: any) {
+        debugResult.metricId = { error: e.message };
+      }
+
+      // 4. Test Campaign Values Report (if we have a sent campaign)
+      if (debugResult.campaigns?.firstSentId) {
+        try {
+          const campId = debugResult.campaigns.firstSentId;
+          
+          const body = {
+            data: {
+              type: 'campaign-values-report',
+              attributes: {
+                timeframe: { key: 'last_365_days' },
+                filter: `equals(campaign_id,"${campId}")`,
+                statistics: [
+                  'recipients',
+                  'delivered',
+                  'opens_unique',
+                  'open_rate',
+                  'clicks_unique',
+                  'click_rate',
+                  'bounced',
+                  'unsubscribes'
+                ]
+              }
+            }
+          };
+
+          // Add conversion_metric_id only if we have one
+          if (metricId) {
+            body.data.attributes.statistics.push('conversion_value', 'conversions');
+            (body.data.attributes as any).conversion_metric_id = metricId;
+          }
+
+          console.log('[Klaviyo Debug] Calling campaign-values-reports with:', JSON.stringify(body, null, 2));
+          
+          const response = await klaviyoPost(klaviyoAccount.api_key, '/campaign-values-reports/', body);
+          
+          debugResult.campaignMetricsTest = {
+            success: true,
+            campaignId: campId,
+            rawResponse: response,
+            results: response?.data?.attributes?.results || [],
+            resultCount: (response?.data?.attributes?.results || []).length
+          };
+        } catch (e: any) {
+          debugResult.campaignMetricsTest = { 
+            success: false, 
+            error: e.message,
+            hint: 'Reporting API may require different permissions or the campaign has no data'
+          };
+        }
+      }
+
+      // 5. Test Flow Values Report (if we have a live flow)
+      if (debugResult.flows?.firstLiveId) {
+        try {
+          const flowId = debugResult.flows.firstLiveId;
+          
+          const body = {
+            data: {
+              type: 'flow-values-report',
+              attributes: {
+                timeframe: { key: 'last_365_days' },
+                filter: `equals(flow_id,"${flowId}")`,
+                statistics: [
+                  'recipients',
+                  'delivered',
+                  'opens_unique',
+                  'open_rate',
+                  'clicks_unique',
+                  'click_rate'
+                ]
+              }
+            }
+          };
+
+          if (metricId) {
+            body.data.attributes.statistics.push('conversion_value', 'conversions');
+            (body.data.attributes as any).conversion_metric_id = metricId;
+          }
+
+          console.log('[Klaviyo Debug] Calling flow-values-reports with:', JSON.stringify(body, null, 2));
+          
+          const response = await klaviyoPost(klaviyoAccount.api_key, '/flow-values-reports/', body);
+          
+          debugResult.flowMetricsTest = {
+            success: true,
+            flowId: flowId,
+            rawResponse: response,
+            results: response?.data?.attributes?.results || [],
+            resultCount: (response?.data?.attributes?.results || []).length
+          };
+        } catch (e: any) {
+          debugResult.flowMetricsTest = { 
+            success: false, 
+            error: e.message,
+            hint: 'Flow may not have any sent emails yet'
+          };
+        }
+      }
+
+      // 6. Check database current state
+      const { data: dbCampaigns } = await supabase
+        .from('campaign_metrics')
+        .select('klaviyo_campaign_id, name, sent, opened, open_rate, revenue')
+        .eq('organization_id', klaviyoAccount.organization_id)
+        .order('sent', { ascending: false })
+        .limit(5);
+
+      const { data: dbFlows } = await supabase
+        .from('flow_metrics')
+        .select('klaviyo_flow_id, name, triggered, opened, open_rate, revenue')
+        .eq('organization_id', klaviyoAccount.organization_id)
+        .order('triggered', { ascending: false })
+        .limit(5);
+
+      debugResult.database = {
+        campaigns: dbCampaigns || [],
+        flows: dbFlows || []
+      };
+
+      return NextResponse.json(debugResult);
+    }
+
     // Trigger quick sync if requested
     if (action === 'sync') {
       const syncErrors: string[] = [];
