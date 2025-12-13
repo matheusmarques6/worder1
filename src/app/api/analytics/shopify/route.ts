@@ -155,46 +155,62 @@ async function fetchCustomersBatch(
 }
 
 // ===== Get Date Range =====
-// Shopify "Últimos 7 dias" = hoje + 7 dias anteriores = 8 dias no total
+// Corrigido para usar timezone do Brasil (UTC-3)
 function getDateRange(period: string): { startDate: string; endDate: string; startISO: string; endISO: string } {
-  const now = new Date();
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
-
+  // Calcular a data atual no Brasil (UTC-3)
+  const nowUTC = new Date();
+  const brazilOffset = -3 * 60; // -3 horas em minutos
+  const brazilTime = new Date(nowUTC.getTime() + (brazilOffset * 60 * 1000) + (nowUTC.getTimezoneOffset() * 60 * 1000));
+  
+  // Extrair apenas a data (YYYY-MM-DD) no horário do Brasil
+  const todayBrazil = brazilTime.toISOString().split('T')[0];
+  
   let daysBack: number;
+  let endDateStr: string;
+  
   switch (period) {
     case 'today':
       daysBack = 0;
+      endDateStr = todayBrazil;
       break;
     case 'yesterday':
-      daysBack = 1;
-      end.setDate(end.getDate() - 1);
+      daysBack = 0;
+      // Para "ontem", end é ontem
+      const yesterday = new Date(brazilTime);
+      yesterday.setDate(yesterday.getDate() - 1);
+      endDateStr = yesterday.toISOString().split('T')[0];
       break;
     case '7d':
-      daysBack = 7; // 8 dias total (hoje + 7 anteriores) - igual ao Shopify
+      daysBack = 7; // 8 dias total (hoje + 7 anteriores)
+      endDateStr = todayBrazil;
       break;
     case '30d':
-      daysBack = 30; // 31 dias total
+      daysBack = 30;
+      endDateStr = todayBrazil;
       break;
     case '90d':
-      daysBack = 90; // 91 dias total
+      daysBack = 90;
+      endDateStr = todayBrazil;
       break;
     default:
       daysBack = 7;
+      endDateStr = todayBrazil;
   }
 
-  const start = new Date(period === 'yesterday' ? end : now);
-  start.setDate(start.getDate() - daysBack);
-  start.setHours(0, 0, 0, 0);
-
-  const startDate = start.toISOString().split('T')[0];
-  const endDate = end.toISOString().split('T')[0];
+  // Calcular data de início
+  const endDate = new Date(endDateStr + 'T12:00:00Z'); // Meio-dia para evitar problemas de timezone
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - daysBack);
+  
+  const startDateStr = startDate.toISOString().split('T')[0];
 
   // Format with timezone for Shopify API
-  const startISO = `${startDate}T00:00:00${TZ_OFFSET}`;
-  const endISO = `${endDate}T23:59:59${TZ_OFFSET}`;
+  const startISO = `${startDateStr}T00:00:00${TZ_OFFSET}`;
+  const endISO = `${endDateStr}T23:59:59${TZ_OFFSET}`;
 
-  return { startDate, endDate, startISO, endISO };
+  console.log(`Period: ${period}, Brazil today: ${todayBrazil}, Range: ${startDateStr} to ${endDateStr}`);
+
+  return { startDate: startDateStr, endDate: endDateStr, startISO, endISO };
 }
 
 export async function GET(request: NextRequest) {
