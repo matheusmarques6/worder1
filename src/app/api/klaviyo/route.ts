@@ -1462,6 +1462,11 @@ export async function GET(request: NextRequest) {
 
       const remainingCount = sentCampaigns.filter((c: any) => !syncedIds.has(c.id)).length - campaignsToSync.length;
       const duration = Date.now() - startTime;
+
+      // Update last sync timestamp on klaviyo_accounts
+      await supabase.from('klaviyo_accounts')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', klaviyoAccount.id);
       
       return NextResponse.json({
         success: true,
@@ -1639,6 +1644,11 @@ export async function GET(request: NextRequest) {
           .upsert(updateRecords, { onConflict: 'organization_id,klaviyo_campaign_id' });
       }
 
+      // Update last sync timestamp on klaviyo_accounts
+      await supabase.from('klaviyo_accounts')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', klaviyoAccount.id);
+
       const duration = Date.now() - startTime;
       
       return NextResponse.json({
@@ -1789,6 +1799,11 @@ export async function GET(request: NextRequest) {
 
       const remainingCount = activeFlows.filter((f: any) => !syncedIds.has(f.id)).length - flowsToSync.length;
       const duration = Date.now() - startTime;
+
+      // Update last sync timestamp on klaviyo_accounts
+      await supabase.from('klaviyo_accounts')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', klaviyoAccount.id);
       
       return NextResponse.json({
         success: true,

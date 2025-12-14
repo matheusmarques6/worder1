@@ -219,9 +219,10 @@ export async function GET(request: NextRequest) {
 
     if (!klaviyoAccount?.api_key) {
       return NextResponse.json({
-        success: false,
+        success: true,
+        connected: false,
         error: 'Klaviyo account not configured'
-      }, { status: 400 });
+      });
     }
 
     const organizationId = klaviyoAccount.organization_id;
@@ -298,6 +299,13 @@ export async function GET(request: NextRequest) {
     // Format response
     const response: any = {
       success: true,
+      connected: true, // IMPORTANT: This tells the frontend Klaviyo is connected
+      account: {
+        id: klaviyoAccount.id,
+        name: klaviyoAccount.account_name || 'Klaviyo Account',
+        lastSync: klaviyoAccount.updated_at || new Date().toISOString(),
+        publicKey: klaviyoAccount.public_key || null,
+      },
       mode: 'realtime',
       period: {
         label: period,
