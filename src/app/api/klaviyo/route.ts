@@ -149,7 +149,8 @@ async function getOrganizationId(): Promise<string> {
  */
 async function findPlacedOrderMetricId(apiKey: string): Promise<string | null> {
   try {
-    const response = await klaviyoFetch(apiKey, '/metrics?page[size]=100');
+    // FIXED: Use page[size] not page_size
+    const response = await klaviyoFetch(apiKey, '/metrics');
     const metrics = response.data || [];
     
     // Find first metric named "Placed Order"
@@ -162,7 +163,24 @@ async function findPlacedOrderMetricId(apiKey: string): Promise<string | null> {
       return placedOrder.id;
     }
     
-    console.log('[Klaviyo] No Placed Order metric found');
+    // Fallback: try to find any order/purchase metric
+    const orderMetric = metrics.find((m: any) => {
+      const name = (m.attributes?.name || '').toLowerCase();
+      return name.includes('order') || name.includes('purchase') || name.includes('compra');
+    });
+    
+    if (orderMetric) {
+      console.log(`[Klaviyo] Found alternative order metric: ${orderMetric.id} (${orderMetric.attributes?.name})`);
+      return orderMetric.id;
+    }
+    
+    console.log('[Klaviyo] No order metric found, using first available metric');
+    // Last resort: use any metric (required for flow-values-report)
+    if (metrics.length > 0) {
+      console.log(`[Klaviyo] Using fallback metric: ${metrics[0].id} (${metrics[0].attributes?.name})`);
+      return metrics[0].id;
+    }
+    
     return null;
   } catch (e: any) {
     console.error('[Klaviyo] Error finding metric:', e.message);
@@ -912,6 +930,7 @@ export async function GET(request: NextRequest) {
           sent: sentCampaigns.length,
           firstSentId: sentCampaigns[0]?.id || null,
           firstSentName: sentCampaigns[0]?.attributes?.name || null,
+          firstSentDate: sentCampaigns[0]?.attributes?.send_time || null,
         };
       } catch (e: any) {
         debugResult.campaigns = { error: e.message };
@@ -935,77 +954,105 @@ export async function GET(request: NextRequest) {
         debugResult.flows = { error: e.message };
       }
 
-      // 3. Find Metric ID
+      // 3. Find Metric ID (FIXED: no page_size parameter)
       let metricId: string | null = null;
       try {
-        const metricsRes = await klaviyoFetch(klaviyoAccount.api_key, '/metrics?page[size]=100');
+        const metricsRes = await klaviyoFetch(klaviyoAccount.api_key, '/metrics');
         const metrics = metricsRes.data || [];
+        
+        // Find Placed Order
         const placedOrder = metrics.find((m: any) => m.attributes?.name === 'Placed Order');
         metricId = placedOrder?.id || null;
+        
+        // If not found, try any order metric
+        if (!metricId) {
+          const orderMetric = metrics.find((m: any) => {
+            const name = (m.attributes?.name || '').toLowerCase();
+            return name.includes('order') || name.includes('purchase');
+          });
+          metricId = orderMetric?.id || null;
+        }
+        
+        // Fallback to first metric
+        if (!metricId && metrics.length > 0) {
+          metricId = metrics[0].id;
+        }
         
         debugResult.metricId = {
           found: !!metricId,
           id: metricId,
           totalMetrics: metrics.length,
-          metricNames: metrics.slice(0, 10).map((m: any) => m.attributes?.name)
+          metricNames: metrics.slice(0, 5).map((m: any) => `${m.id}: ${m.attributes?.name}`)
         };
       } catch (e: any) {
         debugResult.metricId = { error: e.message };
       }
 
-      // 4. Test Campaign Values Report (if we have a sent campaign)
+      // 4. Test Campaign Values Report WITHOUT conversion_metric_id first
       if (debugResult.campaigns?.firstSentId) {
+        const campId = debugResult.campaigns.firstSentId;
+        
+        // Test WITHOUT conversion_metric_id
         try {
-          const campId = debugResult.campaigns.firstSentId;
-          
-          const body = {
+          const bodyWithout = {
             data: {
               type: 'campaign-values-report',
               attributes: {
-                timeframe: { key: 'last_365_days' },
+                timeframe: { key: 'last_30_days' },
                 filter: `equals(campaign_id,"${campId}")`,
-                statistics: [
-                  'recipients',
-                  'delivered',
-                  'opens_unique',
-                  'open_rate',
-                  'clicks_unique',
-                  'click_rate',
-                  'bounced',
-                  'unsubscribes'
-                ]
+                statistics: ['delivered', 'opens_unique', 'clicks_unique', 'bounced']
               }
             }
           };
 
-          // Add conversion_metric_id only if we have one
-          if (metricId) {
-            body.data.attributes.statistics.push('conversion_value', 'conversions');
-            (body.data.attributes as any).conversion_metric_id = metricId;
-          }
-
-          console.log('[Klaviyo Debug] Calling campaign-values-reports with:', JSON.stringify(body, null, 2));
+          const response = await klaviyoPost(klaviyoAccount.api_key, '/campaign-values-reports/', bodyWithout);
           
-          const response = await klaviyoPost(klaviyoAccount.api_key, '/campaign-values-reports/', body);
-          
-          debugResult.campaignMetricsTest = {
+          debugResult.campaignTestWithoutMetricId = {
             success: true,
-            campaignId: campId,
-            rawResponse: response,
             results: response?.data?.attributes?.results || [],
             resultCount: (response?.data?.attributes?.results || []).length
           };
         } catch (e: any) {
-          debugResult.campaignMetricsTest = { 
+          debugResult.campaignTestWithoutMetricId = { 
             success: false, 
-            error: e.message,
-            hint: 'Reporting API may require different permissions or the campaign has no data'
+            error: e.message
           };
+        }
+        
+        // Test WITH conversion_metric_id
+        if (metricId) {
+          try {
+            const bodyWith = {
+              data: {
+                type: 'campaign-values-report',
+                attributes: {
+                  timeframe: { key: 'last_30_days' },
+                  filter: `equals(campaign_id,"${campId}")`,
+                  conversion_metric_id: metricId,
+                  statistics: ['delivered', 'opens_unique', 'clicks_unique', 'bounced', 'conversion_value']
+                }
+              }
+            };
+
+            const response = await klaviyoPost(klaviyoAccount.api_key, '/campaign-values-reports/', bodyWith);
+            
+            debugResult.campaignTestWithMetricId = {
+              success: true,
+              results: response?.data?.attributes?.results || [],
+              resultCount: (response?.data?.attributes?.results || []).length,
+              rawResponse: response
+            };
+          } catch (e: any) {
+            debugResult.campaignTestWithMetricId = { 
+              success: false, 
+              error: e.message
+            };
+          }
         }
       }
 
-      // 5. Test Flow Values Report (if we have a live flow)
-      if (debugResult.flows?.firstLiveId) {
+      // 5. Test Flow Values Report (requires conversion_metric_id)
+      if (debugResult.flows?.firstLiveId && metricId) {
         try {
           const flowId = debugResult.flows.firstLiveId;
           
@@ -1013,46 +1060,68 @@ export async function GET(request: NextRequest) {
             data: {
               type: 'flow-values-report',
               attributes: {
-                timeframe: { key: 'last_365_days' },
+                timeframe: { key: 'last_30_days' },
                 filter: `equals(flow_id,"${flowId}")`,
-                statistics: [
-                  'recipients',
-                  'delivered',
-                  'opens_unique',
-                  'open_rate',
-                  'clicks_unique',
-                  'click_rate'
-                ]
+                conversion_metric_id: metricId,
+                statistics: ['delivered', 'opens_unique', 'clicks_unique', 'conversion_value']
               }
             }
           };
 
-          if (metricId) {
-            body.data.attributes.statistics.push('conversion_value', 'conversions');
-            (body.data.attributes as any).conversion_metric_id = metricId;
-          }
-
-          console.log('[Klaviyo Debug] Calling flow-values-reports with:', JSON.stringify(body, null, 2));
-          
           const response = await klaviyoPost(klaviyoAccount.api_key, '/flow-values-reports/', body);
           
           debugResult.flowMetricsTest = {
             success: true,
             flowId: flowId,
-            rawResponse: response,
             results: response?.data?.attributes?.results || [],
-            resultCount: (response?.data?.attributes?.results || []).length
+            resultCount: (response?.data?.attributes?.results || []).length,
+            rawResponse: response
           };
         } catch (e: any) {
           debugResult.flowMetricsTest = { 
             success: false, 
-            error: e.message,
-            hint: 'Flow may not have any sent emails yet'
+            error: e.message
           };
         }
       }
 
-      // 6. Check database current state
+      // 6. Try Query Metric Aggregates (alternative approach)
+      if (metricId) {
+        try {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          
+          const body = {
+            data: {
+              type: 'metric-aggregate',
+              attributes: {
+                metric_id: metricId,
+                measurements: ['count', 'sum_value'],
+                interval: 'month',
+                filter: [
+                  `greater-or-equal(datetime,${thirtyDaysAgo.toISOString()})`,
+                  `less-than(datetime,${new Date().toISOString()})`
+                ]
+              }
+            }
+          };
+
+          const response = await klaviyoPost(klaviyoAccount.api_key, '/metric-aggregates/', body);
+          
+          debugResult.metricAggregatesTest = {
+            success: true,
+            data: response?.data?.attributes?.data || [],
+            dates: response?.data?.attributes?.dates || []
+          };
+        } catch (e: any) {
+          debugResult.metricAggregatesTest = { 
+            success: false, 
+            error: e.message
+          };
+        }
+      }
+
+      // 7. Check database current state
       const { data: dbCampaigns } = await supabase
         .from('campaign_metrics')
         .select('klaviyo_campaign_id, name, sent, opened, open_rate, revenue')
@@ -1187,7 +1256,7 @@ async function fetchCampaignMetrics(
   
   if (campaignIds.length === 0) return metricsMap;
   
-  console.log(`[Klaviyo] Fetching metrics for ${campaignIds.length} campaigns in ONE batch...`);
+  console.log(`[Klaviyo] Fetching metrics for ${campaignIds.length} campaigns...`);
   
   // Base statistics (always requested)
   const baseStats = [
@@ -1206,41 +1275,36 @@ async function fetchCampaignMetrics(
     ? [...baseStats, 'conversion_value', 'conversions']
     : baseStats;
   
-  // Build filter for ALL campaigns at once (max efficiency)
-  const filterValue = campaignIds.length === 1 
-    ? `equals(campaign_id,"${campaignIds[0]}")`
-    : `any(campaign_id,["${campaignIds.join('","')}"])`;
-  
-  try {
-    const attributes: any = {
-      timeframe: { key: 'last_365_days' },
-      filter: filterValue,
-      statistics: statistics
-    };
-    
-    if (metricId) {
-      attributes.conversion_metric_id = metricId;
-    }
-    
-    const body = {
-      data: {
-        type: 'campaign-values-report',
-        attributes
+  // Process each campaign individually (any() filter may have issues)
+  for (const campId of campaignIds) {
+    try {
+      const attributes: any = {
+        timeframe: { key: 'last_365_days' },
+        filter: `equals(campaign_id,"${campId}")`,
+        statistics: statistics
+      };
+      
+      if (metricId) {
+        attributes.conversion_metric_id = metricId;
       }
-    };
-    
-    const response = await klaviyoPost(apiKey, '/campaign-values-reports/', body);
-    
-    if (!response?.data?.attributes?.results) {
-      console.warn(`[Klaviyo] Campaign metrics: unexpected response`);
-      return metricsMap;
-    }
-    
-    const results = response.data.attributes.results;
-    
-    for (const result of results) {
-      const campId = result.groupings?.campaign_id;
-      if (campId) {
+      
+      const body = {
+        data: {
+          type: 'campaign-values-report',
+          attributes
+        }
+      };
+      
+      const response = await klaviyoPost(apiKey, '/campaign-values-reports/', body);
+      
+      if (!response?.data?.attributes?.results) {
+        console.warn(`[Klaviyo] Campaign ${campId}: no results`);
+        continue;
+      }
+      
+      const results = response.data.attributes.results;
+      
+      for (const result of results) {
         const stats = result.statistics || {};
         metricsMap.set(campId, {
           recipients: stats.recipients || stats.delivered || 0,
@@ -1254,21 +1318,21 @@ async function fetchCampaignMetrics(
           revenue: stats.conversion_value || 0,
           conversions: stats.conversions || 0,
         });
+        console.log(`[Klaviyo] Campaign ${campId}: delivered=${stats.delivered}, opened=${stats.opens_unique}`);
       }
+      
+    } catch (e: any) {
+      console.error(`[Klaviyo] Campaign ${campId} error:`, e.message);
     }
-    
-    console.log(`[Klaviyo] Got metrics for ${metricsMap.size} campaigns`);
-    
-  } catch (e: any) {
-    console.error(`[Klaviyo] Campaign metrics error:`, e.message);
   }
   
+  console.log(`[Klaviyo] Got metrics for ${metricsMap.size}/${campaignIds.length} campaigns`);
   return metricsMap;
 }
 
 /**
  * Fetch flow metrics using Reporting API
- * OPTIMIZED: Busca todos flows em UMA única chamada
+ * NOTE: conversion_metric_id is REQUIRED by Klaviyo for flow-values-report
  */
 async function fetchFlowMetrics(
   apiKey: string, 
@@ -1279,9 +1343,15 @@ async function fetchFlowMetrics(
   
   if (flowIds.length === 0) return metricsMap;
   
-  console.log(`[Klaviyo] Fetching metrics for ${flowIds.length} flows in ONE batch...`);
+  // CRITICAL: Klaviyo REQUIRES conversion_metric_id for flow-values-report
+  if (!metricId) {
+    console.warn('[Klaviyo] Cannot fetch flow metrics without conversion_metric_id');
+    return metricsMap;
+  }
   
-  const baseStats = [
+  console.log(`[Klaviyo] Fetching metrics for ${flowIds.length} flows...`);
+  
+  const statistics = [
     'recipients',
     'delivered',
     'opens_unique',
@@ -1290,100 +1360,81 @@ async function fetchFlowMetrics(
     'click_rate',
     'bounced',
     'unsubscribes',
+    'conversion_value',
+    'conversions'
   ];
   
-  const statistics = metricId 
-    ? [...baseStats, 'conversion_value', 'conversions']
-    : baseStats;
-  
-  // Build filter for ALL flows at once
-  const filterValue = flowIds.length === 1 
-    ? `equals(flow_id,"${flowIds[0]}")`
-    : `any(flow_id,["${flowIds.join('","')}"])`;
-  
-  try {
-    const attributes: any = {
-      timeframe: { key: 'last_365_days' },
-      filter: filterValue,
-      statistics: statistics
-    };
-    
-    if (metricId) {
-      attributes.conversion_metric_id = metricId;
-    }
-    
-    const body = {
-      data: {
-        type: 'flow-values-report',
-        attributes
-      }
-    };
-    
-    const response = await klaviyoPost(apiKey, '/flow-values-reports/', body);
-    
-    if (!response?.data?.attributes?.results) {
-      console.warn(`[Klaviyo] Flow metrics: unexpected response`);
-      return metricsMap;
-    }
-    
-    const results = response.data.attributes.results;
-    
-    // Group results by flow_id (a flow may have multiple messages)
-    const flowData = new Map<string, any>();
-    
-    for (const result of results) {
-      const flowId = result.groupings?.flow_id;
-      if (!flowId) continue;
+  // Process each flow individually
+  for (const flowId of flowIds) {
+    try {
+      const body = {
+        data: {
+          type: 'flow-values-report',
+          attributes: {
+            timeframe: { key: 'last_365_days' },
+            filter: `equals(flow_id,"${flowId}")`,
+            conversion_metric_id: metricId, // REQUIRED!
+            statistics: statistics
+          }
+        }
+      };
       
-      const stats = result.statistics || {};
+      const response = await klaviyoPost(apiKey, '/flow-values-reports/', body);
       
-      if (!flowData.has(flowId)) {
-        flowData.set(flowId, {
-          triggered: 0, received: 0, opened: 0, clicked: 0,
-          bounced: 0, unsubscribed: 0, revenue: 0, conversions: 0,
-          open_rate_sum: 0, click_rate_sum: 0, count: 0
-        });
+      if (!response?.data?.attributes?.results) {
+        console.warn(`[Klaviyo] Flow ${flowId}: no results`);
+        continue;
       }
       
-      const fd = flowData.get(flowId);
-      fd.triggered += stats.recipients || stats.delivered || 0;
-      fd.received += stats.delivered || 0;
-      fd.opened += stats.opens_unique || 0;
-      fd.clicked += stats.clicks_unique || 0;
-      fd.bounced += stats.bounced || 0;
-      fd.unsubscribed += stats.unsubscribes || 0;
-      fd.revenue += stats.conversion_value || 0;
-      fd.conversions += stats.conversions || 0;
-      fd.open_rate_sum += stats.open_rate || 0;
-      fd.click_rate_sum += stats.click_rate || 0;
-      fd.count++;
-    }
-    
-    // Calculate final metrics for each flow
-    for (const [flowId, fd] of flowData) {
-      const openRate = fd.count > 0 ? (fd.open_rate_sum / fd.count) * 100 : 0;
-      const clickRate = fd.count > 0 ? (fd.click_rate_sum / fd.count) * 100 : 0;
+      const results = response.data.attributes.results;
+      
+      // Sum up all results for this flow (may have multiple messages)
+      let flowMetrics = {
+        triggered: 0, received: 0, opened: 0, clicked: 0,
+        bounced: 0, unsubscribed: 0, revenue: 0, conversions: 0,
+        open_rate_sum: 0, click_rate_sum: 0, count: 0
+      };
+      
+      for (const result of results) {
+        const stats = result.statistics || {};
+        flowMetrics.triggered += stats.recipients || stats.delivered || 0;
+        flowMetrics.received += stats.delivered || 0;
+        flowMetrics.opened += stats.opens_unique || 0;
+        flowMetrics.clicked += stats.clicks_unique || 0;
+        flowMetrics.bounced += stats.bounced || 0;
+        flowMetrics.unsubscribed += stats.unsubscribes || 0;
+        flowMetrics.revenue += stats.conversion_value || 0;
+        flowMetrics.conversions += stats.conversions || 0;
+        flowMetrics.open_rate_sum += stats.open_rate || 0;
+        flowMetrics.click_rate_sum += stats.click_rate || 0;
+        flowMetrics.count++;
+      }
+      
+      // Calculate final rates
+      const openRate = flowMetrics.count > 0 ? (flowMetrics.open_rate_sum / flowMetrics.count) * 100 : 0;
+      const clickRate = flowMetrics.count > 0 ? (flowMetrics.click_rate_sum / flowMetrics.count) * 100 : 0;
       
       metricsMap.set(flowId, {
-        triggered: fd.triggered,
-        received: fd.received,
-        opened: fd.opened,
-        clicked: fd.clicked,
-        bounced: fd.bounced,
-        unsubscribed: fd.unsubscribed,
-        revenue: fd.revenue,
-        conversions: fd.conversions,
+        triggered: flowMetrics.triggered,
+        received: flowMetrics.received,
+        opened: flowMetrics.opened,
+        clicked: flowMetrics.clicked,
+        bounced: flowMetrics.bounced,
+        unsubscribed: flowMetrics.unsubscribed,
+        revenue: flowMetrics.revenue,
+        conversions: flowMetrics.conversions,
         open_rate: openRate,
         click_rate: clickRate,
       });
+      
+      console.log(`[Klaviyo] Flow ${flowId}: triggered=${flowMetrics.triggered}, opened=${flowMetrics.opened}`);
+      
+    } catch (e: any) {
+      console.error(`[Klaviyo] Flow ${flowId} error:`, e.message);
     }
-    
-    console.log(`[Klaviyo] Got metrics for ${metricsMap.size} flows`);
-    
-  } catch (e: any) {
-    console.error(`[Klaviyo] Flow metrics error:`, e.message);
   }
   
+  console.log(`[Klaviyo] Got metrics for ${metricsMap.size}/${flowIds.length} flows`);
   return metricsMap;
 }
 
