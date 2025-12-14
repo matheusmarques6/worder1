@@ -307,6 +307,7 @@ export default function EmailAnalyticsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [data, setData] = useState<EmailData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [syncProgress, setSyncProgress] = useState<string | null>(null)
 
   // Fetch data from API
   const fetchData = useCallback(async () => {
@@ -340,31 +341,70 @@ export default function EmailAnalyticsPage() {
     setError(null)
     
     try {
-      // Trigger Klaviyo sync first - wait for it to complete
-      console.log('[Email Analytics] Starting sync...')
-      const syncResponse = await fetch('/api/klaviyo?action=sync')
-      const syncResult = await syncResponse.json()
+      // Sync campaigns in batches using sync-one
+      let campaignsRemaining = 99
+      let campaignsSynced = 0
+      let maxCampaignCalls = 20 // Max 20 calls = 100 campaigns
       
-      if (syncResult.error) {
-        console.warn('[Email Analytics] Sync warning:', syncResult.error)
-      } else {
-        console.log('[Email Analytics] Sync complete:', {
-          duration: syncResult.syncDuration,
-          campaigns: syncResult.database?.campaigns,
-          flows: syncResult.database?.flows,
-        })
+      setSyncProgress('Sincronizando campanhas...')
+      
+      while (campaignsRemaining > 0 && maxCampaignCalls > 0) {
+        try {
+          const res = await fetch('/api/klaviyo?action=sync-one')
+          const data = await res.json()
+          
+          if (data.success) {
+            campaignsRemaining = data.remaining || 0
+            campaignsSynced += data.synced || 1
+            setSyncProgress(`Campanhas: ${campaignsSynced} sincronizadas, ${campaignsRemaining} restantes...`)
+          } else {
+            break
+          }
+          maxCampaignCalls--
+        } catch (e) {
+          console.error('Sync campaign error:', e)
+          break
+        }
       }
       
-      // Small delay to ensure database is updated
+      // Sync flows in batches using sync-flows
+      let flowsRemaining = 99
+      let flowsSynced = 0
+      let maxFlowCalls = 10 // Max 10 calls = 30 flows
+      
+      setSyncProgress('Sincronizando automações...')
+      
+      while (flowsRemaining > 0 && maxFlowCalls > 0) {
+        try {
+          const res = await fetch('/api/klaviyo?action=sync-flows')
+          const data = await res.json()
+          
+          if (data.success) {
+            flowsRemaining = data.remaining || 0
+            flowsSynced += data.synced || 1
+            setSyncProgress(`Automações: ${flowsSynced} sincronizadas, ${flowsRemaining} restantes...`)
+          } else {
+            break
+          }
+          maxFlowCalls--
+        } catch (e) {
+          console.error('Sync flow error:', e)
+          break
+        }
+      }
+      
+      setSyncProgress(`Concluído! ${campaignsSynced} campanhas e ${flowsSynced} automações.`)
+      
+      // Small delay before fetching data
       await new Promise(resolve => setTimeout(resolve, 500))
       
     } catch (err) {
       console.error('[Email Analytics] Sync error:', err)
-      // Continue to fetch data even if sync fails
     }
     
     // Fetch updated data
     await fetchData()
+    setSyncProgress(null)
   }
 
   // Not connected state - show better UI with connection option
@@ -485,6 +525,16 @@ export default function EmailAnalyticsPage() {
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
+
+        {/* Sync Progress */}
+        {syncProgress && (
+          <div className="mt-2 px-4 py-2 bg-primary-500/20 border border-primary-500/30 rounded-lg">
+            <p className="text-sm text-primary-300 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {syncProgress}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* KPI Cards */}
