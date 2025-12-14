@@ -70,6 +70,7 @@ function calculateChange(current: number, previous: number): number {
 
 export async function GET(request: NextRequest) {
   const period = request.nextUrl.searchParams.get('period') || '30d';
+  const debug = request.nextUrl.searchParams.get('debug') === 'true';
 
   try {
     // Get Klaviyo account
@@ -88,6 +89,36 @@ export async function GET(request: NextRequest) {
     }
 
     const organizationId = klaviyoAccount.organization_id;
+    
+    // DEBUG MODE: Show raw database values
+    if (debug) {
+      const { data: rawCampaigns } = await supabase
+        .from('campaign_metrics')
+        .select('klaviyo_campaign_id, name, status, sent, delivered, opened, clicked, revenue, open_rate, click_rate, sent_at, updated_at')
+        .eq('organization_id', organizationId)
+        .order('sent_at', { ascending: false, nullsFirst: false })
+        .limit(10);
+      
+      const { data: rawFlows } = await supabase
+        .from('flow_metrics')
+        .select('klaviyo_flow_id, name, status, triggered, received, opened, clicked, revenue, open_rate, click_rate, updated_at')
+        .eq('organization_id', organizationId)
+        .order('revenue', { ascending: false, nullsFirst: false })
+        .limit(10);
+      
+      return NextResponse.json({
+        debug: true,
+        organizationId,
+        message: 'Dados RAW do banco de dados',
+        campaigns: rawCampaigns,
+        flows: rawFlows,
+        columnInfo: {
+          expectedColumns: ['sent', 'delivered', 'opened', 'clicked', 'revenue', 'open_rate', 'click_rate'],
+          note: 'Se sent/opened/clicked estão zerados, o sync não está salvando esses dados'
+        }
+      });
+    }
+
     const { startDate, endDate } = getDateRange(period);
     const { startDate: prevStart, endDate: prevEnd } = getPreviousPeriod(period);
 

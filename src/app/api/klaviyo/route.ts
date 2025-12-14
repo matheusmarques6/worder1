@@ -228,7 +228,7 @@ async function fetchCampaignsWithRevenue(
     
     console.log(`[Klaviyo] Campaigns in period: ${campaignsInPeriod.length}`);
     
-    // Get revenue for each campaign using Reporting API
+    // Get metrics for each campaign using Reporting API
     const campaignsWithRevenue = [];
     
     for (const camp of campaignsInPeriod) {
@@ -251,38 +251,35 @@ async function fetchCampaignsWithRevenue(
         click_rate: 0,
       };
       
+      // SINGLE CALL with all statistics - conversion_metric_id is REQUIRED
       if (metricId) {
         try {
-          // Get revenue using campaign-values-reports (como no workflow)
-          const revenueBody = {
+          const body = {
             data: {
               type: 'campaign-values-report',
               attributes: {
-                timeframe: {
-                  start: `${startDate}T00:00:00Z`,
-                  end: `${endDate}T23:59:59Z`
-                },
+                timeframe: { key: 'last_365_days' },
                 conversion_metric_id: metricId,
                 filter: `equals(campaign_id,"${camp.id}")`,
                 statistics: [
-                  'conversion_value',
-                  'conversions',
                   'recipients',
-                  'delivered',
+                  'delivered', 
                   'opens_unique',
                   'clicks_unique',
+                  'open_rate',
+                  'click_rate',
                   'bounced',
-                  'unsubscribes'
+                  'unsubscribes',
+                  'conversion_value',
+                  'conversions'
                 ]
               }
             }
           };
           
-          const revenueRes = await klaviyoPost(apiKey, '/campaign-values-reports/', revenueBody);
-          const stats = revenueRes?.data?.attributes?.results?.[0]?.statistics || {};
+          const res = await klaviyoPost(apiKey, '/campaign-values-reports/', body);
+          const stats = res?.data?.attributes?.results?.[0]?.statistics || {};
           
-          campaignData.revenue = stats.conversion_value || 0;
-          campaignData.conversions = stats.conversions || 0;
           campaignData.recipients = stats.recipients || 0;
           campaignData.sent = stats.recipients || 0;
           campaignData.delivered = stats.delivered || 0;
@@ -290,12 +287,11 @@ async function fetchCampaignsWithRevenue(
           campaignData.clicked = stats.clicks_unique || 0;
           campaignData.bounced = stats.bounced || 0;
           campaignData.unsubscribed = stats.unsubscribes || 0;
-          
-          // Calculate rates
-          if (campaignData.delivered > 0) {
-            campaignData.open_rate = (campaignData.opened / campaignData.delivered) * 100;
-            campaignData.click_rate = (campaignData.clicked / campaignData.delivered) * 100;
-          }
+          // Rates come as decimals, multiply by 100
+          campaignData.open_rate = (stats.open_rate || 0) * 100;
+          campaignData.click_rate = (stats.click_rate || 0) * 100;
+          campaignData.revenue = stats.conversion_value || 0;
+          campaignData.conversions = stats.conversions || 0;
           
         } catch (e: any) {
           console.warn(`[Klaviyo] Error getting campaign ${camp.id} metrics:`, e.message);
@@ -1154,6 +1150,139 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(debugResult);
     }
 
+    // DEBUG: Test engagement metrics specifically
+    if (action === 'debug-engagement') {
+      console.log('[Klaviyo Debug] Testing ENGAGEMENT metrics...');
+      
+      const result: any = {
+        timestamp: new Date().toISOString(),
+        purpose: 'Testar se a API retorna métricas de engagement (opens, clicks, etc)',
+      };
+
+      // Get metric ID
+      const metricId = await findPlacedOrderMetricId(klaviyoAccount.api_key);
+      result.metricId = metricId;
+      
+      // Get first sent campaign
+      const campaignsRes = await klaviyoFetch(
+        klaviyoAccount.api_key,
+        '/campaigns?filter=equals(messages.channel,"email")'
+      );
+      const sentCampaigns = (campaignsRes.data || []).filter((c: any) => 
+        (c.attributes?.status || '').toLowerCase() === 'sent'
+      );
+      
+      result.campaignsFound = sentCampaigns.length;
+      
+      if (sentCampaigns.length === 0) {
+        return NextResponse.json({ ...result, error: 'No sent campaigns found' });
+      }
+      
+      const campaign = sentCampaigns[0];
+      result.testCampaign = {
+        id: campaign.id,
+        name: campaign.attributes?.name,
+        sentAt: campaign.attributes?.send_time,
+      };
+      
+      // Test 1: Request with ONLY engagement metrics (no conversion_metric_id)
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 365);
+      
+      const startStr = startDate.toISOString().split('T')[0] + 'T00:00:00Z';
+      const endStr = endDate.toISOString().split('T')[0] + 'T23:59:59Z';
+      
+      result.dateRange = { start: startStr, end: endStr };
+      
+      // Test 1: Without conversion_metric_id
+      try {
+        const body1 = {
+          data: {
+            type: 'campaign-values-report',
+            attributes: {
+              timeframe: { start: startStr, end: endStr },
+              filter: `equals(campaign_id,"${campaign.id}")`,
+              statistics: ['recipients', 'delivered', 'opens_unique', 'clicks_unique', 'bounced', 'unsubscribes']
+            }
+          }
+        };
+        
+        const res1 = await fetch('https://a.klaviyo.com/api/campaign-values-reports/', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Klaviyo-API-Key ${klaviyoAccount.api_key}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'revision': '2024-10-15'
+          },
+          body: JSON.stringify(body1)
+        });
+        
+        const text1 = await res1.text();
+        result.test1_withoutMetricId = {
+          status: res1.status,
+          request: body1,
+          response: text1.substring(0, 3000),
+        };
+      } catch (e: any) {
+        result.test1_withoutMetricId = { error: e.message };
+      }
+      
+      // Test 2: With conversion_metric_id - mixed statistics
+      if (metricId) {
+        try {
+          const body2 = {
+            data: {
+              type: 'campaign-values-report',
+              attributes: {
+                timeframe: { start: startStr, end: endStr },
+                conversion_metric_id: metricId,
+                filter: `equals(campaign_id,"${campaign.id}")`,
+                statistics: ['conversion_value', 'conversions', 'recipients', 'delivered', 'opens_unique', 'clicks_unique']
+              }
+            }
+          };
+          
+          const res2 = await fetch('https://a.klaviyo.com/api/campaign-values-reports/', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Klaviyo-API-Key ${klaviyoAccount.api_key}`,
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              'revision': '2024-10-15'
+            },
+            body: JSON.stringify(body2)
+          });
+          
+          const text2 = await res2.text();
+          let json2 = null;
+          try { json2 = JSON.parse(text2); } catch(e) {}
+          
+          result.test2_withMetricId = {
+            status: res2.status,
+            request: body2,
+            response: text2.substring(0, 3000),
+            parsed: json2,
+            statistics: json2?.data?.attributes?.results?.[0]?.statistics,
+          };
+        } catch (e: any) {
+          result.test2_withMetricId = { error: e.message };
+        }
+      }
+      
+      // Test 3: Check what's actually in the database
+      const { data: dbCampaign } = await supabase
+        .from('campaign_metrics')
+        .select('*')
+        .eq('klaviyo_campaign_id', campaign.id)
+        .single();
+      
+      result.databaseRow = dbCampaign;
+      
+      return NextResponse.json(result);
+    }
+
     // ULTRA-MINIMAL SYNC - One campaign at a time to avoid timeout
     if (action === 'sync-one') {
       console.log('[Klaviyo] Sync-one: Processing campaigns...');
@@ -1229,53 +1358,67 @@ export async function GET(request: NextRequest) {
             updated_at: new Date().toISOString(),
           }, { onConflict: 'organization_id,klaviyo_campaign_id' });
 
-          // Get ALL metrics in a single call (revenue + engagement)
-          const metricsBody = {
-            data: {
-              type: 'campaign-values-report',
-              attributes: {
-                timeframe: { start: startDateStr, end: endDateStr },
-                conversion_metric_id: metricId,
-                filter: `equals(campaign_id,"${targetCampaign.id}")`,
-                statistics: [
-                  'conversion_value', 
-                  'conversions',
-                  'recipients', 
-                  'delivered', 
-                  'opens_unique', 
-                  'clicks_unique', 
-                  'bounced', 
-                  'unsubscribes'
-                ]
-              }
-            }
-          };
-
-          const metricsResponse = await klaviyoPost(klaviyoAccount.api_key, '/campaign-values-reports/', metricsBody);
-          
-          let revenue = 0;
-          let conversions = 0;
+          let revenue = 0, conversions = 0;
           let sent = 0, delivered = 0, opened = 0, clicked = 0, bounced = 0, unsubscribed = 0;
-          
-          if (metricsResponse?.data?.attributes?.results?.[0]) {
-            const stats = metricsResponse.data.attributes.results[0].statistics || {};
-            // Revenue metrics
-            revenue = stats.conversion_value || 0;
-            conversions = stats.conversions || 0;
-            // Engagement metrics
-            sent = stats.recipients || 0;
-            delivered = stats.delivered || 0;
-            opened = stats.opens_unique || 0;
-            clicked = stats.clicks_unique || 0;
-            bounced = stats.bounced || 0;
-            unsubscribed = stats.unsubscribes || 0;
-          }
-          
-          console.log(`[Klaviyo] Campaign ${targetCampaign.id}: sent=${sent}, opened=${opened}, clicked=${clicked}, revenue=${revenue}`);
+          let openRate = 0, clickRate = 0;
 
-          // Calculate rates
-          const openRate = delivered > 0 ? (opened / delivered) * 100 : 0;
-          const clickRate = delivered > 0 ? (clicked / delivered) * 100 : 0;
+          // SINGLE CALL: Get ALL metrics (engagement + conversion)
+          // conversion_metric_id is REQUIRED but only affects conversion stats
+          // engagement stats (opens, clicks, delivered) return regardless of metric ID
+          try {
+            const metricsBody = {
+              data: {
+                type: 'campaign-values-report',
+                attributes: {
+                  timeframe: { key: 'last_365_days' },
+                  conversion_metric_id: metricId,
+                  filter: `equals(campaign_id,"${targetCampaign.id}")`,
+                  statistics: [
+                    'recipients',
+                    'delivered', 
+                    'opens_unique',
+                    'clicks_unique',
+                    'open_rate',
+                    'click_rate',
+                    'bounced',
+                    'unsubscribes',
+                    'conversion_value',
+                    'conversions'
+                  ]
+                }
+              }
+            };
+
+            console.log(`[Klaviyo] Fetching ALL metrics for campaign ${targetCampaign.id}...`);
+            const metricsResponse = await klaviyoPost(klaviyoAccount.api_key, '/campaign-values-reports/', metricsBody);
+            
+            if (metricsResponse?.data?.attributes?.results?.[0]) {
+              const stats = metricsResponse.data.attributes.results[0].statistics || {};
+              
+              // Engagement metrics
+              sent = stats.recipients || 0;
+              delivered = stats.delivered || 0;
+              opened = stats.opens_unique || 0;
+              clicked = stats.clicks_unique || 0;
+              bounced = stats.bounced || 0;
+              unsubscribed = stats.unsubscribes || 0;
+              
+              // Rates come as decimals (0.196 = 19.6%), multiply by 100
+              openRate = (stats.open_rate || 0) * 100;
+              clickRate = (stats.click_rate || 0) * 100;
+              
+              // Conversion metrics
+              revenue = stats.conversion_value || 0;
+              conversions = stats.conversions || 0;
+              
+              console.log(`[Klaviyo] Campaign ${targetCampaign.id} SUCCESS: sent=${sent}, delivered=${delivered}, opened=${opened}, clicked=${clicked}, openRate=${openRate.toFixed(1)}%, revenue=${revenue}`);
+            } else {
+              console.log(`[Klaviyo] Campaign ${targetCampaign.id}: No results in response`);
+              console.log(`[Klaviyo] Raw response:`, JSON.stringify(metricsResponse).substring(0, 500));
+            }
+          } catch (apiErr: any) {
+            console.error(`[Klaviyo] API error for ${targetCampaign.id}:`, apiErr.message);
+          }
 
           // Update DB with all metrics
           await supabase.from('campaign_metrics').update({
@@ -1589,7 +1732,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * Fetch campaign metrics using Reporting API
- * BASED ON WORKING WORKFLOW - uses specific date range and correct statistics
+ * Uses single call with conversion_metric_id (required) to get all metrics
  */
 async function fetchCampaignMetrics(
   apiKey: string, 
@@ -1606,60 +1749,54 @@ async function fetchCampaignMetrics(
   }
   
   console.log(`[Klaviyo] Fetching metrics for ${campaignIds.length} campaigns...`);
-  console.log(`[Klaviyo] Date range: ${startDate} to ${endDate}`);
-  console.log(`[Klaviyo] Using metric ID: ${metricId}`);
   
   // Process each campaign individually
   for (const campId of campaignIds) {
     try {
-      // Get ALL metrics in a single call (revenue + engagement)
+      // SINGLE CALL with all statistics - conversion_metric_id is REQUIRED
       const body = {
         data: {
           type: 'campaign-values-report',
           attributes: {
-            timeframe: {
-              start: startDate + 'T00:00:00Z',
-              end: endDate + 'T23:59:59Z'
-            },
+            timeframe: { key: 'last_365_days' },
             conversion_metric_id: metricId,
             filter: `equals(campaign_id,"${campId}")`,
             statistics: [
-              'conversion_value', 
-              'conversions',
-              'recipients', 
+              'recipients',
               'delivered', 
-              'opens_unique', 
-              'clicks_unique', 
-              'bounced', 
-              'unsubscribes'
+              'opens_unique',
+              'clicks_unique',
+              'open_rate',
+              'click_rate',
+              'bounced',
+              'unsubscribes',
+              'conversion_value',
+              'conversions'
             ]
           }
         }
       };
       
-      console.log(`[Klaviyo] Campaign ${campId} request...`);
       const response = await klaviyoPost(apiKey, '/campaign-values-reports/', body);
       
       if (response?.data?.attributes?.results?.[0]) {
         const stats = response.data.attributes.results[0].statistics || {};
-        const sent = stats.recipients || 0;
-        const delivered = stats.delivered || 0;
-        const opened = stats.opens_unique || 0;
-        const clicked = stats.clicks_unique || 0;
         
         metricsMap.set(campId, {
-          revenue: stats.conversion_value || 0,
-          conversions: stats.conversions || 0,
-          sent: sent,
-          delivered: delivered,
-          opened: opened,
-          clicked: clicked,
+          sent: stats.recipients || 0,
+          delivered: stats.delivered || 0,
+          opened: stats.opens_unique || 0,
+          clicked: stats.clicks_unique || 0,
           bounced: stats.bounced || 0,
           unsubscribed: stats.unsubscribes || 0,
-          open_rate: delivered > 0 ? (opened / delivered) * 100 : 0,
-          click_rate: delivered > 0 ? (clicked / delivered) * 100 : 0,
+          // Rates come as decimals, multiply by 100
+          open_rate: (stats.open_rate || 0) * 100,
+          click_rate: (stats.click_rate || 0) * 100,
+          revenue: stats.conversion_value || 0,
+          conversions: stats.conversions || 0,
         });
-        console.log(`[Klaviyo] Campaign ${campId}: sent=${sent}, opened=${opened}, clicked=${clicked}, revenue=${stats.conversion_value}`);
+        
+        console.log(`[Klaviyo] Campaign ${campId}: sent=${stats.recipients}, opened=${stats.opens_unique}, revenue=${stats.conversion_value}`);
       } else {
         console.log(`[Klaviyo] Campaign ${campId}: no results`);
       }
