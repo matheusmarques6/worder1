@@ -480,8 +480,12 @@ export default function EmailAnalyticsPage() {
 
   const kpis = data?.kpis
   const funnel = data?.funnel || []
-  const campaigns = data?.campaigns || []
-  const flows = data?.flows || []
+  // Limitar campanhas às 10 mais recentes
+  const campaigns = (data?.campaigns || []).slice(0, 10)
+  // Mostrar apenas flows ativos (live ou manual)
+  const flows = (data?.flows || []).filter(f => 
+    f.status?.toLowerCase() === 'live' || f.status?.toLowerCase() === 'manual'
+  )
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -573,20 +577,52 @@ export default function EmailAnalyticsPage() {
         />
       </div>
 
-      {/* Second row of KPIs */}
+      {/* Second row of KPIs - Totais */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard
-          title="ROI de Email"
-          value={`${kpis?.roi?.value || 0}x`}
-          icon={TrendingUp}
-          color="from-yellow-500 to-orange-500"
+          title="Emails Enviados"
+          value={formatNumber(data?.totals?.sent || 0)}
+          icon={Send}
+          color="from-blue-500 to-blue-600"
           loading={isLoading}
         />
+        <KPICard
+          title="Entregues"
+          value={formatNumber(data?.totals?.delivered || 0)}
+          icon={CheckCircle}
+          color="from-cyan-500 to-blue-500"
+          loading={isLoading}
+        />
+        <KPICard
+          title="Abertos"
+          value={formatNumber(data?.totals?.opened || 0)}
+          icon={Eye}
+          color="from-green-500 to-green-600"
+          loading={isLoading}
+        />
+        <KPICard
+          title="Clicados"
+          value={formatNumber(data?.totals?.clicked || 0)}
+          icon={MousePointer}
+          color="from-purple-500 to-purple-600"
+          loading={isLoading}
+        />
+      </div>
+
+      {/* Third row of KPIs - Subscribers & Bounces */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard
           title="Lista Ativa"
           value={formatNumber(Number(kpis?.subscribers?.value) || 0)}
           icon={Users}
           color="from-cyan-500 to-blue-500"
+          loading={isLoading}
+        />
+        <KPICard
+          title="Conversões"
+          value={formatNumber(data?.totals?.conversions || 0)}
+          icon={Target}
+          color="from-yellow-500 to-orange-500"
           loading={isLoading}
         />
         <KPICard
@@ -763,7 +799,7 @@ export default function EmailAnalyticsPage() {
                 : 'text-dark-400 hover:text-white'
             }`}
           >
-            Campanhas ({campaigns.length})
+            Campanhas ({campaigns.length}{data?.totalCounts?.campaigns && data.totalCounts.campaigns > campaigns.length ? ` de ${data.totalCounts.campaigns}` : ''})
           </button>
           <button
             onClick={() => setActiveTab('flows')}
@@ -773,7 +809,7 @@ export default function EmailAnalyticsPage() {
                 : 'text-dark-400 hover:text-white'
             }`}
           >
-            Automações ({flows.length})
+            Automações Ativas ({flows.length})
           </button>
         </div>
 

@@ -113,11 +113,12 @@ export async function GET(request: NextRequest) {
       return sentDate >= prevStart && sentDate <= prevEnd;
     });
 
-    // Fetch flows from database (all flows, regardless of status)
+    // Fetch flows from database (only active flows: live or manual)
     const { data: flows } = await supabase
       .from('flow_metrics')
       .select('*')
       .eq('organization_id', organizationId)
+      .in('status', ['live', 'manual', 'Live', 'Manual'])
       .order('revenue', { ascending: false, nullsFirst: false });
 
     // Fetch lists
@@ -281,7 +282,7 @@ export async function GET(request: NextRequest) {
         flowRevenue: flowRevenue,
       },
       funnel: funnelData,
-      campaigns: allCampaignsForDisplay.slice(0, 20).map(c => {
+      campaigns: allCampaignsForDisplay.slice(0, 10).map(c => {
         // Safe number conversion for all fields
         const sent = Number(c.sent) || Number(c.recipients) || 0;
         const delivered = Number(c.delivered) || 0;
@@ -310,7 +311,7 @@ export async function GET(request: NextRequest) {
         };
       }),
       flows: allFlows
-        .slice(0, 20)
+        .slice(0, 10)
         .map(f => {
           // Safe number conversion for all fields
           const triggered = Number(f.triggered) || 0;
