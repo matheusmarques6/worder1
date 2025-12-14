@@ -32,30 +32,35 @@ const KLAVIYO_REVISION = '2024-10-15'; // Versão testada e funcional
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Klaviyo API request with retry and rate limiting
- * Implementa exponential backoff como no workflow
+ * Klaviyo API request with retry, rate limiting, and timeout
+ * Implementa exponential backoff e timeout para evitar Vercel timeout
  */
 async function klaviyoFetch(
   apiKey: string,
   endpoint: string,
   options: RequestInit = {},
-  retries = 3 // Reduced from 5
+  retries = 2 // Reduced to 2 retries
 ): Promise<any> {
   let attempt = 0;
 
   while (attempt < retries) {
     if (attempt > 0) {
-      // Faster backoff: 500ms, 1s, 2s (max)
-      const backoff = Math.min(500 * Math.pow(2, attempt - 1), 2000);
+      // Faster backoff: 300ms, 600ms
+      const backoff = Math.min(300 * Math.pow(2, attempt - 1), 1000);
       console.log(`[Klaviyo] Retry ${attempt}/${retries}, waiting ${backoff}ms...`);
       await sleep(backoff);
     }
 
     const url = endpoint.startsWith('http') ? endpoint : `${KLAVIYO_API_URL}${endpoint}`;
     
+    // Add timeout to avoid Vercel function timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+    
     try {
       const response = await fetch(url, {
         ...options,
+        signal: controller.signal,
         headers: {
           'Authorization': `Klaviyo-API-Key ${apiKey}`,
           'Content-Type': 'application/json',
@@ -64,11 +69,14 @@ async function klaviyoFetch(
           ...options.headers,
         },
       });
+      
+      clearTimeout(timeoutId);
 
       // Rate limit - respect Retry-After header
       if (response.status === 429) {
+        clearTimeout(timeoutId);
         const retryAfter = response.headers.get('Retry-After');
-        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 2000;
+        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 1000;
         console.log(`[Klaviyo] Rate limited, waiting ${waitTime}ms...`);
         await sleep(waitTime);
         attempt++;
@@ -77,11 +85,13 @@ async function klaviyoFetch(
 
       // Server errors - retry
       if (response.status >= 500) {
+        clearTimeout(timeoutId);
         attempt++;
         continue;
       }
 
       if (!response.ok) {
+        clearTimeout(timeoutId);
         const errorText = await response.text();
         let errorMessage = `Klaviyo API error (${response.status})`;
         try {
@@ -95,6 +105,11 @@ async function klaviyoFetch(
 
       return response.json();
     } catch (error: any) {
+      clearTimeout(timeoutId);
+      // Check if it was a timeout
+      if (error.name === 'AbortError') {
+        console.log(`[Klaviyo] Request timeout for ${endpoint}`);
+      }
       attempt++;
       if (attempt >= retries) throw error;
     }
@@ -1323,10 +1338,10 @@ export async function GET(request: NextRequest) {
           .map((c: any) => c.klaviyo_campaign_id)
       );
 
-      // Get next 5 campaigns to sync
+      // Get next 1 campaign to sync (minimal to avoid timeout on free tier)
       const campaignsToSync = sentCampaigns
         .filter((c: any) => !syncedIds.has(c.id))
-        .slice(0, 5);
+        .slice(0, 1);
       
       // If all are synced, return
       if (campaignsToSync.length === 0) {
@@ -1337,12 +1352,6 @@ export async function GET(request: NextRequest) {
           duration: `${Date.now() - startTime}ms`
         });
       }
-
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 365);
-      const startDateStr = startDate.toISOString().split('T')[0] + 'T00:00:00Z';
-      const endDateStr = endDate.toISOString().split('T')[0] + 'T23:59:59Z';
 
       const syncedCampaigns = [];
 
@@ -2032,7 +2041,7 @@ async function quickSyncKlaviyoData(organizationId: string, apiKey: string, erro
         const status = (f.attributes?.status || '').toLowerCase();
         return status === 'live' || status === 'manual';
       })
-      .slice(0, 5); // 5 flows - we have 300s timeout now
+      .slice(0, 1); // 1 flow to avoid timeout on free tier
     
     console.log(`[Klaviyo Quick Sync] Selected ${activeFlows.length} active flows for metrics:`);
     activeFlows.forEach((f: any, i: number) => {
