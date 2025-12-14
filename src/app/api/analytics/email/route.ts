@@ -185,6 +185,105 @@ async function queryMetricAggregate(
   }
 }
 
+// Query Metric Aggregates GROUPED BY CAMPAIGN
+// Returns a map of campaign_id -> value
+async function queryMetricByMessage(
+  apiKey: string,
+  metricId: string,
+  startStr: string,
+  endStr: string,
+  measurement: 'count' | 'unique' | 'sum_value' = 'count'
+): Promise<Map<string, number>> {
+  const resultMap = new Map<string, number>();
+  if (!metricId) return resultMap;
+  
+  try {
+    const body = {
+      data: {
+        type: 'metric-aggregate',
+        attributes: {
+          measurements: [measurement],
+          by: ['$message'],  // Group by message (campaign)
+          filter: [
+            `greater-or-equal(datetime,${startStr})`,
+            `less-than(datetime,${endStr})`
+          ],
+          metric_id: metricId,
+          timezone: 'America/Sao_Paulo'
+        }
+      }
+    };
+
+    const response = await klaviyoPost(apiKey, '/metric-aggregates', body);
+    
+    // Process grouped results
+    const data = response?.data?.attributes?.data || [];
+    for (const item of data) {
+      const messageId = item.dimensions?.[0];
+      if (messageId) {
+        const values = item.measurements?.[measurement] || [];
+        const total = values.reduce((sum: number, v: number) => sum + (v || 0), 0);
+        resultMap.set(messageId, total);
+      }
+    }
+    
+    return resultMap;
+  } catch (e: any) {
+    console.error(`[Klaviyo] Metric by message error for ${metricId}:`, e.message);
+    return resultMap;
+  }
+}
+
+// Query Metric Aggregates GROUPED BY FLOW
+// Returns a map of flow_id -> value
+async function queryMetricByFlow(
+  apiKey: string,
+  metricId: string,
+  startStr: string,
+  endStr: string,
+  measurement: 'count' | 'unique' | 'sum_value' = 'count'
+): Promise<Map<string, number>> {
+  const resultMap = new Map<string, number>();
+  if (!metricId) return resultMap;
+  
+  try {
+    const body = {
+      data: {
+        type: 'metric-aggregate',
+        attributes: {
+          measurements: [measurement],
+          by: ['$attributed_flow'],  // Group by attributed flow
+          filter: [
+            `greater-or-equal(datetime,${startStr})`,
+            `less-than(datetime,${endStr})`,
+            'not(equals($attributed_flow,""))' // Only include flow-attributed events
+          ],
+          metric_id: metricId,
+          timezone: 'America/Sao_Paulo'
+        }
+      }
+    };
+
+    const response = await klaviyoPost(apiKey, '/metric-aggregates', body);
+    
+    // Process grouped results
+    const data = response?.data?.attributes?.data || [];
+    for (const item of data) {
+      const flowId = item.dimensions?.[0];
+      if (flowId) {
+        const values = item.measurements?.[measurement] || [];
+        const total = values.reduce((sum: number, v: number) => sum + (v || 0), 0);
+        resultMap.set(flowId, total);
+      }
+    }
+    
+    return resultMap;
+  } catch (e: any) {
+    console.error(`[Klaviyo] Metric by flow error for ${metricId}:`, e.message);
+    return resultMap;
+  }
+}
+
 // Get all metrics for a period using Query Metric Aggregates
 async function getMetricsForPeriod(
   apiKey: string,
@@ -287,6 +386,53 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId)
       .order('sent_at', { ascending: false, nullsFirst: false });
 
+    // ============================================
+    // REALTIME: Get per-campaign metrics using Metric Aggregates
+    // This enriches campaign data with real-time engagement metrics
+    // ============================================
+    let campaignSentMap = new Map<string, number>();
+    let campaignOpenedMap = new Map<string, number>();
+    let campaignClickedMap = new Map<string, number>();
+    
+    // Maps for flows (using $attributed_flow)
+    let flowTriggeredMap = new Map<string, number>();
+    let flowOpenedMap = new Map<string, number>();
+    let flowClickedMap = new Map<string, number>();
+    
+    try {
+      // Fetch metrics grouped by message/campaign in parallel
+      const [sentByMsg, openedByMsg, clickedByMsg] = await Promise.all([
+        metricIds.receivedEmail ? queryMetricByMessage(klaviyoAccount.api_key, metricIds.receivedEmail, startStr, endStr, 'count') : Promise.resolve(new Map()),
+        metricIds.openedEmail ? queryMetricByMessage(klaviyoAccount.api_key, metricIds.openedEmail, startStr, endStr, 'unique') : Promise.resolve(new Map()),
+        metricIds.clickedEmail ? queryMetricByMessage(klaviyoAccount.api_key, metricIds.clickedEmail, startStr, endStr, 'unique') : Promise.resolve(new Map()),
+      ]);
+      
+      campaignSentMap = sentByMsg;
+      campaignOpenedMap = openedByMsg;
+      campaignClickedMap = clickedByMsg;
+      
+      console.log(`[Analytics] Got metrics for ${campaignSentMap.size} sent, ${campaignOpenedMap.size} opened, ${campaignClickedMap.size} clicked campaigns`);
+    } catch (e: any) {
+      console.error('[Analytics] Error fetching per-campaign metrics:', e.message);
+    }
+    
+    // Fetch flow metrics grouped by $attributed_flow
+    try {
+      const [flowTrig, flowOpen, flowClick] = await Promise.all([
+        metricIds.receivedEmail ? queryMetricByFlow(klaviyoAccount.api_key, metricIds.receivedEmail, startStr, endStr, 'count') : Promise.resolve(new Map()),
+        metricIds.openedEmail ? queryMetricByFlow(klaviyoAccount.api_key, metricIds.openedEmail, startStr, endStr, 'unique') : Promise.resolve(new Map()),
+        metricIds.clickedEmail ? queryMetricByFlow(klaviyoAccount.api_key, metricIds.clickedEmail, startStr, endStr, 'unique') : Promise.resolve(new Map()),
+      ]);
+      
+      flowTriggeredMap = flowTrig;
+      flowOpenedMap = flowOpen;
+      flowClickedMap = flowClick;
+      
+      console.log(`[Analytics] Got metrics for ${flowTriggeredMap.size} triggered, ${flowOpenedMap.size} opened, ${flowClickedMap.size} clicked flows`);
+    } catch (e: any) {
+      console.error('[Analytics] Error fetching per-flow metrics:', e.message);
+    }
+
     // Calculate rates
     const openRate = totalSent > 0 ? (totalOpened / totalSent) * 100 : 0;
     const clickRate = totalSent > 0 ? (totalClicked / totalSent) * 100 : 0;
@@ -341,29 +487,63 @@ export async function GET(request: NextRequest) {
         openRate,
         clickRate
       },
-      flows: (flows || []).map(f => ({
-        id: f.klaviyo_flow_id,
-        name: f.name,
-        status: f.status,
-        triggered: f.triggered || 0,
-        opened: f.opened || 0,
-        clicked: f.clicked || 0,
-        revenue: f.revenue || 0,
-        open_rate: f.open_rate || 0,
-        click_rate: f.click_rate || 0,
-      })),
-      campaigns: (campaigns || []).slice(0, 20).map(c => ({
-        id: c.klaviyo_campaign_id,
-        name: c.name,
-        status: c.status,
-        sent_at: c.sent_at,
-        sent: c.sent || 0,
-        opened: c.opened || 0,
-        clicked: c.clicked || 0,
-        revenue: c.revenue || 0,
-        open_rate: c.open_rate || 0,
-        click_rate: c.click_rate || 0,
-      })),
+      flows: (flows || []).map(f => {
+        const flowId = f.klaviyo_flow_id;
+        const realtimeTriggered = flowTriggeredMap.get(flowId) || 0;
+        const realtimeOpened = flowOpenedMap.get(flowId) || 0;
+        const realtimeClicked = flowClickedMap.get(flowId) || 0;
+        
+        // Use realtime data if available, otherwise fall back to DB
+        const triggered = realtimeTriggered || f.triggered || 0;
+        const opened = realtimeOpened || f.opened || 0;
+        const clicked = realtimeClicked || f.clicked || 0;
+        
+        // Calculate rates
+        const openRateCalc = triggered > 0 ? (opened / triggered) * 100 : 0;
+        const clickRateCalc = triggered > 0 ? (clicked / triggered) * 100 : 0;
+        
+        return {
+          id: flowId,
+          name: f.name,
+          status: f.status,
+          triggered,
+          opened,
+          clicked,
+          revenue: f.revenue || 0,
+          open_rate: openRateCalc,
+          click_rate: clickRateCalc,
+        };
+      }),
+      campaigns: (campaigns || []).slice(0, 20).map(c => {
+        // Try to get realtime metrics using campaign_id
+        // Note: message_id might be different from campaign_id
+        const campaignId = c.klaviyo_campaign_id;
+        const realtimeSent = campaignSentMap.get(campaignId) || 0;
+        const realtimeOpened = campaignOpenedMap.get(campaignId) || 0;
+        const realtimeClicked = campaignClickedMap.get(campaignId) || 0;
+        
+        // Use realtime data if available, otherwise fall back to DB
+        const sent = realtimeSent || c.sent || 0;
+        const opened = realtimeOpened || c.opened || 0;
+        const clicked = realtimeClicked || c.clicked || 0;
+        
+        // Calculate rates
+        const openRateCalc = sent > 0 ? (opened / sent) * 100 : 0;
+        const clickRateCalc = sent > 0 ? (clicked / sent) * 100 : 0;
+        
+        return {
+          id: campaignId,
+          name: c.name,
+          status: c.status,
+          sent_at: c.sent_at,
+          sent,
+          opened,
+          clicked,
+          revenue: c.revenue || 0,
+          open_rate: openRateCalc,
+          click_rate: clickRateCalc,
+        };
+      }),
       lists: (lists || []).map(l => ({
         id: l.klaviyo_list_id,
         name: l.name,
@@ -376,7 +556,21 @@ export async function GET(request: NextRequest) {
         metricIds,
         currentPeriod: currentMetrics,
         previousPeriod: prevMetrics,
-        rates: { openRate, clickRate, prevOpenRate, prevClickRate }
+        rates: { openRate, clickRate, prevOpenRate, prevClickRate },
+        campaignMetrics: {
+          sentMapSize: campaignSentMap.size,
+          openedMapSize: campaignOpenedMap.size,
+          clickedMapSize: campaignClickedMap.size,
+          sampleSentIds: Array.from(campaignSentMap.keys()).slice(0, 5),
+          sampleOpenedIds: Array.from(campaignOpenedMap.keys()).slice(0, 5),
+        },
+        flowMetrics: {
+          triggeredMapSize: flowTriggeredMap.size,
+          openedMapSize: flowOpenedMap.size,
+          clickedMapSize: flowClickedMap.size,
+          sampleTriggeredIds: Array.from(flowTriggeredMap.keys()).slice(0, 5),
+          sampleOpenedIds: Array.from(flowOpenedMap.keys()).slice(0, 5),
+        }
       };
     }
 
