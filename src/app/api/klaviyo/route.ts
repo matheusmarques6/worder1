@@ -1181,15 +1181,16 @@ export async function GET(request: NextRequest) {
           return dateB.getTime() - dateA.getTime();
         });
 
-      // Find campaigns that haven't been synced yet (revenue = 0 or null)
+      // Find campaigns that haven't been fully synced (need revenue AND engagement)
       const { data: dbCampaigns } = await supabase
         .from('campaign_metrics')
-        .select('klaviyo_campaign_id, revenue')
+        .select('klaviyo_campaign_id, revenue, sent')
         .eq('organization_id', klaviyoAccount.organization_id);
       
+      // Consider synced only if has BOTH revenue AND sent metrics
       const syncedIds = new Set(
         (dbCampaigns || [])
-          .filter((c: any) => Number(c.revenue) > 0)
+          .filter((c: any) => Number(c.revenue) > 0 && Number(c.sent) > 0)
           .map((c: any) => c.klaviyo_campaign_id)
       );
 
@@ -1263,7 +1264,7 @@ export async function GET(request: NextRequest) {
                   timeframe: { start: startDateStr, end: endDateStr },
                   conversion_metric_id: metricId,
                   filter: `equals(campaign_id,"${targetCampaign.id}")`,
-                  statistics: ['recipients', 'delivered', 'opens_unique', 'clicks_unique', 'bounced', 'unsubscribed']
+                  statistics: ['recipients', 'delivered', 'opens_unique', 'clicks_unique', 'bounced', 'unsubscribes']
                 }
               }
             };
@@ -1277,7 +1278,7 @@ export async function GET(request: NextRequest) {
               opened = engStats.opens_unique || 0;
               clicked = engStats.clicks_unique || 0;
               bounced = engStats.bounced || 0;
-              unsubscribed = engStats.unsubscribed || 0;
+              unsubscribed = engStats.unsubscribes || 0;
             }
           } catch (engError: any) {
             console.log(`[Klaviyo] Engagement metrics not available for ${targetCampaign.id}:`, engError.message);
@@ -1331,6 +1332,46 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Reset flows to force re-sync with 30-day data
+    if (action === 'reset-flows') {
+      console.log('[Klaviyo] Resetting flows for re-sync...');
+      
+      const { error } = await supabase
+        .from('flow_metrics')
+        .update({ revenue: 0, conversions: 0 })
+        .eq('organization_id', klaviyoAccount.organization_id);
+      
+      if (error) {
+        console.error('[Klaviyo] Reset flows error:', error);
+        return NextResponse.json({ error: 'Failed to reset flows' }, { status: 500 });
+      }
+      
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Flows reset! Call sync-flows to re-sync with 30-day data.'
+      });
+    }
+
+    // Reset campaigns to force re-sync of engagement metrics
+    if (action === 'reset-campaigns') {
+      console.log('[Klaviyo] Resetting campaigns for re-sync...');
+      
+      const { error } = await supabase
+        .from('campaign_metrics')
+        .update({ sent: 0, delivered: 0, opened: 0, clicked: 0 })
+        .eq('organization_id', klaviyoAccount.organization_id);
+      
+      if (error) {
+        console.error('[Klaviyo] Reset campaigns error:', error);
+        return NextResponse.json({ error: 'Failed to reset campaigns' }, { status: 500 });
+      }
+      
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Campaigns reset! Call sync-one to re-sync engagement metrics.'
+      });
+    }
+
     // Sync flows one batch at a time
     if (action === 'sync-flows') {
       console.log('[Klaviyo] Sync-flows: Processing flows...');
@@ -1381,7 +1422,7 @@ export async function GET(request: NextRequest) {
 
       const endDate = new Date();
       const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 365);
+      startDate.setDate(startDate.getDate() - 30);  // Use 30 days to match Klaviyo UI
       const startDateStr = startDate.toISOString().split('T')[0] + 'T00:00:00Z';
       const endDateStr = endDate.toISOString().split('T')[0] + 'T23:59:59Z';
 
@@ -1399,7 +1440,7 @@ export async function GET(request: NextRequest) {
             updated_at: new Date().toISOString(),
           }, { onConflict: 'organization_id,klaviyo_flow_id' });
 
-          // Get REVENUE metrics using flow-values-report
+          // Get REVENUE metrics using flow-values-report (30 days)
           const revenueBody = {
             data: {
               type: 'flow-values-report',
@@ -1894,20 +1935,28 @@ async function quickSyncKlaviyoData(organizationId: string, apiKey: string, erro
   }
 
   // STEP 3: Fetch metrics in PARALLEL (this is the slow part)
-  // Calculate date range (last 365 days)
+  // Calculate date ranges
   const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 365);
   
-  const startDateStr = startDate.toISOString().split('T')[0];
+  // Campaigns: use 365 days (one-time events, capture all history)
+  const campaignStartDate = new Date();
+  campaignStartDate.setDate(campaignStartDate.getDate() - 365);
+  const campaignStartDateStr = campaignStartDate.toISOString().split('T')[0];
+  
+  // Flows: use 30 days to match Klaviyo UI
+  const flowStartDate = new Date();
+  flowStartDate.setDate(flowStartDate.getDate() - 30);
+  const flowStartDateStr = flowStartDate.toISOString().split('T')[0];
+  
   const endDateStr = endDate.toISOString().split('T')[0];
   
   console.log(`[Klaviyo Quick Sync] Fetching metrics for ${campaignIds.length} campaigns and ${flowIds.length} flows...`);
-  console.log(`[Klaviyo Quick Sync] Date range: ${startDateStr} to ${endDateStr}`);
+  console.log(`[Klaviyo Quick Sync] Campaign date range: ${campaignStartDateStr} to ${endDateStr} (365 days)`);
+  console.log(`[Klaviyo Quick Sync] Flow date range: ${flowStartDateStr} to ${endDateStr} (30 days)`);
   
   const [campaignMetricsResult, flowMetricsResult] = await Promise.allSettled([
-    campaignIds.length > 0 ? fetchCampaignMetrics(apiKey, campaignIds, metricId, startDateStr, endDateStr) : Promise.resolve(new Map()),
-    flowIds.length > 0 ? fetchFlowMetrics(apiKey, flowIds, metricId, startDateStr, endDateStr) : Promise.resolve(new Map())
+    campaignIds.length > 0 ? fetchCampaignMetrics(apiKey, campaignIds, metricId, campaignStartDateStr, endDateStr) : Promise.resolve(new Map()),
+    flowIds.length > 0 ? fetchFlowMetrics(apiKey, flowIds, metricId, flowStartDateStr, endDateStr) : Promise.resolve(new Map())
   ]);
 
   // Update campaign metrics
@@ -2016,13 +2065,19 @@ async function syncKlaviyoData(
 ) {
   console.log(`[Klaviyo Sync] Starting full sync for org ${organizationId}...`);
   
-  // Calculate date range (last 30 days)
+  // Calculate date ranges
   const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 30);
-  
-  const startStr = startDate.toISOString().split('T')[0];
   const endStr = endDate.toISOString().split('T')[0];
+  
+  // Campaigns: 365 days (one-time events)
+  const campaignStartDate = new Date();
+  campaignStartDate.setDate(campaignStartDate.getDate() - 365);
+  const campaignStartStr = campaignStartDate.toISOString().split('T')[0];
+  
+  // Flows: 30 days to match Klaviyo UI
+  const flowStartDate = new Date();
+  flowStartDate.setDate(flowStartDate.getDate() - 30);
+  const flowStartStr = flowStartDate.toISOString().split('T')[0];
 
   try {
     // Find metric if not provided
@@ -2030,9 +2085,9 @@ async function syncKlaviyoData(
       metricId = await findPlacedOrderMetricId(apiKey);
     }
     
-    // Sync campaigns with revenue
+    // Sync campaigns with revenue (365 days)
     if (metricId) {
-      const campaigns = await fetchCampaignsWithRevenue(apiKey, metricId, startStr, endStr);
+      const campaigns = await fetchCampaignsWithRevenue(apiKey, metricId, campaignStartStr, endStr);
       
       for (const camp of campaigns) {
         await supabase.from('campaign_metrics').upsert({
@@ -2059,9 +2114,9 @@ async function syncKlaviyoData(
       console.log(`[Klaviyo Sync] Synced ${campaigns.length} campaigns`);
     }
 
-    // Sync flows with revenue and performance
+    // Sync flows with revenue and performance (30 days)
     if (metricId) {
-      const { flows } = await fetchFlowsWithRevenue(apiKey, metricId, startStr, endStr);
+      const { flows } = await fetchFlowsWithRevenue(apiKey, metricId, flowStartStr, endStr);
       
       for (const flow of flows) {
         await supabase.from('flow_metrics').upsert({
