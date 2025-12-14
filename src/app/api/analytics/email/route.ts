@@ -148,20 +148,38 @@ async function queryMetricAggregate(
   metricId: string,
   startStr: string,
   endStr: string,
-  measurement: 'count' | 'unique' | 'sum_value' = 'count'
+  measurement: 'count' | 'unique' | 'sum_value' = 'count',
+  attributionFilter?: 'email' | 'campaign' | 'flow' | 'none'
 ): Promise<number> {
   if (!metricId) return 0;
   
   try {
+    // Build filter array
+    const filters: string[] = [
+      `greater-or-equal(datetime,${startStr})`,
+      `less-than(datetime,${endStr})`
+    ];
+    
+    // Add attribution filter if specified
+    // This ensures we only get events ATTRIBUTED to email marketing
+    if (attributionFilter === 'email') {
+      // Only events attributed to email channel (campaigns + flows)
+      filters.push('equals($attributed_channel,"email")');
+    } else if (attributionFilter === 'campaign') {
+      // Only events attributed to campaigns
+      filters.push('not(equals($attributed_message,""))');
+    } else if (attributionFilter === 'flow') {
+      // Only events attributed to flows
+      filters.push('not(equals($attributed_flow,""))');
+    }
+    // 'none' = no attribution filter (all events)
+    
     const body = {
       data: {
         type: 'metric-aggregate',
         attributes: {
           measurements: [measurement],
-          filter: [
-            `greater-or-equal(datetime,${startStr})`,
-            `less-than(datetime,${endStr})`
-          ],
+          filter: filters,
           metric_id: metricId,
           timezone: 'America/Sao_Paulo'
         }
@@ -186,7 +204,8 @@ async function queryMetricAggregate(
 }
 
 // Query Metric Aggregates GROUPED BY CAMPAIGN
-// Returns a map of campaign_id -> value
+// Returns a map of message_id -> value
+// Only includes events ATTRIBUTED to campaigns
 async function queryMetricByMessage(
   apiKey: string,
   metricId: string,
@@ -206,7 +225,8 @@ async function queryMetricByMessage(
           by: ['$message'],  // Group by message (campaign)
           filter: [
             `greater-or-equal(datetime,${startStr})`,
-            `less-than(datetime,${endStr})`
+            `less-than(datetime,${endStr})`,
+            'not(equals($message,""))' // Only events attributed to a message/campaign
           ],
           metric_id: metricId,
           timezone: 'America/Sao_Paulo'
@@ -293,11 +313,14 @@ async function getMetricsForPeriod(
 ): Promise<{ sent: number; opened: number; clicked: number; revenue: number }> {
   
   // Run queries in parallel for speed
+  // Note: sent/opened/clicked are email-specific metrics, no attribution filter needed
+  // Revenue (Placed Order) needs attribution filter to only count email-attributed orders
   const [sent, opened, clicked, revenue] = await Promise.all([
-    metricIds.receivedEmail ? queryMetricAggregate(apiKey, metricIds.receivedEmail, startStr, endStr, 'count') : Promise.resolve(0),
-    metricIds.openedEmail ? queryMetricAggregate(apiKey, metricIds.openedEmail, startStr, endStr, 'unique') : Promise.resolve(0),
-    metricIds.clickedEmail ? queryMetricAggregate(apiKey, metricIds.clickedEmail, startStr, endStr, 'unique') : Promise.resolve(0),
-    metricIds.placedOrder ? queryMetricAggregate(apiKey, metricIds.placedOrder, startStr, endStr, 'sum_value') : Promise.resolve(0),
+    metricIds.receivedEmail ? queryMetricAggregate(apiKey, metricIds.receivedEmail, startStr, endStr, 'count', 'none') : Promise.resolve(0),
+    metricIds.openedEmail ? queryMetricAggregate(apiKey, metricIds.openedEmail, startStr, endStr, 'unique', 'none') : Promise.resolve(0),
+    metricIds.clickedEmail ? queryMetricAggregate(apiKey, metricIds.clickedEmail, startStr, endStr, 'unique', 'none') : Promise.resolve(0),
+    // IMPORTANT: Filter revenue to only include orders ATTRIBUTED to email marketing
+    metricIds.placedOrder ? queryMetricAggregate(apiKey, metricIds.placedOrder, startStr, endStr, 'sum_value', 'email') : Promise.resolve(0),
   ]);
 
   return { sent, opened, clicked, revenue };
