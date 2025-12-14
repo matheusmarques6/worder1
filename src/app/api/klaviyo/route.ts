@@ -1493,6 +1493,166 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // ============================================
+    // SYNC-BULK: Get ALL campaign metrics in ONE API call
+    // This is the CORRECT way - no filter = all campaigns at once
+    // ============================================
+    if (action === 'sync-bulk') {
+      console.log('[Klaviyo] BULK SYNC: Fetching ALL campaigns in ONE call...');
+      const startTime = Date.now();
+      
+      // Get metric ID for conversion tracking
+      const metricId = await findPlacedOrderMetricId(klaviyoAccount.api_key);
+      if (!metricId) {
+        return NextResponse.json({ error: 'No metric ID found. Check API key permissions.' }, { status: 400 });
+      }
+      console.log(`[Klaviyo] Using metric ID: ${metricId}`);
+
+      // Step 1: Get list of campaigns from Klaviyo
+      const campaignsRes = await klaviyoFetch(
+        klaviyoAccount.api_key,
+        '/campaigns?filter=equals(messages.channel,"email")'
+      );
+      const allCampaigns = campaignsRes.data || [];
+      const sentCampaigns = allCampaigns.filter((c: any) => 
+        (c.attributes?.status || '').toLowerCase() === 'sent'
+      );
+      
+      console.log(`[Klaviyo] Found ${sentCampaigns.length} sent campaigns`);
+
+      // Step 2: Save all campaigns to DB in BATCH (not one by one!)
+      const campaignRecords = sentCampaigns.map((camp: any) => ({
+        organization_id: klaviyoAccount.organization_id,
+        klaviyo_campaign_id: camp.id,
+        name: camp.attributes?.name || 'Unnamed',
+        status: camp.attributes?.status || 'unknown',
+        sent_at: camp.attributes?.send_time,
+        updated_at: new Date().toISOString(),
+      }));
+      
+      if (campaignRecords.length > 0) {
+        await supabase.from('campaign_metrics')
+          .upsert(campaignRecords, { onConflict: 'organization_id,klaviyo_campaign_id' });
+      }
+
+      // Step 3: ONE API call to get ALL metrics (no filter!)
+      // This returns metrics for ALL campaigns in the timeframe
+      const metricsBody = {
+        data: {
+          type: 'campaign-values-report',
+          attributes: {
+            timeframe: { key: 'last_12_months' },
+            conversion_metric_id: metricId,
+            // NO FILTER = returns ALL campaigns!
+            statistics: [
+              'recipients',
+              'delivered', 
+              'opens',
+              'opens_unique',
+              'clicks',
+              'clicks_unique',
+              'open_rate',
+              'click_rate',
+              'bounced',
+              'unsubscribes',
+              'conversion_value',
+              'conversions'
+            ]
+          }
+        }
+      };
+
+      console.log('[Klaviyo] Making SINGLE API call for all campaigns...');
+      let metricsResponse;
+      try {
+        metricsResponse = await klaviyoPost(klaviyoAccount.api_key, '/campaign-values-reports/', metricsBody);
+      } catch (apiErr: any) {
+        console.error('[Klaviyo] API error:', apiErr.message);
+        return NextResponse.json({ 
+          error: `Klaviyo API error: ${apiErr.message}`,
+          tip: 'Check if API key has campaigns:read permission'
+        }, { status: 500 });
+      }
+
+      // Step 4: Process results - each result has campaign_id in groupings
+      const results = metricsResponse?.data?.attributes?.results || [];
+      console.log(`[Klaviyo] Got ${results.length} results from API`);
+      
+      // Debug: log first result structure
+      if (results.length > 0) {
+        console.log('[Klaviyo] First result structure:', JSON.stringify(results[0]).substring(0, 500));
+      } else {
+        console.log('[Klaviyo] Raw response:', JSON.stringify(metricsResponse).substring(0, 1000));
+      }
+
+      // Build a map of campaign_id -> metrics
+      const metricsMap = new Map<string, any>();
+      for (const result of results) {
+        const campaignId = result.groupings?.campaign_id;
+        if (campaignId) {
+          const stats = result.statistics || {};
+          metricsMap.set(campaignId, {
+            sent: stats.recipients || 0,
+            delivered: stats.delivered || 0,
+            opened: stats.opens_unique || stats.opens || 0,
+            clicked: stats.clicks_unique || stats.clicks || 0,
+            bounced: stats.bounced || 0,
+            unsubscribed: stats.unsubscribes || 0,
+            open_rate: (stats.open_rate || 0) * 100,
+            click_rate: (stats.click_rate || 0) * 100,
+            revenue: stats.conversion_value || 0,
+            conversions: stats.conversions || 0,
+          });
+        }
+      }
+
+      console.log(`[Klaviyo] Mapped metrics for ${metricsMap.size} campaigns`);
+
+      // Step 5: Update DB with metrics using BATCH upsert
+      const updateRecords = [];
+      const updatedCampaigns = [];
+      
+      for (const camp of sentCampaigns) {
+        const metrics = metricsMap.get(camp.id);
+        if (metrics) {
+          updateRecords.push({
+            organization_id: klaviyoAccount.organization_id,
+            klaviyo_campaign_id: camp.id,
+            name: camp.attributes?.name || 'Unnamed',
+            status: camp.attributes?.status || 'unknown',
+            sent_at: camp.attributes?.send_time,
+            ...metrics,
+            updated_at: new Date().toISOString(),
+          });
+          
+          updatedCampaigns.push({
+            id: camp.id,
+            name: camp.attributes?.name?.substring(0, 40),
+            ...metrics
+          });
+        }
+      }
+      
+      // Single batch upsert for all campaigns with metrics
+      if (updateRecords.length > 0) {
+        await supabase.from('campaign_metrics')
+          .upsert(updateRecords, { onConflict: 'organization_id,klaviyo_campaign_id' });
+      }
+
+      const duration = Date.now() - startTime;
+      
+      return NextResponse.json({
+        success: true,
+        duration: `${duration}ms`,
+        apiCalls: 1,
+        totalCampaigns: sentCampaigns.length,
+        metricsFound: metricsMap.size,
+        updated: updateRecords.length,
+        campaigns: updatedCampaigns.slice(0, 10), // Show first 10
+        message: `Updated ${updateRecords.length} campaigns with metrics in ONE API call!`
+      });
+    }
+
     // Reset campaigns to force re-sync of engagement metrics
     if (action === 'reset-campaigns') {
       console.log('[Klaviyo] Resetting campaigns for re-sync...');
