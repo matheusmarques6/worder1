@@ -1308,8 +1308,6 @@ async function fetchCampaignMetrics(
         console.log(`[Klaviyo] Campaign ${campId}: no results`);
       }
       
-      await sleep(100); // Small delay between requests
-      
     } catch (e: any) {
       console.error(`[Klaviyo] Campaign ${campId} error:`, e.message);
     }
@@ -1394,8 +1392,6 @@ async function fetchFlowMetrics(
       
       console.log(`[Klaviyo] Flow ${flowId}: revenue=${totalRevenue}, conversions=${totalConversions}`);
       
-      await sleep(100); // Small delay between requests
-      
     } catch (e: any) {
       console.error(`[Klaviyo] Flow ${flowId} error:`, e.message);
     }
@@ -1444,23 +1440,27 @@ async function quickSyncKlaviyoData(organizationId: string, apiKey: string, erro
     klaviyoFetch(apiKey, '/flows')
   ]);
 
-  // Process Lists
+  // Process Lists - BATCH for speed
   if (listsResult.status === 'fulfilled') {
     const lists = listsResult.value.data || [];
     listsCount = lists.length;
     
-    // Save lists (no need for profile count per list - too slow)
-    for (const list of lists.slice(0, 10)) {
-      await supabase.from('klaviyo_lists').upsert({
-        organization_id: organizationId,
-        klaviyo_list_id: list.id,
-        name: list.attributes?.name || 'Unnamed List',
-        profile_count: 0, // Skip individual counts to save time
-        opt_in_process: list.attributes?.opt_in_process || 'single_opt_in',
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'organization_id,klaviyo_list_id' });
+    // Save lists in BATCH (no sequential awaits)
+    const listRecords = lists.slice(0, 5).map((list: any) => ({
+      organization_id: organizationId,
+      klaviyo_list_id: list.id,
+      name: list.attributes?.name || 'Unnamed List',
+      profile_count: 0,
+      opt_in_process: list.attributes?.opt_in_process || 'single_opt_in',
+      updated_at: new Date().toISOString(),
+    }));
+    
+    if (listRecords.length > 0) {
+      await supabase.from('klaviyo_lists').upsert(listRecords, { 
+        onConflict: 'organization_id,klaviyo_list_id' 
+      });
     }
-    console.log(`[Klaviyo Quick Sync] Saved ${listsCount} lists`);
+    console.log(`[Klaviyo Quick Sync] Saved ${listRecords.length} lists`);
   }
 
   // Process Campaigns
@@ -1477,7 +1477,7 @@ async function quickSyncKlaviyoData(organizationId: string, apiKey: string, erro
         const dateB = new Date(b.attributes?.send_time || 0);
         return dateB.getTime() - dateA.getTime();
       })
-      .slice(0, 10);
+      .slice(0, 3); // ONLY 3 for speed - avoid timeout
     
     console.log(`[Klaviyo Quick Sync] Selected ${sentCampaigns.length} most recent sent campaigns for metrics:`);
     sentCampaigns.forEach((c: any, i: number) => {
@@ -1539,7 +1539,7 @@ async function quickSyncKlaviyoData(organizationId: string, apiKey: string, erro
         const status = (f.attributes?.status || '').toLowerCase();
         return status === 'live' || status === 'manual';
       })
-      .slice(0, 5);
+      .slice(0, 2); // ONLY 2 for speed - avoid timeout
     
     console.log(`[Klaviyo Quick Sync] Selected ${activeFlows.length} active flows for metrics:`);
     activeFlows.forEach((f: any, i: number) => {
@@ -1678,14 +1678,20 @@ async function quickSyncKlaviyoData(organizationId: string, apiKey: string, erro
     .eq('organization_id', organizationId);
 
   const duration = Date.now() - startTime;
-  console.log(`[Klaviyo Quick Sync] Complete in ${duration}ms!`, {
-    profiles: profileCount,
-    lists: listsCount,
-    campaigns: campaignsCount,
-    campaignsWithMetrics: campaignIds.length,
-    flows: flowsCount,
-    flowsWithMetrics: flowIds.length,
-  });
+  console.log(`[Klaviyo Quick Sync] Complete in ${duration}ms!`);
+
+  return {
+    success: true,
+    syncDuration: `${duration}ms`,
+    metricId,
+    database: {
+      profiles: profileCount,
+      lists: listsCount,
+      campaigns: campaignsCount,
+      flows: flowsCount,
+    },
+    errors: errors.length > 0 ? errors : undefined,
+  };
 }
 
 // ============================================
