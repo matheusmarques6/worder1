@@ -109,6 +109,11 @@ interface EmailData {
     revenue: number
     conversions: number
   }
+  totalCounts?: {
+    campaigns: number
+    flows: number
+    lists: number
+  }
   funnel?: Array<{
     stage: string
     value: number
