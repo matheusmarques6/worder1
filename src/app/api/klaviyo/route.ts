@@ -1156,7 +1156,7 @@ export async function GET(request: NextRequest) {
 
     // ULTRA-MINIMAL SYNC - One campaign at a time to avoid timeout
     if (action === 'sync-one') {
-      console.log('[Klaviyo] Sync-one: Processing single campaign...');
+      console.log('[Klaviyo] Sync-one: Processing campaigns...');
       const startTime = Date.now();
       
       // Get metric ID
@@ -1181,7 +1181,7 @@ export async function GET(request: NextRequest) {
           return dateB.getTime() - dateA.getTime();
         });
 
-      // Find first campaign that hasn't been synced yet (revenue = 0)
+      // Find campaigns that haven't been synced yet (revenue = 0 or null)
       const { data: dbCampaigns } = await supabase
         .from('campaign_metrics')
         .select('klaviyo_campaign_id, revenue')
@@ -1193,84 +1193,268 @@ export async function GET(request: NextRequest) {
           .map((c: any) => c.klaviyo_campaign_id)
       );
 
-      // Find next campaign to sync
-      let targetCampaign = sentCampaigns.find((c: any) => !syncedIds.has(c.id));
+      // Get next 5 campaigns to sync
+      const campaignsToSync = sentCampaigns
+        .filter((c: any) => !syncedIds.has(c.id))
+        .slice(0, 5);
       
-      // If all are synced, just pick the first one
-      if (!targetCampaign && sentCampaigns.length > 0) {
-        targetCampaign = sentCampaigns[0];
-      }
-
-      if (!targetCampaign) {
+      // If all are synced, return
+      if (campaignsToSync.length === 0) {
         return NextResponse.json({ 
           success: true, 
-          message: 'No campaigns to sync',
+          message: 'All campaigns synced!',
+          remaining: 0,
           duration: `${Date.now() - startTime}ms`
         });
       }
 
-      // Save campaign to DB first
-      await supabase.from('campaign_metrics').upsert({
-        organization_id: klaviyoAccount.organization_id,
-        klaviyo_campaign_id: targetCampaign.id,
-        name: targetCampaign.attributes?.name || 'Unnamed',
-        status: targetCampaign.attributes?.status || 'unknown',
-        sent_at: targetCampaign.attributes?.send_time,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'organization_id,klaviyo_campaign_id' });
-
-      // Get metrics for this campaign
       const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 365);
-      
-      const body = {
-        data: {
-          type: 'campaign-values-report',
-          attributes: {
-            timeframe: {
-              start: startDate.toISOString().split('T')[0] + 'T00:00:00Z',
-              end: endDate.toISOString().split('T')[0] + 'T23:59:59Z'
-            },
-            conversion_metric_id: metricId,
-            filter: `equals(campaign_id,"${targetCampaign.id}")`,
-            statistics: ['conversion_value', 'conversions']
-          }
-        }
-      };
+      const startDateStr = startDate.toISOString().split('T')[0] + 'T00:00:00Z';
+      const endDateStr = endDate.toISOString().split('T')[0] + 'T23:59:59Z';
 
-      const response = await klaviyoPost(klaviyoAccount.api_key, '/campaign-values-reports/', body);
-      
-      let revenue = 0;
-      let conversions = 0;
-      
-      if (response?.data?.attributes?.results?.[0]) {
-        const stats = response.data.attributes.results[0].statistics || {};
-        revenue = stats.conversion_value || 0;
-        conversions = stats.conversions || 0;
+      const syncedCampaigns = [];
+
+      for (const targetCampaign of campaignsToSync) {
+        try {
+          // Save campaign to DB first
+          await supabase.from('campaign_metrics').upsert({
+            organization_id: klaviyoAccount.organization_id,
+            klaviyo_campaign_id: targetCampaign.id,
+            name: targetCampaign.attributes?.name || 'Unnamed',
+            status: targetCampaign.attributes?.status || 'unknown',
+            sent_at: targetCampaign.attributes?.send_time,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'organization_id,klaviyo_campaign_id' });
+
+          // Get REVENUE metrics
+          const revenueBody = {
+            data: {
+              type: 'campaign-values-report',
+              attributes: {
+                timeframe: { start: startDateStr, end: endDateStr },
+                conversion_metric_id: metricId,
+                filter: `equals(campaign_id,"${targetCampaign.id}")`,
+                statistics: ['conversion_value', 'conversions']
+              }
+            }
+          };
+
+          const revenueResponse = await klaviyoPost(klaviyoAccount.api_key, '/campaign-values-reports/', revenueBody);
+          
+          let revenue = 0;
+          let conversions = 0;
+          
+          if (revenueResponse?.data?.attributes?.results?.[0]) {
+            const stats = revenueResponse.data.attributes.results[0].statistics || {};
+            revenue = stats.conversion_value || 0;
+            conversions = stats.conversions || 0;
+          }
+
+          // Get ENGAGEMENT metrics using campaign-values-report with different statistics
+          let sent = 0, delivered = 0, opened = 0, clicked = 0, bounced = 0, unsubscribed = 0;
+          
+          try {
+            const engagementBody = {
+              data: {
+                type: 'campaign-values-report',
+                attributes: {
+                  timeframe: { start: startDateStr, end: endDateStr },
+                  conversion_metric_id: metricId,
+                  filter: `equals(campaign_id,"${targetCampaign.id}")`,
+                  statistics: ['recipients', 'delivered', 'opens_unique', 'clicks_unique', 'bounced', 'unsubscribed']
+                }
+              }
+            };
+
+            const engResponse = await klaviyoPost(klaviyoAccount.api_key, '/campaign-values-reports/', engagementBody);
+            
+            if (engResponse?.data?.attributes?.results?.[0]) {
+              const engStats = engResponse.data.attributes.results[0].statistics || {};
+              sent = engStats.recipients || 0;
+              delivered = engStats.delivered || 0;
+              opened = engStats.opens_unique || 0;
+              clicked = engStats.clicks_unique || 0;
+              bounced = engStats.bounced || 0;
+              unsubscribed = engStats.unsubscribed || 0;
+            }
+          } catch (engError: any) {
+            console.log(`[Klaviyo] Engagement metrics not available for ${targetCampaign.id}:`, engError.message);
+          }
+
+          // Calculate rates
+          const openRate = delivered > 0 ? (opened / delivered) * 100 : 0;
+          const clickRate = delivered > 0 ? (clicked / delivered) * 100 : 0;
+
+          // Update DB with all metrics
+          await supabase.from('campaign_metrics').update({
+            revenue,
+            conversions,
+            sent,
+            delivered,
+            opened,
+            clicked,
+            bounced,
+            unsubscribed,
+            open_rate: openRate,
+            click_rate: clickRate,
+            updated_at: new Date().toISOString(),
+          }).eq('organization_id', klaviyoAccount.organization_id)
+            .eq('klaviyo_campaign_id', targetCampaign.id);
+
+          syncedCampaigns.push({
+            id: targetCampaign.id,
+            name: targetCampaign.attributes?.name?.substring(0, 50),
+            revenue,
+            conversions,
+            sent,
+            opened,
+            clicked,
+          });
+
+        } catch (err: any) {
+          console.error(`[Klaviyo] Error syncing campaign ${targetCampaign.id}:`, err.message);
+        }
       }
 
-      // Update DB
-      await supabase.from('campaign_metrics').update({
-        revenue,
-        conversions,
-        updated_at: new Date().toISOString(),
-      }).eq('organization_id', klaviyoAccount.organization_id)
-        .eq('klaviyo_campaign_id', targetCampaign.id);
-
+      const remainingCount = sentCampaigns.filter((c: any) => !syncedIds.has(c.id)).length - campaignsToSync.length;
       const duration = Date.now() - startTime;
       
       return NextResponse.json({
         success: true,
         duration: `${duration}ms`,
-        campaign: {
-          id: targetCampaign.id,
-          name: targetCampaign.attributes?.name,
-          revenue,
-          conversions,
-        },
-        remaining: sentCampaigns.length - syncedIds.size - 1,
-        message: `Synced 1 campaign. Call again to sync more.`
+        synced: syncedCampaigns.length,
+        campaigns: syncedCampaigns,
+        remaining: Math.max(0, remainingCount),
+        message: `Synced ${syncedCampaigns.length} campaigns. ${remainingCount > 0 ? 'Call again to sync more.' : 'All done!'}`
+      });
+    }
+
+    // Sync flows one batch at a time
+    if (action === 'sync-flows') {
+      console.log('[Klaviyo] Sync-flows: Processing flows...');
+      const startTime = Date.now();
+      
+      // Get metric ID
+      const metricId = await findPlacedOrderMetricId(klaviyoAccount.api_key);
+      if (!metricId) {
+        return NextResponse.json({ error: 'No metric ID found' }, { status: 400 });
+      }
+
+      // Get flows
+      const flowsRes = await klaviyoFetch(klaviyoAccount.api_key, '/flows');
+      const allFlows = flowsRes.data || [];
+      
+      // Get active flows
+      const activeFlows = allFlows
+        .filter((f: any) => {
+          const status = (f.attributes?.status || '').toLowerCase();
+          return status === 'live' || status === 'manual';
+        });
+
+      // Find flows that haven't been synced yet
+      const { data: dbFlows } = await supabase
+        .from('flow_metrics')
+        .select('klaviyo_flow_id, revenue')
+        .eq('organization_id', klaviyoAccount.organization_id);
+      
+      const syncedIds = new Set(
+        (dbFlows || [])
+          .filter((f: any) => Number(f.revenue) > 0)
+          .map((f: any) => f.klaviyo_flow_id)
+      );
+
+      // Get next 3 flows to sync
+      const flowsToSync = activeFlows
+        .filter((f: any) => !syncedIds.has(f.id))
+        .slice(0, 3);
+      
+      if (flowsToSync.length === 0) {
+        return NextResponse.json({ 
+          success: true, 
+          message: 'All flows synced!',
+          remaining: 0,
+          duration: `${Date.now() - startTime}ms`
+        });
+      }
+
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 365);
+      const startDateStr = startDate.toISOString().split('T')[0] + 'T00:00:00Z';
+      const endDateStr = endDate.toISOString().split('T')[0] + 'T23:59:59Z';
+
+      const syncedFlows = [];
+
+      for (const targetFlow of flowsToSync) {
+        try {
+          // Save flow to DB first
+          await supabase.from('flow_metrics').upsert({
+            organization_id: klaviyoAccount.organization_id,
+            klaviyo_flow_id: targetFlow.id,
+            name: targetFlow.attributes?.name || 'Unnamed',
+            status: targetFlow.attributes?.status || 'unknown',
+            trigger_type: targetFlow.attributes?.trigger_type || null,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'organization_id,klaviyo_flow_id' });
+
+          // Get REVENUE metrics using flow-values-report
+          const revenueBody = {
+            data: {
+              type: 'flow-values-report',
+              attributes: {
+                timeframe: { start: startDateStr, end: endDateStr },
+                conversion_metric_id: metricId,
+                filter: `equals(flow_id,"${targetFlow.id}")`,
+                statistics: ['conversion_value', 'conversions']
+              }
+            }
+          };
+
+          const revenueResponse = await klaviyoPost(klaviyoAccount.api_key, '/flow-values-reports/', revenueBody);
+          
+          // Sum all results (flow can have multiple messages)
+          let revenue = 0;
+          let conversions = 0;
+          
+          if (revenueResponse?.data?.attributes?.results) {
+            for (const r of revenueResponse.data.attributes.results) {
+              revenue += r.statistics?.conversion_value || 0;
+              conversions += r.statistics?.conversions || 0;
+            }
+          }
+
+          // Update DB
+          await supabase.from('flow_metrics').update({
+            revenue,
+            conversions,
+            updated_at: new Date().toISOString(),
+          }).eq('organization_id', klaviyoAccount.organization_id)
+            .eq('klaviyo_flow_id', targetFlow.id);
+
+          syncedFlows.push({
+            id: targetFlow.id,
+            name: targetFlow.attributes?.name?.substring(0, 50),
+            revenue,
+            conversions,
+          });
+
+        } catch (err: any) {
+          console.error(`[Klaviyo] Error syncing flow ${targetFlow.id}:`, err.message);
+        }
+      }
+
+      const remainingCount = activeFlows.filter((f: any) => !syncedIds.has(f.id)).length - flowsToSync.length;
+      const duration = Date.now() - startTime;
+      
+      return NextResponse.json({
+        success: true,
+        duration: `${duration}ms`,
+        synced: syncedFlows.length,
+        flows: syncedFlows,
+        remaining: Math.max(0, remainingCount),
+        message: `Synced ${syncedFlows.length} flows. ${remainingCount > 0 ? 'Call again to sync more.' : 'All done!'}`
       });
     }
 
