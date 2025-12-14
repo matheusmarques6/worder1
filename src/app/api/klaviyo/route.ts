@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 
-// Vercel timeout configuration - increase to max allowed
-export const maxDuration = 60; // seconds (Pro plan allows up to 300)
+// Vercel timeout configuration - Pro plan allows up to 300 seconds
+export const maxDuration = 300; // 5 minutes
 export const dynamic = 'force-dynamic';
 
 let _supabase: SupabaseClient | null = null;
