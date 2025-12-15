@@ -35,6 +35,8 @@ import {
   Pencil,
   Trash2,
   X,
+  DollarSign,
+  User,
 } from 'lucide-react'
 import { useDeals, usePipelines } from '@/hooks'
 import { useCRMStore, useAuthStore } from '@/stores'
@@ -726,70 +728,86 @@ export default function CRMPage() {
             <AnimatePresence>
               {showFilterDropdown && (
                 <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="absolute right-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
+                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full mt-2 w-80 bg-dark-800/95 backdrop-blur-xl border border-dark-700/50 rounded-2xl shadow-2xl shadow-black/20 z-20 overflow-hidden"
                 >
-                  <div className="p-4 border-b border-dark-700">
+                  {/* Header */}
+                  <div className="px-5 py-4 border-b border-dark-700/50 bg-dark-900/30">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-white">Filtros</h3>
+                      <div className="flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-primary-400" />
+                        <h3 className="text-sm font-semibold text-white">Filtros</h3>
+                      </div>
                       {hasActiveFilters && (
                         <button
                           onClick={clearFilters}
-                          className="text-xs text-primary-400 hover:text-primary-300"
+                          className="text-xs text-dark-400 hover:text-white transition-colors flex items-center gap-1"
                         >
-                          Limpar todos
+                          <X className="w-3 h-3" />
+                          Limpar
                         </button>
                       )}
                     </div>
                   </div>
                   
-                  <div className="p-4 space-y-4">
+                  {/* Filters Content */}
+                  <div className="p-5 space-y-5">
                     {/* Value Range */}
                     <div>
-                      <label className="block text-xs font-medium text-dark-400 mb-2">
+                      <label className="flex items-center gap-2 text-xs font-medium text-dark-300 mb-3">
+                        <DollarSign className="w-3.5 h-3.5" />
                         Valor do Deal
                       </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          placeholder="Mín"
-                          value={filters.minValue}
-                          onChange={(e) => setFilters(f => ({ ...f, minValue: e.target.value }))}
-                          className="flex-1 px-3 py-2 bg-dark-900/50 border border-dark-700 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
-                        />
-                        <span className="text-dark-500">-</span>
-                        <input
-                          type="number"
-                          placeholder="Máx"
-                          value={filters.maxValue}
-                          onChange={(e) => setFilters(f => ({ ...f, maxValue: e.target.value }))}
-                          className="flex-1 px-3 py-2 bg-dark-900/50 border border-dark-700 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
-                        />
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500 text-xs">R$</span>
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={filters.minValue}
+                            onChange={(e) => setFilters(f => ({ ...f, minValue: e.target.value }))}
+                            className="w-full pl-9 pr-3 py-2.5 bg-dark-900/80 border border-dark-600/50 rounded-xl text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                          />
+                        </div>
+                        <div className="text-dark-500 text-sm font-medium">até</div>
+                        <div className="flex-1 relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500 text-xs">R$</span>
+                          <input
+                            type="number"
+                            placeholder="∞"
+                            value={filters.maxValue}
+                            onChange={(e) => setFilters(f => ({ ...f, maxValue: e.target.value }))}
+                            className="w-full pl-9 pr-3 py-2.5 bg-dark-900/80 border border-dark-600/50 rounded-xl text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                          />
+                        </div>
                       </div>
                     </div>
                     
                     {/* Has Contact */}
                     <div>
-                      <label className="block text-xs font-medium text-dark-400 mb-2">
-                        Contato associado
+                      <label className="flex items-center gap-2 text-xs font-medium text-dark-300 mb-3">
+                        <User className="w-3.5 h-3.5" />
+                        Contato Vinculado
                       </label>
-                      <div className="flex gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         {[
-                          { value: 'all', label: 'Todos' },
-                          { value: 'yes', label: 'Com contato' },
-                          { value: 'no', label: 'Sem contato' },
+                          { value: 'all', label: 'Todos', icon: '📋' },
+                          { value: 'yes', label: 'Com', icon: '✓' },
+                          { value: 'no', label: 'Sem', icon: '✗' },
                         ].map(option => (
                           <button
                             key={option.value}
                             onClick={() => setFilters(f => ({ ...f, hasContact: option.value as any }))}
-                            className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                            className={`px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
                               filters.hasContact === option.value
-                                ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                : 'bg-dark-900/50 text-dark-400 border border-dark-700 hover:border-dark-600'
+                                ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/25'
+                                : 'bg-dark-900/80 text-dark-400 border border-dark-600/50 hover:border-dark-500 hover:text-dark-300'
                             }`}
                           >
+                            <span className="mr-1">{option.icon}</span>
                             {option.label}
                           </button>
                         ))}
@@ -797,12 +815,22 @@ export default function CRMPage() {
                     </div>
                   </div>
                   
-                  <div className="p-3 border-t border-dark-700 bg-dark-900/50">
+                  {/* Footer */}
+                  <div className="px-5 py-4 border-t border-dark-700/50 bg-dark-900/30 flex gap-3">
+                    <button
+                      onClick={() => {
+                        clearFilters()
+                        setShowFilterDropdown(false)
+                      }}
+                      className="flex-1 px-4 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-xl text-dark-300 text-sm font-medium transition-colors"
+                    >
+                      Cancelar
+                    </button>
                     <button
                       onClick={() => setShowFilterDropdown(false)}
-                      className="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg text-white text-sm font-medium transition-colors"
+                      className="flex-1 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 rounded-xl text-white text-sm font-medium transition-colors shadow-lg shadow-primary-500/25"
                     >
-                      Aplicar Filtros
+                      Aplicar
                     </button>
                   </div>
                 </motion.div>

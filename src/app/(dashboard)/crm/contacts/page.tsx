@@ -22,9 +22,11 @@ import {
   FileSpreadsheet,
   AlertCircle,
   CheckCircle,
+  UserPlus,
 } from 'lucide-react'
 import { useContacts } from '@/hooks'
 import { useAuthStore } from '@/stores'
+import { ContactDrawer } from '@/components/crm'
 import type { Contact } from '@/types'
 
 // ==========================================
@@ -238,9 +240,10 @@ interface ContactRowProps {
   contact: Contact
   onEdit: () => void
   onDelete: () => void
+  onClick: () => void
 }
 
-function ContactRow({ contact, onEdit, onDelete }: ContactRowProps) {
+function ContactRow({ contact, onEdit, onDelete, onClick }: ContactRowProps) {
   const [showMenu, setShowMenu] = useState(false)
   
   const getInitials = () => {
@@ -257,7 +260,10 @@ function ContactRow({ contact, onEdit, onDelete }: ContactRowProps) {
   }
 
   return (
-    <div className="flex items-center gap-4 p-4 bg-dark-800/30 border border-dark-700/50 rounded-xl hover:bg-dark-800/50 transition-colors group">
+    <div 
+      onClick={onClick}
+      className="flex items-center gap-4 p-4 bg-dark-800/30 border border-dark-700/50 rounded-xl hover:bg-dark-800/50 transition-colors group cursor-pointer"
+    >
       {/* Avatar */}
       <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
         <span className="text-white font-bold">{getInitials()}</span>
@@ -265,7 +271,31 @@ function ContactRow({ contact, onEdit, onDelete }: ContactRowProps) {
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <h3 className="text-white font-medium truncate">{getDisplayName()}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-white font-medium truncate">{getDisplayName()}</h3>
+          {/* Tags inline */}
+          {contact.tags && contact.tags.length > 0 && (
+            <div className="flex items-center gap-1">
+              {contact.tags.slice(0, 2).map((tag) => (
+                <span
+                  key={tag}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                    tag === 'vip' ? 'bg-amber-500/20 text-amber-400' :
+                    tag === 'cliente' ? 'bg-cyan-500/20 text-cyan-400' :
+                    tag === 'lead' ? 'bg-blue-500/20 text-blue-400' :
+                    tag === 'novo' ? 'bg-green-500/20 text-green-400' :
+                    'bg-dark-600/50 text-dark-300'
+                  }`}
+                >
+                  {tag}
+                </span>
+              ))}
+              {contact.tags.length > 2 && (
+                <span className="text-[10px] text-dark-500">+{contact.tags.length - 2}</span>
+              )}
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-4 mt-1">
           {contact.email && (
             <div className="flex items-center gap-1.5 text-dark-400 text-sm">
@@ -299,7 +329,7 @@ function ContactRow({ contact, onEdit, onDelete }: ContactRowProps) {
       </div>
 
       {/* Actions */}
-      <div className="relative">
+      <div className="relative" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => setShowMenu(!showMenu)}
           className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors opacity-0 group-hover:opacity-100"
@@ -362,10 +392,21 @@ export default function ContactsPage() {
   
   const [showModal, setShowModal] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [importLoading, setImportLoading] = useState(false)
   const [importResult, setImportResult] = useState<{ success: number; errors: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Update contact tags
+  const handleUpdateTags = async (contactId: string, tags: string[]) => {
+    await updateContact(contactId, { tags })
+    // Update selected contact locally for immediate UI feedback
+    if (selectedContact && selectedContact.id === contactId) {
+      setSelectedContact({ ...selectedContact, tags })
+    }
+    await refetch()
+  }
 
   // Export contacts to CSV
   const handleExportCSV = () => {
@@ -484,7 +525,15 @@ export default function ContactsPage() {
 
   // Stats
   const totalContacts = pagination?.total || contacts.length
-  const totalDeals = contacts.reduce((sum, c) => sum + (c.deals?.length || 0), 0)
+  
+  // Count contacts created this month
+  const now = new Date()
+  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const newThisMonth = contacts.filter(c => {
+    if (!c.created_at) return false
+    return new Date(c.created_at) >= firstDayOfMonth
+  }).length
+  
   const totalValue = contacts.reduce((sum, c) => 
     sum + (c.deals?.reduce((s: number, d: any) => s + (d.value || 0), 0) || 0), 0
   )
@@ -618,11 +667,11 @@ export default function ContactsPage() {
         <div className="p-4 bg-dark-800/30 border border-dark-700/50 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-accent-500/20 flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-accent-400" />
+              <UserPlus className="w-5 h-5 text-accent-400" />
             </div>
             <div>
-              <p className="text-sm text-dark-400">Deals Associados</p>
-              <p className="text-xl font-bold text-white">{totalDeals}</p>
+              <p className="text-sm text-dark-400">Novos Este Mês</p>
+              <p className="text-xl font-bold text-white">{newThisMonth}</p>
             </div>
           </div>
         </div>
@@ -675,6 +724,7 @@ export default function ContactsPage() {
               contact={contact}
               onEdit={() => handleEdit(contact)}
               onDelete={() => handleDeleteContact(contact)}
+              onClick={() => setSelectedContact(contact)}
             />
           ))
         )}
@@ -722,6 +772,15 @@ export default function ContactsPage() {
         onClose={() => setEditingContact(null)}
         onSave={handleUpdateContact}
       />
+
+      {/* Contact Drawer */}
+      {selectedContact && (
+        <ContactDrawer
+          contact={selectedContact}
+          onClose={() => setSelectedContact(null)}
+          onUpdateTags={handleUpdateTags}
+        />
+      )}
     </div>
   )
 }

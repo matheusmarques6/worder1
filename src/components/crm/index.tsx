@@ -51,6 +51,7 @@ export { CreateDealModal } from './CreateDealModal'
 export { DealDrawer } from './DealDrawer'
 export { PipelineModal } from './PipelineModal'
 export { EditStageModal } from './EditStageModal'
+export { ContactDrawer } from './ContactDrawer'
 
 // ===============================
 // KANBAN CARD
