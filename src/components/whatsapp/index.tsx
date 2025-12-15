@@ -471,7 +471,7 @@ export function ContactInfoPanel({
                   <span className="text-xs text-dark-500">Receita Total</span>
                 </div>
                 <span className="text-lg font-semibold text-dark-100">
-                  {formatCurrency(contact.total_revenue)}
+                  {formatCurrency(contact.total_spent || contact.total_revenue || 0)}
                 </span>
               </div>
               <div className="p-3 rounded-xl bg-dark-800/50">
@@ -480,7 +480,7 @@ export function ContactInfoPanel({
                   <span className="text-xs text-dark-500">Pedidos</span>
                 </div>
                 <span className="text-lg font-semibold text-dark-100">
-                  {contact.total_orders}
+                  {contact.total_orders || 0}
                 </span>
               </div>
             </div>
