@@ -613,8 +613,8 @@ export default function CRMPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 className="absolute left-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
-                >
-                  <div className="p-2">
+              >
+                <div className="p-2">
                     {pipelines.map(pipeline => (
                       <div
                         key={pipeline.id}
@@ -821,7 +821,6 @@ export default function CRMPage() {
             <Plus className="w-5 h-5" />
             <span>Novo Deal</span>
           </button>
-        </div>
       </div>
 
       {/* Pipeline Stats */}
