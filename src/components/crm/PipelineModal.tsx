@@ -16,10 +16,10 @@ interface PipelineModalProps {
   isOpen: boolean
   pipeline?: Pipeline | null
   onClose: () => void
-  onSave: (data: { name: string; description?: string; stages: StageInput[] }) => Promise<void>
+  onSave: (data: { name: string; description?: string; color?: string; stages: StageInput[] }) => Promise<void>
 }
 
-const defaultColors = [
+const pipelineColors = [
   '#f97316', '#ea580c', '#eab308', '#facc15',
   '#22c55e', '#10b981', '#14b8a6', '#06b6d4',
   '#0ea5e9', '#6366f1', '#8b5cf6', '#a855f7',
@@ -38,6 +38,7 @@ const defaultStages: StageInput[] = [
 export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineModalProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [pipelineColor, setPipelineColor] = useState('#f97316')
   const [stages, setStages] = useState<StageInput[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +50,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
       if (pipeline) {
         setName(pipeline.name)
         setDescription(pipeline.description || '')
+        setPipelineColor(pipeline.color || '#f97316')
         setStages(
           pipeline.stages?.map((s, i) => ({
             id: s.id,
@@ -60,6 +62,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
       } else {
         setName('')
         setDescription('')
+        setPipelineColor('#f97316')
         setStages([...defaultStages])
       }
       setError(null)
@@ -88,7 +91,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
     setError(null)
 
     try {
-      await onSave({ name, description, stages })
+      await onSave({ name, description, color: pipelineColor, stages })
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar pipeline')
@@ -103,7 +106,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
       ...stages,
       {
         name: `Estágio ${newPosition + 1}`,
-        color: defaultColors[newPosition % defaultColors.length],
+        color: pipelineColors[newPosition % pipelineColors.length],
         position: newPosition,
       },
     ])
@@ -205,6 +208,36 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                     />
                   </div>
 
+                  {/* Pipeline Color */}
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                      Cor do Pipeline
+                    </label>
+                    <div className="flex items-center gap-3">
+                      {/* Color Preview */}
+                      <div 
+                        className="w-10 h-10 rounded-lg border-2 border-dark-600 flex-shrink-0"
+                        style={{ backgroundColor: pipelineColor }}
+                      />
+                      {/* Color Grid */}
+                      <div className="flex flex-wrap gap-2">
+                        {pipelineColors.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            onClick={() => setPipelineColor(color)}
+                            className={`w-7 h-7 rounded-lg transition-all ${
+                              pipelineColor === color 
+                                ? 'ring-2 ring-white ring-offset-2 ring-offset-dark-900 scale-110' 
+                                : 'hover:scale-110'
+                            }`}
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Description */}
                   <div>
                     <label className="block text-sm font-medium text-dark-300 mb-2">
@@ -272,13 +305,17 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                           
                           {/* Color Picker */}
                           <div className="relative flex-shrink-0">
-                            <input
-                              type="color"
-                              value={stage.color}
-                              onChange={(e) => updateStage(index, { color: e.target.value })}
-                              className="w-8 h-8 rounded-lg cursor-pointer border-2 border-dark-600 hover:border-dark-500 transition-colors appearance-none"
+                            <div 
+                              className="w-8 h-8 rounded-lg border-2 border-dark-600 hover:border-dark-500 transition-colors overflow-hidden"
                               style={{ backgroundColor: stage.color }}
-                            />
+                            >
+                              <input
+                                type="color"
+                                value={stage.color}
+                                onChange={(e) => updateStage(index, { color: e.target.value })}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              />
+                            </div>
                           </div>
 
                           {/* Stage Name */}

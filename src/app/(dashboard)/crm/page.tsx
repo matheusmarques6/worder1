@@ -32,10 +32,12 @@ import {
   AlertCircle,
   Settings,
   RefreshCw,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import { useDeals, usePipelines } from '@/hooks'
 import { useCRMStore, useAuthStore } from '@/stores'
-import { CreateDealModal, DealDrawer, PipelineModal } from '@/components/crm'
+import { CreateDealModal, DealDrawer, PipelineModal, EditStageModal } from '@/components/crm'
 import type { Deal, Pipeline, PipelineStage, CreateDealData } from '@/types'
 
 // ==========================================
@@ -191,9 +193,10 @@ interface KanbanColumnProps {
   deals: Deal[]
   onAddDeal: () => void
   onDealClick: (deal: Deal) => void
+  onEditStage: (stage: PipelineStage) => void
 }
 
-function KanbanColumn({ stage, deals, onAddDeal, onDealClick }: KanbanColumnProps) {
+function KanbanColumn({ stage, deals, onAddDeal, onDealClick, onEditStage }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
   
   const totalValue = deals.reduce((sum, deal) => sum + deal.value, 0)
@@ -211,13 +214,18 @@ function KanbanColumn({ stage, deals, onAddDeal, onDealClick }: KanbanColumnProp
         {/* Column Header */}
         <div className="p-4 border-b border-dark-800/50">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
+            <button 
+              onClick={() => onEditStage(stage)}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity group"
+              title="Clique para editar este estágio"
+            >
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
-              <h3 className="font-semibold text-white">{stage.name}</h3>
+              <h3 className="font-semibold text-white group-hover:text-primary-300 transition-colors">{stage.name}</h3>
               <span className="px-2 py-0.5 rounded-full bg-dark-800/50 text-xs text-dark-400">
                 {deals.length}
               </span>
-            </div>
+              <Pencil className="w-3 h-3 text-dark-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
             <button 
               onClick={onAddDeal}
               className="p-1.5 rounded-lg hover:bg-dark-800/50 text-dark-400 hover:text-white transition-colors"
@@ -349,7 +357,7 @@ export default function CRMPage() {
     refetch,
     refetchPipelines
   } = useDeals()
-  const { createPipeline: createPipelineHook, updatePipeline } = usePipelines()
+  const { createPipeline: createPipelineHook, updatePipeline, deletePipeline: deletePipelineHook, updateStage, deleteStage } = usePipelines()
   
   const [activePipeline, setActivePipeline] = useState<Pipeline | null>(null)
   const [showPipelineDropdown, setShowPipelineDropdown] = useState(false)
@@ -360,6 +368,8 @@ export default function CRMPage() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeDeal, setActiveDeal] = useState<Deal | null>(null)
+  const [showEditStageModal, setShowEditStageModal] = useState(false)
+  const [editingStage, setEditingStage] = useState<PipelineStage | null>(null)
 
   // Set active pipeline when pipelines load
   useEffect(() => {
@@ -425,7 +435,7 @@ export default function CRMPage() {
     setShowPipelineDropdown(false)
   }
 
-  const handleCreatePipeline = async (data: { name: string; description?: string; stages: { name: string; color: string; position: number }[] }) => {
+  const handleCreatePipeline = async (data: { name: string; description?: string; color?: string; stages: { name: string; color: string; position: number }[] }) => {
     if (editingPipeline) {
       await updatePipeline(editingPipeline.id, data)
     } else {
@@ -434,6 +444,52 @@ export default function CRMPage() {
     await refetchPipelines()
     setShowPipelineModal(false)
     setEditingPipeline(null)
+  }
+
+  const handleEditPipeline = (pipeline: Pipeline) => {
+    setEditingPipeline(pipeline)
+    setShowPipelineDropdown(false)
+    setShowPipelineModal(true)
+  }
+
+  const handleDeletePipeline = async (pipeline: Pipeline) => {
+    if (!confirm(`Tem certeza que deseja excluir o pipeline "${pipeline.name}"? Esta ação não pode ser desfeita.`)) {
+      return
+    }
+    
+    try {
+      await deletePipelineHook(pipeline.id)
+      await refetchPipelines()
+      
+      // Se deletou o pipeline ativo, seleciona o primeiro disponível
+      if (activePipeline?.id === pipeline.id) {
+        const remainingPipelines = pipelines.filter(p => p.id !== pipeline.id)
+        setActivePipeline(remainingPipelines[0] || null)
+      }
+    } catch (error) {
+      console.error('Error deleting pipeline:', error)
+    }
+    setShowPipelineDropdown(false)
+  }
+
+  // Stage handlers
+  const handleEditStage = (stage: PipelineStage) => {
+    setEditingStage(stage)
+    setShowEditStageModal(true)
+  }
+
+  const handleUpdateStage = async (stageId: string, data: { name: string; color: string }) => {
+    await updateStage(stageId, data)
+    await refetchPipelines()
+    setShowEditStageModal(false)
+    setEditingStage(null)
+  }
+
+  const handleDeleteStage = async (stageId: string) => {
+    await deleteStage(stageId)
+    await refetchPipelines()
+    setShowEditStageModal(false)
+    setEditingStage(null)
   }
 
   // Deal handlers
@@ -514,28 +570,60 @@ export default function CRMPage() {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="absolute left-0 top-full mt-2 w-64 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
+                  className="absolute left-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
                 >
                   <div className="p-2">
                     {pipelines.map(pipeline => (
-                      <button
+                      <div
                         key={pipeline.id}
-                        onClick={() => handlePipelineSelect(pipeline)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors group ${
                           activePipeline?.id === pipeline.id
-                            ? 'bg-primary-500/20 text-primary-400'
-                            : 'text-dark-300 hover:bg-dark-700/50'
+                            ? 'bg-primary-500/20'
+                            : 'hover:bg-dark-700/50'
                         }`}
                       >
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: pipeline.color || '#f97316' }}
-                        />
-                        <span className="flex-1 text-left">{pipeline.name}</span>
-                        {activePipeline?.id === pipeline.id && (
-                          <span className="text-xs text-primary-400">Ativo</span>
-                        )}
-                      </button>
+                        <button
+                          onClick={() => handlePipelineSelect(pipeline)}
+                          className="flex items-center gap-3 flex-1 min-w-0"
+                        >
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: pipeline.color || '#f97316' }}
+                          />
+                          <span className={`flex-1 text-left truncate ${
+                            activePipeline?.id === pipeline.id ? 'text-primary-400' : 'text-dark-300'
+                          }`}>
+                            {pipeline.name}
+                          </span>
+                          {activePipeline?.id === pipeline.id && (
+                            <span className="text-xs text-primary-400 flex-shrink-0">Ativo</span>
+                          )}
+                        </button>
+                        
+                        {/* Edit/Delete buttons */}
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditPipeline(pipeline)
+                            }}
+                            className="p-1.5 rounded-lg text-dark-400 hover:text-white hover:bg-dark-600 transition-colors"
+                            title="Editar pipeline"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeletePipeline(pipeline)
+                            }}
+                            className="p-1.5 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Excluir pipeline"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                   <div className="border-t border-dark-700 p-2">
@@ -638,6 +726,7 @@ export default function CRMPage() {
                 deals={getStageDeals(stage.id)}
                 onAddDeal={() => handleAddDealToStage(stage.id)}
                 onDealClick={setSelectedDeal}
+                onEditStage={handleEditStage}
               />
             ))}
             
@@ -688,6 +777,19 @@ export default function CRMPage() {
           setEditingPipeline(null)
         }}
         onSave={handleCreatePipeline}
+      />
+
+      {/* Edit Stage Modal */}
+      <EditStageModal
+        isOpen={showEditStageModal}
+        stage={editingStage}
+        totalStages={stages.length}
+        onClose={() => {
+          setShowEditStageModal(false)
+          setEditingStage(null)
+        }}
+        onSave={handleUpdateStage}
+        onDelete={handleDeleteStage}
       />
 
       {/* Close dropdown when clicking outside */}

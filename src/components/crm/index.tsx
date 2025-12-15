@@ -49,6 +49,7 @@ export { ContactSelector } from './ContactSelector'
 export { CreateDealModal } from './CreateDealModal'
 export { DealDrawer } from './DealDrawer'
 export { PipelineModal } from './PipelineModal'
+export { EditStageModal } from './EditStageModal'
 
 // ===============================
 // KANBAN CARD

@@ -241,11 +241,13 @@ async function createPipeline({
   organizationId,
   name,
   description,
+  color,
   stages,
 }: {
   organizationId: string;
   name: string;
   description?: string;
+  color?: string;
   stages?: { name: string; color: string }[];
 }) {
   // Get max position
@@ -264,6 +266,7 @@ async function createPipeline({
       organization_id: organizationId,
       name,
       description,
+      color: color || '#f97316',
       position,
     })
     .select()
