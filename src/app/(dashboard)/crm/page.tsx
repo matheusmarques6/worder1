@@ -34,6 +34,7 @@ import {
   RefreshCw,
   Pencil,
   Trash2,
+  X,
 } from 'lucide-react'
 import { useDeals, usePipelines } from '@/hooks'
 import { useCRMStore, useAuthStore } from '@/stores'
@@ -370,6 +371,12 @@ export default function CRMPage() {
   const [activeDeal, setActiveDeal] = useState<Deal | null>(null)
   const [showEditStageModal, setShowEditStageModal] = useState(false)
   const [editingStage, setEditingStage] = useState<PipelineStage | null>(null)
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+  const [filters, setFilters] = useState({
+    minValue: '',
+    maxValue: '',
+    hasContact: 'all' as 'all' | 'yes' | 'no',
+  })
 
   // Set active pipeline when pipelines load
   useEffect(() => {
@@ -387,17 +394,56 @@ export default function CRMPage() {
   // Get stages for active pipeline
   const stages = activePipeline?.stages || []
 
-  // Get deals for a specific stage
+  // Get deals for a specific stage with search and filters
   const getStageDeals = useCallback((stageId: string) => {
-    return deals
-      .filter(deal => deal.stage_id === stageId)
-      .filter(deal => 
-        !searchQuery || 
-        deal.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        deal.contact?.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        deal.contact?.last_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    let filteredDeals = deals.filter(deal => deal.stage_id === stageId)
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      filteredDeals = filteredDeals.filter(deal => 
+        deal.title?.toLowerCase().includes(query) ||
+        deal.contact?.first_name?.toLowerCase().includes(query) ||
+        deal.contact?.last_name?.toLowerCase().includes(query) ||
+        deal.contact?.email?.toLowerCase().includes(query) ||
+        deal.contact?.company?.toLowerCase().includes(query) ||
+        deal.value?.toString().includes(query)
       )
-  }, [deals, searchQuery])
+    }
+    
+    // Apply value filters
+    if (filters.minValue) {
+      const min = parseFloat(filters.minValue)
+      if (!isNaN(min)) {
+        filteredDeals = filteredDeals.filter(deal => deal.value >= min)
+      }
+    }
+    
+    if (filters.maxValue) {
+      const max = parseFloat(filters.maxValue)
+      if (!isNaN(max)) {
+        filteredDeals = filteredDeals.filter(deal => deal.value <= max)
+      }
+    }
+    
+    // Apply contact filter
+    if (filters.hasContact === 'yes') {
+      filteredDeals = filteredDeals.filter(deal => deal.contact_id)
+    } else if (filters.hasContact === 'no') {
+      filteredDeals = filteredDeals.filter(deal => !deal.contact_id)
+    }
+    
+    return filteredDeals
+  }, [deals, searchQuery, filters])
+  
+  // Check if any filters are active
+  const hasActiveFilters = filters.minValue || filters.maxValue || filters.hasContact !== 'all'
+  
+  // Clear all filters
+  const clearFilters = () => {
+    setFilters({ minValue: '', maxValue: '', hasContact: 'all' })
+    setSearchQuery('')
+  }
 
   // DnD handlers
   const handleDragStart = (event: DragStartEvent) => {
@@ -514,10 +560,11 @@ export default function CRMPage() {
   }
 
   // Calculate pipeline stats
+  const uniqueContacts = new Set(deals.filter(d => d.contact_id).map(d => d.contact_id)).size
   const pipelineStats = {
-    totalValue: deals.reduce((sum, d) => sum + d.value, 0),
     weightedValue: deals.reduce((sum, d) => sum + (d.value * d.probability / 100), 0),
     totalDeals: deals.length,
+    totalContacts: uniqueContacts,
   }
 
   // Loading state
@@ -654,11 +701,119 @@ export default function CRMPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 w-64 transition-colors"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
-          <button className="p-2.5 rounded-xl bg-dark-800/50 border border-dark-700/50 text-dark-400 hover:text-white hover:bg-dark-800 transition-all">
-            <Filter className="w-5 h-5" />
-          </button>
+          {/* Filter */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+              className={`p-2.5 rounded-xl border transition-all ${
+                hasActiveFilters 
+                  ? 'bg-primary-500/20 border-primary-500/50 text-primary-400' 
+                  : 'bg-dark-800/50 border-dark-700/50 text-dark-400 hover:text-white hover:bg-dark-800'
+              }`}
+            >
+              <Filter className="w-5 h-5" />
+              {hasActiveFilters && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary-500 rounded-full" />
+              )}
+            </button>
+            
+            {/* Filter Dropdown */}
+            <AnimatePresence>
+              {showFilterDropdown && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="absolute right-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
+                >
+                  <div className="p-4 border-b border-dark-700">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-white">Filtros</h3>
+                      {hasActiveFilters && (
+                        <button
+                          onClick={clearFilters}
+                          className="text-xs text-primary-400 hover:text-primary-300"
+                        >
+                          Limpar todos
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 space-y-4">
+                    {/* Value Range */}
+                    <div>
+                      <label className="block text-xs font-medium text-dark-400 mb-2">
+                        Valor do Deal
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          placeholder="Mín"
+                          value={filters.minValue}
+                          onChange={(e) => setFilters(f => ({ ...f, minValue: e.target.value }))}
+                          className="flex-1 px-3 py-2 bg-dark-900/50 border border-dark-700 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                        />
+                        <span className="text-dark-500">-</span>
+                        <input
+                          type="number"
+                          placeholder="Máx"
+                          value={filters.maxValue}
+                          onChange={(e) => setFilters(f => ({ ...f, maxValue: e.target.value }))}
+                          className="flex-1 px-3 py-2 bg-dark-900/50 border border-dark-700 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Has Contact */}
+                    <div>
+                      <label className="block text-xs font-medium text-dark-400 mb-2">
+                        Contato associado
+                      </label>
+                      <div className="flex gap-2">
+                        {[
+                          { value: 'all', label: 'Todos' },
+                          { value: 'yes', label: 'Com contato' },
+                          { value: 'no', label: 'Sem contato' },
+                        ].map(option => (
+                          <button
+                            key={option.value}
+                            onClick={() => setFilters(f => ({ ...f, hasContact: option.value as any }))}
+                            className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                              filters.hasContact === option.value
+                                ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                : 'bg-dark-900/50 text-dark-400 border border-dark-700 hover:border-dark-600'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 border-t border-dark-700 bg-dark-900/50">
+                    <button
+                      onClick={() => setShowFilterDropdown(false)}
+                      className="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg text-white text-sm font-medium transition-colors"
+                    >
+                      Aplicar Filtros
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
           
           <button 
             onClick={() => {
@@ -677,13 +832,13 @@ export default function CRMPage() {
       {/* Pipeline Stats */}
       <div className="flex items-center gap-6 mb-6 p-4 bg-dark-800/30 rounded-xl border border-dark-700/50">
         <div>
-          <p className="text-sm text-dark-400">Valor Total</p>
-          <p className="text-xl font-bold text-white">{formatCurrency(pipelineStats.totalValue)}</p>
+          <p className="text-sm text-dark-400">Valor Ponderado</p>
+          <p className="text-xl font-bold text-success-400">{formatCurrency(pipelineStats.weightedValue)}</p>
         </div>
         <div className="w-px h-10 bg-dark-700" />
         <div>
-          <p className="text-sm text-dark-400">Valor Ponderado</p>
-          <p className="text-xl font-bold text-success-400">{formatCurrency(pipelineStats.weightedValue)}</p>
+          <p className="text-sm text-dark-400">Contatos na Pipeline</p>
+          <p className="text-xl font-bold text-white">{pipelineStats.totalContacts}</p>
         </div>
         <div className="w-px h-10 bg-dark-700" />
         <div>
@@ -797,6 +952,12 @@ export default function CRMPage() {
         <div 
           className="fixed inset-0 z-10" 
           onClick={() => setShowPipelineDropdown(false)} 
+        />
+      )}
+      {showFilterDropdown && (
+        <div 
+          className="fixed inset-0 z-10" 
+          onClick={() => setShowFilterDropdown(false)} 
         />
       )}
     </div>

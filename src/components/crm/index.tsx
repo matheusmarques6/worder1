@@ -46,6 +46,7 @@ import {
 
 // Export new components
 export { ContactSelector } from './ContactSelector'
+export { CreateContactModal } from './CreateContactModal'
 export { CreateDealModal } from './CreateDealModal'
 export { DealDrawer } from './DealDrawer'
 export { PipelineModal } from './PipelineModal'

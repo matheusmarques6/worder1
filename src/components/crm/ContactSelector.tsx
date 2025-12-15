@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, User, X, Plus, Check } from 'lucide-react'
 import { useContacts } from '@/hooks'
+import { useAuthStore } from '@/stores'
 import type { Contact } from '@/types'
+import { CreateContactModal } from './CreateContactModal'
 
 interface ContactSelectorProps {
   selectedId?: string
@@ -14,7 +16,9 @@ interface ContactSelectorProps {
 export function ContactSelector({ selectedId, onSelect, placeholder = 'Selecionar contato' }: ContactSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const { contacts, loading } = useContacts({ search, limit: 10 })
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const { contacts, loading, refetch } = useContacts({ search, limit: 10 })
+  const { user } = useAuthStore()
   const containerRef = useRef<HTMLDivElement>(null)
 
   const selectedContact = contacts.find((c: Contact) => c.id === selectedId)
@@ -41,6 +45,35 @@ export function ContactSelector({ selectedId, onSelect, placeholder = 'Seleciona
       return `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
     }
     return contact.email || 'Sem nome'
+  }
+
+  const handleCreateContact = async (contactData: {
+    first_name: string
+    last_name: string
+    email: string
+    phone?: string
+    company?: string
+  }) => {
+    const response = await fetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...contactData,
+        organizationId: user?.organization_id,
+      }),
+    })
+
+    if (!response.ok) {
+      const data = await response.json()
+      throw new Error(data.error || 'Erro ao criar contato')
+    }
+
+    const { contact } = await response.json()
+    
+    // Atualizar lista e selecionar o novo contato
+    await refetch()
+    onSelect(contact.id)
+    setShowCreateModal(false)
   }
 
   return (
@@ -152,8 +185,8 @@ export function ContactSelector({ selectedId, onSelect, placeholder = 'Seleciona
             <button
               type="button"
               onClick={() => {
-                // TODO: Abrir modal de criar contato
                 setIsOpen(false)
+                setShowCreateModal(true)
               }}
               className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-primary-400 hover:bg-primary-500/10 transition-colors"
             >
@@ -163,6 +196,14 @@ export function ContactSelector({ selectedId, onSelect, placeholder = 'Seleciona
           </div>
         </div>
       )}
+
+      {/* Create Contact Modal */}
+      <CreateContactModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreate={handleCreateContact}
+        initialEmail={search}
+      />
     </div>
   )
 }

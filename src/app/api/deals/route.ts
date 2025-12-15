@@ -40,76 +40,159 @@ export async function GET(request: NextRequest) {
 
   try {
     if (type === 'pipelines') {
-      const { data, error } = await supabase
+      // First, get all pipelines
+      const { data: pipelines, error: pipelineError } = await supabase
         .from('pipelines')
-        .select(`
-          *,
-          stages:pipeline_stages(
-            id,
-            name,
-            color,
-            position,
-            deal_count:deals(count)
-          )
-        `)
+        .select('*')
         .eq('organization_id', organizationId)
         .order('position');
 
-      if (error) throw error;
-      return NextResponse.json({ pipelines: data });
+      if (pipelineError) throw pipelineError;
+
+      // Then, get all stages for these pipelines
+      const pipelineIds = pipelines?.map(p => p.id) || [];
+      
+      if (pipelineIds.length > 0) {
+        const { data: stages, error: stagesError } = await supabase
+          .from('pipeline_stages')
+          .select('*')
+          .in('pipeline_id', pipelineIds)
+          .order('position');
+
+        if (stagesError) throw stagesError;
+
+        // Get deal counts per stage
+        const { data: dealCounts, error: countError } = await supabase
+          .from('deals')
+          .select('stage_id')
+          .eq('organization_id', organizationId);
+
+        // Count deals per stage
+        const stageDealsMap: Record<string, number> = {};
+        dealCounts?.forEach(deal => {
+          if (deal.stage_id) {
+            stageDealsMap[deal.stage_id] = (stageDealsMap[deal.stage_id] || 0) + 1;
+          }
+        });
+
+        // Combine pipelines with their stages
+        const pipelinesWithStages = pipelines?.map(pipeline => ({
+          ...pipeline,
+          stages: (stages || [])
+            .filter(s => s.pipeline_id === pipeline.id)
+            .map(s => ({
+              ...s,
+              deal_count: stageDealsMap[s.id] || 0
+            }))
+            .sort((a, b) => a.position - b.position)
+        }));
+
+        return NextResponse.json({ pipelines: pipelinesWithStages });
+      }
+
+      return NextResponse.json({ pipelines: pipelines || [] });
     }
 
     if (dealId) {
-      const { data, error } = await supabase
+      // Get deal with contact
+      const { data: deal, error: dealError } = await supabase
         .from('deals')
-        .select(`
-          *,
-          contact:contacts(*),
-          stage:pipeline_stages(
-            id,
-            name,
-            color,
-            pipeline:pipelines(id, name)
-          ),
-          activities:deal_activities(
-            id,
-            type,
-            description,
-            created_at,
-            user:users(first_name, last_name)
-          )
-        `)
+        .select('*')
         .eq('id', dealId)
         .eq('organization_id', organizationId)
         .single();
 
-      if (error) throw error;
-      return NextResponse.json({ deal: data });
+      if (dealError) throw dealError;
+
+      // Get contact separately if exists
+      let contact = null;
+      if (deal?.contact_id) {
+        const { data: contactData } = await supabase
+          .from('contacts')
+          .select('*')
+          .eq('id', deal.contact_id)
+          .single();
+        contact = contactData;
+      }
+
+      // Get stage separately if exists
+      let stage = null;
+      if (deal?.stage_id) {
+        const { data: stageData } = await supabase
+          .from('pipeline_stages')
+          .select('*')
+          .eq('id', deal.stage_id)
+          .single();
+        stage = stageData;
+      }
+
+      return NextResponse.json({ 
+        deal: { 
+          ...deal, 
+          contact, 
+          stage 
+        } 
+      });
     }
 
-    // List deals
-    let query = supabase
+    // List deals with contacts and stages
+    const { data: deals, error: dealsError } = await supabase
       .from('deals')
-      .select(`
-        *,
-        contact:contacts(id, email, first_name, last_name, avatar_url),
-        stage:pipeline_stages(id, name, color)
-      `)
+      .select('*')
       .eq('organization_id', organizationId)
       .order('position');
 
+    if (dealsError) throw dealsError;
+
+    // Get unique contact IDs and stage IDs
+    const contactIds = [...new Set(deals?.filter(d => d.contact_id).map(d => d.contact_id))];
+    const stageIds = [...new Set(deals?.filter(d => d.stage_id).map(d => d.stage_id))];
+
+    // Fetch contacts in batch
+    let contactsMap: Record<string, any> = {};
+    if (contactIds.length > 0) {
+      const { data: contacts } = await supabase
+        .from('contacts')
+        .select('id, email, first_name, last_name, avatar_url, company')
+        .in('id', contactIds);
+      
+      contacts?.forEach(c => {
+        contactsMap[c.id] = c;
+      });
+    }
+
+    // Fetch stages in batch
+    let stagesMap: Record<string, any> = {};
+    if (stageIds.length > 0) {
+      const { data: stages } = await supabase
+        .from('pipeline_stages')
+        .select('id, name, color')
+        .in('id', stageIds);
+      
+      stages?.forEach(s => {
+        stagesMap[s.id] = s;
+      });
+    }
+
+    // Combine deals with contacts and stages
+    const dealsWithRelations = deals?.map(deal => ({
+      ...deal,
+      contact: deal.contact_id ? contactsMap[deal.contact_id] : null,
+      stage: deal.stage_id ? stagesMap[deal.stage_id] : null
+    }));
+
+    // Filter by pipeline or stage if specified
+    let filteredDeals = dealsWithRelations || [];
+
     if (pipelineId) {
-      query = query.eq('pipeline_id', pipelineId);
+      filteredDeals = filteredDeals.filter(d => d.pipeline_id === pipelineId);
     }
 
     if (stageId) {
-      query = query.eq('stage_id', stageId);
+      filteredDeals = filteredDeals.filter(d => d.stage_id === stageId);
     }
 
-    const { data, error } = await query;
-
-    if (error) throw error;
-    return NextResponse.json({ deals: data });
+    return NextResponse.json({ deals: filteredDeals });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -305,15 +388,23 @@ async function createPipeline({
     await supabase.from('pipeline_stages').insert(stageInserts);
   }
 
-  // Fetch pipeline with stages
-  const { data: fullPipeline } = await supabase
+  // Fetch pipeline with stages separately
+  const { data: createdPipeline } = await supabase
     .from('pipelines')
-    .select(`
-      *,
-      stages:pipeline_stages(*)
-    `)
+    .select('*')
     .eq('id', pipeline.id)
     .single();
+
+  const { data: pipelineStages } = await supabase
+    .from('pipeline_stages')
+    .select('*')
+    .eq('pipeline_id', pipeline.id)
+    .order('position');
+
+  const fullPipeline = {
+    ...createdPipeline,
+    stages: pipelineStages || []
+  };
 
   return NextResponse.json({ pipeline: fullPipeline }, { status: 201 });
 }
