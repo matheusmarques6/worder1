@@ -571,10 +571,10 @@ export function ContactCard({ contact, onClick }: ContactCardProps) {
 
         <div className="text-right">
           <p className="text-success-400 font-semibold">
-            {formatCurrency(contact.total_revenue)}
+            {formatCurrency(contact.total_spent || contact.total_revenue || 0)}
           </p>
           <p className="text-dark-500 text-xs mt-1">
-            {contact.total_orders} pedidos
+            {contact.total_orders || 0} pedidos
           </p>
         </div>
       </div>
