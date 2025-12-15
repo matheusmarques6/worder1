@@ -26,7 +26,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { cn, formatCurrency, getInitials, stringToColor } from '@/lib/utils'
 import { Card, Avatar, Badge, Button, Input } from '@/components/ui'
 import { useCRMStore } from '@/stores'
-import type { Pipeline, PipelineColumn, Deal, Contact } from '@/types'
+import type { Pipeline, PipelineStage, Deal, Contact } from '@/types'
 import {
   Plus,
   MoreHorizontal,
@@ -43,6 +43,12 @@ import {
   X,
   Check,
 } from 'lucide-react'
+
+// Export new components
+export { ContactSelector } from './ContactSelector'
+export { CreateDealModal } from './CreateDealModal'
+export { DealDrawer } from './DealDrawer'
+export { PipelineModal } from './PipelineModal'
 
 // ===============================
 // KANBAN CARD
@@ -141,7 +147,7 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
 // KANBAN COLUMN
 // ===============================
 interface KanbanColumnProps {
-  column: PipelineColumn
+  column: PipelineStage
   deals: Deal[]
   onAddDeal: () => void
   onEditColumn: () => void

@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/stores';
 
+// Re-export usePipelines
+export { usePipelines } from './usePipelines';
+
 // Generic fetch hook
 export function useFetch<T>(url: string, options?: RequestInit) {
   const [data, setData] = useState<T | null>(null);

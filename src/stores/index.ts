@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { 
   User, 
   Pipeline, 
-  PipelineColumn, 
+  PipelineStage, 
   Deal, 
   Contact, 
   WhatsAppConversation,
@@ -140,18 +140,18 @@ interface CRMState {
   updatePipeline: (id: string, data: Partial<Pipeline>) => void
   deletePipeline: (id: string) => void
   
-  // Column actions
-  addColumn: (pipelineId: string, column: PipelineColumn) => void
-  updateColumn: (pipelineId: string, columnId: string, data: Partial<PipelineColumn>) => void
-  deleteColumn: (pipelineId: string, columnId: string) => void
-  reorderColumns: (pipelineId: string, columns: PipelineColumn[]) => void
+  // Stage actions (renamed from Column)
+  addStage: (pipelineId: string, stage: PipelineStage) => void
+  updateStage: (pipelineId: string, stageId: string, data: Partial<PipelineStage>) => void
+  deleteStage: (pipelineId: string, stageId: string) => void
+  reorderStages: (pipelineId: string, stages: PipelineStage[]) => void
   
   // Deal actions
   setDeals: (deals: Deal[]) => void
   addDeal: (deal: Deal) => void
   updateDeal: (id: string, data: Partial<Deal>) => void
   deleteDeal: (id: string) => void
-  moveDeal: (dealId: string, columnId: string, position: number) => void
+  moveDeal: (dealId: string, stageId: string, position: number) => void
   
   // Contact actions
   setContacts: (contacts: Contact[]) => void
@@ -186,35 +186,35 @@ export const useCRMStore = create<CRMState>((set) => ({
     selectedPipeline: state.selectedPipeline?.id === id ? null : state.selectedPipeline,
   })),
   
-  // Column actions
-  addColumn: (pipelineId, column) => set((state) => ({
+  // Stage actions
+  addStage: (pipelineId, stage) => set((state) => ({
     pipelines: state.pipelines.map((p) => 
-      p.id === pipelineId ? { ...p, columns: [...p.columns, column] } : p
+      p.id === pipelineId ? { ...p, stages: [...(p.stages || []), stage] } : p
     ),
     selectedPipeline: state.selectedPipeline?.id === pipelineId 
-      ? { ...state.selectedPipeline, columns: [...state.selectedPipeline.columns, column] } 
+      ? { ...state.selectedPipeline, stages: [...(state.selectedPipeline.stages || []), stage] } 
       : state.selectedPipeline,
   })),
-  updateColumn: (pipelineId, columnId, data) => set((state) => ({
+  updateStage: (pipelineId, stageId, data) => set((state) => ({
     pipelines: state.pipelines.map((p) => 
       p.id === pipelineId 
-        ? { ...p, columns: p.columns.map((c) => c.id === columnId ? { ...c, ...data } : c) } 
+        ? { ...p, stages: (p.stages || []).map((s) => s.id === stageId ? { ...s, ...data } : s) } 
         : p
     ),
   })),
-  deleteColumn: (pipelineId, columnId) => set((state) => ({
+  deleteStage: (pipelineId, stageId) => set((state) => ({
     pipelines: state.pipelines.map((p) => 
       p.id === pipelineId 
-        ? { ...p, columns: p.columns.filter((c) => c.id !== columnId) } 
+        ? { ...p, stages: (p.stages || []).filter((s) => s.id !== stageId) } 
         : p
     ),
   })),
-  reorderColumns: (pipelineId, columns) => set((state) => ({
+  reorderStages: (pipelineId, stages) => set((state) => ({
     pipelines: state.pipelines.map((p) => 
-      p.id === pipelineId ? { ...p, columns } : p
+      p.id === pipelineId ? { ...p, stages } : p
     ),
     selectedPipeline: state.selectedPipeline?.id === pipelineId 
-      ? { ...state.selectedPipeline, columns } 
+      ? { ...state.selectedPipeline, stages } 
       : state.selectedPipeline,
   })),
   
@@ -227,9 +227,9 @@ export const useCRMStore = create<CRMState>((set) => ({
   deleteDeal: (id) => set((state) => ({
     deals: state.deals.filter((d) => d.id !== id),
   })),
-  moveDeal: (dealId, columnId, position) => set((state) => ({
+  moveDeal: (dealId, stageId, position) => set((state) => ({
     deals: state.deals.map((d) => 
-      d.id === dealId ? { ...d, column_id: columnId, position } : d
+      d.id === dealId ? { ...d, stage_id: stageId, position } : d
     ),
   })),
   
