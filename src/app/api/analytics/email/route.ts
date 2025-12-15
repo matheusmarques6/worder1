@@ -264,24 +264,23 @@ async function getFlowMetrics(
   }
 }
 
-// Execute queue with concurrency limit (like N8N's execQueue)
+// Execute queue SEQUENTIALLY with delay to respect rate limits
+// Klaviyo Reporting API has 2 requests/minute limit!
 async function execQueue<T, R>(
   items: T[],
-  limit: number,
+  delayMs: number,
   worker: (item: T, index: number) => Promise<R>
 ): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let idx = 0;
-
-  const runners = Array(Math.min(limit, items.length)).fill(0).map(async () => {
-    while (idx < items.length) {
-      const currentIdx = idx;
-      idx++;
-      results[currentIdx] = await worker(items[currentIdx], currentIdx);
+  const results: R[] = [];
+  
+  for (let i = 0; i < items.length; i++) {
+    if (i > 0) {
+      await sleep(delayMs); // Wait between requests to avoid rate limit
     }
-  });
-
-  await Promise.all(runners);
+    const result = await worker(items[i], i);
+    results.push(result);
+  }
+  
   return results;
 }
 
@@ -343,10 +342,10 @@ export async function GET(request: NextRequest) {
       .in('status', ['live', 'manual', 'Live', 'Manual'])
       .order('revenue', { ascending: false });
 
-    // Fetch metrics for each flow (limit to 5 to avoid timeout)
+    // Fetch metrics for each flow (5 flows)
+    // Using 400ms delay between requests to respect rate limits
     const flowsToProcess = (dbFlows || []).slice(0, 5);
-    const flowMetrics = await execQueue(flowsToProcess, 2, async (flow) => {
-      await sleep(100); // Small delay to avoid rate limits
+    const flowMetrics = await execQueue(flowsToProcess, 400, async (flow) => {
       const metrics = await getFlowMetrics(
         klaviyoAccount.api_key,
         flow.klaviyo_flow_id,
@@ -378,10 +377,10 @@ export async function GET(request: NextRequest) {
       .eq('status', 'Sent')
       .order('sent_at', { ascending: false, nullsFirst: false });
 
-    // Fetch metrics for each campaign (limit to 10 to avoid timeout)
+    // Fetch metrics for each campaign (10 campaigns)
+    // Using 400ms delay between requests to respect rate limits
     const campaignsToProcess = (dbCampaigns || []).slice(0, 10);
-    const campaignMetrics = await execQueue(campaignsToProcess, 2, async (campaign) => {
-      await sleep(100); // Small delay to avoid rate limits
+    const campaignMetrics = await execQueue(campaignsToProcess, 400, async (campaign) => {
       const metrics = await getCampaignMetrics(
         klaviyoAccount.api_key,
         campaign.klaviyo_campaign_id,
