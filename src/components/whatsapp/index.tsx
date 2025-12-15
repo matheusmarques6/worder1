@@ -392,12 +392,12 @@ export function ContactInfoPanel({
         <div className="p-6 text-center border-b border-dark-700/50">
           <Avatar
             src={contact?.avatar_url}
-            fallback={getInitials(contact?.name || conversation.contact_name || 'UN')}
+            fallback={getInitials([contact?.first_name, contact?.last_name].filter(Boolean).join(' ') || conversation.contact_name || 'UN')}
             size="xl"
             className="mx-auto mb-4"
           />
           <h3 className="text-lg font-semibold text-dark-100">
-            {contact?.name || conversation.contact_name || 'Desconhecido'}
+            {[contact?.first_name, contact?.last_name].filter(Boolean).join(' ') || conversation.contact_name || 'Desconhecido'}
           </h3>
           <p className="text-dark-400 text-sm">
             {formatPhoneNumber(conversation.phone_number)}
