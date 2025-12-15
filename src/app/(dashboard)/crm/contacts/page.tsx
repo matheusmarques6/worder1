@@ -24,7 +24,7 @@ import {
   CheckCircle,
   UserPlus,
 } from 'lucide-react'
-import { useContacts } from '@/hooks'
+import { useContacts, useDeals } from '@/hooks'
 import { useAuthStore } from '@/stores'
 import { ContactDrawer } from '@/components/crm'
 import type { Contact } from '@/types'
@@ -390,6 +390,9 @@ export default function ContactsPage() {
     limit: 20 
   })
   
+  // Get pipelines and createDeal for the contact drawer
+  const { pipelines, createDeal } = useDeals()
+  
   const [showModal, setShowModal] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
@@ -406,6 +409,11 @@ export default function ContactsPage() {
       setSelectedContact({ ...selectedContact, tags })
     }
     await refetch()
+  }
+
+  // Create deal from contact drawer
+  const handleCreateDeal = async (data: any) => {
+    await createDeal(data)
   }
 
   // Export contacts to CSV
@@ -779,6 +787,8 @@ export default function ContactsPage() {
           contact={selectedContact}
           onClose={() => setSelectedContact(null)}
           onUpdateTags={handleUpdateTags}
+          pipelines={pipelines}
+          onCreateDeal={handleCreateDeal}
         />
       )}
     </div>
