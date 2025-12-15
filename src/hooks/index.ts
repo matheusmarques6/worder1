@@ -163,7 +163,10 @@ export function useDeals(pipelineId?: string) {
   const [error, setError] = useState<Error | null>(null);
 
   const fetchPipelines = useCallback(async () => {
-    if (!user?.organization_id) return;
+    if (!user?.organization_id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -171,14 +174,18 @@ export function useDeals(pipelineId?: string) {
       );
       if (!response.ok) throw new Error('Failed to fetch pipelines');
       const result = await response.json();
-      setPipelines(result.pipelines);
+      setPipelines(result.pipelines || []);
     } catch (e) {
+      console.error('Error fetching pipelines:', e);
       setError(e instanceof Error ? e : new Error('An error occurred'));
     }
   }, [user?.organization_id]);
 
   const fetchDeals = useCallback(async () => {
-    if (!user?.organization_id) return;
+    if (!user?.organization_id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -188,8 +195,9 @@ export function useDeals(pipelineId?: string) {
       const response = await fetch(`/api/deals?${params}`);
       if (!response.ok) throw new Error('Failed to fetch deals');
       const result = await response.json();
-      setDeals(result.deals);
+      setDeals(result.deals || []);
     } catch (e) {
+      console.error('Error fetching deals:', e);
       setError(e instanceof Error ? e : new Error('An error occurred'));
     } finally {
       setLoading(false);
