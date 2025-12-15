@@ -446,32 +446,58 @@ async function createStage({
 
 async function createDeal({
   organizationId,
+  organization_id,
   pipelineId,
+  pipeline_id,
   stageId,
+  stage_id,
   contactId,
+  contact_id,
   title,
   value,
   currency,
   expectedCloseDate,
+  expected_close_date,
   description,
   assignedTo,
+  assigned_to,
+  probability,
 }: {
-  organizationId: string;
-  pipelineId: string;
-  stageId: string;
+  organizationId?: string;
+  organization_id?: string;
+  pipelineId?: string;
+  pipeline_id?: string;
+  stageId?: string;
+  stage_id?: string;
   contactId?: string;
+  contact_id?: string;
   title: string;
   value?: number;
   currency?: string;
   expectedCloseDate?: string;
+  expected_close_date?: string;
   description?: string;
   assignedTo?: string;
+  assigned_to?: string;
+  probability?: number;
 }) {
+  // Support both camelCase and snake_case
+  const orgId = organizationId || organization_id;
+  const pplId = pipelineId || pipeline_id;
+  const stgId = stageId || stage_id;
+  const ctcId = contactId || contact_id;
+  const expDate = expectedCloseDate || expected_close_date;
+  const assignTo = assignedTo || assigned_to;
+
+  if (!orgId || !pplId || !stgId) {
+    throw new Error('organizationId, pipelineId and stageId are required');
+  }
+
   // Get max position in stage
   const { data: existingDeals } = await supabase
     .from('deals')
     .select('position')
-    .eq('stage_id', stageId)
+    .eq('stage_id', stgId)
     .order('position', { ascending: false })
     .limit(1);
 
@@ -480,33 +506,41 @@ async function createDeal({
   const { data, error } = await supabase
     .from('deals')
     .insert({
-      organization_id: organizationId,
-      pipeline_id: pipelineId,
-      stage_id: stageId,
-      contact_id: contactId,
+      organization_id: orgId,
+      pipeline_id: pplId,
+      stage_id: stgId,
+      contact_id: ctcId || null,
       title,
       value: value || 0,
       currency: currency || 'BRL',
-      expected_close_date: expectedCloseDate,
+      probability: probability || 50,
+      expected_close_date: expDate,
       description,
-      assigned_to: assignedTo,
+      assigned_to: assignTo,
       position,
+      status: 'open',
+      tags: [],
+      custom_fields: {},
     })
     .select(`
       *,
-      contact:contacts(id, email, first_name, last_name, avatar_url),
+      contact:contacts(id, email, first_name, last_name, avatar_url, company),
       stage:pipeline_stages(id, name, color)
     `)
     .single();
 
   if (error) throw error;
 
-  // Log activity
-  await supabase.from('deal_activities').insert({
-    deal_id: data.id,
-    type: 'created',
-    description: 'Deal created',
-  });
+  // Log activity (ignore errors)
+  try {
+    await supabase.from('deal_activities').insert({
+      deal_id: data.id,
+      type: 'created',
+      description: 'Deal created',
+    });
+  } catch (e) {
+    console.warn('Failed to log activity:', e);
+  }
 
   return NextResponse.json({ deal: data }, { status: 201 });
 }

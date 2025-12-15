@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
@@ -17,6 +17,11 @@ import {
   ChevronRight,
   Users,
   DollarSign,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  AlertCircle,
+  CheckCircle,
 } from 'lucide-react'
 import { useContacts } from '@/hooks'
 import { useAuthStore } from '@/stores'
@@ -357,6 +362,102 @@ export default function ContactsPage() {
   
   const [showModal, setShowModal] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importResult, setImportResult] = useState<{ success: number; errors: number } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Export contacts to CSV
+  const handleExportCSV = () => {
+    const headers = ['first_name', 'last_name', 'email', 'phone']
+    const csvContent = [
+      headers.join(','),
+      ...contacts.map(c => [
+        c.first_name || '',
+        c.last_name || '',
+        c.email || '',
+        c.phone || ''
+      ].map(field => `"${field.replace(/"/g, '""')}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `contatos_${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  // Download CSV template
+  const handleDownloadTemplate = () => {
+    const template = 'first_name,last_name,email,phone\nJoão,Silva,joao@email.com,11999999999\nMaria,Santos,maria@email.com,11888888888'
+    const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'template_contatos.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  // Import contacts from CSV
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImportLoading(true)
+    setImportResult(null)
+
+    try {
+      const text = await file.text()
+      const lines = text.split('\n').filter(line => line.trim())
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''))
+      
+      let success = 0
+      let errors = 0
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || []
+        const cleanValues = values.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'))
+        
+        const contact: any = {}
+        headers.forEach((header, idx) => {
+          if (cleanValues[idx]) {
+            contact[header] = cleanValues[idx]
+          }
+        })
+
+        if (contact.email || contact.first_name) {
+          try {
+            await createContact({
+              first_name: contact.first_name || '',
+              last_name: contact.last_name || '',
+              email: contact.email || '',
+              phone: contact.phone || '',
+            })
+            success++
+          } catch {
+            errors++
+          }
+        }
+      }
+
+      setImportResult({ success, errors })
+      await refetch()
+    } catch (err) {
+      setImportResult({ success: 0, errors: 1 })
+    } finally {
+      setImportLoading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
 
   const handleCreateContact = async (data: any) => {
     await createContact(data)
@@ -390,6 +491,15 @@ export default function ContactsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv"
+        onChange={handleImportCSV}
+        className="hidden"
+      />
+
       {/* Actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -416,14 +526,81 @@ export default function ContactsPage() {
             )}
           </div>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-primary-500/20"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Novo Contato</span>
-        </button>
+        
+        <div className="flex items-center gap-2">
+          {/* Download Template */}
+          <button
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-2 px-3 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white hover:border-dark-600 transition-colors"
+            title="Baixar modelo CSV"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+          </button>
+
+          {/* Import */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importLoading}
+            className="flex items-center gap-2 px-3 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white hover:border-dark-600 transition-colors disabled:opacity-50"
+            title="Importar CSV"
+          >
+            <Upload className={`w-4 h-4 ${importLoading ? 'animate-pulse' : ''}`} />
+            <span className="text-sm">Importar</span>
+          </button>
+
+          {/* Export */}
+          <button
+            onClick={handleExportCSV}
+            disabled={contacts.length === 0}
+            className="flex items-center gap-2 px-3 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white hover:border-dark-600 transition-colors disabled:opacity-50"
+            title="Exportar CSV"
+          >
+            <Download className="w-4 h-4" />
+            <span className="text-sm">Exportar</span>
+          </button>
+
+          {/* New Contact */}
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-primary-500/20"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Novo Contato</span>
+          </button>
+        </div>
       </div>
+
+      {/* Import Result Notification */}
+      <AnimatePresence>
+        {importResult && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={`p-4 rounded-xl flex items-center gap-3 ${
+              importResult.errors > 0 && importResult.success === 0
+                ? 'bg-red-500/10 border border-red-500/20'
+                : 'bg-green-500/10 border border-green-500/20'
+            }`}
+          >
+            {importResult.errors > 0 && importResult.success === 0 ? (
+              <AlertCircle className="w-5 h-5 text-red-400" />
+            ) : (
+              <CheckCircle className="w-5 h-5 text-green-400" />
+            )}
+            <span className={importResult.errors > 0 && importResult.success === 0 ? 'text-red-300' : 'text-green-300'}>
+              {importResult.success > 0 && `${importResult.success} contato(s) importado(s) com sucesso.`}
+              {importResult.errors > 0 && ` ${importResult.errors} erro(s) durante importação.`}
+            </span>
+            <button
+              onClick={() => setImportResult(null)}
+              className="ml-auto text-dark-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
