@@ -101,11 +101,13 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
       {deal.contact && (
         <div className="flex items-center gap-2 mb-3">
           <Avatar
-            fallback={getInitials(deal.contact.name)}
+            fallback={getInitials(`${deal.contact.first_name || ''} ${deal.contact.last_name || ''}`.trim() || deal.contact.email || '?')}
             size="sm"
           />
           <div className="min-w-0">
-            <p className="text-sm text-dark-200 truncate">{deal.contact.name}</p>
+            <p className="text-sm text-dark-200 truncate">
+              {`${deal.contact.first_name || ''} ${deal.contact.last_name || ''}`.trim() || deal.contact.email || 'Sem nome'}
+            </p>
             {deal.contact.company && (
               <p className="text-xs text-dark-500 truncate">{deal.contact.company}</p>
             )}
@@ -249,11 +251,11 @@ function KanbanColumn({
       {/* Cards Container */}
       <div className="flex-1 overflow-y-auto space-y-3 pr-1 -mr-1">
         <SortableContext
-          items={deals.map((d) => d.id)}
+          items={deals.map((d: Deal) => d.id)}
           strategy={verticalListSortingStrategy}
         >
           <AnimatePresence>
-            {deals.map((deal) => (
+            {deals.map((deal: Deal) => (
               <KanbanCard
                 key={deal.id}
                 deal={deal}
@@ -317,21 +319,21 @@ export function KanbanBoard({ pipeline, deals }: KanbanBoardProps) {
     const overId = over.id as string
 
     // Find the deal being dragged
-    const activeDeal = deals.find((d) => d.id === activeId)
+    const activeDeal = deals.find((d: Deal) => d.id === activeId)
     if (!activeDeal) {
       setActiveId(null)
       return
     }
 
     // Check if dropped on a column
-    const targetColumn = pipeline.columns.find((c) => c.id === overId)
+    const targetColumn = (pipeline.stages || []).find((c: PipelineStage) => c.id === overId)
     if (targetColumn) {
       moveDeal(activeId, targetColumn.id, 0)
     } else {
       // Dropped on another deal - find which column
-      const targetDeal = deals.find((d) => d.id === overId)
+      const targetDeal = deals.find((d: Deal) => d.id === overId)
       if (targetDeal) {
-        moveDeal(activeId, targetDeal.column_id, targetDeal.position)
+        moveDeal(activeId, targetDeal.stage_id, targetDeal.position)
       }
     }
 
@@ -343,7 +345,7 @@ export function KanbanBoard({ pipeline, deals }: KanbanBoardProps) {
     setShowDealModal(true)
   }
 
-  const activeDeal = activeId ? deals.find((d) => d.id === activeId) : null
+  const activeDeal = activeId ? deals.find((d: Deal) => d.id === activeId) : null
 
   return (
     <DndContext
@@ -354,14 +356,14 @@ export function KanbanBoard({ pipeline, deals }: KanbanBoardProps) {
     >
       <div className="flex gap-6 overflow-x-auto pb-4 h-[calc(100vh-200px)]">
         <SortableContext
-          items={pipeline.columns.map((c) => c.id)}
+          items={(pipeline.stages || []).map((c: PipelineStage) => c.id)}
           strategy={horizontalListSortingStrategy}
         >
-          {pipeline.columns.map((column) => (
+          {(pipeline.stages || []).map((column: PipelineStage) => (
             <KanbanColumn
               key={column.id}
               column={column}
-              deals={deals.filter((d) => d.column_id === column.id)}
+              deals={deals.filter((d: Deal) => d.stage_id === column.id)}
               onAddDeal={() => {
                 setSelectedDeal(null)
                 setShowDealModal(true)
@@ -525,11 +527,13 @@ export function ContactCard({ contact, onClick }: ContactCardProps) {
       <div className="flex items-start gap-4">
         <Avatar
           src={contact.avatar_url}
-          fallback={getInitials(contact.name)}
+          fallback={getInitials(`${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email || '?')}
           size="lg"
         />
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-dark-100 truncate">{contact.name}</h3>
+          <h3 className="font-semibold text-dark-100 truncate">
+            {`${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email || 'Sem nome'}
+          </h3>
           {contact.company && (
             <p className="text-dark-400 text-sm truncate">{contact.company}</p>
           )}
@@ -596,7 +600,7 @@ export function PipelineSelector({
 }: PipelineSelectorProps) {
   return (
     <div className="flex items-center gap-2 p-1 bg-dark-800/50 rounded-xl">
-      {pipelines.map((pipeline) => (
+      {pipelines.map((pipeline: Pipeline) => (
         <button
           key={pipeline.id}
           onClick={() => onSelect(pipeline)}
