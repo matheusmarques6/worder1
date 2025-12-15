@@ -10,23 +10,26 @@ import {
   GripVertical,
   ChevronRight,
 } from 'lucide-react'
-import { usePipelines } from '@/hooks'
+import { useDeals, usePipelines } from '@/hooks'
 import { PipelineModal } from '@/components/crm'
 
 export default function PipelinesPage() {
-  const { pipelines, loading, createPipeline, updatePipeline, deletePipeline } = usePipelines()
+  const { pipelines, loading, refetchPipelines } = useDeals()
+  const { createPipeline, updatePipeline, deletePipeline } = usePipelines()
   const [showModal, setShowModal] = useState(false)
   const [editingPipeline, setEditingPipeline] = useState<any>(null)
   const [expandedPipeline, setExpandedPipeline] = useState<string | null>(null)
 
   const handleCreate = async (data: any) => {
     await createPipeline(data)
+    await refetchPipelines()
     setShowModal(false)
   }
 
   const handleUpdate = async (data: any) => {
     if (editingPipeline) {
       await updatePipeline(editingPipeline.id, data)
+      await refetchPipelines()
       setEditingPipeline(null)
     }
   }
@@ -34,6 +37,7 @@ export default function PipelinesPage() {
   const handleDelete = async (pipeline: any) => {
     if (confirm(`Tem certeza que deseja excluir a pipeline "${pipeline.name}"? Todos os deals serão removidos.`)) {
       await deletePipeline(pipeline.id)
+      await refetchPipelines()
     }
   }
 
