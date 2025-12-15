@@ -592,32 +592,27 @@ export default function CRMPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-120px)] flex flex-col">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">CRM</h1>
-          <p className="text-dark-400 mt-1">Gerencie seus deals e oportunidades</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Pipeline Selector */}
-          <div className="relative">
-            <button 
-              onClick={() => setShowPipelineDropdown(!showPipelineDropdown)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white hover:bg-dark-800 transition-colors"
-            >
-              <span className="font-medium">{activePipeline?.name || 'Selecionar'}</span>
-              <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showPipelineDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {/* Dropdown */}
-            <AnimatePresence>
-              {showPipelineDropdown && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="absolute left-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
+    <div className="h-[calc(100vh-200px)] flex flex-col">
+      {/* Controls */}
+      <div className="flex items-center gap-3 mb-6">
+        {/* Pipeline Selector */}
+        <div className="relative">
+          <button 
+            onClick={() => setShowPipelineDropdown(!showPipelineDropdown)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white hover:bg-dark-800 transition-colors"
+          >
+            <span className="font-medium">{activePipeline?.name || 'Selecionar'}</span>
+            <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showPipelineDropdown ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {/* Dropdown */}
+          <AnimatePresence>
+            {showPipelineDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute left-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
                 >
                   <div className="p-2">
                     {pipelines.map(pipeline => (

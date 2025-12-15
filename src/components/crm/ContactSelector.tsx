@@ -52,7 +52,6 @@ export function ContactSelector({ selectedId, onSelect, placeholder = 'Seleciona
     last_name: string
     email: string
     phone?: string
-    company?: string
   }) => {
     const response = await fetch('/api/contacts', {
       method: 'POST',
