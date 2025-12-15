@@ -75,18 +75,18 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
     <div
       onClick={onClick}
       className={`
-        p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl cursor-pointer
-        hover:border-slate-600/50 hover:bg-slate-800/70 transition-all group
-        ${isDragging ? 'opacity-50 scale-105 shadow-xl shadow-violet-500/10 rotate-2' : ''}
+        p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl cursor-pointer
+        hover:border-dark-600 hover:bg-dark-800/80 transition-all group
+        ${isDragging ? 'opacity-50 scale-105 shadow-xl shadow-primary-500/10 rotate-2' : ''}
       `}
     >
       <div className="flex items-start justify-between mb-3">
-        <h4 className="text-sm font-medium text-white line-clamp-2 group-hover:text-violet-300 transition-colors">
+        <h4 className="text-sm font-medium text-white line-clamp-2 group-hover:text-primary-300 transition-colors">
           {deal.title}
         </h4>
         <button 
           onClick={(e) => e.stopPropagation()}
-          className="p-1 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+          className="p-1 rounded hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
@@ -94,7 +94,7 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
 
       {deal.contact && (
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
+          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
             <span className="text-[10px] font-bold text-white">
               {getInitials(deal.contact.first_name, deal.contact.last_name)}
             </span>
@@ -102,22 +102,22 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
           <div className="min-w-0">
             <p className="text-xs text-white truncate">{contactName}</p>
             {deal.contact.company && (
-              <p className="text-[10px] text-slate-400 truncate">{deal.contact.company}</p>
+              <p className="text-[10px] text-dark-400 truncate">{deal.contact.company}</p>
             )}
           </div>
         </div>
       )}
 
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-emerald-400">{formatCurrency(deal.value)}</span>
+        <span className="text-sm font-semibold text-success-400">{formatCurrency(deal.value)}</span>
         <div className="flex items-center gap-1">
-          <div className="w-12 h-1.5 rounded-full bg-slate-700 overflow-hidden">
+          <div className="w-12 h-1.5 rounded-full bg-dark-700 overflow-hidden">
             <div 
-              className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 transition-all duration-300"
+              className="h-full rounded-full bg-gradient-to-r from-primary-500 to-accent-500 transition-all duration-300"
               style={{ width: `${deal.probability}%` }}
             />
           </div>
-          <span className="text-[10px] text-slate-400">{deal.probability}%</span>
+          <span className="text-[10px] text-dark-400">{deal.probability}%</span>
         </div>
       </div>
 
@@ -127,13 +127,13 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
           {deal.tags.slice(0, 2).map((tag, i) => (
             <span
               key={i}
-              className="px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400 text-[10px]"
+              className="px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-400 text-[10px]"
             >
               {tag}
             </span>
           ))}
           {deal.tags.length > 2 && (
-            <span className="px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 text-[10px]">
+            <span className="px-2 py-0.5 rounded-full bg-dark-700/50 text-dark-400 text-[10px]">
               +{deal.tags.length - 2}
             </span>
           )}
@@ -142,7 +142,7 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
 
       {/* Footer */}
       {deal.expected_close_date && (
-        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+        <div className="flex items-center gap-1.5 text-xs text-dark-400">
           <Clock className="w-3 h-3" />
           <span>{new Date(deal.expected_close_date).toLocaleDateString('pt-BR')}</span>
         </div>
@@ -204,31 +204,31 @@ function KanbanColumn({ stage, deals, onAddDeal, onDealClick }: KanbanColumnProp
       <div
         ref={setNodeRef}
         className={`
-          h-full flex flex-col bg-slate-900/30 rounded-2xl border transition-all duration-200
-          ${isOver ? 'border-violet-500/50 bg-violet-500/5 scale-[1.02]' : 'border-slate-800/50'}
+          h-full flex flex-col bg-dark-900/30 rounded-2xl border transition-all duration-200
+          ${isOver ? 'border-primary-500/50 bg-primary-500/5 scale-[1.02]' : 'border-dark-800/50'}
         `}
       >
         {/* Column Header */}
-        <div className="p-4 border-b border-slate-800/50">
+        <div className="p-4 border-b border-dark-800/50">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
               <h3 className="font-semibold text-white">{stage.name}</h3>
-              <span className="px-2 py-0.5 rounded-full bg-slate-800/50 text-xs text-slate-400">
+              <span className="px-2 py-0.5 rounded-full bg-dark-800/50 text-xs text-dark-400">
                 {deals.length}
               </span>
             </div>
             <button 
               onClick={onAddDeal}
-              className="p-1.5 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors"
+              className="p-1.5 rounded-lg hover:bg-dark-800/50 text-dark-400 hover:text-white transition-colors"
               title="Adicionar deal"
             >
               <Plus className="w-4 h-4" />
             </button>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-emerald-400 font-medium">{formatCurrency(totalValue)}</span>
-            <span className="text-slate-500 text-xs">
+            <span className="text-success-400 font-medium">{formatCurrency(totalValue)}</span>
+            <span className="text-dark-500 text-xs">
               Ponderado: {formatCurrency(weightedValue)}
             </span>
           </div>
@@ -244,16 +244,16 @@ function KanbanColumn({ stage, deals, onAddDeal, onDealClick }: KanbanColumnProp
           
           {deals.length === 0 && (
             <div className="p-4 text-center">
-              <p className="text-sm text-slate-500">Arraste deals para cá</p>
+              <p className="text-sm text-dark-500">Arraste deals para cá</p>
             </div>
           )}
         </div>
 
         {/* Add Deal Button */}
-        <div className="p-2 border-t border-slate-800/50">
+        <div className="p-2 border-t border-dark-800/50">
           <button
             onClick={onAddDeal}
-            className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-slate-500 hover:text-white hover:bg-slate-800/50 transition-colors"
+            className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-dark-500 hover:text-white hover:bg-dark-800/50 transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span className="text-sm">Adicionar</span>
@@ -272,8 +272,8 @@ function LoadingState() {
   return (
     <div className="h-[calc(100vh-120px)] flex items-center justify-center">
       <div className="text-center">
-        <div className="w-12 h-12 border-4 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-slate-400">Carregando CRM...</p>
+        <div className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-dark-400">Carregando CRM...</p>
       </div>
     </div>
   )
@@ -291,10 +291,10 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
           <AlertCircle className="w-8 h-8 text-red-500" />
         </div>
         <h3 className="text-lg font-semibold text-white mb-2">Erro ao carregar</h3>
-        <p className="text-slate-400 mb-4 max-w-sm">{error.message}</p>
+        <p className="text-dark-400 mb-4 max-w-sm">{error.message}</p>
         <button
           onClick={onRetry}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-white transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg text-white transition-colors"
         >
           <RefreshCw className="w-4 h-4" />
           Tentar novamente
@@ -312,16 +312,16 @@ function EmptyState({ onCreatePipeline }: { onCreatePipeline: () => void }) {
   return (
     <div className="h-[calc(100vh-120px)] flex items-center justify-center">
       <div className="text-center max-w-md">
-        <div className="w-20 h-20 bg-violet-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Settings className="w-10 h-10 text-violet-500" />
+        <div className="w-20 h-20 bg-primary-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Settings className="w-10 h-10 text-primary-500" />
         </div>
         <h3 className="text-xl font-semibold text-white mb-2">Nenhum pipeline encontrado</h3>
-        <p className="text-slate-400 mb-6">
+        <p className="text-dark-400 mb-6">
           Crie seu primeiro pipeline para começar a gerenciar seus deals e oportunidades.
         </p>
         <button
           onClick={onCreatePipeline}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-600 to-cyan-600 rounded-xl text-white font-medium hover:opacity-90 transition-opacity"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-primary-500/20"
         >
           <Plus className="w-5 h-5" />
           Criar Pipeline
@@ -349,206 +349,133 @@ export default function CRMPage() {
     refetch,
     refetchPipelines
   } = useDeals()
+  const { createPipeline: createPipelineHook, updatePipeline } = usePipelines()
   
-  const { createPipeline } = usePipelines()
-  
-  const { 
-    selectedPipeline, 
-    setSelectedPipeline,
-    setDeals: setStoreDeals,
-    setPipelines: setStorePipelines 
-  } = useCRMStore()
-
-  // Local state
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [activePipeline, setActivePipeline] = useState<Pipeline | null>(null)
   const [showPipelineDropdown, setShowPipelineDropdown] = useState(false)
-  
-  // Modal states
+  const [showPipelineModal, setShowPipelineModal] = useState(false)
+  const [editingPipeline, setEditingPipeline] = useState<Pipeline | null>(null)
   const [showCreateDealModal, setShowCreateDealModal] = useState(false)
   const [createDealStageId, setCreateDealStageId] = useState<string>('')
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
-  const [showPipelineModal, setShowPipelineModal] = useState(false)
-  const [editingPipeline, setEditingPipeline] = useState<Pipeline | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeDeal, setActiveDeal] = useState<Deal | null>(null)
+
+  // Set active pipeline when pipelines load
+  useEffect(() => {
+    if (pipelines.length > 0 && !activePipeline) {
+      setActivePipeline(pipelines[0])
+    }
+  }, [pipelines, activePipeline])
 
   // DnD sensors
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
-  // Sync pipelines with store
-  useEffect(() => {
-    if (pipelines.length > 0) {
-      setStorePipelines(pipelines)
-      if (!selectedPipeline) {
-        setSelectedPipeline(pipelines[0])
-      }
-    }
-  }, [pipelines, selectedPipeline, setStorePipelines, setSelectedPipeline])
-
-  // Sync deals with store
-  useEffect(() => {
-    setStoreDeals(deals)
-  }, [deals, setStoreDeals])
-
-  // Active pipeline
-  const activePipeline = selectedPipeline || pipelines[0]
-  const stages: PipelineStage[] = activePipeline?.stages || []
-
-  // Filter deals by search and pipeline
-  const filteredDeals = deals.filter(deal => {
-    // Filter by pipeline
-    if (activePipeline && deal.pipeline_id !== activePipeline.id) {
-      return false
-    }
-    
-    // Filter by search
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      const matchesTitle = deal.title.toLowerCase().includes(query)
-      const matchesContact = deal.contact?.first_name?.toLowerCase().includes(query) ||
-                            deal.contact?.last_name?.toLowerCase().includes(query) ||
-                            deal.contact?.email?.toLowerCase().includes(query)
-      return matchesTitle || matchesContact
-    }
-    
-    return true
-  })
+  // Get stages for active pipeline
+  const stages = activePipeline?.stages || []
 
   // Get deals for a specific stage
   const getStageDeals = useCallback((stageId: string) => {
-    return filteredDeals.filter(d => d.stage_id === stageId)
-  }, [filteredDeals])
+    return deals
+      .filter(deal => deal.stage_id === stageId)
+      .filter(deal => 
+        !searchQuery || 
+        deal.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        deal.contact?.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        deal.contact?.last_name?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+  }, [deals, searchQuery])
 
-  // Calculate pipeline stats
-  const pipelineStats = {
-    totalValue: filteredDeals.reduce((sum, d) => sum + d.value, 0),
-    totalDeals: filteredDeals.length,
-    weightedValue: filteredDeals.reduce((sum, d) => sum + (d.value * d.probability / 100), 0),
-  }
-
-  // Drag handlers
+  // DnD handlers
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string)
+    const dealId = event.active.id as string
+    const deal = deals.find(d => d.id === dealId)
+    if (deal) setActiveDeal(deal)
   }
 
   const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event
-    if (!over) return
-
-    const activeId = active.id as string
-    const overId = over.id as string
-
-    const activeDeal = deals.find((d: Deal) => d.id === activeId)
-    if (!activeDeal) return
-
-    // Check if we're over a column
-    const overColumn = stages.find((s: PipelineStage) => s.id === overId)
-    if (overColumn && activeDeal.stage_id !== overId) {
-      // Update local state immediately for smooth UX
-      setStoreDeals(deals.map(deal => 
-        deal.id === activeId ? { ...deal, stage_id: overId } : deal
-      ))
-    }
-
-    // Check if we're over another deal
-    const overDeal = deals.find((d: Deal) => d.id === overId)
-    if (overDeal && activeDeal.stage_id !== overDeal.stage_id) {
-      setStoreDeals(deals.map(deal => 
-        deal.id === activeId ? { ...deal, stage_id: overDeal.stage_id } : deal
-      ))
-    }
+    // Handle drag over logic if needed
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveDeal(null)
     const { active, over } = event
-    setActiveId(null)
-
-    if (!over) return
-
-    const dealId = active.id as string
-    const deal = deals.find((d: Deal) => d.id === dealId)
-    if (!deal) return
-
-    // Determine target stage
-    let targetStageId = deal.stage_id
-    const overStage = stages.find((s: PipelineStage) => s.id === over.id)
-    const overDeal = deals.find((d: Deal) => d.id === over.id)
     
-    if (overStage) {
-      targetStageId = overStage.id
-    } else if (overDeal) {
-      targetStageId = overDeal.stage_id
-    }
-
-    // If stage changed, persist to API
-    if (targetStageId !== deal.stage_id) {
-      try {
-        await moveDeal(dealId, targetStageId)
-      } catch (error) {
-        console.error('Erro ao mover deal:', error)
-        // Refetch to restore correct state
-        refetch()
+    if (!over) return
+    
+    const dealId = active.id as string
+    const overId = over.id as string
+    
+    // Check if dropped on a stage
+    const targetStage = stages.find(s => s.id === overId)
+    if (targetStage) {
+      const deal = deals.find(d => d.id === dealId)
+      if (deal && deal.stage_id !== targetStage.id) {
+        await moveDeal(dealId, targetStage.id)
       }
     }
   }
 
-  // Deal handlers
-  const handleCreateDeal = async (data: CreateDealData) => {
-    await createDeal(data)
+  // Pipeline handlers
+  const handlePipelineSelect = (pipeline: Pipeline) => {
+    setActivePipeline(pipeline)
+    setShowPipelineDropdown(false)
   }
 
-  const handleUpdateDeal = async (id: string, data: Partial<Deal>) => {
-    await updateDeal(id, data)
-    // Update selected deal if it's the one being edited
-    if (selectedDeal?.id === id) {
-      setSelectedDeal({ ...selectedDeal, ...data } as Deal)
+  const handleCreatePipeline = async (data: { name: string; description?: string; stages: { name: string; color: string; position: number }[] }) => {
+    if (editingPipeline) {
+      await updatePipeline(editingPipeline.id, data)
+    } else {
+      await createPipelineHook(data)
     }
+    await refetchPipelines()
+    setShowPipelineModal(false)
+    setEditingPipeline(null)
   }
 
-  const handleDeleteDeal = async (id: string) => {
-    await deleteDeal(id)
-    setSelectedDeal(null)
-  }
-
+  // Deal handlers
   const handleAddDealToStage = (stageId: string) => {
     setCreateDealStageId(stageId)
     setShowCreateDealModal(true)
   }
 
-  // Pipeline handlers
-  const handleCreatePipeline = async (data: { name: string; description?: string; stages: any[] }) => {
-    await createPipeline(data)
-    await refetchPipelines()
+  const handleCreateDeal = async (data: CreateDealData) => {
+    await createDeal(data)
+    await refetch()
   }
 
-  const handlePipelineSelect = (pipeline: Pipeline) => {
-    setSelectedPipeline(pipeline)
-    setShowPipelineDropdown(false)
+  const handleUpdateDeal = async (id: string, data: Partial<Deal>) => {
+    await updateDeal(id, data)
+    await refetch()
   }
 
-  // Get active deal for drag overlay
-  const activeDeal = activeId ? deals.find((d: Deal) => d.id === activeId) : null
+  const handleDeleteDeal = async (id: string) => {
+    await deleteDeal(id)
+    await refetch()
+  }
+
+  // Calculate pipeline stats
+  const pipelineStats = {
+    totalValue: deals.reduce((sum, d) => sum + d.value, 0),
+    weightedValue: deals.reduce((sum, d) => sum + (d.value * d.probability / 100), 0),
+    totalDeals: deals.length,
+  }
 
   // Loading state
-  if (loading && !deals.length && !pipelines.length) {
+  if (loading && pipelines.length === 0) {
     return <LoadingState />
   }
 
   // Error state
-  if (error && !deals.length) {
+  if (error) {
     return <ErrorState error={error} onRetry={refetch} />
   }
 
-  // Empty state (no pipelines)
-  if (!loading && pipelines.length === 0) {
+  // Empty state - no pipelines
+  if (pipelines.length === 0) {
     return (
       <>
         <EmptyState onCreatePipeline={() => setShowPipelineModal(true)} />
@@ -567,17 +494,17 @@ export default function CRMPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">CRM</h1>
-          <p className="text-slate-400 mt-1">Gerencie seus deals e oportunidades</p>
+          <p className="text-dark-400 mt-1">Gerencie seus deals e oportunidades</p>
         </div>
         <div className="flex items-center gap-3">
           {/* Pipeline Selector */}
           <div className="relative">
             <button 
               onClick={() => setShowPipelineDropdown(!showPipelineDropdown)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white hover:bg-slate-800 transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white hover:bg-dark-800 transition-colors"
             >
               <span className="font-medium">{activePipeline?.name || 'Selecionar'}</span>
-              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showPipelineDropdown ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showPipelineDropdown ? 'rotate-180' : ''}`} />
             </button>
             
             {/* Dropdown */}
@@ -587,7 +514,7 @@ export default function CRMPage() {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="absolute left-0 top-full mt-2 w-64 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 overflow-hidden"
+                  className="absolute left-0 top-full mt-2 w-64 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
                 >
                   <div className="p-2">
                     {pipelines.map(pipeline => (
@@ -596,29 +523,29 @@ export default function CRMPage() {
                         onClick={() => handlePipelineSelect(pipeline)}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                           activePipeline?.id === pipeline.id
-                            ? 'bg-violet-500/20 text-violet-400'
-                            : 'text-slate-300 hover:bg-slate-700/50'
+                            ? 'bg-primary-500/20 text-primary-400'
+                            : 'text-dark-300 hover:bg-dark-700/50'
                         }`}
                       >
                         <div
                           className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: pipeline.color || '#8b5cf6' }}
+                          style={{ backgroundColor: pipeline.color || '#f97316' }}
                         />
                         <span className="flex-1 text-left">{pipeline.name}</span>
                         {activePipeline?.id === pipeline.id && (
-                          <span className="text-xs text-violet-400">Ativo</span>
+                          <span className="text-xs text-primary-400">Ativo</span>
                         )}
                       </button>
                     ))}
                   </div>
-                  <div className="border-t border-slate-700 p-2">
+                  <div className="border-t border-dark-700 p-2">
                     <button
                       onClick={() => {
                         setShowPipelineDropdown(false)
                         setEditingPipeline(null)
                         setShowPipelineModal(true)
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-violet-400 hover:bg-violet-500/10 transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-primary-400 hover:bg-primary-500/10 transition-colors"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Novo Pipeline</span>
@@ -631,17 +558,17 @@ export default function CRMPage() {
           
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
             <input
               type="text"
               placeholder="Buscar deals..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-violet-500/50 w-64"
+              className="pl-9 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 w-64 transition-colors"
             />
           </div>
 
-          <button className="p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
+          <button className="p-2.5 rounded-xl bg-dark-800/50 border border-dark-700/50 text-dark-400 hover:text-white hover:bg-dark-800 transition-all">
             <Filter className="w-5 h-5" />
           </button>
           
@@ -651,7 +578,7 @@ export default function CRMPage() {
                 handleAddDealToStage(stages[0].id)
               }
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-cyan-600 rounded-xl text-white font-medium hover:opacity-90 transition-opacity"
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-primary-500/20"
           >
             <Plus className="w-5 h-5" />
             <span>Novo Deal</span>
@@ -660,24 +587,24 @@ export default function CRMPage() {
       </div>
 
       {/* Pipeline Stats */}
-      <div className="flex items-center gap-6 mb-6 p-4 bg-slate-900/30 rounded-xl border border-slate-800/50">
+      <div className="flex items-center gap-6 mb-6 p-4 bg-dark-800/30 rounded-xl border border-dark-700/50">
         <div>
-          <p className="text-sm text-slate-400">Valor Total</p>
+          <p className="text-sm text-dark-400">Valor Total</p>
           <p className="text-xl font-bold text-white">{formatCurrency(pipelineStats.totalValue)}</p>
         </div>
-        <div className="w-px h-10 bg-slate-800" />
+        <div className="w-px h-10 bg-dark-700" />
         <div>
-          <p className="text-sm text-slate-400">Valor Ponderado</p>
-          <p className="text-xl font-bold text-emerald-400">{formatCurrency(pipelineStats.weightedValue)}</p>
+          <p className="text-sm text-dark-400">Valor Ponderado</p>
+          <p className="text-xl font-bold text-success-400">{formatCurrency(pipelineStats.weightedValue)}</p>
         </div>
-        <div className="w-px h-10 bg-slate-800" />
+        <div className="w-px h-10 bg-dark-700" />
         <div>
-          <p className="text-sm text-slate-400">Deals Abertos</p>
+          <p className="text-sm text-dark-400">Deals Abertos</p>
           <p className="text-xl font-bold text-white">{pipelineStats.totalDeals}</p>
         </div>
-        <div className="w-px h-10 bg-slate-800" />
+        <div className="w-px h-10 bg-dark-700" />
         <div>
-          <p className="text-sm text-slate-400">Estágios</p>
+          <p className="text-sm text-dark-400">Estágios</p>
           <p className="text-xl font-bold text-white">{stages.length}</p>
         </div>
         
@@ -686,7 +613,7 @@ export default function CRMPage() {
           <button
             onClick={() => refetch()}
             disabled={loading}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors disabled:opacity-50"
+            className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-800/50 transition-colors disabled:opacity-50"
             title="Atualizar"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -720,7 +647,7 @@ export default function CRMPage() {
                 setEditingPipeline(activePipeline)
                 setShowPipelineModal(true)
               }}
-              className="flex-shrink-0 w-80 h-full min-h-[400px] flex flex-col items-center justify-center gap-2 bg-slate-900/20 border-2 border-dashed border-slate-800/50 rounded-2xl text-slate-500 hover:text-slate-400 hover:border-slate-700/50 transition-all"
+              className="flex-shrink-0 w-80 h-full min-h-[400px] flex flex-col items-center justify-center gap-2 bg-dark-900/20 border-2 border-dashed border-dark-800/50 rounded-2xl text-dark-500 hover:text-primary-400 hover:border-primary-500/30 transition-all"
             >
               <Plus className="w-6 h-6" />
               <span className="text-sm font-medium">Editar Estágios</span>

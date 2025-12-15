@@ -114,7 +114,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
           />
 
           {/* Drawer */}
@@ -123,14 +123,14 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed right-0 top-0 h-full w-full max-w-xl bg-slate-900 border-l border-slate-800 shadow-2xl z-50 overflow-hidden flex flex-col"
+            className="fixed right-0 top-0 h-full w-full max-w-xl bg-dark-900 border-l border-dark-700 shadow-2xl z-50 overflow-hidden flex flex-col"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-800">
+            <div className="flex items-center justify-between p-6 border-b border-dark-700">
               <div className="flex items-center gap-3">
                 <div
                   className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: currentStage?.color || '#8b5cf6' }}
+                  style={{ backgroundColor: currentStage?.color || '#f97316' }}
                 />
                 <h2 className="text-lg font-semibold text-white">
                   {isEditing ? 'Editando Deal' : 'Detalhes do Deal'}
@@ -141,14 +141,14 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                   <>
                     <button
                       onClick={() => setIsEditing(true)}
-                      className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                      className="p-2 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-white transition-colors"
                       title="Editar"
                     >
                       <Edit2 className="w-5 h-5" />
                     </button>
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="p-2 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                      className="p-2 rounded-lg hover:bg-red-500/10 text-dark-400 hover:text-red-400 transition-colors"
                       title="Excluir"
                     >
                       <Trash2 className="w-5 h-5" />
@@ -159,14 +159,14 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                     <button
                       onClick={() => setIsEditing(false)}
                       disabled={saving}
-                      className="px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                      className="px-3 py-1.5 rounded-lg text-dark-400 hover:text-white transition-colors disabled:opacity-50"
                     >
                       Cancelar
                     </button>
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-3 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       {saving ? (
                         <>
@@ -184,7 +184,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                 )}
                 <button
                   onClick={onClose}
-                  className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                  className="p-2 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-white transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -200,32 +200,32 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                     type="text"
                     value={editedDeal.title || ''}
                     onChange={(e) => setEditedDeal({ ...editedDeal, title: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white text-xl font-semibold focus:outline-none focus:border-violet-500"
+                    className="w-full text-xl font-bold bg-dark-800/50 border border-dark-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary-500 transition-colors"
                     placeholder="Título do deal"
                   />
                 ) : (
-                  <h3 className="text-xl font-semibold text-white">{deal.title}</h3>
+                  <h3 className="text-xl font-bold text-white">{deal.title}</h3>
                 )}
               </div>
 
               {/* Stage Selector */}
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Estágio</label>
+                <label className="block text-sm font-medium text-dark-400 mb-2">Estágio</label>
                 <div className="flex flex-wrap gap-2">
                   {stages.map((stage) => (
                     <button
                       key={stage.id}
                       onClick={() => handleStageChange(stage.id)}
-                      className={`
-                        px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                        ${deal.stage_id === stage.id
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        deal.stage_id === stage.id
                           ? 'text-white shadow-lg'
-                          : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-800'
-                        }
-                      `}
-                      style={{
-                        backgroundColor: deal.stage_id === stage.id ? stage.color : undefined,
-                      }}
+                          : 'bg-dark-800/50 text-dark-400 hover:bg-dark-700/50'
+                      }`}
+                      style={
+                        deal.stage_id === stage.id
+                          ? { backgroundColor: stage.color }
+                          : undefined
+                      }
                     >
                       {stage.name}
                     </button>
@@ -236,40 +236,43 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
               {/* Value & Probability */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">Valor</label>
+                  <label className="block text-sm font-medium text-dark-400 mb-2">Valor</label>
                   {isEditing ? (
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">R$</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500 text-sm">R$</span>
                       <input
                         type="number"
-                        value={editedDeal.value || 0}
-                        onChange={(e) => setEditedDeal({ ...editedDeal, value: Number(e.target.value) })}
-                        className="w-full pl-10 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                        value={editedDeal.value || ''}
+                        onChange={(e) => setEditedDeal({ ...editedDeal, value: Number(e.target.value) || 0 })}
+                        className="w-full pl-10 pr-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
+                        placeholder="0"
+                        min="0"
                       />
                     </div>
                   ) : (
-                    <p className="text-2xl font-bold text-emerald-400">{formatCurrency(deal.value)}</p>
+                    <p className="text-2xl font-bold text-success-400">{formatCurrency(deal.value)}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">Probabilidade</label>
+                  <label className="block text-sm font-medium text-dark-400 mb-2">Probabilidade</label>
                   {isEditing ? (
                     <div className="relative">
                       <input
                         type="number"
+                        value={editedDeal.probability || ''}
+                        onChange={(e) => setEditedDeal({ ...editedDeal, probability: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+                        className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
+                        placeholder="50"
                         min="0"
                         max="100"
-                        value={editedDeal.probability || 0}
-                        onChange={(e) => setEditedDeal({ ...editedDeal, probability: Number(e.target.value) })}
-                        className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-500">%</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3">
-                      <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="flex-1 h-2 bg-dark-800 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-violet-500 to-cyan-500 rounded-full transition-all duration-300"
+                          className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-300"
                           style={{ width: `${deal.probability}%` }}
                         />
                       </div>
@@ -281,7 +284,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
 
               {/* Expected Close Date */}
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">
+                <label className="block text-sm font-medium text-dark-400 mb-2">
                   <Calendar className="w-4 h-4 inline mr-2" />
                   Data de Fechamento Esperada
                 </label>
@@ -290,7 +293,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                     type="date"
                     value={editedDeal.expected_close_date || ''}
                     onChange={(e) => setEditedDeal({ ...editedDeal, expected_close_date: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                    className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
                   />
                 ) : (
                   <p className="text-white">
@@ -303,22 +306,22 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
 
               {/* Contact */}
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Contato</label>
+                <label className="block text-sm font-medium text-dark-400 mb-2">Contato</label>
                 {isEditing ? (
                   <ContactSelector
                     selectedId={editedDeal.contact_id}
                     onSelect={(contactId) => setEditedDeal({ ...editedDeal, contact_id: contactId })}
                   />
                 ) : deal.contact ? (
-                  <div className="p-4 bg-slate-800/30 rounded-xl">
+                  <div className="p-4 bg-dark-800/30 border border-dark-700/50 rounded-xl">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
                         <span className="text-white font-bold">{getContactInitials()}</span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-white">{getContactName()}</p>
                         {deal.contact.company && (
-                          <p className="text-sm text-slate-400 flex items-center gap-1">
+                          <p className="text-sm text-dark-400 flex items-center gap-1">
                             <Building2 className="w-3 h-3" />
                             {deal.contact.company}
                           </p>
@@ -328,7 +331,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                         {deal.contact.email && (
                           <a
                             href={`mailto:${deal.contact.email}`}
-                            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                            className="p-2 rounded-lg bg-dark-800 hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
                             title={deal.contact.email}
                           >
                             <Mail className="w-5 h-5" />
@@ -337,7 +340,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                         {deal.contact.phone && (
                           <a
                             href={`tel:${deal.contact.phone}`}
-                            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                            className="p-2 rounded-lg bg-dark-800 hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
                             title={deal.contact.phone}
                           >
                             <Phone className="w-5 h-5" />
@@ -348,7 +351,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                             href={`https://wa.me/${deal.contact.whatsapp.replace(/\D/g, '')}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                            className="p-2 rounded-lg bg-success-500 hover:bg-success-600 text-white transition-colors"
                             title={deal.contact.whatsapp}
                           >
                             <MessageSquare className="w-5 h-5" />
@@ -358,37 +361,37 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                     </div>
                   </div>
                 ) : (
-                  <p className="text-slate-500">Nenhum contato vinculado</p>
+                  <p className="text-dark-500">Nenhum contato vinculado</p>
                 )}
               </div>
 
               {/* Notes */}
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Notas</label>
+                <label className="block text-sm font-medium text-dark-400 mb-2">Notas</label>
                 {isEditing ? (
                   <textarea
                     value={editedDeal.notes || ''}
                     onChange={(e) => setEditedDeal({ ...editedDeal, notes: e.target.value })}
                     rows={4}
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-violet-500 resize-none"
+                    className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 resize-none transition-colors"
                     placeholder="Adicione notas sobre este deal..."
                   />
                 ) : (
-                  <p className="text-slate-300 whitespace-pre-wrap">
+                  <p className="text-dark-300 whitespace-pre-wrap">
                     {deal.notes || 'Nenhuma nota adicionada'}
                   </p>
                 )}
               </div>
 
               {/* Metadata */}
-              <div className="pt-4 border-t border-slate-800">
+              <div className="pt-4 border-t border-dark-700">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-slate-500 flex items-center gap-1">
+                    <p className="text-dark-500 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       Criado em
                     </p>
-                    <p className="text-slate-300">
+                    <p className="text-dark-300">
                       {new Date(deal.created_at).toLocaleDateString('pt-BR', {
                         day: '2-digit',
                         month: 'short',
@@ -399,8 +402,8 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                     </p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Última atualização</p>
-                    <p className="text-slate-300">
+                    <p className="text-dark-500">Última atualização</p>
+                    <p className="text-dark-300">
                       {new Date(deal.updated_at).toLocaleDateString('pt-BR', {
                         day: '2-digit',
                         month: 'short',
@@ -421,23 +424,23 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-10"
+                  className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-10"
                 >
                   <motion.div
                     initial={{ scale: 0.95, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.95, opacity: 0 }}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full"
+                    className="bg-dark-900 border border-dark-700 rounded-2xl p-6 max-w-sm w-full"
                   >
                     <h3 className="text-lg font-semibold text-white mb-2">Excluir deal?</h3>
-                    <p className="text-slate-400 mb-6">
+                    <p className="text-dark-400 mb-6">
                       Esta ação não pode ser desfeita. O deal "{deal.title}" será permanentemente excluído.
                     </p>
                     <div className="flex gap-3">
                       <button
                         onClick={() => setShowDeleteConfirm(false)}
                         disabled={deleting}
-                        className="flex-1 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition-colors disabled:opacity-50"
+                        className="flex-1 px-4 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 text-white transition-colors disabled:opacity-50"
                       >
                         Cancelar
                       </button>
