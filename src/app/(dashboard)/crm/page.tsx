@@ -400,7 +400,7 @@ export default function CRMPage() {
 
   // Active pipeline
   const activePipeline = selectedPipeline || pipelines[0]
-  const stages = activePipeline?.stages || []
+  const stages: PipelineStage[] = activePipeline?.stages || []
 
   // Filter deals by search and pipeline
   const filteredDeals = deals.filter(deal => {
