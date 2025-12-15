@@ -446,11 +446,11 @@ export default function CRMPage() {
     const activeId = active.id as string
     const overId = over.id as string
 
-    const activeDeal = deals.find(d => d.id === activeId)
+    const activeDeal = deals.find((d: Deal) => d.id === activeId)
     if (!activeDeal) return
 
     // Check if we're over a column
-    const overColumn = stages.find(s => s.id === overId)
+    const overColumn = stages.find((s: PipelineStage) => s.id === overId)
     if (overColumn && activeDeal.stage_id !== overId) {
       // Update local state immediately for smooth UX
       setStoreDeals(deals.map(deal => 
@@ -459,7 +459,7 @@ export default function CRMPage() {
     }
 
     // Check if we're over another deal
-    const overDeal = deals.find(d => d.id === overId)
+    const overDeal = deals.find((d: Deal) => d.id === overId)
     if (overDeal && activeDeal.stage_id !== overDeal.stage_id) {
       setStoreDeals(deals.map(deal => 
         deal.id === activeId ? { ...deal, stage_id: overDeal.stage_id } : deal
@@ -474,13 +474,13 @@ export default function CRMPage() {
     if (!over) return
 
     const dealId = active.id as string
-    const deal = deals.find(d => d.id === dealId)
+    const deal = deals.find((d: Deal) => d.id === dealId)
     if (!deal) return
 
     // Determine target stage
     let targetStageId = deal.stage_id
-    const overStage = stages.find(s => s.id === over.id)
-    const overDeal = deals.find(d => d.id === over.id)
+    const overStage = stages.find((s: PipelineStage) => s.id === over.id)
+    const overDeal = deals.find((d: Deal) => d.id === over.id)
     
     if (overStage) {
       targetStageId = overStage.id
@@ -535,7 +535,7 @@ export default function CRMPage() {
   }
 
   // Get active deal for drag overlay
-  const activeDeal = activeId ? deals.find(d => d.id === activeId) : null
+  const activeDeal = activeId ? deals.find((d: Deal) => d.id === activeId) : null
 
   // Loading state
   if (loading && !deals.length && !pipelines.length) {
