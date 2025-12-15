@@ -54,7 +54,7 @@ const TikTokIcon = () => (
   </svg>
 )
 
-import { useStoreStore, type ShopifyStore } from '@/stores'
+import { useStoreStore, useAuthStore, type ShopifyStore } from '@/stores'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
 
 // Worder Logo Component
@@ -111,6 +111,48 @@ export default function DashboardLayout({
   const pathname = usePathname()
   
   const { stores, currentStore, setStores, setCurrentStore, addStore } = useStoreStore()
+  const { user, setUser } = useAuthStore()
+
+  // Initialize user with default organization if not set
+  useEffect(() => {
+    const initializeUser = async () => {
+      if (!user || !user.organization_id) {
+        // Try to get or create default organization
+        try {
+          const response = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get-or-create-org' }),
+          })
+          const result = await response.json()
+          
+          if (result.organization) {
+            setUser({
+              id: result.user?.id || 'default-user',
+              email: result.user?.email || 'demo@worder.com',
+              first_name: result.user?.first_name || 'Demo',
+              last_name: result.user?.last_name || 'User',
+              organization_id: result.organization.id,
+              role: 'admin',
+            })
+          }
+        } catch (error) {
+          console.error('Error initializing user:', error)
+          // Fallback: set a default user with a temporary org ID
+          setUser({
+            id: 'default-user',
+            email: 'demo@worder.com',
+            first_name: 'Demo',
+            last_name: 'User',
+            organization_id: 'default-org',
+            role: 'admin',
+          })
+        }
+      }
+    }
+    
+    initializeUser()
+  }, [user, setUser])
 
   // Get store initials
   const getInitials = (name: string) => {

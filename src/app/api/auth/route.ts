@@ -31,6 +31,18 @@ export async function POST(request: NextRequest) {
       if (isDevMode && action === 'login') {
         return handleDevLogin(data);
       }
+      if (action === 'get-or-create-org') {
+        // Return a default organization for development
+        return NextResponse.json({
+          organization: { id: 'default-org', name: 'Development Organization' },
+          user: {
+            id: 'default-user',
+            email: 'demo@worder.com',
+            first_name: 'Demo',
+            last_name: 'User',
+          },
+        });
+      }
       return NextResponse.json(
         { error: 'Database not configured. Please set up Supabase environment variables.' },
         { status: 503 }
@@ -48,6 +60,8 @@ export async function POST(request: NextRequest) {
         return await handleResetPassword(client, data);
       case 'update-password':
         return await handleUpdatePassword(client, data);
+      case 'get-or-create-org':
+        return await handleGetOrCreateOrg(client);
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
@@ -274,6 +288,76 @@ async function handleUpdatePassword(
   }
 
   return NextResponse.json({ message: 'Password updated successfully' });
+}
+
+// Get or create default organization
+async function handleGetOrCreateOrg(supabase: SupabaseClient) {
+  try {
+    // First try to get existing organization
+    const { data: existingOrg, error: fetchError } = await supabase
+      .from('organizations')
+      .select('*')
+      .limit(1)
+      .single();
+
+    if (existingOrg) {
+      return NextResponse.json({
+        organization: existingOrg,
+        user: {
+          id: 'default-user',
+          email: 'demo@worder.com',
+          first_name: 'Demo',
+          last_name: 'User',
+        },
+      });
+    }
+
+    // Create new organization
+    const { data: newOrg, error: createError } = await supabase
+      .from('organizations')
+      .insert({
+        name: 'Minha Empresa',
+        slug: 'minha-empresa',
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error('Error creating organization:', createError);
+      // Return a default org ID even if creation fails
+      return NextResponse.json({
+        organization: { id: 'default-org', name: 'Default Organization' },
+        user: {
+          id: 'default-user',
+          email: 'demo@worder.com',
+          first_name: 'Demo',
+          last_name: 'User',
+        },
+      });
+    }
+
+    return NextResponse.json({
+      organization: newOrg,
+      user: {
+        id: 'default-user',
+        email: 'demo@worder.com',
+        first_name: 'Demo',
+        last_name: 'User',
+      },
+    });
+  } catch (error) {
+    console.error('Error in handleGetOrCreateOrg:', error);
+    // Return a default org ID as fallback
+    return NextResponse.json({
+      organization: { id: 'default-org', name: 'Default Organization' },
+      user: {
+        id: 'default-user',
+        email: 'demo@worder.com',
+        first_name: 'Demo',
+        last_name: 'User',
+      },
+    });
+  }
 }
 
 // GET - Get current user
