@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
+import { EventBus, EventType } from '@/lib/events';
 
 // GET - List contacts or get single contact
 export async function GET(request: NextRequest) {
@@ -120,6 +121,21 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
+    // 🔥 EMITIR EVENTO DE CONTATO CRIADO
+    EventBus.emit(EventType.CONTACT_CREATED, {
+      organization_id: organizationId,
+      contact_id: data.id,
+      email: data.email,
+      phone: data.phone,
+      data: {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        source: data.source,
+        tags: data.tags,
+      },
+      source: 'crm',
+    }).catch(console.error);
+
     return NextResponse.json({ contact: data }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -140,6 +156,13 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
+    // Buscar dados anteriores para comparação
+    const { data: previousContact } = await supabase
+      .from('contacts')
+      .select('tags, email')
+      .eq('id', id)
+      .single();
+
     const { data, error } = await supabase
       .from('contacts')
       .update({
@@ -152,6 +175,33 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    // 🔥 EMITIR EVENTO DE CONTATO ATUALIZADO
+    EventBus.emit(EventType.CONTACT_UPDATED, {
+      organization_id: organizationId,
+      contact_id: id,
+      email: data.email,
+      data: {
+        updated_fields: Object.keys(updates),
+      },
+      source: 'crm',
+    }).catch(console.error);
+
+    // 🔥 VERIFICAR SE TAGS FORAM ADICIONADAS
+    if (updates.tags && previousContact?.tags) {
+      const previousTags = previousContact.tags || [];
+      const newTags = (updates.tags || []).filter((t: string) => !previousTags.includes(t));
+      
+      for (const tag of newTags) {
+        EventBus.emit(EventType.TAG_ADDED, {
+          organization_id: organizationId,
+          contact_id: id,
+          email: data.email,
+          data: { tag_name: tag },
+          source: 'crm',
+        }).catch(console.error);
+      }
+    }
 
     return NextResponse.json({ contact: data });
   } catch (error: any) {

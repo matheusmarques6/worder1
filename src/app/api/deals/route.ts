@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { EventBus, EventType } from '@/lib/events';
 
 // Module-level lazy client
 let _supabase: SupabaseClient | null = null;
@@ -289,6 +290,86 @@ export async function PUT(request: NextRequest) {
         type: 'stage_change',
         description: `Deal moved to ${data.stage?.name}`,
       });
+
+      // 🔥 EMITIR EVENTO DE MUDANÇA DE ESTÁGIO
+      EventBus.emit(EventType.DEAL_STAGE_CHANGED, {
+        organization_id: organizationId,
+        deal_id: id,
+        contact_id: data.contact_id,
+        email: data.contact?.email,
+        data: {
+          from_stage_id: previousDeal.data?.stage_id,
+          to_stage_id: updates.stage_id,
+          to_stage_name: data.stage?.name,
+          deal_title: data.title,
+          deal_value: data.value,
+          pipeline_id: data.pipeline_id,
+        },
+        source: 'crm',
+      }).catch(console.error);
+    }
+
+    // 🔥 EMITIR EVENTO DE DEAL GANHO
+    if (updates.status === 'won') {
+      EventBus.emit(EventType.DEAL_WON, {
+        organization_id: organizationId,
+        deal_id: id,
+        contact_id: data.contact_id,
+        email: data.contact?.email,
+        data: {
+          deal_title: data.title,
+          deal_value: data.value,
+          pipeline_id: data.pipeline_id,
+          won_at: new Date().toISOString(),
+        },
+        source: 'crm',
+      }).catch(console.error);
+    }
+
+    // 🔥 EMITIR EVENTO DE DEAL PERDIDO
+    if (updates.status === 'lost') {
+      EventBus.emit(EventType.DEAL_LOST, {
+        organization_id: organizationId,
+        deal_id: id,
+        contact_id: data.contact_id,
+        email: data.contact?.email,
+        data: {
+          deal_title: data.title,
+          deal_value: data.value,
+          lost_reason: updates.lost_reason,
+          pipeline_id: data.pipeline_id,
+        },
+        source: 'crm',
+      }).catch(console.error);
+    }
+
+    // 🔥 EMITIR EVENTO DE VALOR ALTERADO
+    if (updates.value && updates.value !== previousDeal.data?.value) {
+      EventBus.emit(EventType.DEAL_VALUE_CHANGED, {
+        organization_id: organizationId,
+        deal_id: id,
+        contact_id: data.contact_id,
+        data: {
+          old_value: previousDeal.data?.value,
+          new_value: updates.value,
+          deal_title: data.title,
+        },
+        source: 'crm',
+      }).catch(console.error);
+    }
+
+    // 🔥 EMITIR EVENTO DE DEAL ATRIBUÍDO
+    if (updates.assigned_to) {
+      EventBus.emit(EventType.DEAL_ASSIGNED, {
+        organization_id: organizationId,
+        deal_id: id,
+        contact_id: data.contact_id,
+        data: {
+          assigned_to: updates.assigned_to,
+          deal_title: data.title,
+        },
+        source: 'crm',
+      }).catch(console.error);
     }
 
     return NextResponse.json({ deal: data });
@@ -549,6 +630,23 @@ async function createDeal({
   } catch (e) {
     console.warn('Failed to log activity:', e);
   }
+
+  // 🔥 EMITIR EVENTO DE DEAL CRIADO
+  EventBus.emit(EventType.DEAL_CREATED, {
+    organization_id: orgId,
+    deal_id: data.id,
+    contact_id: ctcId,
+    email: data.contact?.email,
+    data: {
+      deal_title: title,
+      deal_value: value || 0,
+      pipeline_id: pplId,
+      stage_id: stgId,
+      stage_name: data.stage?.name,
+      assigned_to: assignTo,
+    },
+    source: 'crm',
+  }).catch(console.error);
 
   return NextResponse.json({ deal: data }, { status: 201 });
 }

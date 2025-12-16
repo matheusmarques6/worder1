@@ -42,6 +42,14 @@ import {
   Heart,
   Webhook,
   Database,
+  Trophy,
+  XCircle,
+  PlusCircle,
+  MoveRight,
+  CheckSquare,
+  Briefcase,
+  TrendingUp,
+  DollarSign,
 } from 'lucide-react';
 import { Button, Input, Card, Badge, Textarea } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -53,22 +61,37 @@ import { AutomationNode, AutomationTrigger, AutomationEdge } from '@/types';
 
 export const NODE_TYPES = {
   triggers: [
+    // E-commerce
     { type: 'trigger_order', label: 'Pedido Realizado', icon: ShoppingCart, color: 'emerald' },
     { type: 'trigger_abandon', label: 'Carrinho Abandonado', icon: Package, color: 'amber' },
+    // Contatos
     { type: 'trigger_signup', label: 'Novo Cadastro', icon: UserPlus, color: 'blue' },
     { type: 'trigger_tag', label: 'Tag Adicionada', icon: Tag, color: 'purple' },
+    // Pipeline / CRM
+    { type: 'trigger_deal_created', label: 'Deal Criado', icon: Briefcase, color: 'blue' },
+    { type: 'trigger_deal_stage', label: 'Deal Mudou Estágio', icon: MoveRight, color: 'violet' },
+    { type: 'trigger_deal_won', label: 'Deal Ganho', icon: Trophy, color: 'emerald' },
+    { type: 'trigger_deal_lost', label: 'Deal Perdido', icon: XCircle, color: 'red' },
+    // Outros
     { type: 'trigger_date', label: 'Data Especial', icon: Star, color: 'pink' },
     { type: 'trigger_segment', label: 'Entrou em Segmento', icon: Users, color: 'cyan' },
     { type: 'trigger_webhook', label: 'Webhook', icon: Webhook, color: 'orange' },
   ],
   actions: [
+    // Comunicação
     { type: 'action_email', label: 'Enviar Email', icon: Mail, color: 'violet' },
     { type: 'action_whatsapp', label: 'Enviar WhatsApp', icon: MessageSquare, color: 'green' },
     { type: 'action_sms', label: 'Enviar SMS', icon: Send, color: 'blue' },
+    // Contatos
     { type: 'action_tag', label: 'Adicionar Tag', icon: Tag, color: 'purple' },
+    { type: 'action_update', label: 'Atualizar Contato', icon: Database, color: 'cyan' },
+    // Pipeline / CRM
+    { type: 'action_create_deal', label: 'Criar Deal', icon: PlusCircle, color: 'blue' },
+    { type: 'action_move_deal', label: 'Mover Deal', icon: MoveRight, color: 'violet' },
+    { type: 'action_assign_deal', label: 'Atribuir Deal', icon: UserPlus, color: 'cyan' },
+    // Outros
     { type: 'action_notify', label: 'Notificação Interna', icon: Bell, color: 'amber' },
     { type: 'action_webhook', label: 'Chamar Webhook', icon: Webhook, color: 'slate' },
-    { type: 'action_update', label: 'Atualizar Contato', icon: Database, color: 'cyan' },
   ],
   logic: [
     { type: 'logic_delay', label: 'Aguardar', icon: Clock, color: 'slate' },
@@ -91,6 +114,7 @@ const getNodeColor = (color: string) => {
     green: { bg: 'bg-green-500/20', border: 'border-green-500/50', text: 'text-green-400', glow: 'shadow-green-500/20' },
     slate: { bg: 'bg-slate-500/20', border: 'border-slate-500/50', text: 'text-slate-400', glow: 'shadow-slate-500/20' },
     indigo: { bg: 'bg-indigo-500/20', border: 'border-indigo-500/50', text: 'text-indigo-400', glow: 'shadow-indigo-500/20' },
+    red: { bg: 'bg-red-500/20', border: 'border-red-500/50', text: 'text-red-400', glow: 'shadow-red-500/20' },
   };
   return colors[color] || colors.slate;
 };
