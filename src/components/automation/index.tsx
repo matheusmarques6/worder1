@@ -136,6 +136,22 @@ function CanvasNode({
   const isTrigger = node.type?.startsWith('trigger_');
   const isCondition = node.type === 'logic_condition' || node.type === 'logic_split';
 
+  // Handler para iniciar conexão (mousedown no handle de saída)
+  const handleOutputMouseDown = (e: React.MouseEvent, handle: string = 'output') => {
+    e.stopPropagation();
+    e.preventDefault();
+    onStartConnection(handle);
+  };
+
+  // Handler para finalizar conexão (mouseup no handle de entrada)
+  const handleInputMouseUp = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isConnecting) {
+      onEndConnection();
+    }
+  };
+
   return (
     <motion.div
       initial={{ scale: 0.8, opacity: 0 }}
@@ -148,8 +164,17 @@ function CanvasNode({
       }}
     >
       <div
-        onClick={onSelect}
-        onMouseDown={onDragStart}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+        onMouseDown={(e) => {
+          // Só inicia drag se não clicar em um handle
+          const target = e.target as HTMLElement;
+          if (!target.classList.contains('connection-handle')) {
+            onDragStart(e);
+          }
+        }}
         className={cn(
           'relative cursor-move select-none transition-all duration-200',
           isSelected && 'scale-105'
@@ -230,65 +255,70 @@ function CanvasNode({
           </div>
         </div>
 
-        {/* Handle de Entrada (topo) */}
+        {/* Handle de Entrada (topo) - RECEBE conexão */}
         {!isTrigger && (
           <div
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isConnecting) onEndConnection();
-            }}
+            onMouseUp={handleInputMouseUp}
             className={cn(
-              'absolute -top-3 left-1/2 -translate-x-1/2',
-              'w-5 h-5 rounded-full border-3 border-dark-700 bg-dark-900',
-              'hover:border-emerald-400 hover:bg-emerald-400 hover:scale-125',
-              'transition-all duration-150 cursor-crosshair',
-              isConnecting && 'border-emerald-400 bg-emerald-400 scale-125 animate-pulse'
+              'connection-handle absolute -top-4 left-1/2 -translate-x-1/2',
+              'w-8 h-8 rounded-full',
+              'flex items-center justify-center',
+              'transition-all duration-150 cursor-crosshair z-20',
+              isConnecting 
+                ? 'bg-emerald-500 border-4 border-emerald-300 scale-125 animate-pulse shadow-lg shadow-emerald-500/50' 
+                : 'bg-[#1a1a1a] border-4 border-[#333333] hover:border-emerald-400 hover:bg-emerald-500 hover:scale-110'
             )}
-          />
+          >
+            <div className="w-2 h-2 rounded-full bg-current" />
+          </div>
         )}
 
-        {/* Handle de Saída (baixo) */}
+        {/* Handle de Saída (baixo) - INICIA conexão */}
         {!isCondition ? (
           <div
-            onClick={(e) => {
-              e.stopPropagation();
-              onStartConnection('output');
-            }}
+            onMouseDown={(e) => handleOutputMouseDown(e, 'output')}
             className={cn(
-              'absolute -bottom-3 left-1/2 -translate-x-1/2',
-              'w-5 h-5 rounded-full border-3 border-dark-700 bg-dark-900',
-              'hover:border-primary hover:bg-primary hover:scale-125',
-              'transition-all duration-150 cursor-crosshair'
+              'connection-handle absolute -bottom-4 left-1/2 -translate-x-1/2',
+              'w-8 h-8 rounded-full',
+              'flex items-center justify-center',
+              'transition-all duration-150 cursor-crosshair z-20',
+              'bg-[#1a1a1a] border-4 border-[#333333] hover:border-primary-500 hover:bg-primary-500 hover:scale-110'
             )}
-          />
+          >
+            <div className="w-2 h-2 rounded-full bg-current" />
+          </div>
         ) : (
           <>
+            {/* Handle Verdadeiro */}
             <div
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartConnection('true');
-              }}
+              onMouseDown={(e) => handleOutputMouseDown(e, 'true')}
               className={cn(
-                'absolute -bottom-3 left-1/4 -translate-x-1/2',
-                'w-5 h-5 rounded-full border-3 border-emerald-500 bg-emerald-500/30',
-                'hover:bg-emerald-500 hover:scale-125',
-                'transition-all duration-150 cursor-crosshair'
+                'connection-handle absolute -bottom-4 left-1/4 -translate-x-1/2',
+                'w-7 h-7 rounded-full',
+                'flex items-center justify-center',
+                'bg-emerald-500/30 border-4 border-emerald-500',
+                'hover:bg-emerald-500 hover:scale-110',
+                'transition-all duration-150 cursor-crosshair z-20'
               )}
-            />
+            >
+              <div className="w-2 h-2 rounded-full bg-emerald-300" />
+            </div>
+            {/* Handle Falso */}
             <div
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartConnection('false');
-              }}
+              onMouseDown={(e) => handleOutputMouseDown(e, 'false')}
               className={cn(
-                'absolute -bottom-3 left-3/4 -translate-x-1/2',
-                'w-5 h-5 rounded-full border-3 border-red-500 bg-red-500/30',
-                'hover:bg-red-500 hover:scale-125',
-                'transition-all duration-150 cursor-crosshair'
+                'connection-handle absolute -bottom-4 left-3/4 -translate-x-1/2',
+                'w-7 h-7 rounded-full',
+                'flex items-center justify-center',
+                'bg-red-500/30 border-4 border-red-500',
+                'hover:bg-red-500 hover:scale-110',
+                'transition-all duration-150 cursor-crosshair z-20'
               )}
-            />
-            <span className="absolute -bottom-8 left-1/4 -translate-x-1/2 text-[10px] text-emerald-400 font-semibold">Sim</span>
-            <span className="absolute -bottom-8 left-3/4 -translate-x-1/2 text-[10px] text-red-400 font-semibold">Não</span>
+            >
+              <div className="w-2 h-2 rounded-full bg-red-300" />
+            </div>
+            <span className="absolute -bottom-10 left-1/4 -translate-x-1/2 text-[10px] text-emerald-400 font-semibold">Sim</span>
+            <span className="absolute -bottom-10 left-3/4 -translate-x-1/2 text-[10px] text-red-400 font-semibold">Não</span>
           </>
         )}
       </div>
@@ -625,7 +655,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                     },
                   })
                 }
-                className="bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                className="bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50"
               >
                 <option value="minutes">Minutos</option>
                 <option value="hours">Horas</option>
@@ -648,7 +678,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
               <select
                 value={node.data.config?.templateId || ''}
                 onChange={(e) => onUpdate({ config: { ...node.data.config, templateId: e.target.value } })}
-                className="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50"
               >
                 <option value="">Selecionar template...</option>
                 <option value="welcome">Boas-vindas</option>
@@ -677,7 +707,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 onChange={(e) =>
                   onUpdate({ config: { ...node.data.config, pipelineId: e.target.value, stageId: undefined } })
                 }
-                className="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50"
                 disabled={loadingPipelines}
               >
                 <option value="">{loadingPipelines ? 'Carregando...' : 'Selecionar pipeline...'}</option>
@@ -685,6 +715,11 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
+              {!loadingPipelines && pipelines.length === 0 && (
+                <p className="text-xs text-amber-400 mt-1">
+                  Nenhuma pipeline encontrada. Crie uma no CRM primeiro.
+                </p>
+              )}
             </div>
             
             {stages.length > 0 && (node.type === 'trigger_deal_stage' || node.type === 'action_create_deal' || node.type === 'action_move_deal') && (
@@ -693,7 +728,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 <select
                   value={node.data.config?.stageId || ''}
                   onChange={(e) => onUpdate({ config: { ...node.data.config, stageId: e.target.value } })}
-                  className="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                  className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50"
                 >
                   <option value="">Selecionar estágio...</option>
                   {stages.map((s) => (
@@ -875,34 +910,51 @@ export function AutomationCanvas({
     }
   }, [isDraggingNode, selectedNodeId, dragStart, zoom, isPanning, panStart, nodes, onNodesChange, connectingFrom, pan]);
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
     setIsDraggingNode(false);
     setIsPanning(false);
-    setConnectingFrom(null);
-    setTempConnection(null);
-  }, []);
+    
+    // Se estava conectando e soltou no canvas (não em um handle), cancela
+    if (connectingFrom) {
+      // Pequeno delay para permitir que o mouseUp do handle seja processado primeiro
+      setTimeout(() => {
+        setConnectingFrom(null);
+        setTempConnection(null);
+      }, 50);
+    }
+  }, [connectingFrom]);
+
+  // Não precisamos mais do handleCanvasClick separado
 
   const handleStartConnection = useCallback((nodeId: string, handle: string) => {
     setConnectingFrom({ nodeId, handle });
   }, []);
 
   const handleEndConnection = useCallback((targetNodeId: string) => {
-    if (connectingFrom && connectingFrom.nodeId !== targetNodeId) {
-      const newEdge: AutomationEdge = {
-        id: `edge-${Date.now()}`,
-        source: connectingFrom.nodeId,
-        target: targetNodeId,
-        sourceHandle: connectingFrom.handle,
-      };
-      
-      const exists = edges.some(
-        (e) => e.source === newEdge.source && e.target === newEdge.target && e.sourceHandle === newEdge.sourceHandle
-      );
-      
-      if (!exists) {
-        onEdgesChange([...edges, newEdge]);
-      }
+    if (!connectingFrom) return;
+    if (connectingFrom.nodeId === targetNodeId) {
+      // Não pode conectar a si mesmo
+      setConnectingFrom(null);
+      setTempConnection(null);
+      return;
     }
+    
+    const newEdge: AutomationEdge = {
+      id: `edge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      source: connectingFrom.nodeId,
+      target: targetNodeId,
+      sourceHandle: connectingFrom.handle,
+    };
+    
+    const exists = edges.some(
+      (e) => e.source === newEdge.source && e.target === newEdge.target && e.sourceHandle === newEdge.sourceHandle
+    );
+    
+    if (!exists) {
+      console.log('✅ Criando conexão:', newEdge);
+      onEdgesChange([...edges, newEdge]);
+    }
+    
     setConnectingFrom(null);
     setTempConnection(null);
   }, [connectingFrom, edges, onEdgesChange]);
@@ -1050,7 +1102,12 @@ export function AutomationCanvas({
           onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onMouseLeave={() => {
+            setIsDraggingNode(false);
+            setIsPanning(false);
+            setConnectingFrom(null);
+            setTempConnection(null);
+          }}
           onWheel={handleWheel}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
@@ -1100,6 +1157,17 @@ export function AutomationCanvas({
                 <h3 className="text-lg font-semibold text-white mb-2">Canvas vazio</h3>
                 <p className="text-[#555555] text-sm">
                   Arraste um gatilho da sidebar para começar
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Mensagem de ajuda quando conectando */}
+          {connectingFrom && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+              <div className="bg-[#111111] border border-primary-500/50 rounded-lg px-4 py-2 shadow-lg">
+                <p className="text-sm text-white">
+                  🔗 Clique no <span className="text-emerald-400 font-semibold">ponto verde</span> de outro bloco para conectar
                 </p>
               </div>
             </div>
