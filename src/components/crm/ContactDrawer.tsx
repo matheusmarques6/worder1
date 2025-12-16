@@ -98,6 +98,11 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
   const [contactDeals, setContactDeals] = useState<ContactDeal[]>([])
   const [loadingDeals, setLoadingDeals] = useState(false)
   
+  // Delete confirmation modal state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [dealToDelete, setDealToDelete] = useState<string | null>(null)
+  const [deletingDeal, setDeletingDeal] = useState(false)
+  
   // Pipeline modal state
   const [showPipelineModal, setShowPipelineModal] = useState(false)
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null)
@@ -177,31 +182,49 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
     }
   }
 
-  const handleRemoveDeal = async (dealId: string) => {
-    if (!confirm('Tem certeza que deseja remover este deal?')) return
+  // Open delete confirmation modal
+  const openDeleteConfirm = (dealId: string) => {
+    setDealToDelete(dealId)
+    setShowDeleteConfirm(true)
+  }
+
+  // Confirm and delete deal
+  const confirmDeleteDeal = async () => {
+    if (!dealToDelete) return
     
+    setDeletingDeal(true)
     try {
+      const orgId = user?.organization_id || contact?.organization_id
+      
       if (onDeleteDeal) {
-        await onDeleteDeal(dealId)
+        await onDeleteDeal(dealToDelete)
       } else {
         // Fallback: delete via API directly
-        const orgId = user?.organization_id || contact?.organization_id
         const response = await fetch(
-          `/api/deals?id=${dealId}&organizationId=${orgId}`,
+          `/api/deals?id=${dealToDelete}&organizationId=${orgId}`,
           { method: 'DELETE' }
         )
-        if (!response.ok) throw new Error('Failed to delete deal')
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to delete deal')
+        }
       }
       
       // Remove from local state
-      setContactDeals(prev => prev.filter(d => d.id !== dealId))
+      setContactDeals(prev => prev.filter(d => d.id !== dealToDelete))
       
       // Refresh deals list if callback provided
       if (onRefreshDeals) {
         await onRefreshDeals()
       }
+      
+      // Close modal
+      setShowDeleteConfirm(false)
+      setDealToDelete(null)
     } catch (error) {
       console.error('Error removing deal:', error)
+    } finally {
+      setDeletingDeal(false)
     }
   }
 
@@ -498,7 +521,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                         </p>
                       </div>
                       <button
-                        onClick={() => handleRemoveDeal(deal.id)}
+                        onClick={() => openDeleteConfirm(deal.id)}
                         className="p-1.5 rounded-lg text-dark-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
                         title="Remover da pipeline"
                       >
@@ -762,6 +785,70 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
             </div>
           </div>
         </motion.div>
+
+        {/* Delete Confirmation Modal */}
+        <AnimatePresence>
+          {showDeleteConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-60 flex items-center justify-center p-4"
+              onClick={() => {
+                setShowDeleteConfirm(false)
+                setDealToDelete(null)
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+              >
+                {/* Modal Content */}
+                <div className="p-6 text-center">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                    <Trash2 className="w-7 h-7 text-red-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">Remover Deal?</h3>
+                  <p className="text-dark-400 text-sm mb-6">
+                    Tem certeza que deseja remover este deal da pipeline? Esta ação não pode ser desfeita.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowDeleteConfirm(false)
+                        setDealToDelete(null)
+                      }}
+                      disabled={deletingDeal}
+                      className="flex-1 px-4 py-3 bg-dark-700 hover:bg-dark-600 rounded-xl text-dark-300 font-medium transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={confirmDeleteDeal}
+                      disabled={deletingDeal}
+                      className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      {deletingDeal ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Removendo...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-4 h-4" />
+                          Remover
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Pipeline Modal */}
         <AnimatePresence>
