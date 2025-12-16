@@ -98,7 +98,7 @@ const getNodeColor = (color: string) => {
     orange: { bg: 'bg-orange-500/20', border: 'border-orange-500/50', text: 'text-orange-400', glow: 'shadow-orange-500/30', solid: 'bg-orange-500' },
     violet: { bg: 'bg-violet-500/20', border: 'border-violet-500/50', text: 'text-violet-400', glow: 'shadow-violet-500/30', solid: 'bg-violet-500' },
     green: { bg: 'bg-green-500/20', border: 'border-green-500/50', text: 'text-green-400', glow: 'shadow-green-500/30', solid: 'bg-green-500' },
-    slate: { bg: 'bg-slate-500/20', border: 'border-slate-500/50', text: 'text-slate-400', glow: 'shadow-slate-500/30', solid: 'bg-slate-500' },
+    slate: { bg: 'bg-dark-600/20', border: 'border-dark-600/50', text: 'text-dark-500', glow: 'shadow-dark-600/30', solid: 'bg-dark-600' },
     indigo: { bg: 'bg-indigo-500/20', border: 'border-indigo-500/50', text: 'text-indigo-400', glow: 'shadow-indigo-500/30', solid: 'bg-indigo-500' },
     red: { bg: 'bg-red-500/20', border: 'border-red-500/50', text: 'text-red-400', glow: 'shadow-red-500/30', solid: 'bg-red-500' },
   };
@@ -180,8 +180,8 @@ function CanvasNode({
           <div className={cn(
             'p-4',
             isTrigger 
-              ? 'bg-slate-900/95 border-x-2 border-b-2 border-slate-700/50 rounded-b-2xl' 
-              : `bg-slate-800/90 border-2 ${colors.border} rounded-2xl`
+              ? 'bg-dark-950/95 border-x-2 border-b-2 border-dark-800/50 rounded-b-2xl' 
+              : `bg-dark-900/90 border-2 ${colors.border} rounded-2xl`
           )}>
             <div className="flex items-center gap-3">
               {/* Ícone */}
@@ -198,7 +198,7 @@ function CanvasNode({
                   {node.data.label || nodeType?.label}
                 </p>
                 {node.data.description && (
-                  <p className="text-xs text-slate-400 truncate mt-0.5">
+                  <p className="text-xs text-dark-500 truncate mt-0.5">
                     {node.data.description}
                   </p>
                 )}
@@ -215,7 +215,7 @@ function CanvasNode({
                     </span>
                   )}
                   {node.data.config.delay && (
-                    <span className="px-2 py-0.5 bg-slate-500/20 text-slate-300 text-[10px] rounded-full">
+                    <span className="px-2 py-0.5 bg-dark-600/20 text-dark-400 text-[10px] rounded-full">
                       ⏱ {node.data.config.delay.value} {node.data.config.delay.unit}
                     </span>
                   )}
@@ -239,7 +239,7 @@ function CanvasNode({
             }}
             className={cn(
               'absolute -top-3 left-1/2 -translate-x-1/2',
-              'w-5 h-5 rounded-full border-3 border-slate-600 bg-slate-800',
+              'w-5 h-5 rounded-full border-3 border-dark-700 bg-dark-900',
               'hover:border-emerald-400 hover:bg-emerald-400 hover:scale-125',
               'transition-all duration-150 cursor-crosshair',
               isConnecting && 'border-emerald-400 bg-emerald-400 scale-125 animate-pulse'
@@ -256,7 +256,7 @@ function CanvasNode({
             }}
             className={cn(
               'absolute -bottom-3 left-1/2 -translate-x-1/2',
-              'w-5 h-5 rounded-full border-3 border-slate-600 bg-slate-800',
+              'w-5 h-5 rounded-full border-3 border-dark-700 bg-dark-900',
               'hover:border-primary hover:bg-primary hover:scale-125',
               'transition-all duration-150 cursor-crosshair'
             )}
@@ -425,10 +425,10 @@ function NodePalette({ onAddNode }: NodePaletteProps) {
   };
 
   return (
-    <div className="w-64 bg-slate-900/80 backdrop-blur-sm border-r border-white/5 overflow-y-auto flex-shrink-0">
-      <div className="p-4 border-b border-white/5">
+    <div className="w-64 bg-[#111111] border-r border-[#222222] overflow-y-auto flex-shrink-0">
+      <div className="p-4 border-b border-[#222222]">
         <h3 className="font-semibold text-white">Blocos</h3>
-        <p className="text-xs text-slate-400 mt-1">Arraste para o canvas</p>
+        <p className="text-xs text-[#555555] mt-1">Arraste para o canvas</p>
       </div>
 
       <div className="p-2 space-y-1">
@@ -438,17 +438,17 @@ function NodePalette({ onAddNode }: NodePaletteProps) {
               onClick={() => setExpanded(expanded === section.id ? '' : section.id)}
               className={cn(
                 'w-full flex items-center justify-between p-3 rounded-lg',
-                'text-left transition-all duration-200',
-                expanded === section.id ? 'bg-white/5' : 'hover:bg-white/5'
+                'text-left transition-all duration-150',
+                expanded === section.id ? 'bg-[#1a1a1a]' : 'hover:bg-[#1a1a1a]'
               )}
             >
               <div className="flex items-center gap-2">
-                <section.icon className="w-4 h-4 text-slate-400" />
+                <section.icon className="w-4 h-4 text-[#666666]" />
                 <span className="text-sm font-medium text-white">{section.label}</span>
               </div>
               <ChevronRight
                 className={cn(
-                  'w-4 h-4 text-slate-400 transition-transform',
+                  'w-4 h-4 text-[#555555] transition-transform',
                   expanded === section.id && 'rotate-90'
                 )}
               />
@@ -475,9 +475,10 @@ function NodePalette({ onAddNode }: NodePaletteProps) {
                           onClick={() => onAddNode(node.type)}
                           className={cn(
                             'w-full flex items-center gap-3 p-2.5 rounded-xl',
-                            'border border-transparent cursor-grab active:cursor-grabbing',
-                            'hover:border-white/10 hover:bg-white/5',
-                            'transition-all duration-200 group'
+                            'bg-[#0a0a0a] border border-[#1a1a1a]',
+                            'cursor-grab active:cursor-grabbing',
+                            'hover:border-[#333333] hover:bg-[#141414]',
+                            'transition-all duration-150 group'
                           )}
                         >
                           {isTrigger && (
@@ -486,7 +487,7 @@ function NodePalette({ onAddNode }: NodePaletteProps) {
                           <div className={cn('p-2.5 rounded-xl', colors.bg)}>
                             <node.icon className={cn('w-4 h-4', colors.text)} />
                           </div>
-                          <span className="text-sm text-slate-300 group-hover:text-white transition-colors">
+                          <span className="text-sm text-[#888888] group-hover:text-white transition-colors">
                             {node.label}
                           </span>
                         </button>
@@ -557,8 +558,8 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
   const isTrigger = node.type?.startsWith('trigger_');
 
   return (
-    <div className="w-80 bg-slate-900/90 backdrop-blur-sm border-l border-white/10 overflow-y-auto flex-shrink-0">
-      <div className="flex items-center justify-between p-4 border-b border-white/10">
+    <div className="w-80 bg-[#111111] border-l border-[#222222] overflow-y-auto flex-shrink-0">
+      <div className="flex items-center justify-between p-4 border-b border-[#222222]">
         <div className="flex items-center gap-3">
           {isTrigger && (
             <span className={cn('px-2 py-0.5 text-[10px] font-bold rounded', colors.solid, 'text-white')}>
@@ -570,12 +571,12 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
           </div>
           <div>
             <h3 className="text-sm font-semibold text-white">{nodeType?.label}</h3>
-            <p className="text-xs text-slate-400">Configurações</p>
+            <p className="text-xs text-[#555555]">Configurações</p>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+          className="p-1.5 rounded-lg hover:bg-[#1a1a1a] text-[#555555] hover:text-white transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
@@ -624,7 +625,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                     },
                   })
                 }
-                className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                className="bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
               >
                 <option value="minutes">Minutos</option>
                 <option value="hours">Horas</option>
@@ -647,7 +648,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
               <select
                 value={node.data.config?.templateId || ''}
                 onChange={(e) => onUpdate({ config: { ...node.data.config, templateId: e.target.value } })}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                className="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
               >
                 <option value="">Selecionar template...</option>
                 <option value="welcome">Boas-vindas</option>
@@ -676,7 +677,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 onChange={(e) =>
                   onUpdate({ config: { ...node.data.config, pipelineId: e.target.value, stageId: undefined } })
                 }
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                className="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
                 disabled={loadingPipelines}
               >
                 <option value="">{loadingPipelines ? 'Carregando...' : 'Selecionar pipeline...'}</option>
@@ -692,7 +693,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 <select
                   value={node.data.config?.stageId || ''}
                   onChange={(e) => onUpdate({ config: { ...node.data.config, stageId: e.target.value } })}
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                  className="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
                 >
                   <option value="">Selecionar estágio...</option>
                   {stages.map((s) => (
@@ -959,15 +960,15 @@ export function AutomationCanvas({
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-950">
+    <div className="h-full flex flex-col bg-[#0a0a0a]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-900/80 backdrop-blur-sm flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#222222] bg-[#111111] flex-shrink-0">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onBack}>
             <ArrowRight className="w-4 h-4 mr-2 rotate-180" />
             Voltar
           </Button>
-          <div className="w-px h-6 bg-white/10" />
+          <div className="w-px h-6 bg-[#222222]" />
           
           <input
             type="text"
@@ -988,14 +989,14 @@ export function AutomationCanvas({
           <div className="flex items-center gap-1 mr-4">
             <button
               onClick={() => setZoom((z) => Math.max(z - 0.1, 0.25))}
-              className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-[#1a1a1a] text-[#555555] hover:text-white transition-colors"
             >
               <ZoomOut className="w-4 h-4" />
             </button>
-            <span className="text-xs text-slate-400 w-12 text-center">{Math.round(zoom * 100)}%</span>
+            <span className="text-xs text-[#555555] w-12 text-center">{Math.round(zoom * 100)}%</span>
             <button
               onClick={() => setZoom((z) => Math.min(z + 0.1, 2))}
-              className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-[#1a1a1a] text-[#555555] hover:text-white transition-colors"
             >
               <ZoomIn className="w-4 h-4" />
             </button>
@@ -1045,7 +1046,7 @@ export function AutomationCanvas({
 
         <div
           ref={canvasRef}
-          className="flex-1 relative overflow-hidden bg-slate-950"
+          className="flex-1 relative overflow-hidden bg-[#0a0a0a]"
           onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -1056,13 +1057,13 @@ export function AutomationCanvas({
           style={{ cursor: isPanning ? 'grabbing' : connectingFrom ? 'crosshair' : 'default' }}
         >
           <div
-            className="absolute inset-0 opacity-30"
+            className="absolute inset-0"
             style={{
               backgroundImage: `
-                linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px)
+                linear-gradient(to right, #1a1a1a 1px, transparent 1px),
+                linear-gradient(to bottom, #1a1a1a 1px, transparent 1px)
               `,
-              backgroundSize: `${20 * zoom}px ${20 * zoom}px`,
+              backgroundSize: `${24 * zoom}px ${24 * zoom}px`,
               backgroundPosition: `${pan.x}px ${pan.y}px`,
             }}
           />
@@ -1093,11 +1094,11 @@ export function AutomationCanvas({
           {nodes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center">
-                <div className="w-16 h-16 rounded-2xl bg-slate-800/50 flex items-center justify-center mx-auto mb-4">
-                  <Zap className="w-8 h-8 text-slate-500" />
+                <div className="w-16 h-16 rounded-2xl bg-[#111111] border border-[#222222] flex items-center justify-center mx-auto mb-4">
+                  <Zap className="w-8 h-8 text-[#444444]" />
                 </div>
                 <h3 className="text-lg font-semibold text-white mb-2">Canvas vazio</h3>
-                <p className="text-slate-400 text-sm">
+                <p className="text-[#555555] text-sm">
                   Arraste um gatilho da sidebar para começar
                 </p>
               </div>
@@ -1148,7 +1149,7 @@ export function AutomationListItem({
   const Icon = triggerType?.icon || Zap;
 
   return (
-    <div className="group p-4 bg-slate-900/50 hover:bg-slate-900/80 border border-white/5 hover:border-white/10 rounded-xl transition-all">
+    <div className="group p-4 bg-[#0d0d0d] hover:bg-[#111111] border border-[#1a1a1a] hover:border-[#222222] rounded-xl transition-all">
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-4">
           <div className={cn('p-3 rounded-xl', colors.bg)}>
@@ -1164,10 +1165,10 @@ export function AutomationListItem({
               </Badge>
             </div>
             {automation.description && (
-              <p className="text-sm text-slate-400 mt-1">{automation.description}</p>
+              <p className="text-sm text-[#555555] mt-1">{automation.description}</p>
             )}
             {automation.stats && (
-              <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
+              <div className="flex items-center gap-4 mt-3 text-xs text-[#555555]">
                 <span>{automation.stats.sent?.toLocaleString()} enviados</span>
                 <span>{automation.stats.converted?.toLocaleString()} conversões</span>
                 {automation.stats.revenue && (
@@ -1205,14 +1206,14 @@ export function AutomationTemplateCard({ template, onSelect }: { template: (type
   const Icon = triggerType?.icon || Zap;
 
   return (
-    <button onClick={onSelect} className="w-full p-4 rounded-xl border border-white/10 hover:border-primary/50 hover:bg-primary/5 transition-all text-left group">
+    <button onClick={onSelect} className="w-full p-4 rounded-xl bg-[#0d0d0d] border border-[#1a1a1a] hover:border-[#333333] hover:bg-[#111111] transition-all text-left group">
       <div className="flex items-center gap-3">
         <div className={cn('p-2.5 rounded-lg', colors.bg)}>
           <Icon className={cn('w-5 h-5', colors.text)} />
         </div>
         <div>
           <h4 className="font-medium text-white group-hover:text-primary transition-colors">{template.name}</h4>
-          <p className="text-xs text-slate-400">{template.description}</p>
+          <p className="text-xs text-[#555555]">{template.description}</p>
         </div>
       </div>
     </button>
