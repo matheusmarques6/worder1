@@ -64,12 +64,19 @@ export default function AutomationsPage() {
         const parsed = JSON.parse(authData);
         setOrganizationId(parsed?.state?.user?.organization_id);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Erro ao buscar organizationId:', e);
+    }
+    // Parar loading se não encontrar organizationId
+    setLoading(false);
   }, []);
 
   useEffect(() => {
     async function fetchAutomations() {
-      if (!organizationId) return;
+      if (!organizationId) {
+        setLoading(false);
+        return;
+      }
       
       setLoading(true);
       try {
@@ -84,7 +91,10 @@ export default function AutomationsPage() {
         setLoading(false);
       }
     }
-    fetchAutomations();
+    
+    if (organizationId) {
+      fetchAutomations();
+    }
   }, [organizationId]);
 
   const filteredAutomations = automations.filter((automation) => {
