@@ -693,6 +693,329 @@ export function NodeProperties({ node, onUpdate, onClose }: NodePropertiesProps)
             </div>
           </div>
         )}
+
+        {/* ========== TRIGGERS DE PIPELINE ========== */}
+        
+        {node.type === 'trigger_deal_created' && (
+          <div className="space-y-3">
+            <Input
+              label="Pipeline ID (opcional)"
+              value={node.data.config?.pipelineId || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, pipelineId: e.target.value },
+                })
+              }
+              placeholder="Deixe vazio para qualquer pipeline"
+            />
+            <p className="text-xs text-slate-400">
+              💡 Dispara quando um deal é criado. Deixe vazio para disparar em qualquer pipeline.
+            </p>
+          </div>
+        )}
+
+        {node.type === 'trigger_deal_stage' && (
+          <div className="space-y-3">
+            <Input
+              label="Pipeline ID (opcional)"
+              value={node.data.config?.pipelineId || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, pipelineId: e.target.value },
+                })
+              }
+              placeholder="Deixe vazio para qualquer pipeline"
+            />
+            <Input
+              label="Estágio ID (opcional)"
+              value={node.data.config?.stageId || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, stageId: e.target.value },
+                })
+              }
+              placeholder="Deixe vazio para qualquer mudança de estágio"
+            />
+            <p className="text-xs text-slate-400">
+              💡 Dispara quando deal muda de estágio. Configure o estágio de destino para filtrar.
+            </p>
+          </div>
+        )}
+
+        {node.type === 'trigger_deal_won' && (
+          <div className="space-y-3">
+            <Input
+              label="Pipeline ID (opcional)"
+              value={node.data.config?.pipelineId || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, pipelineId: e.target.value },
+                })
+              }
+              placeholder="Deixe vazio para qualquer pipeline"
+            />
+            <Input
+              label="Valor mínimo (opcional)"
+              type="number"
+              value={node.data.config?.minValue || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, minValue: e.target.value },
+                })
+              }
+              placeholder="Ex: 1000"
+            />
+            <p className="text-xs text-slate-400">
+              💡 Dispara quando deal é marcado como ganho. Use valor mínimo para filtrar deals grandes.
+            </p>
+          </div>
+        )}
+
+        {node.type === 'trigger_deal_lost' && (
+          <div className="space-y-3">
+            <Input
+              label="Pipeline ID (opcional)"
+              value={node.data.config?.pipelineId || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, pipelineId: e.target.value },
+                })
+              }
+              placeholder="Deixe vazio para qualquer pipeline"
+            />
+            <Input
+              label="Motivo de perda (opcional)"
+              value={node.data.config?.lostReason || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, lostReason: e.target.value },
+                })
+              }
+              placeholder="Ex: preço, concorrência"
+            />
+            <p className="text-xs text-slate-400">
+              💡 Dispara quando deal é marcado como perdido. Filtre por motivo específico.
+            </p>
+          </div>
+        )}
+
+        {/* ========== ACTIONS DE PIPELINE ========== */}
+
+        {node.type === 'action_create_deal' && (
+          <div className="space-y-3">
+            <Input
+              label="Pipeline ID *"
+              value={node.data.config?.pipelineId || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, pipelineId: e.target.value },
+                })
+              }
+              placeholder="ID do pipeline"
+            />
+            <Input
+              label="Estágio ID *"
+              value={node.data.config?.stageId || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, stageId: e.target.value },
+                })
+              }
+              placeholder="ID do estágio inicial"
+            />
+            <Input
+              label="Título do Deal"
+              value={node.data.config?.title || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, title: e.target.value },
+                })
+              }
+              placeholder="Ex: Upsell - {{contact.company}}"
+            />
+            <Input
+              label="Valor"
+              type="number"
+              value={node.data.config?.value || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, value: parseFloat(e.target.value) || 0 },
+                })
+              }
+              placeholder="0"
+            />
+            <p className="text-xs text-slate-400">
+              💡 Use {'{{contact.first_name}}'} ou {'{{deal.value}}'} no título para personalizar.
+            </p>
+          </div>
+        )}
+
+        {node.type === 'action_move_deal' && (
+          <div className="space-y-3">
+            <Input
+              label="Estágio de Destino ID *"
+              value={node.data.config?.stageId || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, stageId: e.target.value },
+                })
+              }
+              placeholder="ID do estágio de destino"
+            />
+            <p className="text-xs text-slate-400">
+              💡 Move o deal do contexto para o estágio especificado.
+            </p>
+          </div>
+        )}
+
+        {node.type === 'action_assign_deal' && (
+          <div className="space-y-3">
+            <Input
+              label="Atribuir para (User ID) *"
+              value={node.data.config?.assignTo || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, assignTo: e.target.value },
+                })
+              }
+              placeholder="ID do usuário responsável"
+            />
+            <p className="text-xs text-slate-400">
+              💡 Atribui o deal do contexto para o usuário especificado.
+            </p>
+          </div>
+        )}
+
+        {/* ========== OUTROS TRIGGERS ========== */}
+
+        {node.type === 'trigger_tag' && (
+          <div className="space-y-3">
+            <Input
+              label="Nome da Tag"
+              value={node.data.config?.tagName || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, tagName: e.target.value },
+                })
+              }
+              placeholder="Ex: lead-quente"
+            />
+            <p className="text-xs text-slate-400">
+              💡 Dispara quando esta tag específica é adicionada a um contato.
+            </p>
+          </div>
+        )}
+
+        {node.type === 'trigger_webhook' && (
+          <div className="space-y-3">
+            <div className="bg-slate-800/50 rounded-lg p-3">
+              <p className="text-xs text-slate-400 mb-1">URL do Webhook:</p>
+              <code className="text-xs text-emerald-400 break-all">
+                /api/webhooks/custom/{node.data.config?.webhookId || '[salve para gerar]'}
+              </code>
+            </div>
+            <p className="text-xs text-slate-400">
+              💡 Envie um POST para esta URL com JSON para disparar a automação.
+            </p>
+          </div>
+        )}
+
+        {node.type === 'action_webhook' && (
+          <div className="space-y-3">
+            <Input
+              label="URL do Webhook *"
+              value={node.data.config?.url || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, url: e.target.value },
+                })
+              }
+              placeholder="https://..."
+            />
+            <div>
+              <label className="text-sm font-medium text-white mb-2 block">Método</label>
+              <select
+                value={node.data.config?.method || 'POST'}
+                onChange={(e) =>
+                  onUpdate({
+                    config: { ...node.data.config, method: e.target.value },
+                  })
+                }
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+              >
+                <option value="POST">POST</option>
+                <option value="GET">GET</option>
+                <option value="PUT">PUT</option>
+              </select>
+            </div>
+            <p className="text-xs text-slate-400">
+              💡 Envia dados do contexto para URL externa.
+            </p>
+          </div>
+        )}
+
+        {node.type === 'action_notify' && (
+          <div className="space-y-3">
+            <Input
+              label="Título da Notificação"
+              value={node.data.config?.title || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, title: e.target.value },
+                })
+              }
+              placeholder="Ex: Novo lead qualificado!"
+            />
+            <Textarea
+              label="Mensagem"
+              value={node.data.config?.message || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, message: e.target.value },
+                })
+              }
+              placeholder="Ex: {{contact.first_name}} acabou de..."
+              rows={3}
+            />
+            <p className="text-xs text-slate-400">
+              💡 Use {'{{contact.first_name}}'}, {'{{deal.title}}'} para personalizar.
+            </p>
+          </div>
+        )}
+
+        {node.type === 'action_update' && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium text-white mb-2 block">Campo a atualizar</label>
+              <select
+                value={node.data.config?.fieldName || ''}
+                onChange={(e) =>
+                  onUpdate({
+                    config: { ...node.data.config, fieldName: e.target.value },
+                  })
+                }
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+              >
+                <option value="">Selecionar campo...</option>
+                <option value="first_name">Nome</option>
+                <option value="last_name">Sobrenome</option>
+                <option value="phone">Telefone</option>
+                <option value="company">Empresa</option>
+                <option value="source">Origem</option>
+              </select>
+            </div>
+            <Input
+              label="Novo valor"
+              value={node.data.config?.fieldValue || ''}
+              onChange={(e) =>
+                onUpdate({
+                  config: { ...node.data.config, fieldValue: e.target.value },
+                })
+              }
+              placeholder="Novo valor do campo"
+            />
+          </div>
+        )}
       </div>
 
       {/* Stats (if available) */}
