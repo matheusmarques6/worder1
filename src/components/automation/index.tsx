@@ -350,7 +350,21 @@ interface ConnectionLinesProps {
 }
 
 function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps) {
-  const getNodePosition = (nodeId: string, handle: string = 'output') => {
+  const getNodeCenter = (nodeId: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return { x: 0, y: 0 };
+    
+    const isTrigger = node.type?.startsWith('trigger_');
+    const width = 220;
+    const height = isTrigger ? 100 : 80;
+    
+    return {
+      x: node.position.x + width / 2,
+      y: node.position.y + height / 2
+    };
+  };
+
+  const getOutputPosition = (nodeId: string, handle: string = 'output') => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return { x: 0, y: 0 };
     
@@ -360,27 +374,78 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
     const width = 220;
     const height = isTrigger ? 100 : 80;
     
-    if (handle === 'input') {
-      return { x: node.position.x + width / 2, y: node.position.y };
-    }
-    
+    // Posição do handle de saída (embaixo)
     if (isCondition) {
-      if (handle === 'true') return { x: node.position.x + width / 4, y: node.position.y + height };
-      if (handle === 'false') return { x: node.position.x + (width * 3) / 4, y: node.position.y + height };
+      if (handle === 'true') {
+        return { x: node.position.x + width * 0.25, y: node.position.y + height + 16 };
+      }
+      if (handle === 'false') {
+        return { x: node.position.x + width * 0.75, y: node.position.y + height + 16 };
+      }
     }
     
-    return { x: node.position.x + width / 2, y: node.position.y + height };
+    return { x: node.position.x + width / 2, y: node.position.y + height + 16 };
   };
 
-  const createPath = (from: { x: number; y: number }, to: { x: number; y: number }) => {
-    const midY = (from.y + to.y) / 2;
-    const controlOffset = Math.min(Math.abs(to.y - from.y) / 2, 100);
+  const getInputPosition = (nodeId: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return { x: 0, y: 0 };
     
-    return `M ${from.x} ${from.y} C ${from.x} ${from.y + controlOffset}, ${to.x} ${to.y - controlOffset}, ${to.x} ${to.y}`;
+    const width = 220;
+    
+    // Posição do handle de entrada (em cima)
+    return { x: node.position.x + width / 2, y: node.position.y - 16 };
   };
+
+  const createSmoothPath = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    
+    // Distância vertical entre os pontos
+    const verticalDistance = Math.abs(dy);
+    
+    // Offset do controle proporcional à distância
+    const controlOffset = Math.max(50, Math.min(verticalDistance * 0.5, 150));
+    
+    // Criar curva Bezier suave
+    const c1x = from.x;
+    const c1y = from.y + controlOffset;
+    const c2x = to.x;
+    const c2y = to.y - controlOffset;
+    
+    return `M ${from.x} ${from.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${to.x} ${to.y}`;
+  };
+
+  // Calcular bounding box para o SVG
+  const allPositions = nodes.flatMap(n => [
+    { x: n.position.x, y: n.position.y },
+    { x: n.position.x + 220, y: n.position.y + 120 }
+  ]);
+  
+  if (tempConnection) {
+    allPositions.push({ x: tempConnection.toX, y: tempConnection.toY });
+  }
+
+  const minX = Math.min(...allPositions.map(p => p.x)) - 100;
+  const minY = Math.min(...allPositions.map(p => p.y)) - 100;
+  const maxX = Math.max(...allPositions.map(p => p.x)) + 100;
+  const maxY = Math.max(...allPositions.map(p => p.y)) + 100;
+  
+  const width = maxX - minX;
+  const height = maxY - minY;
 
   return (
-    <svg className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+    <svg 
+      className="absolute pointer-events-none overflow-visible"
+      style={{ 
+        left: minX,
+        top: minY,
+        width: width,
+        height: height,
+        zIndex: 0,
+      }}
+      viewBox={`${minX} ${minY} ${width} ${height}`}
+    >
       <defs>
         <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
           <polygon points="0 0, 10 3.5, 0 7" fill="#6366f1" />
@@ -391,34 +456,54 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
         <marker id="arrowhead-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
           <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
         </marker>
+        
+        {/* Gradientes para as linhas */}
+        <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#6366f1" />
+          <stop offset="100%" stopColor="#8b5cf6" />
+        </linearGradient>
+        <linearGradient id="lineGradientGreen" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#10b981" />
+          <stop offset="100%" stopColor="#34d399" />
+        </linearGradient>
+        <linearGradient id="lineGradientRed" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#ef4444" />
+          <stop offset="100%" stopColor="#f87171" />
+        </linearGradient>
       </defs>
       
+      {/* Conexões salvas */}
       {edges.map((edge) => {
-        const from = getNodePosition(edge.source, edge.sourceHandle || 'output');
-        const targetNode = nodes.find(n => n.id === edge.target);
-        const to = targetNode ? getNodePosition(edge.target, 'input') : { x: 0, y: 0 };
+        const from = getOutputPosition(edge.source, edge.sourceHandle || 'output');
+        const to = getInputPosition(edge.target);
         
+        const targetNode = nodes.find(n => n.id === edge.target);
         if (!targetNode) return null;
         
         const isTrue = edge.sourceHandle === 'true';
         const isFalse = edge.sourceHandle === 'false';
-        const strokeColor = isTrue ? '#10b981' : isFalse ? '#ef4444' : '#6366f1';
+        const strokeColor = isTrue ? 'url(#lineGradientGreen)' : isFalse ? 'url(#lineGradientRed)' : 'url(#lineGradient)';
+        const solidColor = isTrue ? '#10b981' : isFalse ? '#ef4444' : '#6366f1';
         const marker = isTrue ? 'url(#arrowhead-green)' : isFalse ? 'url(#arrowhead-red)' : 'url(#arrowhead)';
+        
+        const path = createSmoothPath(from, to);
         
         return (
           <g key={edge.id}>
+            {/* Sombra */}
             <path
-              d={createPath(from, to)}
+              d={path}
               fill="none"
               stroke="black"
               strokeWidth="6"
-              strokeOpacity="0.2"
-              style={{ filter: 'blur(4px)' }}
+              strokeOpacity="0.3"
+              strokeLinecap="round"
             />
+            {/* Linha principal */}
             <path
-              d={createPath(from, to)}
+              d={path}
               fill="none"
-              stroke={strokeColor}
+              stroke={solidColor}
               strokeWidth="3"
               strokeLinecap="round"
               markerEnd={marker}
@@ -427,10 +512,11 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
         );
       })}
       
+      {/* Conexão temporária (enquanto arrasta) */}
       {tempConnection && (
         <path
-          d={createPath(
-            getNodePosition(tempConnection.fromNode, tempConnection.fromHandle),
+          d={createSmoothPath(
+            getOutputPosition(tempConnection.fromNode, tempConnection.fromHandle),
             { x: tempConnection.toX, y: tempConnection.toY }
           )}
           fill="none"
@@ -438,7 +524,7 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
           strokeWidth="3"
           strokeDasharray="8 4"
           strokeLinecap="round"
-          opacity={0.7}
+          opacity={0.8}
         />
       )}
     </svg>

@@ -139,7 +139,11 @@ export default function AutomationsPage() {
   };
 
   const handleSave = async () => {
-    if (!organizationId) return;
+    if (!organizationId) {
+      console.error('❌ organizationId não encontrado');
+      alert('Erro: Organização não identificada. Faça login novamente.');
+      return;
+    }
     
     const triggerNode = canvasNodes.find(n => n.type?.startsWith('trigger_'));
     const triggerType = triggerNode?.type?.replace('trigger_', '') || 'manual';
@@ -154,6 +158,8 @@ export default function AutomationsPage() {
       status: canvasStatus,
     };
 
+    console.log('💾 Salvando automação:', payload);
+
     try {
       if (editingAutomation?.id === 'new') {
         const res = await fetch('/api/automations', {
@@ -162,26 +168,37 @@ export default function AutomationsPage() {
           body: JSON.stringify(payload),
         });
         
-        if (res.ok) {
-          const data = await res.json();
-          setAutomations([...automations, data.automation]);
+        const data = await res.json();
+        
+        if (res.ok && data.automation) {
+          console.log('✅ Automação criada:', data.automation);
+          setAutomations(prev => [...prev, data.automation]);
           setEditingAutomation(data.automation);
+        } else {
+          console.error('❌ Erro ao criar:', data);
+          alert('Erro ao salvar: ' + (data.error || 'Erro desconhecido'));
         }
-      } else {
+      } else if (editingAutomation?.id) {
         const res = await fetch('/api/automations', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...payload, id: editingAutomation?.id }),
+          body: JSON.stringify({ ...payload, id: editingAutomation.id }),
         });
         
-        if (res.ok) {
-          const data = await res.json();
-          setAutomations(automations.map(a => a.id === data.automation.id ? data.automation : a));
+        const data = await res.json();
+        
+        if (res.ok && data.automation) {
+          console.log('✅ Automação atualizada:', data.automation);
+          setAutomations(prev => prev.map(a => a.id === data.automation.id ? data.automation : a));
           setEditingAutomation(data.automation);
+        } else {
+          console.error('❌ Erro ao atualizar:', data);
+          alert('Erro ao salvar: ' + (data.error || 'Erro desconhecido'));
         }
       }
     } catch (e) {
-      console.error('Erro ao salvar:', e);
+      console.error('❌ Erro ao salvar:', e);
+      alert('Erro ao salvar automação. Verifique o console.');
     }
   };
 
