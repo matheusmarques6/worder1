@@ -350,20 +350,6 @@ interface ConnectionLinesProps {
 }
 
 function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps) {
-  const getNodeCenter = (nodeId: string) => {
-    const node = nodes.find(n => n.id === nodeId);
-    if (!node) return { x: 0, y: 0 };
-    
-    const isTrigger = node.type?.startsWith('trigger_');
-    const width = 220;
-    const height = isTrigger ? 100 : 80;
-    
-    return {
-      x: node.position.x + width / 2,
-      y: node.position.y + height / 2
-    };
-  };
-
   const getOutputPosition = (nodeId: string, handle: string = 'output') => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return { x: 0, y: 0 };
@@ -374,7 +360,6 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
     const width = 220;
     const height = isTrigger ? 100 : 80;
     
-    // Posição do handle de saída (embaixo)
     if (isCondition) {
       if (handle === 'true') {
         return { x: node.position.x + width * 0.25, y: node.position.y + height + 16 };
@@ -392,47 +377,48 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
     if (!node) return { x: 0, y: 0 };
     
     const width = 220;
-    
-    // Posição do handle de entrada (em cima)
     return { x: node.position.x + width / 2, y: node.position.y - 16 };
   };
 
   const createSmoothPath = (from: { x: number; y: number }, to: { x: number; y: number }) => {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
     
-    // Distância vertical entre os pontos
-    const verticalDistance = Math.abs(dy);
+    // Curva mais suave baseada na distância
+    const curvature = Math.min(distance * 0.4, 120);
     
-    // Offset do controle proporcional à distância
-    const controlOffset = Math.max(50, Math.min(verticalDistance * 0.5, 150));
-    
-    // Criar curva Bezier suave
+    // Pontos de controle para curva Bezier
     const c1x = from.x;
-    const c1y = from.y + controlOffset;
+    const c1y = from.y + curvature;
     const c2x = to.x;
-    const c2y = to.y - controlOffset;
+    const c2y = to.y - curvature;
     
     return `M ${from.x} ${from.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${to.x} ${to.y}`;
   };
 
-  // Calcular bounding box para o SVG
+  // Calcular bounding box
   const allPositions = nodes.flatMap(n => [
-    { x: n.position.x, y: n.position.y },
-    { x: n.position.x + 220, y: n.position.y + 120 }
+    { x: n.position.x - 50, y: n.position.y - 50 },
+    { x: n.position.x + 300, y: n.position.y + 200 }
   ]);
   
   if (tempConnection) {
-    allPositions.push({ x: tempConnection.toX, y: tempConnection.toY });
+    allPositions.push({ x: tempConnection.toX - 50, y: tempConnection.toY - 50 });
+    allPositions.push({ x: tempConnection.toX + 50, y: tempConnection.toY + 50 });
   }
 
-  const minX = Math.min(...allPositions.map(p => p.x)) - 100;
-  const minY = Math.min(...allPositions.map(p => p.y)) - 100;
-  const maxX = Math.max(...allPositions.map(p => p.x)) + 100;
-  const maxY = Math.max(...allPositions.map(p => p.y)) + 100;
+  if (allPositions.length === 0) {
+    return null;
+  }
+
+  const minX = Math.min(...allPositions.map(p => p.x));
+  const minY = Math.min(...allPositions.map(p => p.y));
+  const maxX = Math.max(...allPositions.map(p => p.x));
+  const maxY = Math.max(...allPositions.map(p => p.y));
   
-  const width = maxX - minX;
-  const height = maxY - minY;
+  const width = maxX - minX || 100;
+  const height = maxY - minY || 100;
 
   return (
     <svg 
@@ -447,29 +433,53 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
       viewBox={`${minX} ${minY} ${width} ${height}`}
     >
       <defs>
-        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-          <polygon points="0 0, 10 3.5, 0 7" fill="#6366f1" />
-        </marker>
-        <marker id="arrowhead-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-          <polygon points="0 0, 10 3.5, 0 7" fill="#10b981" />
-        </marker>
-        <marker id="arrowhead-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-          <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
-        </marker>
+        {/* Animação de fluxo */}
+        <style>
+          {`
+            @keyframes flowAnimation {
+              from { stroke-dashoffset: 24; }
+              to { stroke-dashoffset: 0; }
+            }
+            @keyframes flowAnimationReverse {
+              from { stroke-dashoffset: 0; }
+              to { stroke-dashoffset: 24; }
+            }
+            .flow-line {
+              animation: flowAnimation 1s linear infinite;
+            }
+            .flow-line-temp {
+              animation: flowAnimation 0.5s linear infinite;
+            }
+          `}
+        </style>
         
-        {/* Gradientes para as linhas */}
-        <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+        {/* Gradientes */}
+        <linearGradient id="lineGradientBlue" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#6366f1" />
-          <stop offset="100%" stopColor="#8b5cf6" />
+          <stop offset="50%" stopColor="#818cf8" />
+          <stop offset="100%" stopColor="#6366f1" />
         </linearGradient>
-        <linearGradient id="lineGradientGreen" x1="0%" y1="0%" x2="0%" y2="100%">
+        
+        <linearGradient id="lineGradientGreen" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#10b981" />
-          <stop offset="100%" stopColor="#34d399" />
+          <stop offset="50%" stopColor="#34d399" />
+          <stop offset="100%" stopColor="#10b981" />
         </linearGradient>
-        <linearGradient id="lineGradientRed" x1="0%" y1="0%" x2="0%" y2="100%">
+        
+        <linearGradient id="lineGradientRed" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#ef4444" />
-          <stop offset="100%" stopColor="#f87171" />
+          <stop offset="50%" stopColor="#f87171" />
+          <stop offset="100%" stopColor="#ef4444" />
         </linearGradient>
+
+        {/* Glow filter */}
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
       </defs>
       
       {/* Conexões salvas */}
@@ -482,51 +492,118 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
         
         const isTrue = edge.sourceHandle === 'true';
         const isFalse = edge.sourceHandle === 'false';
-        const strokeColor = isTrue ? 'url(#lineGradientGreen)' : isFalse ? 'url(#lineGradientRed)' : 'url(#lineGradient)';
+        const gradient = isTrue ? 'url(#lineGradientGreen)' : isFalse ? 'url(#lineGradientRed)' : 'url(#lineGradientBlue)';
         const solidColor = isTrue ? '#10b981' : isFalse ? '#ef4444' : '#6366f1';
-        const marker = isTrue ? 'url(#arrowhead-green)' : isFalse ? 'url(#arrowhead-red)' : 'url(#arrowhead)';
+        const glowColor = isTrue ? '#10b98150' : isFalse ? '#ef444450' : '#6366f150';
         
         const path = createSmoothPath(from, to);
         
         return (
           <g key={edge.id}>
-            {/* Sombra */}
+            {/* Glow/sombra da linha */}
             <path
               d={path}
               fill="none"
-              stroke="black"
-              strokeWidth="6"
-              strokeOpacity="0.3"
+              stroke={glowColor}
+              strokeWidth="8"
               strokeLinecap="round"
             />
-            {/* Linha principal */}
+            
+            {/* Linha base (fundo) */}
             <path
               d={path}
               fill="none"
               stroke={solidColor}
-              strokeWidth="3"
+              strokeWidth="2.5"
               strokeLinecap="round"
-              markerEnd={marker}
+              strokeOpacity="0.3"
+            />
+            
+            {/* Linha animada (tracejada fluindo) */}
+            <path
+              d={path}
+              fill="none"
+              stroke={solidColor}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeDasharray="8 4"
+              className="flow-line"
+            />
+            
+            {/* Círculo no ponto de origem */}
+            <circle
+              cx={from.x}
+              cy={from.y}
+              r="5"
+              fill={solidColor}
+              stroke="#0a0a0a"
+              strokeWidth="2"
+            />
+            
+            {/* Círculo no ponto de destino */}
+            <circle
+              cx={to.x}
+              cy={to.y}
+              r="5"
+              fill={solidColor}
+              stroke="#0a0a0a"
+              strokeWidth="2"
             />
           </g>
         );
       })}
       
       {/* Conexão temporária (enquanto arrasta) */}
-      {tempConnection && (
-        <path
-          d={createSmoothPath(
-            getOutputPosition(tempConnection.fromNode, tempConnection.fromHandle),
-            { x: tempConnection.toX, y: tempConnection.toY }
-          )}
-          fill="none"
-          stroke="#6366f1"
-          strokeWidth="3"
-          strokeDasharray="8 4"
-          strokeLinecap="round"
-          opacity={0.8}
-        />
-      )}
+      {tempConnection && (() => {
+        const from = getOutputPosition(tempConnection.fromNode, tempConnection.fromHandle);
+        const to = { x: tempConnection.toX, y: tempConnection.toY };
+        const path = createSmoothPath(from, to);
+        
+        return (
+          <g>
+            {/* Glow da linha temporária */}
+            <path
+              d={path}
+              fill="none"
+              stroke="#6366f130"
+              strokeWidth="10"
+              strokeLinecap="round"
+            />
+            
+            {/* Linha tracejada animada */}
+            <path
+              d={path}
+              fill="none"
+              stroke="#818cf8"
+              strokeWidth="3"
+              strokeDasharray="8 4"
+              strokeLinecap="round"
+              className="flow-line-temp"
+            />
+            
+            {/* Círculo na origem */}
+            <circle
+              cx={from.x}
+              cy={from.y}
+              r="6"
+              fill="#818cf8"
+              stroke="#0a0a0a"
+              strokeWidth="2"
+            />
+            
+            {/* Círculo no cursor */}
+            <circle
+              cx={to.x}
+              cy={to.y}
+              r="6"
+              fill="#818cf8"
+              stroke="#0a0a0a"
+              strokeWidth="2"
+              opacity="0.7"
+            />
+          </g>
+        );
+      })()}
     </svg>
   );
 }
