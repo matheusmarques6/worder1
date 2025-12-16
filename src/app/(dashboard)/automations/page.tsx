@@ -444,71 +444,77 @@ export default function AutomationsPage() {
       <AnimatePresence>
         {showNewModal && (
           <>
-            {/* Overlay */}
+            {/* Overlay - cobre tudo incluindo sidebar */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/70 z-50"
+              className="fixed inset-0 bg-black/70 z-[100]"
               onClick={() => setShowNewModal(false)}
             />
             
-            {/* Modal - Centralizado */}
+            {/* Modal - Centralizado na viewport inteira */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-2xl bg-[#0a0a0a] border border-[#222222] rounded-2xl shadow-2xl overflow-hidden"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+              onClick={() => setShowNewModal(false)}
             >
-              {/* Modal Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#222222]">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Nova Automação</h2>
-                  <p className="text-sm text-[#666666]">Escolha um template ou comece do zero</p>
-                </div>
-                <button
-                  onClick={() => setShowNewModal(false)}
-                  className="p-2 rounded-lg hover:bg-[#1a1a1a] text-[#555555] hover:text-white transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Modal Content */}
-              <div className="p-6 max-h-[60vh] overflow-y-auto">
-                {/* Começar do Zero */}
-                <button
-                  onClick={handleNewBlank}
-                  className="w-full p-4 rounded-xl border-2 border-dashed border-[#333333] hover:border-primary-500 hover:bg-primary-500/5 transition-all mb-6 text-left group"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-[#1a1a1a] group-hover:bg-primary-500/10 transition-colors">
-                      <Plus className="w-6 h-6 text-[#555555] group-hover:text-primary-500" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-white group-hover:text-primary-500 transition-colors">
-                        Começar do zero
-                      </h3>
-                      <p className="text-sm text-[#555555]">
-                        Canvas em branco para criar sua automação
-                      </p>
-                    </div>
+              <div 
+                className="w-full max-w-2xl bg-[#0a0a0a] border border-[#222222] rounded-2xl shadow-2xl overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Modal Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[#222222]">
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">Nova Automação</h2>
+                    <p className="text-sm text-[#666666]">Escolha um template ou comece do zero</p>
                   </div>
-                </button>
+                  <button
+                    onClick={() => setShowNewModal(false)}
+                    className="p-2 rounded-lg hover:bg-[#1a1a1a] text-[#555555] hover:text-white transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
-                {/* Templates */}
-                <div>
-                  <h3 className="text-sm font-semibold text-[#555555] uppercase tracking-wider mb-4">
-                    Templates populares
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {AUTOMATION_TEMPLATES.map((template) => (
-                      <AutomationTemplateCard
-                        key={template.id}
-                        template={template}
-                        onSelect={() => handleNewFromTemplate(template.id)}
-                      />
-                    ))}
+                {/* Modal Content */}
+                <div className="p-6 max-h-[60vh] overflow-y-auto">
+                  {/* Começar do Zero */}
+                  <button
+                    onClick={handleNewBlank}
+                    className="w-full p-4 rounded-xl border-2 border-dashed border-[#333333] hover:border-primary-500 hover:bg-primary-500/5 transition-all mb-6 text-left group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-xl bg-[#1a1a1a] group-hover:bg-primary-500/10 transition-colors">
+                        <Plus className="w-6 h-6 text-[#555555] group-hover:text-primary-500" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-white group-hover:text-primary-500 transition-colors">
+                          Começar do zero
+                        </h3>
+                        <p className="text-sm text-[#555555]">
+                          Canvas em branco para criar sua automação
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Templates */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#555555] uppercase tracking-wider mb-4">
+                      Templates populares
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {AUTOMATION_TEMPLATES.map((template) => (
+                        <AutomationTemplateCard
+                          key={template.id}
+                          template={template}
+                          onSelect={() => handleNewFromTemplate(template.id)}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
