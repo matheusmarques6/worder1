@@ -1,84 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
   Search,
-  Filter,
   LayoutGrid,
   List,
   Zap,
-  Play,
-  Pause,
-  MoreHorizontal,
-  TrendingUp,
   Mail,
   Users,
   DollarSign,
-  ArrowLeft,
   X,
 } from 'lucide-react';
-import { Button, Input, Badge, Card } from '@/components/ui';
+import { Button, Input } from '@/components/ui';
 import {
   AutomationCanvas,
   AutomationListItem,
   AutomationTemplateCard,
   AUTOMATION_TEMPLATES,
-  NODE_TYPES,
 } from '@/components/automation';
 import { AutomationNode, AutomationEdge } from '@/types';
 import { cn } from '@/lib/utils';
 
-// Mock data for existing automations
-const mockAutomations = [
-  {
-    id: '1',
-    name: 'Carrinho Abandonado',
-    description: 'Recupera carrinhos abandonados com série de 3 emails + WhatsApp',
-    status: 'active' as const,
-    trigger: 'trigger_abandon',
-    stats: { sent: 12450, converted: 1556, revenue: 89000 },
-    updatedAt: '2 horas atrás',
-  },
-  {
-    id: '2',
-    name: 'Boas-vindas',
-    description: 'Série de boas-vindas para novos inscritos',
-    status: 'active' as const,
-    trigger: 'trigger_signup',
-    stats: { sent: 8200, converted: 672, revenue: 45000 },
-    updatedAt: '1 dia atrás',
-  },
-  {
-    id: '3',
-    name: 'Pós-compra Cross-sell',
-    description: 'Oferece produtos complementares após compra',
-    status: 'active' as const,
-    trigger: 'trigger_order',
-    stats: { sent: 5400, converted: 324, revenue: 34000 },
-    updatedAt: '3 dias atrás',
-  },
-  {
-    id: '4',
-    name: 'Reativação 60 dias',
-    description: 'Reativa clientes que não compraram há 60 dias',
-    status: 'paused' as const,
-    trigger: 'trigger_segment',
-    stats: { sent: 3200, converted: 128, revenue: 12000 },
-    updatedAt: '1 semana atrás',
-  },
-  {
-    id: '5',
-    name: 'Nova automação',
-    description: 'Automação em construção',
-    status: 'draft' as const,
-    trigger: 'trigger_tag',
-    updatedAt: '5 min atrás',
-  },
-];
-
-// Stats summary
 const stats = [
   { label: 'Automações Ativas', value: '8', icon: Zap, color: 'emerald' },
   { label: 'Processados Hoje', value: '2.4k', icon: Mail, color: 'violet' },
@@ -86,16 +30,64 @@ const stats = [
   { label: 'Receita (30d)', value: 'R$ 180k', icon: DollarSign, color: 'amber' },
 ];
 
+interface Automation {
+  id: string;
+  name: string;
+  description?: string;
+  status: 'active' | 'draft' | 'paused';
+  trigger_type: string;
+  nodes: AutomationNode[];
+  edges: AutomationEdge[];
+  total_runs?: number;
+  successful_runs?: number;
+}
+
 export default function AutomationsPage() {
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'draft'>('all');
   const [showNewModal, setShowNewModal] = useState(false);
-  const [editingAutomation, setEditingAutomation] = useState<string | null>(null);
+  const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
+  const [automations, setAutomations] = useState<Automation[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  const [canvasName, setCanvasName] = useState('Nova Automação');
+  const [canvasStatus, setCanvasStatus] = useState<'draft' | 'active' | 'paused'>('draft');
   const [canvasNodes, setCanvasNodes] = useState<AutomationNode[]>([]);
   const [canvasEdges, setCanvasEdges] = useState<AutomationEdge[]>([]);
+  const [organizationId, setOrganizationId] = useState<string | undefined>();
 
-  const filteredAutomations = mockAutomations.filter((automation) => {
+  useEffect(() => {
+    try {
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        setOrganizationId(parsed?.state?.user?.organization_id);
+      }
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    async function fetchAutomations() {
+      if (!organizationId) return;
+      
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/automations?organizationId=${organizationId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setAutomations(data.automations || []);
+        }
+      } catch (e) {
+        console.error('Erro ao buscar automações:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchAutomations();
+  }, [organizationId]);
+
+  const filteredAutomations = automations.filter((automation) => {
     const matchesSearch = automation.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       automation.description?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || automation.status === statusFilter;
@@ -105,58 +97,178 @@ export default function AutomationsPage() {
   const handleNewFromTemplate = (templateId: string) => {
     const template = AUTOMATION_TEMPLATES.find((t) => t.id === templateId);
     if (template) {
-      // Create initial nodes based on template
       const triggerNode: AutomationNode = {
-        id: 'node-1',
-        type: 'trigger' as const,
-        position: { x: 300, y: 100 },
-        data: { label: template.trigger, config: {} },
+        id: `node-${Date.now()}`,
+        type: template.trigger,
+        position: { x: 250, y: 50 },
+        data: { label: '', config: {} },
       };
+      setCanvasName(template.name);
+      setCanvasStatus('draft');
       setCanvasNodes([triggerNode]);
       setCanvasEdges([]);
+      setEditingAutomation({ id: 'new', name: template.name, status: 'draft', trigger_type: template.trigger, nodes: [triggerNode], edges: [] });
       setShowNewModal(false);
-      setEditingAutomation('new');
     }
   };
 
   const handleNewBlank = () => {
+    setCanvasName('Nova Automação');
+    setCanvasStatus('draft');
     setCanvasNodes([]);
     setCanvasEdges([]);
+    setEditingAutomation({ id: 'new', name: 'Nova Automação', status: 'draft', trigger_type: '', nodes: [], edges: [] });
     setShowNewModal(false);
-    setEditingAutomation('new');
   };
 
-  // If editing, show canvas
+  const handleEditAutomation = (automation: Automation) => {
+    setCanvasName(automation.name);
+    setCanvasStatus(automation.status);
+    setCanvasNodes(automation.nodes || []);
+    setCanvasEdges(automation.edges || []);
+    setEditingAutomation(automation);
+  };
+
+  const handleSave = async () => {
+    if (!organizationId) return;
+    
+    const triggerNode = canvasNodes.find(n => n.type?.startsWith('trigger_'));
+    const triggerType = triggerNode?.type?.replace('trigger_', '') || 'manual';
+    
+    const payload = {
+      organizationId,
+      name: canvasName,
+      trigger_type: triggerType,
+      trigger_config: triggerNode?.data.config || {},
+      nodes: canvasNodes,
+      edges: canvasEdges,
+      status: canvasStatus,
+    };
+
+    try {
+      if (editingAutomation?.id === 'new') {
+        const res = await fetch('/api/automations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          setAutomations([...automations, data.automation]);
+          setEditingAutomation(data.automation);
+        }
+      } else {
+        const res = await fetch('/api/automations', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...payload, id: editingAutomation?.id }),
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          setAutomations(automations.map(a => a.id === data.automation.id ? data.automation : a));
+          setEditingAutomation(data.automation);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao salvar:', e);
+    }
+  };
+
+  const handleActivate = async () => {
+    const newStatus = canvasStatus === 'active' ? 'paused' : 'active';
+    setCanvasStatus(newStatus);
+    
+    if (editingAutomation?.id && editingAutomation.id !== 'new') {
+      try {
+        await fetch('/api/automations', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingAutomation.id,
+            organizationId,
+            status: newStatus,
+          }),
+        });
+        
+        setAutomations(automations.map(a => 
+          a.id === editingAutomation.id ? { ...a, status: newStatus } : a
+        ));
+      } catch (e) {
+        console.error('Erro ao ativar:', e);
+      }
+    }
+  };
+
+  const handleTest = async () => {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    alert('Teste executado com sucesso! (simulação)');
+  };
+
+  const handleBack = () => {
+    setEditingAutomation(null);
+    setCanvasNodes([]);
+    setCanvasEdges([]);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta automação?')) return;
+    
+    try {
+      const res = await fetch(`/api/automations?id=${id}&organizationId=${organizationId}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        setAutomations(automations.filter(a => a.id !== id));
+      }
+    } catch (e) {
+      console.error('Erro ao excluir:', e);
+    }
+  };
+
+  const handleToggleStatus = async (automation: Automation) => {
+    const newStatus = automation.status === 'active' ? 'paused' : 'active';
+    
+    try {
+      const res = await fetch('/api/automations', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: automation.id,
+          organizationId,
+          status: newStatus,
+        }),
+      });
+      
+      if (res.ok) {
+        setAutomations(automations.map(a => 
+          a.id === automation.id ? { ...a, status: newStatus } : a
+        ));
+      }
+    } catch (e) {
+      console.error('Erro ao alterar status:', e);
+    }
+  };
+
   if (editingAutomation) {
     return (
-      <div className="h-[calc(100vh-64px)] flex flex-col">
-        {/* Editor Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-slate-900/50">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setEditingAutomation(null)}
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Voltar
-            </Button>
-            <div className="w-px h-6 bg-white/10" />
-            <Input
-              value="Nova Automação"
-              onChange={() => {}}
-              className="w-64 bg-transparent border-none text-lg font-semibold"
-            />
-            <Badge variant="warning">Rascunho</Badge>
-          </div>
-        </div>
-
-        {/* Canvas */}
+      <div className="h-[calc(100vh-64px)]">
         <AutomationCanvas
+          automationId={editingAutomation.id}
+          automationName={canvasName}
+          automationStatus={canvasStatus}
           nodes={canvasNodes}
           edges={canvasEdges}
           onNodesChange={setCanvasNodes}
           onEdgesChange={setCanvasEdges}
+          onNameChange={setCanvasName}
+          onSave={handleSave}
+          onActivate={handleActivate}
+          onTest={handleTest}
+          onBack={handleBack}
+          organizationId={organizationId}
         />
       </div>
     );
@@ -164,7 +276,6 @@ export default function AutomationsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Automações</h1>
@@ -176,7 +287,6 @@ export default function AutomationsPage() {
         </Button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (
           <motion.div
@@ -210,7 +320,6 @@ export default function AutomationsPage() {
         ))}
       </div>
 
-      {/* Filters & Search */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -261,29 +370,42 @@ export default function AutomationsPage() {
         </div>
       </div>
 
-      {/* Automations List */}
-      <div className={cn(
-        view === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : 'space-y-3'
-      )}>
-        {filteredAutomations.map((automation, index) => (
-          <motion.div
-            key={automation.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-          >
-            <AutomationListItem
-              automation={automation}
-              onEdit={() => setEditingAutomation(automation.id)}
-              onDuplicate={() => console.log('Duplicate', automation.id)}
-              onDelete={() => console.log('Delete', automation.id)}
-              onToggleStatus={() => console.log('Toggle', automation.id)}
-            />
-          </motion.div>
-        ))}
-      </div>
+      {loading ? (
+        <div className="text-center py-12">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-slate-400 mt-4">Carregando...</p>
+        </div>
+      ) : (
+        <div className={cn(
+          view === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : 'space-y-3'
+        )}>
+          {filteredAutomations.map((automation, index) => (
+            <motion.div
+              key={automation.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <AutomationListItem
+                automation={{
+                  ...automation,
+                  trigger: automation.trigger_type ? `trigger_${automation.trigger_type}` : 'trigger_manual',
+                  stats: {
+                    sent: automation.total_runs || 0,
+                    converted: automation.successful_runs || 0,
+                  },
+                }}
+                onEdit={() => handleEditAutomation(automation)}
+                onDuplicate={() => console.log('Duplicate', automation.id)}
+                onDelete={() => handleDelete(automation.id)}
+                onToggleStatus={() => handleToggleStatus(automation)}
+              />
+            </motion.div>
+          ))}
+        </div>
+      )}
 
-      {filteredAutomations.length === 0 && (
+      {!loading && filteredAutomations.length === 0 && (
         <div className="text-center py-12">
           <div className="w-16 h-16 rounded-2xl bg-slate-800/50 flex items-center justify-center mx-auto mb-4">
             <Zap className="w-8 h-8 text-slate-500" />
@@ -303,7 +425,6 @@ export default function AutomationsPage() {
         </div>
       )}
 
-      {/* New Automation Modal */}
       <AnimatePresence>
         {showNewModal && (
           <>
@@ -320,7 +441,6 @@ export default function AutomationsPage() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="fixed inset-4 sm:inset-auto sm:top-[10%] sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-2xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[80vh]"
             >
-              {/* Modal Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
                 <div>
                   <h2 className="text-lg font-semibold text-white">Nova Automação</h2>
@@ -334,9 +454,7 @@ export default function AutomationsPage() {
                 </button>
               </div>
 
-              {/* Modal Content */}
               <div className="flex-1 overflow-y-auto p-6">
-                {/* Blank Option */}
                 <button
                   onClick={handleNewBlank}
                   className="w-full p-4 rounded-xl border-2 border-dashed border-white/10 hover:border-primary/50 hover:bg-primary/5 transition-all mb-6 text-left group"
@@ -356,7 +474,6 @@ export default function AutomationsPage() {
                   </div>
                 </button>
 
-                {/* Templates */}
                 <div>
                   <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
                     Templates populares

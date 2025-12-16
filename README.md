@@ -1,52 +1,51 @@
-# WORDER V45 - Arquivos de Automação
+# Atualização: Selects Dinâmicos para Automações
 
-## 📁 Estrutura
+## O que mudou
 
-```
-src/
-├── lib/
-│   ├── events.ts          ✨ NOVO - EventBus (sistema de eventos)
-│   └── queue.ts           ✨ NOVO - Integração QStash (filas)
-│
-├── app/api/
-│   ├── webhooks/
-│   │   ├── shopify/route.ts    ✨ NOVO - Webhook Shopify
-│   │   ├── klaviyo/route.ts    ✨ NOVO - Webhook Klaviyo
-│   │   └── custom/[id]/route.ts ✨ NOVO - Webhooks customizados
-│   │
-│   ├── workers/
-│   │   ├── automation/route.ts      ✨ NOVO - Worker principal
-│   │   └── automation-step/route.ts ✨ NOVO - Worker de delays
-│   │
-│   ├── deals/route.ts      📝 MODIFICADO - Emite eventos de pipeline
-│   └── contacts/route.ts   📝 MODIFICADO - Emite eventos de contatos
-│
-└── components/
-    └── automation/index.tsx 📝 MODIFICADO - Novos triggers/actions
+O arquivo `src/components/automation/index.tsx` foi atualizado para:
 
-supabase/
-└── automations-migration.sql ✨ NOVO - SQL para executar no Supabase
-```
+### ✅ Selects Dinâmicos
+Agora ao configurar nodes de pipeline, você **seleciona de uma lista** ao invés de digitar IDs manualmente:
 
-## 🚀 Como usar
+| Node | Campos com Select |
+|------|-------------------|
+| **Deal Criado** | Pipeline |
+| **Deal Mudou Estágio** | Pipeline + Estágio |
+| **Deal Ganho** | Pipeline |
+| **Deal Perdido** | Pipeline |
+| **Criar Deal** | Pipeline + Estágio |
+| **Mover Deal** | Pipeline + Estágio |
+| **Atribuir Deal** | Usuário |
 
-1. **Faça upload desses arquivos** no GitHub mantendo a estrutura de pastas
-2. **Execute o SQL** `automations-migration.sql` no Supabase SQL Editor
-3. **Adicione as variáveis** no Vercel:
-   - `QSTASH_TOKEN`
-   - `QSTASH_CURRENT_SIGNING_KEY`
-   - `QSTASH_NEXT_SIGNING_KEY`
-   - `NEXT_PUBLIC_APP_URL`
+### 🔄 Como funciona
+1. O componente busca o `organization_id` do localStorage (auth-storage)
+2. Faz chamada `GET /api/deals?type=pipelines&organizationId=xxx`
+3. Popula os selects com os dados retornados
+4. Ao selecionar uma pipeline, os estágios dela aparecem automaticamente
 
-## ✨ Novos Triggers de Pipeline
+### 📝 Campos por Node
 
-- Deal Criado
-- Deal Mudou Estágio
-- Deal Ganho
-- Deal Perdido
+**Triggers:**
+- `trigger_deal_created`: Pipeline (opcional)
+- `trigger_deal_stage`: Pipeline (opcional) + Estágio de destino (opcional)
+- `trigger_deal_won`: Pipeline (opcional) + Valor mínimo (opcional)
+- `trigger_deal_lost`: Pipeline (opcional) + Motivo de perda (opcional)
 
-## ✨ Novas Actions de Pipeline
+**Actions:**
+- `action_create_deal`: Pipeline* + Estágio* + Título + Valor
+- `action_move_deal`: Pipeline (opcional) + Estágio de destino*
+- `action_assign_deal`: Usuário*
 
-- Criar Deal
-- Mover Deal
-- Atribuir Deal
+**Outros:**
+- `trigger_tag`: Nome da tag
+- `trigger_webhook`: Mostra URL para copiar
+- `action_webhook`: URL + Método
+- `action_notify`: Título + Mensagem
+- `action_update`: Campo + Novo valor
+
+---
+
+**Arquivo modificado:**
+- `src/components/automation/index.tsx`
+
+**Apenas substitua este arquivo no seu projeto!**

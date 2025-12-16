@@ -1,16 +1,13 @@
 'use client';
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, DragEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play,
   Pause,
   Save,
-  Undo,
-  Redo,
   ZoomIn,
   ZoomOut,
-  Maximize2,
   Plus,
   Trash2,
   Copy,
@@ -27,33 +24,26 @@ import {
   Zap,
   ArrowRight,
   X,
-  Check,
-  ChevronDown,
   ChevronRight,
-  Grip,
-  Target,
   Send,
-  Timer,
   Split,
   UserPlus,
   Package,
-  CreditCard,
   Star,
-  Heart,
   Webhook,
   Database,
   Trophy,
   XCircle,
   PlusCircle,
   MoveRight,
-  CheckSquare,
   Briefcase,
-  TrendingUp,
-  DollarSign,
+  PlayCircle,
+  Loader2,
+  CheckCircle2,
 } from 'lucide-react';
-import { Button, Input, Card, Badge, Textarea } from '@/components/ui';
+import { Button, Input, Badge, Textarea } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { AutomationNode, AutomationTrigger, AutomationEdge } from '@/types';
+import { AutomationNode, AutomationEdge } from '@/types';
 
 // ============================================
 // Node Type Definitions
@@ -61,35 +51,27 @@ import { AutomationNode, AutomationTrigger, AutomationEdge } from '@/types';
 
 export const NODE_TYPES = {
   triggers: [
-    // E-commerce
     { type: 'trigger_order', label: 'Pedido Realizado', icon: ShoppingCart, color: 'emerald' },
     { type: 'trigger_abandon', label: 'Carrinho Abandonado', icon: Package, color: 'amber' },
-    // Contatos
     { type: 'trigger_signup', label: 'Novo Cadastro', icon: UserPlus, color: 'blue' },
     { type: 'trigger_tag', label: 'Tag Adicionada', icon: Tag, color: 'purple' },
-    // Pipeline / CRM
     { type: 'trigger_deal_created', label: 'Deal Criado', icon: Briefcase, color: 'blue' },
     { type: 'trigger_deal_stage', label: 'Deal Mudou Estágio', icon: MoveRight, color: 'violet' },
     { type: 'trigger_deal_won', label: 'Deal Ganho', icon: Trophy, color: 'emerald' },
     { type: 'trigger_deal_lost', label: 'Deal Perdido', icon: XCircle, color: 'red' },
-    // Outros
     { type: 'trigger_date', label: 'Data Especial', icon: Star, color: 'pink' },
     { type: 'trigger_segment', label: 'Entrou em Segmento', icon: Users, color: 'cyan' },
     { type: 'trigger_webhook', label: 'Webhook', icon: Webhook, color: 'orange' },
   ],
   actions: [
-    // Comunicação
     { type: 'action_email', label: 'Enviar Email', icon: Mail, color: 'violet' },
     { type: 'action_whatsapp', label: 'Enviar WhatsApp', icon: MessageSquare, color: 'green' },
     { type: 'action_sms', label: 'Enviar SMS', icon: Send, color: 'blue' },
-    // Contatos
     { type: 'action_tag', label: 'Adicionar Tag', icon: Tag, color: 'purple' },
     { type: 'action_update', label: 'Atualizar Contato', icon: Database, color: 'cyan' },
-    // Pipeline / CRM
     { type: 'action_create_deal', label: 'Criar Deal', icon: PlusCircle, color: 'blue' },
     { type: 'action_move_deal', label: 'Mover Deal', icon: MoveRight, color: 'violet' },
     { type: 'action_assign_deal', label: 'Atribuir Deal', icon: UserPlus, color: 'cyan' },
-    // Outros
     { type: 'action_notify', label: 'Notificação Interna', icon: Bell, color: 'amber' },
     { type: 'action_webhook', label: 'Chamar Webhook', icon: Webhook, color: 'slate' },
   ],
@@ -101,277 +83,322 @@ export const NODE_TYPES = {
   ],
 } as const;
 
+// ============================================
+// Color Utilities
+// ============================================
+
 const getNodeColor = (color: string) => {
-  const colors: Record<string, { bg: string; border: string; text: string; glow: string }> = {
-    emerald: { bg: 'bg-emerald-500/20', border: 'border-emerald-500/50', text: 'text-emerald-400', glow: 'shadow-emerald-500/20' },
-    amber: { bg: 'bg-amber-500/20', border: 'border-amber-500/50', text: 'text-amber-400', glow: 'shadow-amber-500/20' },
-    blue: { bg: 'bg-blue-500/20', border: 'border-blue-500/50', text: 'text-blue-400', glow: 'shadow-blue-500/20' },
-    purple: { bg: 'bg-purple-500/20', border: 'border-purple-500/50', text: 'text-purple-400', glow: 'shadow-purple-500/20' },
-    pink: { bg: 'bg-pink-500/20', border: 'border-pink-500/50', text: 'text-pink-400', glow: 'shadow-pink-500/20' },
-    cyan: { bg: 'bg-cyan-500/20', border: 'border-cyan-500/50', text: 'text-cyan-400', glow: 'shadow-cyan-500/20' },
-    orange: { bg: 'bg-orange-500/20', border: 'border-orange-500/50', text: 'text-orange-400', glow: 'shadow-orange-500/20' },
-    violet: { bg: 'bg-violet-500/20', border: 'border-violet-500/50', text: 'text-violet-400', glow: 'shadow-violet-500/20' },
-    green: { bg: 'bg-green-500/20', border: 'border-green-500/50', text: 'text-green-400', glow: 'shadow-green-500/20' },
-    slate: { bg: 'bg-slate-500/20', border: 'border-slate-500/50', text: 'text-slate-400', glow: 'shadow-slate-500/20' },
-    indigo: { bg: 'bg-indigo-500/20', border: 'border-indigo-500/50', text: 'text-indigo-400', glow: 'shadow-indigo-500/20' },
-    red: { bg: 'bg-red-500/20', border: 'border-red-500/50', text: 'text-red-400', glow: 'shadow-red-500/20' },
+  const colors: Record<string, { bg: string; border: string; text: string; glow: string; solid: string }> = {
+    emerald: { bg: 'bg-emerald-500/20', border: 'border-emerald-500/50', text: 'text-emerald-400', glow: 'shadow-emerald-500/30', solid: 'bg-emerald-500' },
+    amber: { bg: 'bg-amber-500/20', border: 'border-amber-500/50', text: 'text-amber-400', glow: 'shadow-amber-500/30', solid: 'bg-amber-500' },
+    blue: { bg: 'bg-blue-500/20', border: 'border-blue-500/50', text: 'text-blue-400', glow: 'shadow-blue-500/30', solid: 'bg-blue-500' },
+    purple: { bg: 'bg-purple-500/20', border: 'border-purple-500/50', text: 'text-purple-400', glow: 'shadow-purple-500/30', solid: 'bg-purple-500' },
+    pink: { bg: 'bg-pink-500/20', border: 'border-pink-500/50', text: 'text-pink-400', glow: 'shadow-pink-500/30', solid: 'bg-pink-500' },
+    cyan: { bg: 'bg-cyan-500/20', border: 'border-cyan-500/50', text: 'text-cyan-400', glow: 'shadow-cyan-500/30', solid: 'bg-cyan-500' },
+    orange: { bg: 'bg-orange-500/20', border: 'border-orange-500/50', text: 'text-orange-400', glow: 'shadow-orange-500/30', solid: 'bg-orange-500' },
+    violet: { bg: 'bg-violet-500/20', border: 'border-violet-500/50', text: 'text-violet-400', glow: 'shadow-violet-500/30', solid: 'bg-violet-500' },
+    green: { bg: 'bg-green-500/20', border: 'border-green-500/50', text: 'text-green-400', glow: 'shadow-green-500/30', solid: 'bg-green-500' },
+    slate: { bg: 'bg-slate-500/20', border: 'border-slate-500/50', text: 'text-slate-400', glow: 'shadow-slate-500/30', solid: 'bg-slate-500' },
+    indigo: { bg: 'bg-indigo-500/20', border: 'border-indigo-500/50', text: 'text-indigo-400', glow: 'shadow-indigo-500/30', solid: 'bg-indigo-500' },
+    red: { bg: 'bg-red-500/20', border: 'border-red-500/50', text: 'text-red-400', glow: 'shadow-red-500/30', solid: 'bg-red-500' },
   };
   return colors[color] || colors.slate;
 };
 
 // ============================================
-// Automation Canvas Node
+// Canvas Node Component
 // ============================================
 
 interface CanvasNodeProps {
   node: AutomationNode;
   isSelected: boolean;
   onSelect: () => void;
-  onDelete: () => void;
   onDragStart: (e: React.MouseEvent) => void;
-  onConnect: (fromHandle: 'output' | 'true' | 'false') => void;
-  zoom: number;
+  onStartConnection: (handle: string) => void;
+  onEndConnection: () => void;
+  isConnecting: boolean;
 }
 
-export function CanvasNode({
+function CanvasNode({
   node,
   isSelected,
   onSelect,
-  onDelete,
   onDragStart,
-  onConnect,
-  zoom,
+  onStartConnection,
+  onEndConnection,
+  isConnecting,
 }: CanvasNodeProps) {
   const allNodes = [...NODE_TYPES.triggers, ...NODE_TYPES.actions, ...NODE_TYPES.logic];
   const nodeType = allNodes.find((n) => n.type === node.type);
   const colors = getNodeColor(nodeType?.color || 'slate');
   const Icon = nodeType?.icon || Zap;
-
+  
+  const isTrigger = node.type?.startsWith('trigger_');
   const isCondition = node.type === 'logic_condition' || node.type === 'logic_split';
-  const isTrigger = node.type.startsWith('trigger_');
 
   return (
     <motion.div
       initial={{ scale: 0.8, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      className={cn(
-        'absolute cursor-move select-none',
-        'w-[220px] rounded-xl border backdrop-blur-sm',
-        'transition-all duration-200',
-        colors.bg,
-        colors.border,
-        isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
-        isSelected && colors.glow,
-        isSelected && 'shadow-lg'
-      )}
+      className="absolute"
       style={{
         left: node.position.x,
         top: node.position.y,
-        transform: `scale(${zoom})`,
-        transformOrigin: 'top left',
+        zIndex: isSelected ? 10 : 1,
       }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelect();
-      }}
-      onMouseDown={onDragStart}
     >
-      {/* Input Handle */}
-      {!isTrigger && (
+      <div
+        onClick={onSelect}
+        onMouseDown={onDragStart}
+        className={cn(
+          'relative cursor-move select-none transition-all duration-200',
+          isSelected && 'scale-105'
+        )}
+      >
+        {/* Container do Nó */}
         <div
-          className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-slate-700 border-2 border-slate-500 hover:bg-primary hover:border-primary transition-colors cursor-crosshair"
-          title="Conectar entrada"
-        />
-      )}
-
-      {/* Header */}
-      <div className={cn('flex items-center gap-2 p-3 border-b', colors.border)}>
-        <div className={cn('p-1.5 rounded-lg', colors.bg)}>
-          <Icon className={cn('w-4 h-4', colors.text)} />
-        </div>
-        <span className="text-sm font-medium text-white flex-1 truncate">
-          {node.data.label || nodeType?.label}
-        </span>
-        {isSelected && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="p-1 rounded hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="p-3">
-        {node.data.description && (
-          <p className="text-xs text-slate-400 mb-2">{node.data.description}</p>
-        )}
-        
-        {/* Node-specific preview */}
-        {node.type === 'logic_delay' && node.data.config?.delay && (
-          <div className="flex items-center gap-2 text-xs text-slate-300">
-            <Timer className="w-3.5 h-3.5" />
-            <span>
-              {node.data.config.delay.value} {node.data.config.delay.unit}
-            </span>
-          </div>
-        )}
-        
-        {node.type === 'action_email' && node.data.config?.subject && (
-          <div className="text-xs text-slate-300 truncate">
-            "{node.data.config.subject}"
-          </div>
-        )}
-
-        {node.data.stats && (
-          <div className="flex items-center gap-3 mt-2 pt-2 border-t border-white/5">
-            <div className="text-xs">
-              <span className="text-slate-500">Enviados:</span>
-              <span className="text-white ml-1">{node.data.stats.sent || 0}</span>
+          className={cn(
+            'relative min-w-[220px] rounded-2xl overflow-hidden',
+            'backdrop-blur-sm transition-all duration-200',
+            isSelected 
+              ? `ring-2 ring-white/50 shadow-2xl ${colors.glow}` 
+              : 'hover:ring-1 hover:ring-white/20 shadow-lg'
+          )}
+        >
+          {/* Header colorido para Triggers */}
+          {isTrigger && (
+            <div className={cn(
+              'px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-white flex items-center gap-2',
+              colors.solid
+            )}>
+              <Zap className="w-3.5 h-3.5" />
+              Gatilho
             </div>
-            {node.data.stats.opened && (
-              <div className="text-xs">
-                <span className="text-slate-500">Abertos:</span>
-                <span className="text-emerald-400 ml-1">{node.data.stats.opened}%</span>
+          )}
+          
+          {/* Corpo do nó */}
+          <div className={cn(
+            'p-4',
+            isTrigger 
+              ? 'bg-slate-900/95 border-x-2 border-b-2 border-slate-700/50 rounded-b-2xl' 
+              : `bg-slate-800/90 border-2 ${colors.border} rounded-2xl`
+          )}>
+            <div className="flex items-center gap-3">
+              {/* Ícone */}
+              <div className={cn(
+                'p-3 rounded-xl',
+                isTrigger ? colors.bg : 'bg-white/10'
+              )}>
+                <Icon className={cn('w-5 h-5', colors.text)} />
+              </div>
+              
+              {/* Label */}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-white text-sm truncate">
+                  {node.data.label || nodeType?.label}
+                </p>
+                {node.data.description && (
+                  <p className="text-xs text-slate-400 truncate mt-0.5">
+                    {node.data.description}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Config Preview */}
+            {node.data.config && Object.keys(node.data.config).length > 0 && (
+              <div className="mt-3 pt-3 border-t border-white/10">
+                <div className="flex flex-wrap gap-1.5">
+                  {node.data.config.tagName && (
+                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] rounded-full">
+                      #{node.data.config.tagName}
+                    </span>
+                  )}
+                  {node.data.config.delay && (
+                    <span className="px-2 py-0.5 bg-slate-500/20 text-slate-300 text-[10px] rounded-full">
+                      ⏱ {node.data.config.delay.value} {node.data.config.delay.unit}
+                    </span>
+                  )}
+                  {node.data.config.subject && (
+                    <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 text-[10px] rounded-full truncate max-w-[150px]">
+                      📧 {node.data.config.subject}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
+        </div>
+
+        {/* Handle de Entrada (topo) */}
+        {!isTrigger && (
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isConnecting) onEndConnection();
+            }}
+            className={cn(
+              'absolute -top-3 left-1/2 -translate-x-1/2',
+              'w-5 h-5 rounded-full border-3 border-slate-600 bg-slate-800',
+              'hover:border-emerald-400 hover:bg-emerald-400 hover:scale-125',
+              'transition-all duration-150 cursor-crosshair',
+              isConnecting && 'border-emerald-400 bg-emerald-400 scale-125 animate-pulse'
+            )}
+          />
+        )}
+
+        {/* Handle de Saída (baixo) */}
+        {!isCondition ? (
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              onStartConnection('output');
+            }}
+            className={cn(
+              'absolute -bottom-3 left-1/2 -translate-x-1/2',
+              'w-5 h-5 rounded-full border-3 border-slate-600 bg-slate-800',
+              'hover:border-primary hover:bg-primary hover:scale-125',
+              'transition-all duration-150 cursor-crosshair'
+            )}
+          />
+        ) : (
+          <>
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartConnection('true');
+              }}
+              className={cn(
+                'absolute -bottom-3 left-1/4 -translate-x-1/2',
+                'w-5 h-5 rounded-full border-3 border-emerald-500 bg-emerald-500/30',
+                'hover:bg-emerald-500 hover:scale-125',
+                'transition-all duration-150 cursor-crosshair'
+              )}
+            />
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartConnection('false');
+              }}
+              className={cn(
+                'absolute -bottom-3 left-3/4 -translate-x-1/2',
+                'w-5 h-5 rounded-full border-3 border-red-500 bg-red-500/30',
+                'hover:bg-red-500 hover:scale-125',
+                'transition-all duration-150 cursor-crosshair'
+              )}
+            />
+            <span className="absolute -bottom-8 left-1/4 -translate-x-1/2 text-[10px] text-emerald-400 font-semibold">Sim</span>
+            <span className="absolute -bottom-8 left-3/4 -translate-x-1/2 text-[10px] text-red-400 font-semibold">Não</span>
+          </>
         )}
       </div>
-
-      {/* Output Handles */}
-      {isCondition ? (
-        <>
-          <div
-            className="absolute -bottom-2 left-1/4 -translate-x-1/2 w-4 h-4 rounded-full bg-emerald-600 border-2 border-emerald-400 hover:bg-emerald-500 transition-colors cursor-crosshair"
-            title="Sim"
-            onClick={(e) => {
-              e.stopPropagation();
-              onConnect('true');
-            }}
-          />
-          <div
-            className="absolute -bottom-2 left-3/4 -translate-x-1/2 w-4 h-4 rounded-full bg-red-600 border-2 border-red-400 hover:bg-red-500 transition-colors cursor-crosshair"
-            title="Não"
-            onClick={(e) => {
-              e.stopPropagation();
-              onConnect('false');
-            }}
-          />
-        </>
-      ) : (
-        <div
-          className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-slate-700 border-2 border-slate-500 hover:bg-primary hover:border-primary transition-colors cursor-crosshair"
-          title="Conectar saída"
-          onClick={(e) => {
-            e.stopPropagation();
-            onConnect('output');
-          }}
-        />
-      )}
     </motion.div>
   );
 }
 
 // ============================================
-// Edge Component
+// Connection Lines
 // ============================================
 
-interface EdgeProps {
-  edge: AutomationEdge;
+interface ConnectionLinesProps {
+  edges: AutomationEdge[];
   nodes: AutomationNode[];
-  isSelected: boolean;
-  onSelect: () => void;
-  onDelete: () => void;
-  zoom: number;
+  tempConnection: { fromNode: string; fromHandle: string; toX: number; toY: number } | null;
 }
 
-export function CanvasEdge({ edge, nodes, isSelected, onSelect, onDelete, zoom }: EdgeProps) {
-  const sourceNode = nodes.find((n) => n.id === edge.source);
-  const targetNode = nodes.find((n) => n.id === edge.target);
+function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps) {
+  const getNodePosition = (nodeId: string, handle: string = 'output') => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return { x: 0, y: 0 };
+    
+    const isTrigger = node.type?.startsWith('trigger_');
+    const isCondition = node.type === 'logic_condition' || node.type === 'logic_split';
+    
+    const width = 220;
+    const height = isTrigger ? 100 : 80;
+    
+    if (handle === 'input') {
+      return { x: node.position.x + width / 2, y: node.position.y };
+    }
+    
+    if (isCondition) {
+      if (handle === 'true') return { x: node.position.x + width / 4, y: node.position.y + height };
+      if (handle === 'false') return { x: node.position.x + (width * 3) / 4, y: node.position.y + height };
+    }
+    
+    return { x: node.position.x + width / 2, y: node.position.y + height };
+  };
 
-  if (!sourceNode || !targetNode) return null;
-
-  const sourceX = sourceNode.position.x + 110; // center of 220px node
-  const sourceY = sourceNode.position.y + 100; // bottom of node
-  const targetX = targetNode.position.x + 110;
-  const targetY = targetNode.position.y;
-
-  // Adjust source position for condition nodes
-  if (edge.sourceHandle === 'true') {
-    // Left handle
-  } else if (edge.sourceHandle === 'false') {
-    // Right handle
-  }
-
-  const midY = (sourceY + targetY) / 2;
-
-  const path = `M ${sourceX} ${sourceY} C ${sourceX} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
-
-  const edgeColor = edge.sourceHandle === 'true' 
-    ? '#10b981' 
-    : edge.sourceHandle === 'false' 
-    ? '#ef4444' 
-    : '#8b5cf6';
+  const createPath = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const midY = (from.y + to.y) / 2;
+    const controlOffset = Math.min(Math.abs(to.y - from.y) / 2, 100);
+    
+    return `M ${from.x} ${from.y} C ${from.x} ${from.y + controlOffset}, ${to.x} ${to.y - controlOffset}, ${to.x} ${to.y}`;
+  };
 
   return (
-    <g onClick={onSelect} className="cursor-pointer">
-      {/* Invisible wider path for easier clicking */}
-      <path
-        d={path}
-        fill="none"
-        stroke="transparent"
-        strokeWidth={20}
-      />
-      {/* Visible path */}
-      <path
-        d={path}
-        fill="none"
-        stroke={isSelected ? '#ffffff' : edgeColor}
-        strokeWidth={isSelected ? 3 : 2}
-        strokeDasharray={edge.animated ? '5,5' : undefined}
-        className={cn(edge.animated && 'animate-dash')}
-      />
-      {/* Arrow */}
-      <circle
-        cx={targetX}
-        cy={targetY - 8}
-        r={4}
-        fill={isSelected ? '#ffffff' : edgeColor}
-      />
-      {/* Delete button when selected */}
-      {isSelected && (
-        <g
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="cursor-pointer"
-        >
-          <circle
-            cx={(sourceX + targetX) / 2}
-            cy={(sourceY + targetY) / 2}
-            r={12}
-            fill="#1e293b"
-            stroke="#ef4444"
-            strokeWidth={2}
-          />
-          <text
-            x={(sourceX + targetX) / 2}
-            y={(sourceY + targetY) / 2 + 4}
-            textAnchor="middle"
-            fill="#ef4444"
-            fontSize={14}
-          >
-            ×
-          </text>
-        </g>
+    <svg className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#6366f1" />
+        </marker>
+        <marker id="arrowhead-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#10b981" />
+        </marker>
+        <marker id="arrowhead-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
+        </marker>
+      </defs>
+      
+      {edges.map((edge) => {
+        const from = getNodePosition(edge.source, edge.sourceHandle || 'output');
+        const targetNode = nodes.find(n => n.id === edge.target);
+        const to = targetNode ? getNodePosition(edge.target, 'input') : { x: 0, y: 0 };
+        
+        if (!targetNode) return null;
+        
+        const isTrue = edge.sourceHandle === 'true';
+        const isFalse = edge.sourceHandle === 'false';
+        const strokeColor = isTrue ? '#10b981' : isFalse ? '#ef4444' : '#6366f1';
+        const marker = isTrue ? 'url(#arrowhead-green)' : isFalse ? 'url(#arrowhead-red)' : 'url(#arrowhead)';
+        
+        return (
+          <g key={edge.id}>
+            <path
+              d={createPath(from, to)}
+              fill="none"
+              stroke="black"
+              strokeWidth="6"
+              strokeOpacity="0.2"
+              style={{ filter: 'blur(4px)' }}
+            />
+            <path
+              d={createPath(from, to)}
+              fill="none"
+              stroke={strokeColor}
+              strokeWidth="3"
+              strokeLinecap="round"
+              markerEnd={marker}
+            />
+          </g>
+        );
+      })}
+      
+      {tempConnection && (
+        <path
+          d={createPath(
+            getNodePosition(tempConnection.fromNode, tempConnection.fromHandle),
+            { x: tempConnection.toX, y: tempConnection.toY }
+          )}
+          fill="none"
+          stroke="#6366f1"
+          strokeWidth="3"
+          strokeDasharray="8 4"
+          strokeLinecap="round"
+          opacity={0.7}
+        />
       )}
-    </g>
+    </svg>
   );
 }
 
@@ -380,80 +407,98 @@ export function CanvasEdge({ edge, nodes, isSelected, onSelect, onDelete, zoom }
 // ============================================
 
 interface NodePaletteProps {
-  onAddNode: (type: string) => void;
+  onAddNode: (type: string, position?: { x: number; y: number }) => void;
 }
 
-export function NodePalette({ onAddNode }: NodePaletteProps) {
-  const [expanded, setExpanded] = useState<string | null>('triggers');
+function NodePalette({ onAddNode }: NodePaletteProps) {
+  const [expanded, setExpanded] = useState<string>('triggers');
 
   const sections = [
     { id: 'triggers', label: 'Gatilhos', icon: Zap, nodes: NODE_TYPES.triggers },
-    { id: 'actions', label: 'Ações', icon: Send, nodes: NODE_TYPES.actions },
+    { id: 'actions', label: 'Ações', icon: Play, nodes: NODE_TYPES.actions },
     { id: 'logic', label: 'Lógica', icon: GitBranch, nodes: NODE_TYPES.logic },
   ];
 
+  const handleDragStart = (e: DragEvent<HTMLButtonElement>, type: string) => {
+    e.dataTransfer.setData('nodeType', type);
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
   return (
-    <div className="w-64 bg-slate-900/50 border-r border-white/5 overflow-y-auto">
+    <div className="w-64 bg-slate-900/80 backdrop-blur-sm border-r border-white/5 overflow-y-auto flex-shrink-0">
       <div className="p-4 border-b border-white/5">
-        <h3 className="text-sm font-semibold text-white">Blocos</h3>
+        <h3 className="font-semibold text-white">Blocos</h3>
         <p className="text-xs text-slate-400 mt-1">Arraste para o canvas</p>
       </div>
 
-      {sections.map((section) => (
-        <div key={section.id} className="border-b border-white/5">
-          <button
-            onClick={() => setExpanded(expanded === section.id ? null : section.id)}
-            className="w-full flex items-center gap-2 p-3 hover:bg-white/5 transition-colors"
-          >
-            <section.icon className="w-4 h-4 text-slate-400" />
-            <span className="text-sm font-medium text-white flex-1 text-left">
-              {section.label}
-            </span>
-            {expanded === section.id ? (
-              <ChevronDown className="w-4 h-4 text-slate-400" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-slate-400" />
-            )}
-          </button>
+      <div className="p-2 space-y-1">
+        {sections.map((section) => (
+          <div key={section.id}>
+            <button
+              onClick={() => setExpanded(expanded === section.id ? '' : section.id)}
+              className={cn(
+                'w-full flex items-center justify-between p-3 rounded-lg',
+                'text-left transition-all duration-200',
+                expanded === section.id ? 'bg-white/5' : 'hover:bg-white/5'
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <section.icon className="w-4 h-4 text-slate-400" />
+                <span className="text-sm font-medium text-white">{section.label}</span>
+              </div>
+              <ChevronRight
+                className={cn(
+                  'w-4 h-4 text-slate-400 transition-transform',
+                  expanded === section.id && 'rotate-90'
+                )}
+              />
+            </button>
 
-          <AnimatePresence>
-            {expanded === section.id && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="p-2 space-y-1">
-                  {section.nodes.map((node) => {
-                    const colors = getNodeColor(node.color);
-                    return (
-                      <button
-                        key={node.type}
-                        onClick={() => onAddNode(node.type)}
-                        className={cn(
-                          'w-full flex items-center gap-2 p-2 rounded-lg',
-                          'border border-transparent',
-                          'hover:border-white/10 hover:bg-white/5',
-                          'transition-all duration-200',
-                          'group cursor-grab active:cursor-grabbing'
-                        )}
-                      >
-                        <div className={cn('p-1.5 rounded-lg', colors.bg)}>
-                          <node.icon className={cn('w-3.5 h-3.5', colors.text)} />
-                        </div>
-                        <span className="text-xs text-slate-300 group-hover:text-white transition-colors">
-                          {node.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      ))}
+            <AnimatePresence>
+              {expanded === section.id && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="p-2 space-y-1">
+                    {section.nodes.map((node) => {
+                      const colors = getNodeColor(node.color);
+                      const isTrigger = section.id === 'triggers';
+                      
+                      return (
+                        <button
+                          key={node.type}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, node.type)}
+                          onClick={() => onAddNode(node.type)}
+                          className={cn(
+                            'w-full flex items-center gap-3 p-2.5 rounded-xl',
+                            'border border-transparent cursor-grab active:cursor-grabbing',
+                            'hover:border-white/10 hover:bg-white/5',
+                            'transition-all duration-200 group'
+                          )}
+                        >
+                          {isTrigger && (
+                            <div className={cn('w-1.5 h-10 rounded-full', colors.solid)} />
+                          )}
+                          <div className={cn('p-2.5 rounded-xl', colors.bg)}>
+                            <node.icon className={cn('w-4 h-4', colors.text)} />
+                          </div>
+                          <span className="text-sm text-slate-300 group-hover:text-white transition-colors">
+                            {node.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -465,22 +510,61 @@ export function NodePalette({ onAddNode }: NodePaletteProps) {
 interface NodePropertiesProps {
   node: AutomationNode | null;
   onUpdate: (updates: Partial<AutomationNode['data']>) => void;
+  onDelete: () => void;
   onClose: () => void;
+  organizationId?: string;
 }
 
-export function NodeProperties({ node, onUpdate, onClose }: NodePropertiesProps) {
+interface PipelineOption {
+  id: string;
+  name: string;
+  stages: { id: string; name: string; color: string }[];
+}
+
+function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: NodePropertiesProps) {
+  const [pipelines, setPipelines] = useState<PipelineOption[]>([]);
+  const [loadingPipelines, setLoadingPipelines] = useState(false);
+
+  useEffect(() => {
+    if (!organizationId) return;
+    
+    async function fetchPipelines() {
+      setLoadingPipelines(true);
+      try {
+        const res = await fetch(`/api/deals?type=pipelines&organizationId=${organizationId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setPipelines(data.pipelines || []);
+        }
+      } catch (e) {
+        console.error('Erro ao buscar pipelines:', e);
+      } finally {
+        setLoadingPipelines(false);
+      }
+    }
+    fetchPipelines();
+  }, [organizationId]);
+
+  const selectedPipeline = pipelines.find(p => p.id === node?.data.config?.pipelineId);
+  const stages = selectedPipeline?.stages || [];
+
   if (!node) return null;
 
   const allNodes = [...NODE_TYPES.triggers, ...NODE_TYPES.actions, ...NODE_TYPES.logic];
   const nodeType = allNodes.find((n) => n.type === node.type);
   const colors = getNodeColor(nodeType?.color || 'slate');
   const Icon = nodeType?.icon || Zap;
+  const isTrigger = node.type?.startsWith('trigger_');
 
   return (
-    <div className="w-80 bg-slate-900/50 border-l border-white/5 overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/5">
-        <div className="flex items-center gap-2">
+    <div className="w-80 bg-slate-900/90 backdrop-blur-sm border-l border-white/10 overflow-y-auto flex-shrink-0">
+      <div className="flex items-center justify-between p-4 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          {isTrigger && (
+            <span className={cn('px-2 py-0.5 text-[10px] font-bold rounded', colors.solid, 'text-white')}>
+              GATILHO
+            </span>
+          )}
           <div className={cn('p-2 rounded-lg', colors.bg)}>
             <Icon className={cn('w-4 h-4', colors.text)} />
           </div>
@@ -491,13 +575,12 @@ export function NodeProperties({ node, onUpdate, onClose }: NodePropertiesProps)
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+          className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Properties Form */}
       <div className="p-4 space-y-4">
         <Input
           label="Nome do bloco"
@@ -514,7 +597,6 @@ export function NodeProperties({ node, onUpdate, onClose }: NodePropertiesProps)
           rows={2}
         />
 
-        {/* Type-specific fields */}
         {node.type === 'logic_delay' && (
           <div className="space-y-3">
             <label className="text-sm font-medium text-white">Tempo de espera</label>
@@ -526,10 +608,7 @@ export function NodeProperties({ node, onUpdate, onClose }: NodePropertiesProps)
                   onUpdate({
                     config: {
                       ...node.data.config,
-                      delay: {
-                        ...node.data.config?.delay,
-                        value: parseInt(e.target.value),
-                      },
+                      delay: { ...node.data.config?.delay, value: parseInt(e.target.value) },
                     },
                   })
                 }
@@ -541,10 +620,7 @@ export function NodeProperties({ node, onUpdate, onClose }: NodePropertiesProps)
                   onUpdate({
                     config: {
                       ...node.data.config,
-                      delay: {
-                        ...node.data.config?.delay,
-                        unit: e.target.value as 'minutes' | 'hours' | 'days',
-                      },
+                      delay: { ...node.data.config?.delay, unit: e.target.value },
                     },
                   })
                 }
@@ -563,487 +639,96 @@ export function NodeProperties({ node, onUpdate, onClose }: NodePropertiesProps)
             <Input
               label="Assunto do email"
               value={node.data.config?.subject || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, subject: e.target.value },
-                })
-              }
+              onChange={(e) => onUpdate({ config: { ...node.data.config, subject: e.target.value } })}
               placeholder="Assunto do email..."
             />
             <div>
               <label className="text-sm font-medium text-white mb-2 block">Template</label>
               <select
                 value={node.data.config?.templateId || ''}
-                onChange={(e) =>
-                  onUpdate({
-                    config: { ...node.data.config, templateId: e.target.value },
-                  })
-                }
+                onChange={(e) => onUpdate({ config: { ...node.data.config, templateId: e.target.value } })}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
               >
                 <option value="">Selecionar template...</option>
                 <option value="welcome">Boas-vindas</option>
                 <option value="abandon">Carrinho Abandonado</option>
                 <option value="order_confirm">Confirmação de Pedido</option>
-                <option value="review">Solicitar Avaliação</option>
               </select>
-            </div>
-          </div>
-        )}
-
-        {node.type === 'action_whatsapp' && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium text-white mb-2 block">Template WhatsApp</label>
-              <select
-                value={node.data.config?.templateId || ''}
-                onChange={(e) =>
-                  onUpdate({
-                    config: { ...node.data.config, templateId: e.target.value },
-                  })
-                }
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-              >
-                <option value="">Selecionar template...</option>
-                <option value="order_update">Atualização de Pedido</option>
-                <option value="abandon_cart">Lembrete Carrinho</option>
-                <option value="promo">Promoção</option>
-              </select>
-            </div>
-          </div>
-        )}
-
-        {node.type === 'logic_condition' && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium text-white mb-2 block">Condição</label>
-              <select
-                value={node.data.config?.conditionType || ''}
-                onChange={(e) =>
-                  onUpdate({
-                    config: { ...node.data.config, conditionType: e.target.value },
-                  })
-                }
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-              >
-                <option value="">Selecionar condição...</option>
-                <option value="has_tag">Possui tag</option>
-                <option value="email_opened">Abriu email anterior</option>
-                <option value="order_value">Valor do pedido</option>
-                <option value="order_count">Quantidade de pedidos</option>
-                <option value="segment">Está em segmento</option>
-              </select>
-            </div>
-          </div>
-        )}
-
-        {node.type === 'logic_split' && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium text-white mb-2 block">Distribuição</label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  value={node.data.config?.splitPercentage || 50}
-                  onChange={(e) =>
-                    onUpdate({
-                      config: { ...node.data.config, splitPercentage: parseInt(e.target.value) },
-                    })
-                  }
-                  min={1}
-                  max={99}
-                  className="flex-1"
-                />
-                <span className="text-sm text-slate-400">%</span>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Grupo A: {node.data.config?.splitPercentage || 50}% / Grupo B: {100 - (node.data.config?.splitPercentage || 50)}%
-              </p>
             </div>
           </div>
         )}
 
         {node.type === 'action_tag' && (
-          <div className="space-y-3">
-            <Input
-              label="Nome da tag"
-              value={node.data.config?.tagName || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, tagName: e.target.value },
-                })
-              }
-              placeholder="Ex: cliente-vip"
-            />
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="removeTag"
-                checked={node.data.config?.removeTag || false}
-                onChange={(e) =>
-                  onUpdate({
-                    config: { ...node.data.config, removeTag: e.target.checked },
-                  })
-                }
-                className="rounded border-white/20 bg-slate-800 text-primary"
-              />
-              <label htmlFor="removeTag" className="text-sm text-slate-300">
-                Remover tag (ao invés de adicionar)
-              </label>
-            </div>
-          </div>
+          <Input
+            label="Nome da tag"
+            value={node.data.config?.tagName || ''}
+            onChange={(e) => onUpdate({ config: { ...node.data.config, tagName: e.target.value } })}
+            placeholder="Ex: cliente-vip"
+          />
         )}
 
-        {/* ========== TRIGGERS DE PIPELINE ========== */}
-        
-        {node.type === 'trigger_deal_created' && (
+        {(node.type?.includes('deal') || node.type === 'action_create_deal') && (
           <div className="space-y-3">
-            <Input
-              label="Pipeline ID (opcional)"
-              value={node.data.config?.pipelineId || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, pipelineId: e.target.value },
-                })
-              }
-              placeholder="Deixe vazio para qualquer pipeline"
-            />
-            <p className="text-xs text-slate-400">
-              💡 Dispara quando um deal é criado. Deixe vazio para disparar em qualquer pipeline.
-            </p>
-          </div>
-        )}
-
-        {node.type === 'trigger_deal_stage' && (
-          <div className="space-y-3">
-            <Input
-              label="Pipeline ID (opcional)"
-              value={node.data.config?.pipelineId || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, pipelineId: e.target.value },
-                })
-              }
-              placeholder="Deixe vazio para qualquer pipeline"
-            />
-            <Input
-              label="Estágio ID (opcional)"
-              value={node.data.config?.stageId || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, stageId: e.target.value },
-                })
-              }
-              placeholder="Deixe vazio para qualquer mudança de estágio"
-            />
-            <p className="text-xs text-slate-400">
-              💡 Dispara quando deal muda de estágio. Configure o estágio de destino para filtrar.
-            </p>
-          </div>
-        )}
-
-        {node.type === 'trigger_deal_won' && (
-          <div className="space-y-3">
-            <Input
-              label="Pipeline ID (opcional)"
-              value={node.data.config?.pipelineId || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, pipelineId: e.target.value },
-                })
-              }
-              placeholder="Deixe vazio para qualquer pipeline"
-            />
-            <Input
-              label="Valor mínimo (opcional)"
-              type="number"
-              value={node.data.config?.minValue || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, minValue: e.target.value },
-                })
-              }
-              placeholder="Ex: 1000"
-            />
-            <p className="text-xs text-slate-400">
-              💡 Dispara quando deal é marcado como ganho. Use valor mínimo para filtrar deals grandes.
-            </p>
-          </div>
-        )}
-
-        {node.type === 'trigger_deal_lost' && (
-          <div className="space-y-3">
-            <Input
-              label="Pipeline ID (opcional)"
-              value={node.data.config?.pipelineId || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, pipelineId: e.target.value },
-                })
-              }
-              placeholder="Deixe vazio para qualquer pipeline"
-            />
-            <Input
-              label="Motivo de perda (opcional)"
-              value={node.data.config?.lostReason || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, lostReason: e.target.value },
-                })
-              }
-              placeholder="Ex: preço, concorrência"
-            />
-            <p className="text-xs text-slate-400">
-              💡 Dispara quando deal é marcado como perdido. Filtre por motivo específico.
-            </p>
-          </div>
-        )}
-
-        {/* ========== ACTIONS DE PIPELINE ========== */}
-
-        {node.type === 'action_create_deal' && (
-          <div className="space-y-3">
-            <Input
-              label="Pipeline ID *"
-              value={node.data.config?.pipelineId || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, pipelineId: e.target.value },
-                })
-              }
-              placeholder="ID do pipeline"
-            />
-            <Input
-              label="Estágio ID *"
-              value={node.data.config?.stageId || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, stageId: e.target.value },
-                })
-              }
-              placeholder="ID do estágio inicial"
-            />
-            <Input
-              label="Título do Deal"
-              value={node.data.config?.title || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, title: e.target.value },
-                })
-              }
-              placeholder="Ex: Upsell - {{contact.company}}"
-            />
-            <Input
-              label="Valor"
-              type="number"
-              value={node.data.config?.value || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, value: parseFloat(e.target.value) || 0 },
-                })
-              }
-              placeholder="0"
-            />
-            <p className="text-xs text-slate-400">
-              💡 Use {'{{contact.first_name}}'} ou {'{{deal.value}}'} no título para personalizar.
-            </p>
-          </div>
-        )}
-
-        {node.type === 'action_move_deal' && (
-          <div className="space-y-3">
-            <Input
-              label="Estágio de Destino ID *"
-              value={node.data.config?.stageId || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, stageId: e.target.value },
-                })
-              }
-              placeholder="ID do estágio de destino"
-            />
-            <p className="text-xs text-slate-400">
-              💡 Move o deal do contexto para o estágio especificado.
-            </p>
-          </div>
-        )}
-
-        {node.type === 'action_assign_deal' && (
-          <div className="space-y-3">
-            <Input
-              label="Atribuir para (User ID) *"
-              value={node.data.config?.assignTo || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, assignTo: e.target.value },
-                })
-              }
-              placeholder="ID do usuário responsável"
-            />
-            <p className="text-xs text-slate-400">
-              💡 Atribui o deal do contexto para o usuário especificado.
-            </p>
-          </div>
-        )}
-
-        {/* ========== OUTROS TRIGGERS ========== */}
-
-        {node.type === 'trigger_tag' && (
-          <div className="space-y-3">
-            <Input
-              label="Nome da Tag"
-              value={node.data.config?.tagName || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, tagName: e.target.value },
-                })
-              }
-              placeholder="Ex: lead-quente"
-            />
-            <p className="text-xs text-slate-400">
-              💡 Dispara quando esta tag específica é adicionada a um contato.
-            </p>
-          </div>
-        )}
-
-        {node.type === 'trigger_webhook' && (
-          <div className="space-y-3">
-            <div className="bg-slate-800/50 rounded-lg p-3">
-              <p className="text-xs text-slate-400 mb-1">URL do Webhook:</p>
-              <code className="text-xs text-emerald-400 break-all">
-                /api/webhooks/custom/{node.data.config?.webhookId || '[salve para gerar]'}
-              </code>
-            </div>
-            <p className="text-xs text-slate-400">
-              💡 Envie um POST para esta URL com JSON para disparar a automação.
-            </p>
-          </div>
-        )}
-
-        {node.type === 'action_webhook' && (
-          <div className="space-y-3">
-            <Input
-              label="URL do Webhook *"
-              value={node.data.config?.url || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, url: e.target.value },
-                })
-              }
-              placeholder="https://..."
-            />
             <div>
-              <label className="text-sm font-medium text-white mb-2 block">Método</label>
+              <label className="text-sm font-medium text-white mb-2 block">Pipeline</label>
               <select
-                value={node.data.config?.method || 'POST'}
+                value={node.data.config?.pipelineId || ''}
                 onChange={(e) =>
-                  onUpdate({
-                    config: { ...node.data.config, method: e.target.value },
-                  })
+                  onUpdate({ config: { ...node.data.config, pipelineId: e.target.value, stageId: undefined } })
                 }
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                disabled={loadingPipelines}
               >
-                <option value="POST">POST</option>
-                <option value="GET">GET</option>
-                <option value="PUT">PUT</option>
+                <option value="">{loadingPipelines ? 'Carregando...' : 'Selecionar pipeline...'}</option>
+                {pipelines.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
               </select>
             </div>
-            <p className="text-xs text-slate-400">
-              💡 Envia dados do contexto para URL externa.
-            </p>
+            
+            {stages.length > 0 && (node.type === 'trigger_deal_stage' || node.type === 'action_create_deal' || node.type === 'action_move_deal') && (
+              <div>
+                <label className="text-sm font-medium text-white mb-2 block">Estágio</label>
+                <select
+                  value={node.data.config?.stageId || ''}
+                  onChange={(e) => onUpdate({ config: { ...node.data.config, stageId: e.target.value } })}
+                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                >
+                  <option value="">Selecionar estágio...</option>
+                  {stages.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
 
         {node.type === 'action_notify' && (
           <div className="space-y-3">
             <Input
-              label="Título da Notificação"
+              label="Título"
               value={node.data.config?.title || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, title: e.target.value },
-                })
-              }
-              placeholder="Ex: Novo lead qualificado!"
+              onChange={(e) => onUpdate({ config: { ...node.data.config, title: e.target.value } })}
+              placeholder="Título da notificação"
             />
             <Textarea
               label="Mensagem"
               value={node.data.config?.message || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, message: e.target.value },
-                })
-              }
-              placeholder="Ex: {{contact.first_name}} acabou de..."
+              onChange={(e) => onUpdate({ config: { ...node.data.config, message: e.target.value } })}
+              placeholder="Mensagem..."
               rows={3}
-            />
-            <p className="text-xs text-slate-400">
-              💡 Use {'{{contact.first_name}}'}, {'{{deal.title}}'} para personalizar.
-            </p>
-          </div>
-        )}
-
-        {node.type === 'action_update' && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium text-white mb-2 block">Campo a atualizar</label>
-              <select
-                value={node.data.config?.fieldName || ''}
-                onChange={(e) =>
-                  onUpdate({
-                    config: { ...node.data.config, fieldName: e.target.value },
-                  })
-                }
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-              >
-                <option value="">Selecionar campo...</option>
-                <option value="first_name">Nome</option>
-                <option value="last_name">Sobrenome</option>
-                <option value="phone">Telefone</option>
-                <option value="company">Empresa</option>
-                <option value="source">Origem</option>
-              </select>
-            </div>
-            <Input
-              label="Novo valor"
-              value={node.data.config?.fieldValue || ''}
-              onChange={(e) =>
-                onUpdate({
-                  config: { ...node.data.config, fieldValue: e.target.value },
-                })
-              }
-              placeholder="Novo valor do campo"
             />
           </div>
         )}
       </div>
 
-      {/* Stats (if available) */}
-      {node.data.stats && (
-        <div className="p-4 border-t border-white/5">
-          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-            Estatísticas
-          </h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-800/50 rounded-lg p-3">
-              <p className="text-xs text-slate-400">Processados</p>
-              <p className="text-lg font-semibold text-white">{node.data.stats.sent || 0}</p>
-            </div>
-            {node.data.stats.opened && (
-              <div className="bg-slate-800/50 rounded-lg p-3">
-                <p className="text-xs text-slate-400">Taxa Abertura</p>
-                <p className="text-lg font-semibold text-emerald-400">{node.data.stats.opened}%</p>
-              </div>
-            )}
-            {node.data.stats.clicked && (
-              <div className="bg-slate-800/50 rounded-lg p-3">
-                <p className="text-xs text-slate-400">Taxa Cliques</p>
-                <p className="text-lg font-semibold text-cyan-400">{node.data.stats.clicked}%</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <div className="p-4 border-t border-white/10">
+        <Button variant="ghost" className="w-full text-red-400 hover:bg-red-500/10" onClick={onDelete}>
+          <Trash2 className="w-4 h-4 mr-2" />
+          Excluir bloco
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1053,325 +738,390 @@ export function NodeProperties({ node, onUpdate, onClose }: NodePropertiesProps)
 // ============================================
 
 interface AutomationCanvasProps {
+  automationId?: string;
+  automationName: string;
+  automationStatus: 'draft' | 'active' | 'paused';
   nodes: AutomationNode[];
   edges: AutomationEdge[];
   onNodesChange: (nodes: AutomationNode[]) => void;
   onEdgesChange: (edges: AutomationEdge[]) => void;
+  onNameChange: (name: string) => void;
+  onSave: () => Promise<void>;
+  onActivate: () => Promise<void>;
+  onTest: () => Promise<void>;
+  onBack: () => void;
+  organizationId?: string;
 }
 
 export function AutomationCanvas({
+  automationName,
+  automationStatus,
   nodes,
   edges,
   onNodesChange,
   onEdgesChange,
+  onNameChange,
+  onSave,
+  onActivate,
+  onTest,
+  onBack,
+  organizationId: propOrgId,
 }: AutomationCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [pan, setPan] = useState({ x: 50, y: 50 });
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isDraggingNode, setIsDraggingNode] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [connectingFrom, setConnectingFrom] = useState<{
-    nodeId: string;
-    handle: 'output' | 'true' | 'false';
-  } | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  
+  const [connectingFrom, setConnectingFrom] = useState<{ nodeId: string; handle: string } | null>(null);
+  const [tempConnection, setTempConnection] = useState<{ fromNode: string; fromHandle: string; toX: number; toY: number } | null>(null);
+  
+  const [saving, setSaving] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const [orgId, setOrgId] = useState<string | undefined>(propOrgId);
+  
+  useEffect(() => {
+    if (!propOrgId) {
+      try {
+        const authData = localStorage.getItem('auth-storage');
+        if (authData) {
+          const parsed = JSON.parse(authData);
+          setOrgId(parsed?.state?.user?.organization_id);
+        }
+      } catch (e) {}
+    }
+  }, [propOrgId]);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
-  const handleAddNode = useCallback(
-    (type: string) => {
-      const newNode: AutomationNode = {
-        id: `node-${Date.now()}`,
-        type,
-        position: {
-          x: 300 + Math.random() * 200,
-          y: 100 + nodes.length * 120,
-        },
-        data: {
-          label: '',
-          config: {},
-        },
-      };
-      onNodesChange([...nodes, newNode]);
-      setSelectedNodeId(newNode.id);
-    },
-    [nodes, onNodesChange]
-  );
+  const handleAddNode = useCallback((type: string, position?: { x: number; y: number }) => {
+    const newNode: AutomationNode = {
+      id: `node-${Date.now()}`,
+      type,
+      position: position || { x: 250 + Math.random() * 50, y: 50 + nodes.length * 150 },
+      data: { label: '', config: {} },
+    };
+    onNodesChange([...nodes, newNode]);
+    setSelectedNodeId(newNode.id);
+  }, [nodes, onNodesChange]);
 
-  const handleDeleteNode = useCallback(
-    (nodeId: string) => {
-      onNodesChange(nodes.filter((n) => n.id !== nodeId));
-      onEdgesChange(edges.filter((e) => e.source !== nodeId && e.target !== nodeId));
-      setSelectedNodeId(null);
-    },
-    [nodes, edges, onNodesChange, onEdgesChange]
-  );
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    onNodesChange(nodes.filter((n) => n.id !== nodeId));
+    onEdgesChange(edges.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    setSelectedNodeId(null);
+  }, [nodes, edges, onNodesChange, onEdgesChange]);
 
-  const handleDeleteEdge = useCallback(
-    (edgeId: string) => {
-      onEdgesChange(edges.filter((e) => e.id !== edgeId));
-      setSelectedEdgeId(null);
-    },
-    [edges, onEdgesChange]
-  );
+  const handleNodeUpdateData = useCallback((updates: Partial<AutomationNode['data']>) => {
+    if (!selectedNodeId) return;
+    onNodesChange(
+      nodes.map((node) =>
+        node.id === selectedNodeId
+          ? { ...node, data: { ...node.data, ...updates } }
+          : node
+      )
+    );
+  }, [selectedNodeId, nodes, onNodesChange]);
 
-  const handleNodeDragStart = useCallback(
-    (nodeId: string, e: React.MouseEvent) => {
-      if (e.button !== 0) return;
-      setIsDragging(true);
-      setDragStart({ x: e.clientX, y: e.clientY });
-      setSelectedNodeId(nodeId);
-    },
-    []
-  );
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!isDragging || !selectedNodeId) return;
-
-      const dx = (e.clientX - dragStart.x) / zoom;
-      const dy = (e.clientY - dragStart.y) / zoom;
-
-      onNodesChange(
-        nodes.map((node) =>
-          node.id === selectedNodeId
-            ? {
-                ...node,
-                position: {
-                  x: node.position.x + dx,
-                  y: node.position.y + dy,
-                },
-              }
-            : node
-        )
-      );
-
-      setDragStart({ x: e.clientX, y: e.clientY });
-    },
-    [isDragging, selectedNodeId, dragStart, zoom, nodes, onNodesChange]
-  );
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
+  const handleNodeDragStart = useCallback((nodeId: string, e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    setIsDraggingNode(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setSelectedNodeId(nodeId);
   }, []);
 
-  const handleNodeUpdateData = useCallback(
-    (updates: Partial<AutomationNode['data']>) => {
-      if (!selectedNodeId) return;
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.target === canvasRef.current && e.button === 0) {
+      setSelectedNodeId(null);
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
+  }, [pan]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (isDraggingNode && selectedNodeId) {
+      const dx = (e.clientX - dragStart.x) / zoom;
+      const dy = (e.clientY - dragStart.y) / zoom;
+      
       onNodesChange(
         nodes.map((node) =>
           node.id === selectedNodeId
-            ? { ...node, data: { ...node.data, ...updates } }
+            ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy } }
             : node
         )
       );
-    },
-    [selectedNodeId, nodes, onNodesChange]
-  );
+      setDragStart({ x: e.clientX, y: e.clientY });
+    }
+    
+    if (isPanning && !isDraggingNode) {
+      setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
+    }
 
-  const handleConnect = useCallback(
-    (fromNodeId: string, fromHandle: 'output' | 'true' | 'false') => {
-      if (connectingFrom) {
-        // Complete connection
-        if (connectingFrom.nodeId !== fromNodeId) {
-          const newEdge: AutomationEdge = {
-            id: `edge-${Date.now()}`,
-            source: connectingFrom.nodeId,
-            target: fromNodeId,
-            sourceHandle: connectingFrom.handle,
-          };
-          onEdgesChange([...edges, newEdge]);
-        }
-        setConnectingFrom(null);
-      } else {
-        // Start connection
-        setConnectingFrom({ nodeId: fromNodeId, handle: fromHandle });
+    if (connectingFrom && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      setTempConnection({
+        fromNode: connectingFrom.nodeId,
+        fromHandle: connectingFrom.handle,
+        toX: (e.clientX - rect.left - pan.x) / zoom,
+        toY: (e.clientY - rect.top - pan.y) / zoom,
+      });
+    }
+  }, [isDraggingNode, selectedNodeId, dragStart, zoom, isPanning, panStart, nodes, onNodesChange, connectingFrom, pan]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDraggingNode(false);
+    setIsPanning(false);
+    setConnectingFrom(null);
+    setTempConnection(null);
+  }, []);
+
+  const handleStartConnection = useCallback((nodeId: string, handle: string) => {
+    setConnectingFrom({ nodeId, handle });
+  }, []);
+
+  const handleEndConnection = useCallback((targetNodeId: string) => {
+    if (connectingFrom && connectingFrom.nodeId !== targetNodeId) {
+      const newEdge: AutomationEdge = {
+        id: `edge-${Date.now()}`,
+        source: connectingFrom.nodeId,
+        target: targetNodeId,
+        sourceHandle: connectingFrom.handle,
+      };
+      
+      const exists = edges.some(
+        (e) => e.source === newEdge.source && e.target === newEdge.target && e.sourceHandle === newEdge.sourceHandle
+      );
+      
+      if (!exists) {
+        onEdgesChange([...edges, newEdge]);
       }
-    },
-    [connectingFrom, edges, onEdgesChange]
-  );
+    }
+    setConnectingFrom(null);
+    setTempConnection(null);
+  }, [connectingFrom, edges, onEdgesChange]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('nodeType');
+    if (!type || !canvasRef.current) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left - pan.x) / zoom;
+    const y = (e.clientY - rect.top - pan.y) / zoom;
+    
+    handleAddNode(type, { x, y });
+  }, [handleAddNode, pan, zoom]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setZoom((z) => Math.min(Math.max(z * delta, 0.25), 2));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave();
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleActivate = async () => {
+    setActivating(true);
+    try {
+      await onActivate();
+    } finally {
+      setActivating(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      await onTest();
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
-    <div className="flex flex-1 h-full overflow-hidden">
-      {/* Node Palette */}
-      <NodePalette onAddNode={handleAddNode} />
-
-      {/* Canvas Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-slate-900/30">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm">
-              <Undo className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="sm">
-              <Redo className="w-4 h-4" />
-            </Button>
-            <div className="w-px h-6 bg-white/10 mx-2" />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setZoom(Math.max(0.25, zoom - 0.1))}
-            >
-              <ZoomOut className="w-4 h-4" />
-            </Button>
-            <span className="text-sm text-slate-400 w-12 text-center">
-              {Math.round(zoom * 100)}%
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setZoom(Math.min(2, zoom + 0.1))}
-            >
-              <ZoomIn className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setZoom(1)}>
-              <Maximize2 className="w-4 h-4" />
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm">
-              <Save className="w-4 h-4 mr-2" />
-              Salvar
-            </Button>
-            <Button variant="primary" size="sm">
-              <Play className="w-4 h-4 mr-2" />
-              Ativar
-            </Button>
-          </div>
+    <div className="h-full flex flex-col bg-slate-950">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-900/80 backdrop-blur-sm flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={onBack}>
+            <ArrowRight className="w-4 h-4 mr-2 rotate-180" />
+            Voltar
+          </Button>
+          <div className="w-px h-6 bg-white/10" />
+          
+          <input
+            type="text"
+            value={automationName}
+            onChange={(e) => onNameChange(e.target.value)}
+            className="bg-transparent border-none text-lg font-semibold text-white focus:outline-none focus:ring-2 focus:ring-primary/50 rounded px-2 py-1 min-w-[200px]"
+            placeholder="Nome da automação"
+          />
+          
+          <Badge 
+            variant={automationStatus === 'active' ? 'success' : automationStatus === 'paused' ? 'warning' : 'default'}
+          >
+            {automationStatus === 'active' ? 'Ativo' : automationStatus === 'paused' ? 'Pausado' : 'Rascunho'}
+          </Badge>
         </div>
 
-        {/* Canvas */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 mr-4">
+            <button
+              onClick={() => setZoom((z) => Math.max(z - 0.1, 0.25))}
+              className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <span className="text-xs text-slate-400 w-12 text-center">{Math.round(zoom * 100)}%</span>
+            <button
+              onClick={() => setZoom((z) => Math.min(z + 0.1, 2))}
+              className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+          </div>
+
+          <Button variant="outline" size="sm" onClick={handleTest} disabled={testing || nodes.length === 0}>
+            {testing ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <PlayCircle className="w-4 h-4 mr-2" />
+            )}
+            Testar
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : saveSuccess ? (
+              <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-400" />
+            ) : (
+              <Save className="w-4 h-4 mr-2" />
+            )}
+            {saveSuccess ? 'Salvo!' : 'Salvar'}
+          </Button>
+
+          <Button 
+            variant="primary" 
+            size="sm" 
+            onClick={handleActivate} 
+            disabled={activating || nodes.length === 0}
+          >
+            {activating ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : automationStatus === 'active' ? (
+              <Pause className="w-4 h-4 mr-2" />
+            ) : (
+              <Play className="w-4 h-4 mr-2" />
+            )}
+            {automationStatus === 'active' ? 'Pausar' : 'Ativar'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        <NodePalette onAddNode={handleAddNode} />
+
         <div
           ref={canvasRef}
           className="flex-1 relative overflow-hidden bg-slate-950"
-          style={{
-            backgroundImage: `
-              radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0)
-            `,
-            backgroundSize: `${20 * zoom}px ${20 * zoom}px`,
-          }}
+          onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          onClick={() => {
-            setSelectedNodeId(null);
-            setSelectedEdgeId(null);
-            setConnectingFrom(null);
-          }}
+          onWheel={handleWheel}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          style={{ cursor: isPanning ? 'grabbing' : connectingFrom ? 'crosshair' : 'default' }}
         >
-          {/* SVG for edges */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none">
-            <g style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
-              {edges.map((edge) => (
-                <CanvasEdge
-                  key={edge.id}
-                  edge={edge}
-                  nodes={nodes}
-                  isSelected={selectedEdgeId === edge.id}
-                  onSelect={() => {
-                    setSelectedEdgeId(edge.id);
-                    setSelectedNodeId(null);
-                  }}
-                  onDelete={() => handleDeleteEdge(edge.id)}
-                  zoom={zoom}
-                />
-              ))}
-            </g>
-          </svg>
-
-          {/* Nodes */}
           <div
+            className="absolute inset-0 opacity-30"
             style={{
-              transform: `translate(${pan.x}px, ${pan.y}px)`,
+              backgroundImage: `
+                linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px)
+              `,
+              backgroundSize: `${20 * zoom}px ${20 * zoom}px`,
+              backgroundPosition: `${pan.x}px ${pan.y}px`,
+            }}
+          />
+
+          <div
+            className="absolute"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: '0 0',
             }}
           >
+            <ConnectionLines edges={edges} nodes={nodes} tempConnection={tempConnection} />
+
             {nodes.map((node) => (
               <CanvasNode
                 key={node.id}
                 node={node}
                 isSelected={selectedNodeId === node.id}
-                onSelect={() => {
-                  setSelectedNodeId(node.id);
-                  setSelectedEdgeId(null);
-                }}
-                onDelete={() => handleDeleteNode(node.id)}
+                onSelect={() => setSelectedNodeId(node.id)}
                 onDragStart={(e) => handleNodeDragStart(node.id, e)}
-                onConnect={(handle) => handleConnect(node.id, handle)}
-                zoom={zoom}
+                onStartConnection={(handle) => handleStartConnection(node.id, handle)}
+                onEndConnection={() => handleEndConnection(node.id)}
+                isConnecting={!!connectingFrom}
               />
             ))}
           </div>
 
-          {/* Connecting indicator */}
-          {connectingFrom && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-primary/20 border border-primary/50 rounded-lg px-4 py-2 text-sm text-primary">
-              Clique em outro nó para conectar
-              <button
-                onClick={() => setConnectingFrom(null)}
-                className="ml-2 text-primary/70 hover:text-primary"
-              >
-                (cancelar)
-              </button>
-            </div>
-          )}
-
-          {/* Empty state */}
           {nodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <Zap className="w-8 h-8 text-primary" />
+                <div className="w-16 h-16 rounded-2xl bg-slate-800/50 flex items-center justify-center mx-auto mb-4">
+                  <Zap className="w-8 h-8 text-slate-500" />
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Comece sua automação
-                </h3>
-                <p className="text-sm text-slate-400 mb-4">
-                  Adicione um gatilho da barra lateral para começar
+                <h3 className="text-lg font-semibold text-white mb-2">Canvas vazio</h3>
+                <p className="text-slate-400 text-sm">
+                  Arraste um gatilho da sidebar para começar
                 </p>
               </div>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Properties Panel */}
-      {selectedNode && (
-        <NodeProperties
-          node={selectedNode}
-          onUpdate={handleNodeUpdateData}
-          onClose={() => setSelectedNodeId(null)}
-        />
-      )}
+        {selectedNode && (
+          <NodeProperties
+            node={selectedNode}
+            onUpdate={handleNodeUpdateData}
+            onDelete={() => handleDeleteNode(selectedNodeId!)}
+            onClose={() => setSelectedNodeId(null)}
+            organizationId={orgId}
+          />
+        )}
+      </div>
     </div>
   );
 }
 
 // ============================================
-// Automation List Item
+// Exports
 // ============================================
-
-interface AutomationListItemProps {
-  automation: {
-    id: string;
-    name: string;
-    description?: string;
-    status: 'active' | 'draft' | 'paused';
-    trigger: string;
-    stats?: {
-      sent: number;
-      converted: number;
-      revenue: number;
-    };
-    updatedAt: string;
-  };
-  onEdit: () => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
-  onToggleStatus: () => void;
-}
 
 export function AutomationListItem({
   automation,
@@ -1379,184 +1129,91 @@ export function AutomationListItem({
   onDuplicate,
   onDelete,
   onToggleStatus,
-}: AutomationListItemProps) {
-  const statusColors = {
-    active: 'success',
-    draft: 'default',
-    paused: 'warning',
-  } as const;
-
-  const statusLabels = {
-    active: 'Ativa',
-    draft: 'Rascunho',
-    paused: 'Pausada',
+}: {
+  automation: {
+    id: string;
+    name: string;
+    description?: string;
+    status: 'active' | 'draft' | 'paused';
+    trigger: string;
+    stats?: { sent?: number; converted?: number; revenue?: number };
   };
-
-  const triggerInfo = NODE_TYPES.triggers.find((t) => t.type === automation.trigger);
-  const TriggerIcon = triggerInfo?.icon || Zap;
-  const triggerColors = getNodeColor(triggerInfo?.color || 'slate');
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onToggleStatus: () => void;
+}) {
+  const triggerType = NODE_TYPES.triggers.find((t) => t.type === automation.trigger);
+  const colors = getNodeColor(triggerType?.color || 'slate');
+  const Icon = triggerType?.icon || Zap;
 
   return (
-    <Card variant="glass" className="p-4 hover:bg-white/5 transition-colors">
-      <div className="flex items-start gap-4">
-        {/* Trigger Icon */}
-        <div className={cn('p-3 rounded-xl', triggerColors.bg)}>
-          <TriggerIcon className={cn('w-5 h-5', triggerColors.text)} />
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-white truncate">{automation.name}</h3>
-            <Badge variant={statusColors[automation.status]}>
-              {statusLabels[automation.status]}
-            </Badge>
+    <div className="group p-4 bg-slate-900/50 hover:bg-slate-900/80 border border-white/5 hover:border-white/10 rounded-xl transition-all">
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-4">
+          <div className={cn('p-3 rounded-xl', colors.bg)}>
+            <Icon className={cn('w-5 h-5', colors.text)} />
           </div>
-          {automation.description && (
-            <p className="text-sm text-slate-400 truncate">{automation.description}</p>
-          )}
-          <p className="text-xs text-slate-500 mt-1">
-            {triggerInfo?.label} • Atualizada em {automation.updatedAt}
-          </p>
-        </div>
-
-        {/* Stats */}
-        {automation.stats && automation.status === 'active' && (
-          <div className="flex items-center gap-6 text-center">
-            <div>
-              <p className="text-lg font-semibold text-white">
-                {automation.stats.sent.toLocaleString('pt-BR')}
-              </p>
-              <p className="text-xs text-slate-400">Enviados</p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-white">{automation.name}</h3>
+              <Badge
+                variant={automation.status === 'active' ? 'success' : automation.status === 'paused' ? 'warning' : 'default'}
+              >
+                {automation.status === 'active' ? 'Ativo' : automation.status === 'paused' ? 'Pausado' : 'Rascunho'}
+              </Badge>
             </div>
-            <div>
-              <p className="text-lg font-semibold text-emerald-400">
-                {automation.stats.converted.toLocaleString('pt-BR')}
-              </p>
-              <p className="text-xs text-slate-400">Convertidos</p>
-            </div>
-            <div>
-              <p className="text-lg font-semibold text-primary">
-                R$ {automation.stats.revenue.toLocaleString('pt-BR')}
-              </p>
-              <p className="text-xs text-slate-400">Receita</p>
-            </div>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={onToggleStatus}>
-            {automation.status === 'active' ? (
-              <Pause className="w-4 h-4" />
-            ) : (
-              <Play className="w-4 h-4" />
+            {automation.description && (
+              <p className="text-sm text-slate-400 mt-1">{automation.description}</p>
             )}
+            {automation.stats && (
+              <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
+                <span>{automation.stats.sent?.toLocaleString()} enviados</span>
+                <span>{automation.stats.converted?.toLocaleString()} conversões</span>
+                {automation.stats.revenue && (
+                  <span className="text-emerald-400">R$ {automation.stats.revenue.toLocaleString()}</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button variant="ghost" size="sm" onClick={onEdit}><Settings className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="sm" onClick={onDuplicate}><Copy className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="sm" onClick={onToggleStatus}>
+            {automation.status === 'active' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
           </Button>
-          <Button variant="ghost" size="sm" onClick={onEdit}>
-            <Settings className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onDuplicate}>
-            <Copy className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onDelete}>
-            <Trash2 className="w-4 h-4 text-red-400" />
+          <Button variant="ghost" size="sm" onClick={onDelete} className="text-red-400 hover:bg-red-500/10">
+            <Trash2 className="w-4 h-4" />
           </Button>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
-// ============================================
-// Automation Templates
-// ============================================
-
 export const AUTOMATION_TEMPLATES = [
-  {
-    id: 'welcome',
-    name: 'Série de Boas-vindas',
-    description: 'Envie uma série de emails para novos assinantes',
-    trigger: 'trigger_signup',
-    nodes: 3,
-    category: 'engagement',
-  },
-  {
-    id: 'abandon',
-    name: 'Recuperação de Carrinho',
-    description: 'Recupere carrinhos abandonados com emails e WhatsApp',
-    trigger: 'trigger_abandon',
-    nodes: 5,
-    category: 'recovery',
-  },
-  {
-    id: 'post_purchase',
-    name: 'Pós-compra',
-    description: 'Engaje clientes após a compra com cross-sell',
-    trigger: 'trigger_order',
-    nodes: 4,
-    category: 'sales',
-  },
-  {
-    id: 'winback',
-    name: 'Reativação',
-    description: 'Reative clientes inativos com ofertas especiais',
-    trigger: 'trigger_segment',
-    nodes: 4,
-    category: 'recovery',
-  },
-  {
-    id: 'birthday',
-    name: 'Aniversário',
-    description: 'Parabenize clientes no aniversário com desconto',
-    trigger: 'trigger_date',
-    nodes: 2,
-    category: 'engagement',
-  },
-  {
-    id: 'review',
-    name: 'Solicitar Avaliação',
-    description: 'Peça avaliações após entrega do pedido',
-    trigger: 'trigger_order',
-    nodes: 3,
-    category: 'engagement',
-  },
+  { id: 'abandon-cart', name: 'Carrinho Abandonado', description: 'Recupere vendas', trigger: 'trigger_abandon', category: 'e-commerce' },
+  { id: 'welcome-series', name: 'Boas-vindas', description: 'Série para novos leads', trigger: 'trigger_signup', category: 'engajamento' },
+  { id: 'post-purchase', name: 'Pós-compra', description: 'Follow-up após compra', trigger: 'trigger_order', category: 'e-commerce' },
+  { id: 'deal-won', name: 'Deal Fechado', description: 'Ações quando deal é ganho', trigger: 'trigger_deal_won', category: 'crm' },
 ];
 
-interface AutomationTemplateCardProps {
-  template: typeof AUTOMATION_TEMPLATES[0];
-  onSelect: () => void;
-}
-
-export function AutomationTemplateCard({ template, onSelect }: AutomationTemplateCardProps) {
-  const triggerInfo = NODE_TYPES.triggers.find((t) => t.type === template.trigger);
-  const TriggerIcon = triggerInfo?.icon || Zap;
-  const triggerColors = getNodeColor(triggerInfo?.color || 'slate');
+export function AutomationTemplateCard({ template, onSelect }: { template: (typeof AUTOMATION_TEMPLATES)[0]; onSelect: () => void }) {
+  const triggerType = NODE_TYPES.triggers.find((t) => t.type === template.trigger);
+  const colors = getNodeColor(triggerType?.color || 'slate');
+  const Icon = triggerType?.icon || Zap;
 
   return (
-    <button
-      onClick={onSelect}
-      className={cn(
-        'w-full text-left p-4 rounded-xl border border-white/10',
-        'bg-slate-900/50 hover:bg-slate-800/50',
-        'transition-all duration-200',
-        'group'
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <div className={cn('p-2 rounded-lg', triggerColors.bg)}>
-          <TriggerIcon className={cn('w-4 h-4', triggerColors.text)} />
+    <button onClick={onSelect} className="w-full p-4 rounded-xl border border-white/10 hover:border-primary/50 hover:bg-primary/5 transition-all text-left group">
+      <div className="flex items-center gap-3">
+        <div className={cn('p-2.5 rounded-lg', colors.bg)}>
+          <Icon className={cn('w-5 h-5', colors.text)} />
         </div>
-        <div className="flex-1">
-          <h4 className="font-medium text-white group-hover:text-primary transition-colors">
-            {template.name}
-          </h4>
-          <p className="text-xs text-slate-400 mt-1">{template.description}</p>
-          <p className="text-xs text-slate-500 mt-2">
-            {template.nodes} blocos • {triggerInfo?.label}
-          </p>
+        <div>
+          <h4 className="font-medium text-white group-hover:text-primary transition-colors">{template.name}</h4>
+          <p className="text-xs text-slate-400">{template.description}</p>
         </div>
-        <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-primary group-hover:translate-x-1 transition-all" />
       </div>
     </button>
   );
