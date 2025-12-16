@@ -86,12 +86,14 @@ export async function POST(request: NextRequest) {
         .eq('id', runId);
 
       // 7. Atualizar contadores da automação
-      await supabase.rpc('increment_automation_stats', {
-        p_automation_id: run.automation_id,
-        p_success: result.success,
-      }).catch(() => {
+      try {
+        await supabase.rpc('increment_automation_stats', {
+          p_automation_id: run.automation_id,
+          p_success: result.success,
+        });
+      } catch {
         // RPC pode não existir ainda, ignorar
-      });
+      }
     }
 
     return NextResponse.json({ success: true, result });
