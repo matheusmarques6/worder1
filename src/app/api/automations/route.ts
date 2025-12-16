@@ -63,18 +63,65 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return NextResponse.json({ automations: data });
+    if (error) {
+      console.error('Error fetching automations:', error);
+      return NextResponse.json({ automations: [] });
+    }
+    return NextResponse.json({ automations: data || [] });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Automation GET error:', error);
+    return NextResponse.json({ automations: [] });
   }
 }
 
 // POST - Create automation or trigger run
 export async function POST(request: NextRequest) {
-  const { action, ...data } = await request.json();
+  try {
+    getDb();
+  } catch {
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+  }
+
+  const body = await request.json();
+  const { action, ...data } = body;
 
   try {
+    // Se não tem action, assume que é criação direta
+    if (!action) {
+      const {
+        organizationId,
+        name,
+        description,
+        trigger_type,
+        trigger_config,
+        nodes,
+        edges,
+        status = 'draft',
+      } = body;
+
+      if (!organizationId || !name) {
+        return NextResponse.json({ error: 'Organization ID and name required' }, { status: 400 });
+      }
+
+      const { data: automation, error } = await supabase
+        .from('automations')
+        .insert({
+          organization_id: organizationId,
+          name,
+          description,
+          trigger_type,
+          trigger_config,
+          nodes,
+          edges,
+          status,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return NextResponse.json({ automation });
+    }
+
     switch (action) {
       case 'create':
         return await createAutomation(data);
@@ -86,6 +133,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error: any) {
+    console.error('Automation POST error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
