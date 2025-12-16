@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
   const dealId = searchParams.get('id');
   const pipelineId = searchParams.get('pipelineId');
   const stageId = searchParams.get('stageId');
+  const contactId = searchParams.get('contactId');
 
   if (!organizationId) {
     return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
@@ -136,11 +137,18 @@ export async function GET(request: NextRequest) {
     }
 
     // List deals with contacts and stages
-    const { data: deals, error: dealsError } = await supabase
+    let dealsQuery = supabase
       .from('deals')
       .select('*')
       .eq('organization_id', organizationId)
       .order('position');
+    
+    // Filter by contact_id if provided
+    if (contactId) {
+      dealsQuery = dealsQuery.eq('contact_id', contactId);
+    }
+
+    const { data: deals, error: dealsError } = await dealsQuery;
 
     if (dealsError) throw dealsError;
 

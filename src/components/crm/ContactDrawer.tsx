@@ -66,9 +66,21 @@ interface ContactDrawerProps {
   onUpdateTags: (contactId: string, tags: string[]) => Promise<void>
   pipelines?: Pipeline[]
   onCreateDeal?: (data: any) => Promise<void>
+  onDeleteDeal?: (dealId: string) => Promise<void>
+  onRefreshDeals?: () => Promise<void>
 }
 
-export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], onCreateDeal }: ContactDrawerProps) {
+interface ContactDeal {
+  id: string
+  title: string
+  value: number
+  pipeline_id: string
+  stage_id: string
+  stage?: { name: string; color: string }
+  pipeline?: { name: string; color: string }
+}
+
+export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], onCreateDeal, onDeleteDeal, onRefreshDeals }: ContactDrawerProps) {
   const { user } = useAuthStore()
   const [newTag, setNewTag] = useState('')
   const [showTagInput, setShowTagInput] = useState(false)
@@ -82,6 +94,10 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
   const [newActivityTitle, setNewActivityTitle] = useState('')
   const [savingActivity, setSavingActivity] = useState(false)
   
+  // Contact deals state
+  const [contactDeals, setContactDeals] = useState<ContactDeal[]>([])
+  const [loadingDeals, setLoadingDeals] = useState(false)
+  
   // Pipeline modal state
   const [showPipelineModal, setShowPipelineModal] = useState(false)
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null)
@@ -92,10 +108,34 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
 
   // Fetch activities when contact changes
   useEffect(() => {
-    if (contact && user?.organization_id) {
+    if (contact && (user?.organization_id || contact.organization_id)) {
       fetchActivities()
+      fetchContactDeals()
     }
-  }, [contact?.id, user?.organization_id])
+  }, [contact?.id, user?.organization_id, contact?.organization_id])
+
+  // Update deal info when pipelines load
+  useEffect(() => {
+    if (pipelines.length > 0 && contactDeals.length > 0) {
+      const updatedDeals = contactDeals.map((deal) => {
+        const pipeline = pipelines.find(p => p.id === deal.pipeline_id)
+        const stage = pipeline?.stages?.find(s => s.id === deal.stage_id)
+        return {
+          ...deal,
+          pipeline: pipeline ? { name: pipeline.name, color: pipeline.color } : deal.pipeline,
+          stage: stage ? { name: stage.name, color: stage.color } : deal.stage,
+        }
+      })
+      // Only update if there are actual changes
+      const hasChanges = updatedDeals.some((d, i) => 
+        d.pipeline?.name !== contactDeals[i]?.pipeline?.name ||
+        d.stage?.name !== contactDeals[i]?.stage?.name
+      )
+      if (hasChanges) {
+        setContactDeals(updatedDeals)
+      }
+    }
+  }, [pipelines])
 
   // Set default deal title when contact changes
   useEffect(() => {
@@ -105,13 +145,76 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
     }
   }, [contact])
 
+  const fetchContactDeals = async () => {
+    if (!contact) return
+    
+    const orgId = user?.organization_id || contact.organization_id
+    if (!orgId) return
+    
+    setLoadingDeals(true)
+    try {
+      const response = await fetch(
+        `/api/deals?organizationId=${orgId}&contactId=${contact.id}`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        // Map deals with pipeline info
+        const dealsWithInfo = (data.deals || []).map((deal: any) => {
+          const pipeline = pipelines.find(p => p.id === deal.pipeline_id)
+          const stage = pipeline?.stages?.find(s => s.id === deal.stage_id)
+          return {
+            ...deal,
+            pipeline: pipeline ? { name: pipeline.name, color: pipeline.color } : null,
+            stage: stage ? { name: stage.name, color: stage.color } : null,
+          }
+        })
+        setContactDeals(dealsWithInfo)
+      }
+    } catch (error) {
+      console.error('Error fetching contact deals:', error)
+    } finally {
+      setLoadingDeals(false)
+    }
+  }
+
+  const handleRemoveDeal = async (dealId: string) => {
+    if (!confirm('Tem certeza que deseja remover este deal?')) return
+    
+    try {
+      if (onDeleteDeal) {
+        await onDeleteDeal(dealId)
+      } else {
+        // Fallback: delete via API directly
+        const orgId = user?.organization_id || contact?.organization_id
+        const response = await fetch(
+          `/api/deals?id=${dealId}&organizationId=${orgId}`,
+          { method: 'DELETE' }
+        )
+        if (!response.ok) throw new Error('Failed to delete deal')
+      }
+      
+      // Remove from local state
+      setContactDeals(prev => prev.filter(d => d.id !== dealId))
+      
+      // Refresh deals list if callback provided
+      if (onRefreshDeals) {
+        await onRefreshDeals()
+      }
+    } catch (error) {
+      console.error('Error removing deal:', error)
+    }
+  }
+
   const fetchActivities = async () => {
-    if (!contact || !user?.organization_id) return
+    if (!contact) return
+    
+    const orgId = user?.organization_id || contact.organization_id
+    if (!orgId) return
     
     setLoadingActivities(true)
     try {
       const response = await fetch(
-        `/api/contact-activities?contactId=${contact.id}&organizationId=${user.organization_id}`
+        `/api/contact-activities?contactId=${contact.id}&organizationId=${orgId}`
       )
       if (response.ok) {
         const data = await response.json()
@@ -125,7 +228,14 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
   }
 
   const handleAddActivity = async () => {
-    if (!contact || !user?.organization_id || !newActivityTitle.trim()) return
+    if (!contact || !newActivityTitle.trim()) return
+    
+    const orgId = user?.organization_id || contact.organization_id
+
+    if (!orgId) {
+      console.error('No organization_id found')
+      return
+    }
 
     setSavingActivity(true)
     try {
@@ -134,8 +244,8 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contactId: contact.id,
-          organizationId: user.organization_id,
-          userId: user.id,
+          organizationId: orgId,
+          userId: user?.id,
           type: newActivityType,
           title: newActivityTitle.trim(),
         }),
@@ -146,6 +256,9 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
         setActivities(prev => [data.activity, ...prev])
         setNewActivityTitle('')
         setShowAddActivity(false)
+      } else {
+        const errorData = await response.json()
+        console.error('Error response:', errorData)
       }
     } catch (error) {
       console.error('Error adding activity:', error)
@@ -155,11 +268,12 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
   }
 
   const handleDeleteActivity = async (activityId: string) => {
-    if (!user?.organization_id) return
+    const orgId = user?.organization_id || contact?.organization_id
+    if (!orgId) return
 
     try {
       const response = await fetch(
-        `/api/contact-activities?id=${activityId}&organizationId=${user.organization_id}`,
+        `/api/contact-activities?id=${activityId}&organizationId=${orgId}`,
         { method: 'DELETE' }
       )
 
@@ -189,7 +303,14 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
       setSelectedPipeline(null)
       setSelectedStage(null)
       setDealValue('')
-      // Optionally close drawer or show success message
+      
+      // Refresh the contact deals list
+      await fetchContactDeals()
+      
+      // Refresh main deals list if callback provided
+      if (onRefreshDeals) {
+        await onRefreshDeals()
+      }
     } catch (error) {
       console.error('Error creating deal:', error)
     } finally {
@@ -322,16 +443,85 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
               )}
             </div>
 
-            {/* Add to Pipeline Button */}
-            {pipelines.length > 0 && onCreateDeal && (
-              <button
-                onClick={() => setShowPipelineModal(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/30 rounded-xl text-primary-400 font-medium transition-colors"
-              >
-                <Briefcase className="w-5 h-5" />
-                Adicionar em Pipeline
-              </button>
-            )}
+            {/* Contact Deals/Pipelines - Always show */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 text-dark-400">
+                  <Briefcase className="w-4 h-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wider">Pipelines</span>
+                </div>
+                {pipelines.length > 0 && onCreateDeal && (
+                  <button
+                    onClick={() => setShowPipelineModal(true)}
+                    className="p-1 rounded text-dark-400 hover:text-primary-400 transition-colors"
+                    title="Adicionar em Pipeline"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              
+              {loadingDeals ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : contactDeals.length > 0 ? (
+                <div className="space-y-2">
+                  {contactDeals.map((deal) => (
+                    <div
+                      key={deal.id}
+                      className="flex items-center gap-3 p-3 bg-dark-800/50 border border-dark-700/50 rounded-xl group"
+                    >
+                      <div
+                        className="w-2 h-full min-h-[40px] rounded-full flex-shrink-0"
+                        style={{ backgroundColor: deal.stage?.color || deal.pipeline?.color || '#8b5cf6' }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate">{deal.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-dark-400">{deal.pipeline?.name || 'Pipeline'}</span>
+                          <span className="text-dark-600">•</span>
+                          <span 
+                            className="text-xs px-1.5 py-0.5 rounded"
+                            style={{ 
+                              backgroundColor: `${deal.stage?.color || '#8b5cf6'}20`,
+                              color: deal.stage?.color || '#8b5cf6'
+                            }}
+                          >
+                            {deal.stage?.name || 'Estágio'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-success-400 text-sm font-medium">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(deal.value || 0)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveDeal(deal.id)}
+                        className="p-1.5 rounded-lg text-dark-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                        title="Remover da pipeline"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 border border-dashed border-dark-700 rounded-xl">
+                  <Briefcase className="w-6 h-6 mx-auto mb-2 text-dark-600" />
+                  <p className="text-dark-500 text-sm">Nenhuma pipeline vinculada</p>
+                  {pipelines.length > 0 && onCreateDeal && (
+                    <button
+                      onClick={() => setShowPipelineModal(true)}
+                      className="mt-2 text-primary-400 text-sm hover:text-primary-300"
+                    >
+                      Adicionar em pipeline
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Tags */}
             <div>

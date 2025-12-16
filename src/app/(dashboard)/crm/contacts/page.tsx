@@ -390,8 +390,8 @@ export default function ContactsPage() {
     limit: 20 
   })
   
-  // Get pipelines and createDeal for the contact drawer
-  const { pipelines, createDeal } = useDeals()
+  // Get pipelines and deal functions for the contact drawer
+  const { pipelines, createDeal, deleteDeal, refetch: refetchDeals } = useDeals()
   
   const [showModal, setShowModal] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
@@ -414,6 +414,11 @@ export default function ContactsPage() {
   // Create deal from contact drawer
   const handleCreateDeal = async (data: any) => {
     await createDeal(data)
+  }
+
+  // Delete deal from contact drawer
+  const handleDeleteDeal = async (dealId: string) => {
+    await deleteDeal(dealId)
   }
 
   // Export contacts to CSV
@@ -789,6 +794,8 @@ export default function ContactsPage() {
           onUpdateTags={handleUpdateTags}
           pipelines={pipelines}
           onCreateDeal={handleCreateDeal}
+          onDeleteDeal={handleDeleteDeal}
+          onRefreshDeals={refetchDeals}
         />
       )}
     </div>
