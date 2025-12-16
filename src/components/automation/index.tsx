@@ -987,6 +987,7 @@ export function AutomationCanvas({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
   
   const [connectingFrom, setConnectingFrom] = useState<{ nodeId: string; handle: string } | null>(null);
   const [tempConnection, setTempConnection] = useState<{ fromNode: string; fromHandle: string; toX: number; toY: number } | null>(null);
@@ -998,6 +999,74 @@ export function AutomationCanvas({
 
   const [orgId, setOrgId] = useState<string | undefined>(propOrgId);
   const [isDraggingFromPalette, setIsDraggingFromPalette] = useState(false);
+  
+  // Bloquear zoom do browser dentro do canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const preventBrowserZoom = (e: WheelEvent) => {
+      // Bloqueia zoom do browser (Ctrl+Scroll ou pinch)
+      e.preventDefault();
+    };
+
+    // passive: false é necessário para preventDefault funcionar
+    canvas.addEventListener('wheel', preventBrowserZoom, { passive: false });
+    
+    return () => {
+      canvas.removeEventListener('wheel', preventBrowserZoom);
+    };
+  }, []);
+
+  // Controle de Espaço para Pan
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Espaço pressionado - ativar modo pan
+      if (e.code === 'Space' && !isSpacePressed) {
+        // Só previne se o canvas estiver focado ou se não estiver em input
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+          e.preventDefault();
+          setIsSpacePressed(true);
+        }
+      }
+      
+      // ESC para cancelar operações
+      if (e.key === 'Escape') {
+        setConnectingFrom(null);
+        setTempConnection(null);
+        setIsDraggingNode(false);
+        setSelectedNodeId(null);
+        setIsSpacePressed(false);
+        setIsPanning(false);
+      }
+      
+      // Delete para excluir nó selecionado
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNodeId) {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+          onNodesChange(nodes.filter((n) => n.id !== selectedNodeId));
+          onEdgesChange(edges.filter((edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId));
+          setSelectedNodeId(null);
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+        setIsPanning(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isSpacePressed, selectedNodeId, nodes, edges, onNodesChange, onEdgesChange]);
   
   useEffect(() => {
     if (!propOrgId) {
@@ -1030,35 +1099,6 @@ export function AutomationCanvas({
     setSelectedNodeId(null);
   }, [nodes, edges, onNodesChange, onEdgesChange]);
 
-  // ESC para cancelar operações + Delete para excluir nó
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        // Cancelar conexão em andamento
-        setConnectingFrom(null);
-        setTempConnection(null);
-        // Cancelar drag de nó
-        setIsDraggingNode(false);
-        // Deselecionar nó
-        setSelectedNodeId(null);
-      }
-      
-      // Delete para excluir nó selecionado
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNodeId) {
-        const target = e.target as HTMLElement;
-        // Não excluir se estiver digitando em um input
-        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
-          onNodesChange(nodes.filter((n) => n.id !== selectedNodeId));
-          onEdgesChange(edges.filter((e) => e.source !== selectedNodeId && e.target !== selectedNodeId));
-          setSelectedNodeId(null);
-        }
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNodeId, nodes, edges, onNodesChange, onEdgesChange]);
-
   const handleNodeUpdateData = useCallback((updates: Partial<AutomationNode['data']>) => {
     if (!selectedNodeId) return;
     onNodesChange(
@@ -1079,12 +1119,19 @@ export function AutomationCanvas({
   }, []);
 
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.target === canvasRef.current && e.button === 0) {
-      setSelectedNodeId(null);
+    // Espaço + Clique = Iniciar pan
+    if (isSpacePressed && e.button === 0) {
+      e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+      return;
     }
-  }, [pan]);
+    
+    // Clique no canvas vazio = deselecionar
+    if (e.target === canvasRef.current && e.button === 0) {
+      setSelectedNodeId(null);
+    }
+  }, [isSpacePressed, pan]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (isDraggingNode && selectedNodeId) {
@@ -1101,7 +1148,8 @@ export function AutomationCanvas({
       setDragStart({ x: e.clientX, y: e.clientY });
     }
     
-    if (isPanning && !isDraggingNode) {
+    // Pan com Espaço + Arrastar
+    if (isPanning && isSpacePressed && !isDraggingNode) {
       setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
     }
 
@@ -1114,7 +1162,7 @@ export function AutomationCanvas({
         toY: (e.clientY - rect.top - pan.y) / zoom,
       });
     }
-  }, [isDraggingNode, selectedNodeId, dragStart, zoom, isPanning, panStart, nodes, onNodesChange, connectingFrom, pan]);
+  }, [isDraggingNode, selectedNodeId, dragStart, zoom, isPanning, isSpacePressed, panStart, nodes, onNodesChange, connectingFrom, pan]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     setIsDraggingNode(false);
@@ -1183,9 +1231,30 @@ export function AutomationCanvas({
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom((z) => Math.min(Math.max(z * delta, 0.25), 2));
-  }, []);
+    const newZoom = Math.min(Math.max(zoom * delta, 0.25), 2);
+    
+    // Zoom centrado no cursor para melhor UX
+    if (canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      // Calcula o ponto do canvas sob o cursor antes do zoom
+      const pointX = (mouseX - pan.x) / zoom;
+      const pointY = (mouseY - pan.y) / zoom;
+      
+      // Calcula novo pan para manter o ponto sob o cursor
+      const newPanX = mouseX - pointX * newZoom;
+      const newPanY = mouseY - pointY * newZoom;
+      
+      setPan({ x: newPanX, y: newPanY });
+    }
+    
+    setZoom(newZoom);
+  }, [zoom, pan]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -1314,7 +1383,15 @@ export function AutomationCanvas({
           onWheel={handleWheel}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          style={{ cursor: isPanning ? 'grabbing' : connectingFrom ? 'crosshair' : 'default' }}
+          style={{ 
+            cursor: isPanning 
+              ? 'grabbing' 
+              : isSpacePressed 
+                ? 'grab' 
+                : connectingFrom 
+                  ? 'crosshair' 
+                  : 'default' 
+          }}
         >
           {/* Grid background - clicável para cancelar conexão */}
           <div
@@ -1374,6 +1451,35 @@ export function AutomationCanvas({
                 <p className="text-sm text-white">
                   🔗 Clique no <span className="text-emerald-400 font-semibold">ponto verde</span> de outro bloco para conectar
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* Indicador de modo pan */}
+          {isSpacePressed && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+              <div className="bg-[#111111] border border-cyan-500/50 rounded-lg px-4 py-2 shadow-lg">
+                <p className="text-sm text-white">
+                  ✋ Modo <span className="text-cyan-400 font-semibold">mover tela</span> — arraste para navegar
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Indicador de zoom */}
+          <div className="absolute bottom-4 right-4 z-20 pointer-events-none">
+            <div className="bg-[#111111]/80 border border-[#333333] rounded-lg px-3 py-1.5 text-xs text-[#666666]">
+              {Math.round(zoom * 100)}%
+            </div>
+          </div>
+
+          {/* Atalhos de teclado - mostra apenas quando não há ação em andamento */}
+          {!connectingFrom && !isSpacePressed && nodes.length > 0 && (
+            <div className="absolute bottom-4 left-4 z-20 pointer-events-none">
+              <div className="flex gap-2 text-[10px] text-[#444444]">
+                <span className="bg-[#111111]/60 border border-[#222222] rounded px-1.5 py-0.5">Scroll = Zoom</span>
+                <span className="bg-[#111111]/60 border border-[#222222] rounded px-1.5 py-0.5">Espaço + Arrastar = Mover</span>
+                <span className="bg-[#111111]/60 border border-[#222222] rounded px-1.5 py-0.5">ESC = Cancelar</span>
               </div>
             </div>
           )}
