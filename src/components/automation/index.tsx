@@ -1001,7 +1001,7 @@ export function AutomationCanvas({
             </button>
           </div>
 
-          <Button variant="outline" size="sm" onClick={handleTest} disabled={testing || nodes.length === 0}>
+          <Button variant="secondary" size="sm" onClick={handleTest} disabled={testing || nodes.length === 0}>
             {testing ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
@@ -1010,7 +1010,7 @@ export function AutomationCanvas({
             Testar
           </Button>
 
-          <Button variant="outline" size="sm" onClick={handleSave} disabled={saving}>
+          <Button variant="secondary" size="sm" onClick={handleSave} disabled={saving}>
             {saving ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : saveSuccess ? (
