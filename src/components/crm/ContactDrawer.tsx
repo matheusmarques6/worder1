@@ -266,6 +266,15 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
       return
     }
 
+    // Validate userId is a proper UUID (not "default-user" or similar)
+    const isValidUUID = (id: string | undefined) => {
+      if (!id) return false
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      return uuidRegex.test(id)
+    }
+    
+    const userId = isValidUUID(user?.id) ? user?.id : null
+
     setSavingActivity(true)
     try {
       const response = await fetch('/api/contact-activities', {
@@ -274,7 +283,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
         body: JSON.stringify({
           contactId: contact.id,
           organizationId: orgId,
-          userId: user?.id || null,
+          userId: userId,
           type: newActivityType,
           title: newActivityTitle.trim(),
         }),

@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { contactId, organizationId, type, title, description, userId } = body;
 
-    console.log('Creating activity:', { contactId, organizationId, type, title });
+    console.log('Creating activity:', { contactId, organizationId, type, title, userId });
 
     if (!contactId || !organizationId || !type || !title) {
       return NextResponse.json({ 
@@ -56,12 +56,21 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Validate userId is a proper UUID or null
+    const isValidUUID = (id: string | null | undefined): boolean => {
+      if (!id) return false
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      return uuidRegex.test(id)
+    }
+    
+    const validUserId = isValidUUID(userId) ? userId : null
+
     const { data, error } = await supabase
       .from('contact_activities')
       .insert({
         contact_id: contactId,
         organization_id: organizationId,
-        user_id: userId || null,
+        user_id: validUserId,
         type,
         title,
         description: description || null,

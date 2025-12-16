@@ -226,7 +226,7 @@ export default function DashboardLayout({
 
     return (
       <Link href={item.href}>
-        <motion.div
+        <div
           className={`
             flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative
             ${isActive
@@ -234,12 +234,9 @@ export default function DashboardLayout({
               : 'text-dark-400 hover:text-white hover:bg-dark-800/50'
             }
           `}
-          whileHover={{ x: 4 }}
-          whileTap={{ scale: 0.98 }}
         >
           {isActive && (
-            <motion.div
-              layoutId="activeTab"
+            <div
               className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-primary-500 to-accent-500 rounded-full"
             />
           )}
@@ -256,7 +253,7 @@ export default function DashboardLayout({
               </motion.span>
             )}
           </AnimatePresence>
-        </motion.div>
+        </div>
       </Link>
     )
   }
