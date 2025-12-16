@@ -22,6 +22,7 @@ import {
 } from '@/components/automation';
 import { AutomationNode, AutomationEdge } from '@/types';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores';
 
 const stats = [
   { label: 'Automações Ativas', value: '8', icon: Zap, color: 'emerald' },
@@ -43,6 +44,7 @@ interface Automation {
 }
 
 export default function AutomationsPage() {
+  const { user } = useAuthStore();
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'draft'>('all');
@@ -55,45 +57,35 @@ export default function AutomationsPage() {
   const [canvasStatus, setCanvasStatus] = useState<'draft' | 'active' | 'paused'>('draft');
   const [canvasNodes, setCanvasNodes] = useState<AutomationNode[]>([]);
   const [canvasEdges, setCanvasEdges] = useState<AutomationEdge[]>([]);
-  const [organizationId, setOrganizationId] = useState<string | undefined>();
-
-  useEffect(() => {
-    try {
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        const parsed = JSON.parse(authData);
-        setOrganizationId(parsed?.state?.user?.organization_id);
-      }
-    } catch (e) {
-      console.error('Erro ao buscar organizationId:', e);
-    }
-    setLoading(false);
-  }, []);
+  
+  // Pegar organizationId do user via store
+  const organizationId = user?.organization_id;
 
   useEffect(() => {
     async function fetchAutomations() {
       if (!organizationId) {
+        console.log('⏳ Aguardando organizationId...');
         setLoading(false);
         return;
       }
       
+      console.log('📡 Buscando automações para org:', organizationId);
       setLoading(true);
       try {
         const res = await fetch(`/api/automations?organizationId=${organizationId}`);
         if (res.ok) {
           const data = await res.json();
+          console.log('✅ Automações encontradas:', data.automations?.length || 0);
           setAutomations(data.automations || []);
         }
       } catch (e) {
-        console.error('Erro ao buscar automações:', e);
+        console.error('❌ Erro ao buscar automações:', e);
       } finally {
         setLoading(false);
       }
     }
     
-    if (organizationId) {
-      fetchAutomations();
-    }
+    fetchAutomations();
   }, [organizationId]);
 
   const filteredAutomations = automations.filter((automation) => {
@@ -140,8 +132,8 @@ export default function AutomationsPage() {
 
   const handleSave = async () => {
     if (!organizationId) {
-      console.error('❌ organizationId não encontrado');
-      alert('Erro: Organização não identificada. Faça login novamente.');
+      console.error('❌ organizationId não encontrado. User:', user);
+      alert('Erro: Organização não identificada. Aguarde o carregamento ou faça login novamente.');
       return;
     }
     
@@ -158,7 +150,12 @@ export default function AutomationsPage() {
       status: canvasStatus,
     };
 
-    console.log('💾 Salvando automação:', payload);
+    console.log('💾 Salvando automação:', { 
+      organizationId, 
+      name: canvasName, 
+      nodesCount: canvasNodes.length,
+      edgesCount: canvasEdges.length 
+    });
 
     try {
       if (editingAutomation?.id === 'new') {
@@ -169,9 +166,10 @@ export default function AutomationsPage() {
         });
         
         const data = await res.json();
+        console.log('📥 Resposta do servidor:', data);
         
         if (res.ok && data.automation) {
-          console.log('✅ Automação criada:', data.automation);
+          console.log('✅ Automação criada com sucesso:', data.automation.id);
           setAutomations(prev => [...prev, data.automation]);
           setEditingAutomation(data.automation);
         } else {
@@ -186,9 +184,10 @@ export default function AutomationsPage() {
         });
         
         const data = await res.json();
+        console.log('📥 Resposta do servidor:', data);
         
         if (res.ok && data.automation) {
-          console.log('✅ Automação atualizada:', data.automation);
+          console.log('✅ Automação atualizada com sucesso:', data.automation.id);
           setAutomations(prev => prev.map(a => a.id === data.automation.id ? data.automation : a));
           setEditingAutomation(data.automation);
         } else {
@@ -197,8 +196,8 @@ export default function AutomationsPage() {
         }
       }
     } catch (e) {
-      console.error('❌ Erro ao salvar:', e);
-      alert('Erro ao salvar automação. Verifique o console.');
+      console.error('❌ Erro de rede ao salvar:', e);
+      alert('Erro de conexão ao salvar automação.');
     }
   };
 
