@@ -422,27 +422,35 @@ export default function ContactsPage() {
   }
 
   // Export contacts to CSV
-  const handleExportCSV = () => {
-    const headers = ['first_name', 'last_name', 'email', 'phone']
-    const csvContent = [
-      headers.join(','),
-      ...contacts.map(c => [
-        c.first_name || '',
-        c.last_name || '',
-        c.email || '',
-        c.phone || ''
-      ].map(field => `"${field.replace(/"/g, '""')}"`).join(','))
-    ].join('\n')
+  const [exporting, setExporting] = useState(false)
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `contatos_${new Date().toISOString().split('T')[0]}.csv`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+  // Export contacts to Excel
+  const handleExportExcel = async () => {
+    if (!user?.organization_id) return
+    
+    setExporting(true)
+    try {
+      const response = await fetch(`/api/contacts/export?organizationId=${user.organization_id}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to export')
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `contatos_${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error exporting:', error)
+      alert('Erro ao exportar contatos')
+    } finally {
+      setExporting(false)
+    }
   }
 
   // Download CSV template
@@ -610,15 +618,19 @@ export default function ContactsPage() {
             <span className="text-sm">Importar</span>
           </button>
 
-          {/* Export */}
+          {/* Export Excel */}
           <button
-            onClick={handleExportCSV}
-            disabled={contacts.length === 0}
+            onClick={handleExportExcel}
+            disabled={contacts.length === 0 || exporting}
             className="flex items-center gap-2 px-3 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white hover:border-dark-600 transition-colors disabled:opacity-50"
-            title="Exportar CSV"
+            title="Exportar Excel"
           >
-            <Download className="w-4 h-4" />
-            <span className="text-sm">Exportar</span>
+            {exporting ? (
+              <div className="w-4 h-4 border-2 border-dark-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            <span className="text-sm">{exporting ? 'Exportando...' : 'Exportar'}</span>
           </button>
 
           {/* New Contact */}

@@ -98,10 +98,15 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
   const [contactDeals, setContactDeals] = useState<ContactDeal[]>([])
   const [loadingDeals, setLoadingDeals] = useState(false)
   
-  // Delete confirmation modal state
+  // Delete deal confirmation modal state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [dealToDelete, setDealToDelete] = useState<string | null>(null)
   const [deletingDeal, setDeletingDeal] = useState(false)
+  
+  // Delete activity confirmation modal state
+  const [showDeleteActivityConfirm, setShowDeleteActivityConfirm] = useState(false)
+  const [activityToDelete, setActivityToDelete] = useState<string | null>(null)
+  const [deletingActivity, setDeletingActivity] = useState(false)
   
   // Pipeline modal state
   const [showPipelineModal, setShowPipelineModal] = useState(false)
@@ -257,6 +262,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
 
     if (!orgId) {
       console.error('No organization_id found')
+      alert('Erro: Organization ID não encontrado')
       return
     }
 
@@ -268,43 +274,63 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
         body: JSON.stringify({
           contactId: contact.id,
           organizationId: orgId,
-          userId: user?.id,
+          userId: user?.id || null,
           type: newActivityType,
           title: newActivityTitle.trim(),
         }),
       })
 
-      if (response.ok) {
-        const data = await response.json()
+      const data = await response.json()
+      
+      if (response.ok && data.activity) {
         setActivities(prev => [data.activity, ...prev])
         setNewActivityTitle('')
         setShowAddActivity(false)
+        setNewActivityType('note')
       } else {
-        const errorData = await response.json()
-        console.error('Error response:', errorData)
+        console.error('Error response:', data)
+        alert(`Erro ao adicionar atividade: ${data.error || 'Erro desconhecido'}`)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding activity:', error)
+      alert(`Erro ao adicionar atividade: ${error.message}`)
     } finally {
       setSavingActivity(false)
     }
   }
 
-  const handleDeleteActivity = async (activityId: string) => {
+  // Open delete activity confirmation modal
+  const openDeleteActivityConfirm = (activityId: string) => {
+    setActivityToDelete(activityId)
+    setShowDeleteActivityConfirm(true)
+  }
+
+  // Confirm and delete activity
+  const confirmDeleteActivity = async () => {
+    if (!activityToDelete) return
+    
     const orgId = user?.organization_id || contact?.organization_id
     if (!orgId) return
 
+    setDeletingActivity(true)
     try {
       const response = await fetch(
-        `/api/contact-activities?id=${activityId}&organizationId=${orgId}`,
+        `/api/contact-activities?id=${activityToDelete}&organizationId=${orgId}`,
         { method: 'DELETE' }
       )
 
       if (response.ok) {
-        setActivities(prev => prev.filter(a => a.id !== activityId))
+        setActivities(prev => prev.filter(a => a.id !== activityToDelete))
+        setShowDeleteActivityConfirm(false)
+        setActivityToDelete(null)
+      } else {
+        const errorData = await response.json()
+        alert(`Erro ao excluir: ${errorData.error}`)
       }
     } catch (error) {
       console.error('Error deleting activity:', error)
+    } finally {
+      setDeletingActivity(false)
     }
   }
 
@@ -749,7 +775,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                           <p className="text-dark-500 text-xs">{formatDate(activity.created_at)}</p>
                         </div>
                         <button
-                          onClick={() => handleDeleteActivity(activity.id)}
+                          onClick={() => openDeleteActivityConfirm(activity.id)}
                           className="p-1 rounded text-dark-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -840,6 +866,70 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                         <>
                           <Trash2 className="w-4 h-4" />
                           Remover
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Delete Activity Confirmation Modal */}
+        <AnimatePresence>
+          {showDeleteActivityConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-60 flex items-center justify-center p-4"
+              onClick={() => {
+                setShowDeleteActivityConfirm(false)
+                setActivityToDelete(null)
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+              >
+                {/* Modal Content */}
+                <div className="p-6 text-center">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                    <Trash2 className="w-7 h-7 text-red-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">Excluir Atividade?</h3>
+                  <p className="text-dark-400 text-sm mb-6">
+                    Tem certeza que deseja excluir esta atividade? Esta ação não pode ser desfeita.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowDeleteActivityConfirm(false)
+                        setActivityToDelete(null)
+                      }}
+                      disabled={deletingActivity}
+                      className="flex-1 px-4 py-3 bg-dark-700 hover:bg-dark-600 rounded-xl text-dark-300 font-medium transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={confirmDeleteActivity}
+                      disabled={deletingActivity}
+                      className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      {deletingActivity ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Excluindo...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-4 h-4" />
+                          Excluir
                         </>
                       )}
                     </button>

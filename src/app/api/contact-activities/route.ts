@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 
-const supabase = getSupabaseClient();
-
 // GET - List activities for a contact
 export async function GET(request: NextRequest) {
+  const supabase = getSupabaseClient();
+  
   if (!supabase) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
@@ -37,15 +37,23 @@ export async function GET(request: NextRequest) {
 
 // POST - Create activity
 export async function POST(request: NextRequest) {
+  const supabase = getSupabaseClient();
+  
   if (!supabase) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
   try {
-    const { contactId, organizationId, type, title, description, userId } = await request.json();
+    const body = await request.json();
+    const { contactId, organizationId, type, title, description, userId } = body;
+
+    console.log('Creating activity:', { contactId, organizationId, type, title });
 
     if (!contactId || !organizationId || !type || !title) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+      return NextResponse.json({ 
+        error: 'Missing required fields',
+        received: { contactId, organizationId, type, title }
+      }, { status: 400 });
     }
 
     const { data, error } = await supabase
@@ -53,16 +61,20 @@ export async function POST(request: NextRequest) {
       .insert({
         contact_id: contactId,
         organization_id: organizationId,
-        user_id: userId,
+        user_id: userId || null,
         type,
         title,
-        description,
+        description: description || null,
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase error:', error);
+      throw error;
+    }
 
+    console.log('Activity created:', data);
     return NextResponse.json({ activity: data }, { status: 201 });
   } catch (error: any) {
     console.error('Error creating activity:', error);
@@ -72,6 +84,8 @@ export async function POST(request: NextRequest) {
 
 // DELETE - Delete activity
 export async function DELETE(request: NextRequest) {
+  const supabase = getSupabaseClient();
+  
   if (!supabase) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
