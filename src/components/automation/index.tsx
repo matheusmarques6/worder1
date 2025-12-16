@@ -128,6 +128,8 @@ function CanvasNode({
   onEndConnection,
   isConnecting,
 }: CanvasNodeProps) {
+  const [isHoveringInput, setIsHoveringInput] = useState(false);
+  
   const allNodes = [...NODE_TYPES.triggers, ...NODE_TYPES.actions, ...NODE_TYPES.logic];
   const nodeType = allNodes.find((n) => n.type === node.type);
   const colors = getNodeColor(nodeType?.color || 'slate');
@@ -143,14 +145,19 @@ function CanvasNode({
     onStartConnection(handle);
   };
 
-  // Handler para finalizar conexão (mouseup no handle de entrada)
-  const handleInputMouseUp = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (isConnecting) {
-      onEndConnection();
-    }
-  };
+  // Efeito para detectar mouseup global quando está conectando
+  useEffect(() => {
+    if (!isConnecting) return;
+    
+    const handleGlobalMouseUp = () => {
+      if (isHoveringInput) {
+        onEndConnection();
+      }
+    };
+    
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, [isConnecting, isHoveringInput, onEndConnection]);
 
   return (
     <motion.div
@@ -258,18 +265,24 @@ function CanvasNode({
         {/* Handle de Entrada (topo) - RECEBE conexão */}
         {!isTrigger && (
           <div
-            onMouseUp={handleInputMouseUp}
+            onMouseEnter={() => setIsHoveringInput(true)}
+            onMouseLeave={() => setIsHoveringInput(false)}
             className={cn(
               'connection-handle absolute -top-4 left-1/2 -translate-x-1/2',
               'w-8 h-8 rounded-full',
               'flex items-center justify-center',
               'transition-all duration-150 cursor-crosshair z-20',
-              isConnecting 
-                ? 'bg-emerald-500 border-4 border-emerald-300 scale-125 animate-pulse shadow-lg shadow-emerald-500/50' 
-                : 'bg-[#1a1a1a] border-4 border-[#333333] hover:border-emerald-400 hover:bg-emerald-500 hover:scale-110'
+              isConnecting && isHoveringInput
+                ? 'bg-emerald-500 border-4 border-white scale-150 shadow-lg shadow-emerald-500/50' 
+                : isConnecting 
+                  ? 'bg-emerald-500/50 border-4 border-emerald-300 scale-125 animate-pulse shadow-lg shadow-emerald-500/30' 
+                  : 'bg-[#1a1a1a] border-4 border-[#333333] hover:border-emerald-400 hover:bg-emerald-500 hover:scale-110'
             )}
           >
-            <div className="w-2 h-2 rounded-full bg-current" />
+            <div className={cn(
+              'w-2 h-2 rounded-full',
+              isConnecting ? 'bg-white' : 'bg-gray-500'
+            )} />
           </div>
         )}
 
@@ -285,7 +298,7 @@ function CanvasNode({
               'bg-[#1a1a1a] border-4 border-[#333333] hover:border-primary-500 hover:bg-primary-500 hover:scale-110'
             )}
           >
-            <div className="w-2 h-2 rounded-full bg-current" />
+            <div className="w-2 h-2 rounded-full bg-gray-500" />
           </div>
         ) : (
           <>
@@ -821,6 +834,7 @@ export function AutomationCanvas({
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [orgId, setOrgId] = useState<string | undefined>(propOrgId);
+  const [isDraggingFromPalette, setIsDraggingFromPalette] = useState(false);
   
   useEffect(() => {
     if (!propOrgId) {
@@ -852,6 +866,35 @@ export function AutomationCanvas({
     onEdgesChange(edges.filter((e) => e.source !== nodeId && e.target !== nodeId));
     setSelectedNodeId(null);
   }, [nodes, edges, onNodesChange, onEdgesChange]);
+
+  // ESC para cancelar operações + Delete para excluir nó
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Cancelar conexão em andamento
+        setConnectingFrom(null);
+        setTempConnection(null);
+        // Cancelar drag de nó
+        setIsDraggingNode(false);
+        // Deselecionar nó
+        setSelectedNodeId(null);
+      }
+      
+      // Delete para excluir nó selecionado
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNodeId) {
+        const target = e.target as HTMLElement;
+        // Não excluir se estiver digitando em um input
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+          onNodesChange(nodes.filter((n) => n.id !== selectedNodeId));
+          onEdgesChange(edges.filter((e) => e.source !== selectedNodeId && e.target !== selectedNodeId));
+          setSelectedNodeId(null);
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNodeId, nodes, edges, onNodesChange, onEdgesChange]);
 
   const handleNodeUpdateData = useCallback((updates: Partial<AutomationNode['data']>) => {
     if (!selectedNodeId) return;
@@ -913,18 +956,17 @@ export function AutomationCanvas({
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     setIsDraggingNode(false);
     setIsPanning(false);
-    
-    // Se estava conectando e soltou no canvas (não em um handle), cancela
-    if (connectingFrom) {
-      // Pequeno delay para permitir que o mouseUp do handle seja processado primeiro
-      setTimeout(() => {
-        setConnectingFrom(null);
-        setTempConnection(null);
-      }, 50);
+    // NÃO cancela conexão aqui - deixa o handle de entrada fazer isso
+  }, []);
+
+  // Cancelar conexão ao clicar no fundo do canvas
+  const handleCanvasClick = useCallback((e: React.MouseEvent) => {
+    // Só cancela se clicar diretamente no canvas (não em um nó)
+    if (connectingFrom && (e.target as HTMLElement).classList.contains('canvas-background')) {
+      setConnectingFrom(null);
+      setTempConnection(null);
     }
   }, [connectingFrom]);
-
-  // Não precisamos mais do handleCanvasClick separado
 
   const handleStartConnection = useCallback((nodeId: string, handle: string) => {
     setConnectingFrom({ nodeId, handle });
@@ -1105,16 +1147,16 @@ export function AutomationCanvas({
           onMouseLeave={() => {
             setIsDraggingNode(false);
             setIsPanning(false);
-            setConnectingFrom(null);
-            setTempConnection(null);
           }}
           onWheel={handleWheel}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           style={{ cursor: isPanning ? 'grabbing' : connectingFrom ? 'crosshair' : 'default' }}
         >
+          {/* Grid background - clicável para cancelar conexão */}
           <div
-            className="absolute inset-0"
+            className="canvas-background absolute inset-0"
+            onClick={handleCanvasClick}
             style={{
               backgroundImage: `
                 linear-gradient(to right, #1a1a1a 1px, transparent 1px),
