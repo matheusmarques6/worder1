@@ -46,6 +46,7 @@ const mainNavItems: NavItem[] = [
 ]
 
 const analyticsNavItems: NavItem[] = [
+  { title: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
   { title: 'Shopify', href: '/analytics/shopify', icon: ShoppingBag },
   { title: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
   { title: 'Facebook Ads', href: '/analytics/facebook', icon: BarChart3 },
