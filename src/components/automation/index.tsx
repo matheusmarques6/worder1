@@ -44,6 +44,24 @@ import {
 import { Button, Input, Badge, Textarea } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { AutomationNode, AutomationEdge } from '@/types';
+import { TestModal, TestResultPanel } from './TestModal';
+
+// Tipos de execução de teste
+interface NodeExecutionStatus {
+  status: 'pending' | 'running' | 'success' | 'error' | 'skipped';
+  output?: any;
+  error?: string;
+  duration?: number;
+}
+
+interface TestExecutionState {
+  isRunning: boolean;
+  nodeStatuses: Record<string, NodeExecutionStatus>;
+  results: any[];
+  contact: any;
+  totalDuration: number;
+  success: boolean;
+}
 
 // ============================================
 // Node Type Definitions
@@ -127,7 +145,8 @@ function CanvasNode({
   onStartConnection,
   onEndConnection,
   isConnecting,
-}: CanvasNodeProps) {
+  executionStatus,
+}: CanvasNodeProps & { executionStatus?: NodeExecutionStatus }) {
   const [isHoveringInput, setIsHoveringInput] = useState(false);
   
   const allNodes = [...NODE_TYPES.triggers, ...NODE_TYPES.actions, ...NODE_TYPES.logic];
@@ -137,6 +156,12 @@ function CanvasNode({
   
   const isTrigger = node.type?.startsWith('trigger_');
   const isCondition = node.type === 'logic_condition' || node.type === 'logic_split';
+
+  // Status de execução
+  const isRunning = executionStatus?.status === 'running';
+  const isSuccess = executionStatus?.status === 'success';
+  const isError = executionStatus?.status === 'error';
+  const isSkipped = executionStatus?.status === 'skipped';
 
   // Handler para iniciar conexão (mousedown no handle de saída)
   const handleOutputMouseDown = (e: React.MouseEvent, handle: string = 'output') => {
@@ -192,11 +217,40 @@ function CanvasNode({
           className={cn(
             'relative min-w-[220px] rounded-2xl overflow-hidden',
             'backdrop-blur-sm transition-all duration-200',
-            isSelected 
+            // Status de execução tem prioridade
+            isRunning && 'ring-2 ring-amber-500 shadow-2xl shadow-amber-500/20 animate-pulse',
+            isSuccess && 'ring-2 ring-green-500 shadow-xl shadow-green-500/20',
+            isError && 'ring-2 ring-red-500 shadow-xl shadow-red-500/20',
+            isSkipped && 'ring-1 ring-dark-600 opacity-60',
+            // Seleção (só se não tiver status)
+            !executionStatus && isSelected 
               ? `ring-2 ring-white/50 shadow-2xl ${colors.glow}` 
-              : 'hover:ring-1 hover:ring-white/20 shadow-lg'
+              : !executionStatus && 'hover:ring-1 hover:ring-white/20 shadow-lg'
           )}
         >
+          {/* Badge de status de execução */}
+          {executionStatus && executionStatus.status !== 'pending' && (
+            <div className={cn(
+              'absolute -top-2 -right-2 z-20 p-1.5 rounded-full shadow-lg',
+              isRunning && 'bg-amber-500',
+              isSuccess && 'bg-green-500',
+              isError && 'bg-red-500',
+              isSkipped && 'bg-dark-600',
+            )}>
+              {isRunning && <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />}
+              {isSuccess && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+              {isError && <X className="w-3.5 h-3.5 text-white" />}
+              {isSkipped && <span className="text-[10px] text-white px-1">—</span>}
+            </div>
+          )}
+
+          {/* Duração se disponível */}
+          {executionStatus?.duration && (isSuccess || isError) && (
+            <div className="absolute -bottom-2 right-2 z-20 px-1.5 py-0.5 bg-dark-800 border border-dark-700 rounded text-[9px] text-dark-400">
+              {executionStatus.duration}ms
+            </div>
+          )}
+
           {/* Header colorido para Triggers */}
           {isTrigger && (
             <div className={cn(
@@ -1635,6 +1689,18 @@ export function AutomationCanvas({
   const [orgId, setOrgId] = useState<string | undefined>(propOrgId);
   const [isDraggingFromPalette, setIsDraggingFromPalette] = useState(false);
   
+  // Estados de teste
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [showTestResults, setShowTestResults] = useState(false);
+  const [testExecution, setTestExecution] = useState<TestExecutionState>({
+    isRunning: false,
+    nodeStatuses: {},
+    results: [],
+    contact: null,
+    totalDuration: 0,
+    success: false,
+  });
+  
   // Bloquear zoom do browser dentro do canvas
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1911,13 +1977,149 @@ export function AutomationCanvas({
     }
   };
 
-  const handleTest = async () => {
+  // Abre o modal de teste
+  const handleTestClick = () => {
+    setShowTestModal(true);
+  };
+
+  // Executa o teste real
+  const executeTest = async (contactId: string | null, useSampleData: boolean) => {
+    if (!orgId) return;
+    
     setTesting(true);
+    setShowTestModal(false);
+    
+    // Resetar estados de execução
+    const initialStatuses: Record<string, NodeExecutionStatus> = {};
+    nodes.forEach((n: AutomationNode) => {
+      initialStatuses[n.id] = { status: 'pending' };
+    });
+    
+    setTestExecution({
+      isRunning: true,
+      nodeStatuses: initialStatuses,
+      results: [],
+      contact: null,
+      totalDuration: 0,
+      success: false,
+    });
+
     try {
-      await onTest();
+      // Pega o ID da automação da URL
+      const urlParts = window.location.pathname.split('/');
+      const automationId = urlParts[urlParts.length - 1];
+      
+      // Primeiro, salva a automação
+      await onSave();
+
+      // Marca todos os nós como "em espera" e o primeiro como "running"
+      const triggerNode = nodes.find((n: AutomationNode) => n.type?.startsWith('trigger_'));
+      if (triggerNode) {
+        setTestExecution(prev => ({
+          ...prev,
+          nodeStatuses: {
+            ...prev.nodeStatuses,
+            [triggerNode.id]: { status: 'running' }
+          }
+        }));
+      }
+
+      // Chama API de teste
+      const response = await fetch(`/api/automations/${automationId}/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactId,
+          useSampleData,
+          organizationId: orgId,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao executar teste');
+      }
+
+      // Atualiza status de cada nó com animação sequencial
+      const steps = result.steps || [];
+      
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        
+        // Marca o nó atual como running
+        setTestExecution(prev => ({
+          ...prev,
+          nodeStatuses: {
+            ...prev.nodeStatuses,
+            [step.nodeId]: { status: 'running' }
+          }
+        }));
+
+        // Pequeno delay para efeito visual
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // Marca com o status final
+        setTestExecution(prev => ({
+          ...prev,
+          nodeStatuses: {
+            ...prev.nodeStatuses,
+            [step.nodeId]: {
+              status: step.status,
+              output: step.output,
+              error: step.error,
+              duration: step.duration,
+            }
+          }
+        }));
+      }
+
+      // Resultado final
+      setTestExecution(prev => ({
+        ...prev,
+        isRunning: false,
+        results: steps,
+        contact: result.contact,
+        totalDuration: result.totalDuration,
+        success: result.success,
+      }));
+
+      // Mostra painel de resultados
+      setShowTestResults(true);
+
+    } catch (error: any) {
+      console.error('Erro no teste:', error);
+      
+      // Marca todos como erro
+      setTestExecution(prev => ({
+        ...prev,
+        isRunning: false,
+        success: false,
+        results: [{
+          nodeId: 'error',
+          status: 'error',
+          error: error.message,
+          duration: 0,
+        }],
+      }));
+      
+      setShowTestResults(true);
     } finally {
       setTesting(false);
     }
+  };
+
+  // Limpa estados de execução
+  const clearTestExecution = () => {
+    setShowTestResults(false);
+    setTestExecution({
+      isRunning: false,
+      nodeStatuses: {},
+      results: [],
+      contact: null,
+      totalDuration: 0,
+      success: false,
+    });
   };
 
   return (
@@ -1963,7 +2165,7 @@ export function AutomationCanvas({
             </button>
           </div>
 
-          <Button variant="secondary" size="sm" onClick={handleTest} disabled={testing || nodes.length === 0}>
+          <Button variant="secondary" size="sm" onClick={handleTestClick} disabled={testing || nodes.length === 0}>
             {testing ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
@@ -2061,6 +2263,7 @@ export function AutomationCanvas({
                 onStartConnection={(handle) => handleStartConnection(node.id, handle)}
                 onEndConnection={() => handleEndConnection(node.id)}
                 isConnecting={!!connectingFrom}
+                executionStatus={testExecution.nodeStatuses[node.id]}
               />
             ))}
           </div>
@@ -2130,6 +2333,29 @@ export function AutomationCanvas({
           />
         )}
       </div>
+
+      {/* Modal de Teste */}
+      <TestModal
+        isOpen={showTestModal}
+        onClose={() => setShowTestModal(false)}
+        onTest={executeTest}
+        organizationId={orgId || ''}
+        isLoading={testing}
+      />
+
+      {/* Painel de Resultados */}
+      <AnimatePresence>
+        {showTestResults && (
+          <TestResultPanel
+            isOpen={showTestResults}
+            onClose={clearTestExecution}
+            results={testExecution.results}
+            contact={testExecution.contact}
+            totalDuration={testExecution.totalDuration}
+            success={testExecution.success}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
