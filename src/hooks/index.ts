@@ -18,18 +18,6 @@ export {
   useWhatsAppTemplates,
 } from './useWhatsApp';
 
-// Re-export WhatsApp hooks
-export {
-  useWhatsAppConversations,
-  useWhatsAppMessages,
-  useWhatsAppCampaigns,
-  useWhatsAppFlows,
-  useWhatsAppPhonebooks,
-  useWhatsAppTags,
-  useWhatsAppAgents,
-  useWhatsAppTemplates,
-} from './useWhatsApp';
-
 // Generic fetch hook
 export function useFetch<T>(url: string, options?: RequestInit) {
   const [data, setData] = useState<T | null>(null);
@@ -363,75 +351,6 @@ export function useAutomations() {
     updateAutomation,
     deleteAutomation,
     toggleAutomation,
-  };
-}
-
-// WhatsApp conversations hook
-export function useWhatsAppConversations() {
-  const { user } = useAuthStore();
-  const [conversations, setConversations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchConversations = useCallback(async () => {
-    if (!user?.organization_id) return;
-
-    try {
-      setLoading(true);
-      // This would fetch from a conversations endpoint
-      // For now, using mock data structure
-      setConversations([]);
-    } catch (e) {
-      setError(e instanceof Error ? e : new Error('An error occurred'));
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.organization_id]);
-
-  useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
-
-  const sendMessage = async (conversationId: string, to: string, message: string, mediaUrl?: string, mediaType?: string) => {
-    const response = await fetch('/api/whatsapp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'send',
-        organizationId: user?.organization_id,
-        conversationId,
-        to,
-        message,
-        mediaUrl,
-        mediaType,
-      }),
-    });
-    if (!response.ok) throw new Error('Failed to send message');
-    const result = await response.json();
-    await fetchConversations();
-    return result;
-  };
-
-  const markAsRead = async (messageId: string) => {
-    const response = await fetch('/api/whatsapp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'mark-read',
-        organizationId: user?.organization_id,
-        messageId,
-      }),
-    });
-    if (!response.ok) throw new Error('Failed to mark as read');
-  };
-
-  return {
-    conversations,
-    loading,
-    error,
-    refetch: fetchConversations,
-    sendMessage,
-    markAsRead,
   };
 }
 
