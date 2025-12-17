@@ -30,6 +30,7 @@ import {
   ChevronDown,
   Check,
   Plus,
+  Puzzle,
 } from 'lucide-react'
 
 // Custom icons for ad platforms
@@ -83,6 +84,7 @@ const navigation = [
   { name: 'CRM', href: '/crm', icon: Users },
   { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare },
   { name: 'Automações', href: '/automations', icon: Zap },
+  { name: 'Integrações', href: '/integrations', icon: Puzzle },
 ]
 
 const analyticsNav = [
@@ -91,7 +93,6 @@ const analyticsNav = [
   { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon },
   { name: 'Google Ads', href: '/analytics/google', icon: GoogleIcon },
   { name: 'TikTok Ads', href: '/analytics/tiktok', icon: TikTokIcon },
-  { name: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
 ]
 
 const systemNav = [
@@ -231,14 +232,14 @@ export default function DashboardLayout({
           className={`
             flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative
             ${isActive
-              ? 'bg-primary-500/15 text-white'
-              : 'text-[#666666] hover:text-white hover:bg-[#1a1a1a]'
+              ? 'bg-gradient-to-r from-primary-500/20 to-accent-500/10 text-white'
+              : 'text-dark-400 hover:text-white hover:bg-dark-800/50'
             }
           `}
         >
           {isActive && (
             <div
-              className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary-500 rounded-full"
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-primary-500 to-accent-500 rounded-full"
             />
           )}
           <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-primary-400' : ''}`} />
@@ -262,7 +263,7 @@ export default function DashboardLayout({
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="p-4 border-b border-[#222222]">
+      <div className="p-4 border-b border-dark-800/50">
         <Link href="/dashboard" className="flex flex-col gap-0.5">
           <WorderLogo size={collapsed ? 'sm' : 'md'} />
           <AnimatePresence mode="wait">
@@ -271,7 +272,7 @@ export default function DashboardLayout({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="text-[10px] text-[#555555]"
+                className="text-[10px] text-dark-500"
               >
                 by Convertfy
               </motion.p>
@@ -285,7 +286,7 @@ export default function DashboardLayout({
         {/* Main */}
         <div>
           {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-[#555555] uppercase tracking-wider">
+            <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
               Principal
             </p>
           )}
@@ -299,7 +300,7 @@ export default function DashboardLayout({
         {/* Analytics */}
         <div>
           {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-[#555555] uppercase tracking-wider">
+            <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
               Analytics
             </p>
           )}
@@ -313,7 +314,7 @@ export default function DashboardLayout({
         {/* System */}
         <div>
           {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-[#555555] uppercase tracking-wider">
+            <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
               Sistema
             </p>
           )}
@@ -326,7 +327,7 @@ export default function DashboardLayout({
       </div>
 
       {/* Store Selector Section */}
-      <div className="p-3 border-t border-[#222222] relative">
+      <div className="p-3 border-t border-dark-800/50 relative">
         {/* Store Dropdown */}
         <AnimatePresence>
           {storeDropdownOpen && !collapsed && (
@@ -335,12 +336,12 @@ export default function DashboardLayout({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.96 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-full left-3 right-3 mb-2 bg-[#1a1a1a] border border-[#222222] rounded-xl shadow-xl overflow-hidden z-50"
+              className="absolute bottom-full left-3 right-3 mb-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-50"
             >
               {/* Stores List */}
               {stores.length > 0 && (
-                <div className="p-2 border-b border-[#222222]">
-                  <p className="px-2 py-1 text-xs font-medium text-[#555555] uppercase tracking-wider">
+                <div className="p-2 border-b border-dark-700">
+                  <p className="px-2 py-1 text-xs font-medium text-dark-500 uppercase tracking-wider">
                     Suas Lojas
                   </p>
                   <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
@@ -355,16 +356,16 @@ export default function DashboardLayout({
                           w-full flex items-center gap-3 p-2 rounded-lg transition-colors
                           ${currentStore?.id === store.id
                             ? 'bg-primary-500/10 text-primary-400'
-                            : 'hover:bg-[#252525] text-white'
+                            : 'hover:bg-dark-700/50 text-white'
                           }
                         `}
                       >
-                        <div className="w-8 h-8 rounded-lg bg-[#252525] flex items-center justify-center text-xs font-bold">
+                        <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center text-xs font-bold">
                           {getInitials(store.name)}
                         </div>
                         <div className="flex-1 text-left min-w-0">
                           <p className="text-sm font-medium truncate">{store.name}</p>
-                          <p className="text-xs text-[#555555] truncate">{store.domain}</p>
+                          <p className="text-xs text-dark-400 truncate">{store.domain}</p>
                         </div>
                         {currentStore?.id === store.id && (
                           <Check className="w-4 h-4 text-primary-400 flex-shrink-0" />
@@ -405,7 +406,7 @@ export default function DashboardLayout({
           }}
           className={`
             w-full flex items-center gap-3 p-2 rounded-xl transition-all
-            bg-[#1a1a1a] hover:bg-[#222222]
+            bg-dark-800/30 hover:bg-dark-800/50
             ${storeDropdownOpen ? 'ring-1 ring-primary-500/50' : ''}
             ${collapsed ? 'justify-center' : ''}
           `}
@@ -426,7 +427,7 @@ export default function DashboardLayout({
                 <p className="text-sm font-medium text-white truncate">
                   {currentStore?.name || 'Selecionar Loja'}
                 </p>
-                <p className="text-xs text-[#555555] truncate">
+                <p className="text-xs text-dark-400 truncate">
                   {currentStore?.domain || 'Nenhuma loja conectada'}
                 </p>
               </motion.div>
@@ -435,7 +436,7 @@ export default function DashboardLayout({
 
           {!collapsed && (
             <ChevronDown
-              className={`w-4 h-4 text-[#555555] transition-transform flex-shrink-0 ${storeDropdownOpen ? 'rotate-180' : ''}`}
+              className={`w-4 h-4 text-dark-400 transition-transform flex-shrink-0 ${storeDropdownOpen ? 'rotate-180' : ''}`}
             />
           )}
         </button>
@@ -445,7 +446,7 @@ export default function DashboardLayout({
       <div className="hidden lg:block p-3 pt-0">
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="w-full flex items-center justify-center gap-2 p-2 rounded-xl bg-[#1a1a1a] hover:bg-[#222222] text-[#666666] hover:text-white transition-all"
+          className="w-full flex items-center justify-center gap-2 p-2 rounded-xl bg-dark-800/30 hover:bg-dark-800/50 text-dark-400 hover:text-white transition-all"
         >
           {collapsed ? (
             <ChevronRight className="w-4 h-4" />
@@ -461,14 +462,14 @@ export default function DashboardLayout({
   )
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen bg-dark-950">
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-[#111111] border-b border-[#222222]">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-dark-900/95 backdrop-blur-xl border-b border-dark-800/50">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
-              className="p-2 rounded-lg bg-[#1a1a1a] text-[#666666] hover:text-white transition-colors"
+              className="p-2 rounded-lg bg-dark-800/50 text-dark-400 hover:text-white transition-colors"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -476,7 +477,7 @@ export default function DashboardLayout({
             <span className="font-semibold text-white">Worder</span>
           </div>
           <div className="flex items-center gap-2">
-            <button className="p-2 rounded-lg bg-[#1a1a1a] text-[#666666] hover:text-white transition-colors relative">
+            <button className="p-2 rounded-lg bg-dark-800/50 text-dark-400 hover:text-white transition-colors relative">
               <Bell className="w-5 h-5" />
               {notifications > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-500 rounded-full text-[10px] font-bold flex items-center justify-center">
@@ -497,18 +498,18 @@ export default function DashboardLayout({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileOpen(false)}
-              className="lg:hidden fixed inset-0 bg-black/60 z-50"
+              className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
             />
             <motion.div
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="lg:hidden fixed left-0 top-0 bottom-0 w-72 bg-[#111111] border-r border-[#222222] z-50"
+              className="lg:hidden fixed left-0 top-0 bottom-0 w-72 bg-dark-900/95 backdrop-blur-xl border-r border-dark-800/50 z-50"
             >
               <button
                 onClick={() => setMobileOpen(false)}
-                className="absolute top-4 right-4 p-2 rounded-lg bg-[#1a1a1a] text-[#666666] hover:text-white transition-colors"
+                className="absolute top-4 right-4 p-2 rounded-lg bg-dark-800/50 text-dark-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -522,7 +523,7 @@ export default function DashboardLayout({
       <motion.aside
         initial={false}
         animate={{ width: collapsed ? 80 : 280 }}
-        className="hidden lg:block fixed left-0 top-0 bottom-0 bg-[#111111] border-r border-[#222222] z-40"
+        className="hidden lg:block fixed left-0 top-0 bottom-0 bg-dark-900/50 backdrop-blur-xl border-r border-dark-800/50 z-40"
       >
         <SidebarContent />
       </motion.aside>
@@ -534,23 +535,23 @@ export default function DashboardLayout({
         className="min-h-screen lg:ml-[280px] pt-[72px] lg:pt-0"
       >
         {/* Desktop Header */}
-        <header className="hidden lg:flex sticky top-0 z-30 items-center justify-between px-6 py-4 bg-[#0a0a0a]/95 backdrop-blur-sm border-b border-[#222222]">
+        <header className="hidden lg:flex sticky top-0 z-30 items-center justify-between px-6 py-4 bg-dark-950/80 backdrop-blur-xl border-b border-dark-800/50">
           <div className="flex-1 max-w-xl">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#555555]" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
               <input
                 type="text"
                 placeholder="Buscar em tudo..."
-                className="w-full pl-10 pr-4 py-2.5 bg-[#111111] border border-[#222222] rounded-xl text-white placeholder-[#555555] focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
               />
-              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-[#1a1a1a] rounded text-[10px] text-[#555555] font-mono">
+              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-dark-700/50 rounded text-[10px] text-dark-400 font-mono">
                 ⌘K
               </kbd>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="p-2.5 rounded-xl bg-[#111111] border border-[#222222] text-[#666666] hover:text-white hover:bg-[#1a1a1a] transition-all relative">
+            <button className="p-2.5 rounded-xl bg-dark-800/50 text-dark-400 hover:text-white hover:bg-dark-700/50 transition-all relative">
               <Bell className="w-5 h-5" />
               {notifications > 0 && (
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full text-[10px] font-bold flex items-center justify-center text-white">
@@ -558,14 +559,14 @@ export default function DashboardLayout({
                 </span>
               )}
             </button>
-            <div className="w-px h-8 bg-[#222222]" />
-            <button className="flex items-center gap-3 p-1.5 pr-4 rounded-xl hover:bg-[#1a1a1a] transition-all">
+            <div className="w-px h-8 bg-dark-800" />
+            <button className="flex items-center gap-3 p-1.5 pr-4 rounded-xl hover:bg-dark-800/50 transition-all">
               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
                 <span className="text-white font-semibold text-sm">JD</span>
               </div>
               <div className="text-left">
                 <p className="text-sm font-medium text-white">João Demo</p>
-                <p className="text-xs text-[#555555]">Admin</p>
+                <p className="text-xs text-dark-400">Admin</p>
               </div>
             </button>
           </div>
