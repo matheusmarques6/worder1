@@ -147,6 +147,9 @@ export interface AIAgentWithMetrics {
   total_interactions: number;
   total_tokens_used: number;
   total_cost_usd: number;
+  avg_response_time_ms?: number;
+  success_rate?: number;
+  resolution_rate?: number;
   last_interaction_at?: string;
   created_at: string;
 }
