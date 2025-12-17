@@ -1,439 +1,781 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Search, Phone, MoreVertical, Smile, Paperclip, Mic, Send, Check, CheckCheck,
-  Clock, User, Building2, Mail, Tag, ShoppingCart, DollarSign, MessageSquare,
-  Filter, X, Plus, RefreshCw, Bot, UserCircle, Loader2, AlertCircle, Settings,
-  ChevronDown
+  Search,
+  RefreshCw,
+  Plus,
+  MessageSquare,
+  Loader2,
+  PanelRightClose,
+  PanelRightOpen,
+  Bot,
+  ArrowLeft,
+  MoreVertical,
+  UserPlus,
+  Send,
+  Smile,
+  Paperclip,
+  Check,
+  CheckCheck,
+  Clock,
+  AlertCircle,
+  Mail,
+  Phone,
+  MapPin,
+  Calendar,
+  Tag,
+  X,
+  DollarSign,
+  ShoppingCart,
+  Package,
+  FileText,
+  Ban,
+  CheckCircle,
 } from 'lucide-react'
-import { 
-  useWhatsAppConversations, useWhatsAppMessages, useWhatsAppTags, useWhatsAppAgents
-} from '@/hooks/useWhatsApp'
 
-// Helpers
-const formatPhone = (p?: string) => {
-  if (!p) return ''
-  const c = p.replace(/\D/g, '')
-  if (c.length === 13) return `+${c.slice(0,2)} ${c.slice(2,4)} ${c.slice(4,9)}-${c.slice(9)}`
-  return p
+// Types
+interface InboxContact {
+  id: string
+  organization_id: string
+  phone_number: string
+  name?: string
+  email?: string
+  profile_picture_url?: string
+  address?: {
+    city?: string
+    state?: string
+  }
+  tags: string[]
+  total_orders: number
+  total_spent: number
+  is_blocked: boolean
+  total_messages_received: number
+  total_messages_sent: number
+  created_at: string
 }
 
-const formatTime = (d?: string) => {
-  if (!d) return ''
-  const now = new Date(), dt = new Date(d)
-  const diff = Math.floor((now.getTime() - dt.getTime()) / 60000)
-  if (diff < 1) return 'Agora'
-  if (diff < 60) return `${diff}min`
-  if (diff < 1440) return `${Math.floor(diff/60)}h`
-  if (diff < 2880) return 'Ontem'
+interface InboxConversation {
+  id: string
+  organization_id: string
+  contact_id: string
+  phone_number: string
+  status: string
+  is_bot_active: boolean
+  last_message_at?: string
+  last_message_preview?: string
+  unread_count: number
+  can_send_template_only: boolean
+  contact_name?: string
+  contact_avatar?: string
+  contact_tags?: string[]
+}
+
+interface InboxMessage {
+  id: string
+  conversation_id: string
+  direction: string
+  message_type: string
+  content?: string
+  media_url?: string
+  media_filename?: string
+  status: string
+  sent_by_bot: boolean
+  created_at: string
+}
+
+interface InboxNote {
+  id: string
+  content: string
+  created_by_name?: string
+  created_at: string
+}
+
+interface InboxDeal {
+  id: string
+  title: string
+  value: number
+  status: string
+  pipeline?: { name: string }
+  stage?: { name: string }
+  created_at: string
+}
+
+interface InboxOrder {
+  id: string
+  order_number: string
+  total_price: number
+  fulfillment_status?: string
+  line_items?: any[]
+  created_at: string
+}
+
+interface InboxCart {
+  id: string
+  total_price: number
+  line_items?: any[]
+  created_at: string
+}
+
+// Helpers
+const formatPhone = (phone?: string) => {
+  if (!phone) return ''
+  const clean = phone.replace(/\D/g, '')
+  if (clean.length === 13) {
+    return `+${clean.slice(0, 2)} ${clean.slice(2, 4)} ${clean.slice(4, 9)}-${clean.slice(9)}`
+  }
+  return phone
+}
+
+const formatTime = (date?: string) => {
+  if (!date) return ''
+  const now = new Date()
+  const dt = new Date(date)
+  const diffMinutes = Math.floor((now.getTime() - dt.getTime()) / 60000)
+  
+  if (diffMinutes < 1) return 'Agora'
+  if (diffMinutes < 60) return `${diffMinutes}min`
+  if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h`
+  if (diffMinutes < 2880) return 'Ontem'
   return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
-const formatMsgTime = (d?: string) => d ? new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''
+const formatMessageTime = (date?: string) => {
+  if (!date) return ''
+  return new Date(date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
 
-const getInitials = (n?: string) => (n || 'UN').split(' ').map(x => x[0]).join('').slice(0,2).toUpperCase()
+const formatDate = (date?: string) => {
+  if (!date) return '-'
+  return new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
 
-const formatCurrency = (v?: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
+const formatRelativeTime = (date?: string) => {
+  if (!date) return ''
+  const diffMins = Math.floor((new Date().getTime() - new Date(date).getTime()) / 60000)
+  if (diffMins < 60) return `há ${diffMins}min`
+  if (diffMins < 1440) return `há ${Math.floor(diffMins / 60)}h`
+  return `há ${Math.floor(diffMins / 1440)}d`
+}
+
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+}
+
+const getInitials = (name?: string) => {
+  if (!name) return '??'
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+}
 
 // Status Icon
-const StatusIcon = ({ status }: { status: string }) => {
-  const icons: Record<string, JSX.Element> = {
-    pending: <Clock className="w-3.5 h-3.5 text-slate-500" />,
-    sent: <Check className="w-3.5 h-3.5 text-slate-500" />,
-    delivered: <CheckCheck className="w-3.5 h-3.5 text-slate-500" />,
-    read: <CheckCheck className="w-3.5 h-3.5 text-cyan-400" />,
-    failed: <AlertCircle className="w-3.5 h-3.5 text-red-400" />,
+function MessageStatus({ status }: { status: string }) {
+  switch (status) {
+    case 'pending': return <Clock className="w-4 h-4 text-dark-500" />
+    case 'sent': return <Check className="w-4 h-4 text-dark-500" />
+    case 'delivered': return <CheckCheck className="w-4 h-4 text-dark-500" />
+    case 'read': return <CheckCheck className="w-4 h-4 text-cyan-400" />
+    case 'failed': return <AlertCircle className="w-4 h-4 text-red-400" />
+    default: return <Clock className="w-4 h-4 text-dark-500" />
   }
-  return icons[status] || <Check className="w-3.5 h-3.5 text-slate-500" />
+}
+
+// Date Separator
+function DateSeparator({ date }: { date: string }) {
+  const d = new Date(date)
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  
+  let label = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })
+  if (d.toDateString() === today.toDateString()) label = 'Hoje'
+  if (d.toDateString() === yesterday.toDateString()) label = 'Ontem'
+
+  return (
+    <div className="flex items-center gap-4 my-4">
+      <div className="flex-1 h-px bg-dark-700/50" />
+      <span className="text-xs text-dark-500 bg-dark-900 px-3 py-1 rounded-full">{label}</span>
+      <div className="flex-1 h-px bg-dark-700/50" />
+    </div>
+  )
 }
 
 export default function WhatsAppPage() {
-  // Hooks
-  const {
-    conversations, selectedConversation, setSelectedConversation,
-    isLoading: convsLoading, fetchConversations, updateConversation
-  } = useWhatsAppConversations()
-
-  const {
-    messages, isLoading: msgsLoading, sendMessage, fetchMessages
-  } = useWhatsAppMessages(selectedConversation?.id || null)
-
-  const { tags, fetchTags } = useWhatsAppTags()
-  const { agents, fetchAgents, assignChat } = useWhatsAppAgents()
-
   // State
-  const [input, setInput] = useState('')
+  const [conversations, setConversations] = useState<InboxConversation[]>([])
+  const [selectedConversation, setSelectedConversation] = useState<InboxConversation | null>(null)
+  const [messages, setMessages] = useState<InboxMessage[]>([])
+  const [contact, setContact] = useState<InboxContact | null>(null)
+  const [notes, setNotes] = useState<InboxNote[]>([])
+  const [deals, setDeals] = useState<InboxDeal[]>([])
+  const [orders, setOrders] = useState<InboxOrder[]>([])
+  const [cart, setCart] = useState<InboxCart | null>(null)
+  
+  const [conversationsLoading, setConversationsLoading] = useState(false)
+  const [messagesLoading, setMessagesLoading] = useState(false)
+  const [contactLoading, setContactLoading] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [showInfo, setShowInfo] = useState(true)
+  const [showContactPanel, setShowContactPanel] = useState(true)
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
-  const msgEndRef = useRef<HTMLDivElement>(null)
+  const [activeTab, setActiveTab] = useState<'info' | 'crm' | 'orders' | 'notes'>('info')
+  
+  const [input, setInput] = useState('')
+  const [newNote, setNewNote] = useState('')
+  const [newTag, setNewTag] = useState('')
+  const [showAddTag, setShowAddTag] = useState(false)
+  const [isSavingNote, setIsSavingNote] = useState(false)
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Load data
-  useEffect(() => {
-    fetchConversations({ status: statusFilter !== 'all' ? statusFilter : undefined })
-    fetchTags()
-    fetchAgents()
-  }, [statusFilter])
+  const organizationId = 'org-placeholder'
 
-  // Scroll to bottom
-  useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
-
-  // Handlers
-  const handleSelect = (c: any) => { setSelectedConversation(c); setMobileView('chat') }
-
-  const handleSend = async () => {
-    if (!input.trim() || !selectedConversation) return
+  // Fetch conversations
+  const fetchConversations = async () => {
+    setConversationsLoading(true)
     try {
-      await sendMessage(input)
-      setInput('')
-    } catch (e) { console.error(e) }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
-  }
-
-  const toggleBot = () => {
-    if (selectedConversation) {
-      updateConversation(selectedConversation.id, { is_bot_active: !selectedConversation.is_bot_active })
+      const params = new URLSearchParams({ organizationId })
+      if (statusFilter !== 'all') params.append('status', statusFilter)
+      if (search) params.append('search', search)
+      
+      const res = await fetch(`/api/whatsapp/inbox/conversations?${params}`)
+      const data = await res.json()
+      setConversations(data.conversations || [])
+    } catch (error) {
+      console.error('Error fetching conversations:', error)
+    } finally {
+      setConversationsLoading(false)
     }
   }
 
-  // Filter
-  const filtered = conversations.filter(c =>
-    (c.contact_name?.toLowerCase().includes(search.toLowerCase()) ||
-     c.phone_number?.includes(search))
-  )
+  // Fetch messages
+  const fetchMessages = async (conversationId: string) => {
+    setMessagesLoading(true)
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}/messages`)
+      const data = await res.json()
+      setMessages(data.messages || [])
+    } catch (error) {
+      console.error('Error fetching messages:', error)
+    } finally {
+      setMessagesLoading(false)
+    }
+  }
+
+  // Fetch contact
+  const fetchContact = async (contactId: string) => {
+    setContactLoading(true)
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/contacts/${contactId}`)
+      const data = await res.json()
+      setContact(data.contact || null)
+      setNotes(data.notes || [])
+    } catch (error) {
+      console.error('Error fetching contact:', error)
+    } finally {
+      setContactLoading(false)
+    }
+  }
+
+  // Fetch orders
+  const fetchOrders = async (contactId: string) => {
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/orders`)
+      const data = await res.json()
+      setOrders(data.orders || [])
+      setCart(data.cart || null)
+    } catch (error) {
+      console.error('Error fetching orders:', error)
+    }
+  }
+
+  // Fetch deals
+  const fetchDeals = async (contactId: string) => {
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/deals`)
+      const data = await res.json()
+      setDeals(data.deals || [])
+    } catch (error) {
+      console.error('Error fetching deals:', error)
+    }
+  }
+
+  // Send message
+  const handleSendMessage = async () => {
+    if (!input.trim() || !selectedConversation || isSending) return
+    const content = input.trim()
+    setInput('')
+    setIsSending(true)
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/conversations/${selectedConversation.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, messageType: 'text' })
+      })
+      const data = await res.json()
+      if (data.message) setMessages(prev => [...prev, data.message])
+    } catch (error) {
+      console.error('Error sending message:', error)
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  // Toggle bot
+  const handleToggleBot = async () => {
+    if (!selectedConversation) return
+    try {
+      await fetch(`/api/whatsapp/inbox/conversations/${selectedConversation.id}/bot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !selectedConversation.is_bot_active })
+      })
+      setSelectedConversation(prev => prev ? { ...prev, is_bot_active: !prev.is_bot_active } : null)
+    } catch (error) {
+      console.error('Error toggling bot:', error)
+    }
+  }
+
+  // Add note
+  const handleAddNote = async () => {
+    if (!newNote.trim() || !contact || isSavingNote) return
+    setIsSavingNote(true)
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/contacts/${contact.id}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newNote.trim(), conversationId: selectedConversation?.id })
+      })
+      const data = await res.json()
+      if (data.note) {
+        setNotes(prev => [data.note, ...prev])
+        setNewNote('')
+      }
+    } catch (error) {
+      console.error('Error adding note:', error)
+    } finally {
+      setIsSavingNote(false)
+    }
+  }
+
+  // Tags
+  const handleAddTag = async () => {
+    if (!newTag.trim() || !contact) return
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/contacts/${contact.id}/tags`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: newTag.trim(), action: 'add' })
+      })
+      const data = await res.json()
+      if (data.contact) {
+        setContact(prev => prev ? { ...prev, tags: data.contact.tags } : null)
+        setNewTag('')
+        setShowAddTag(false)
+      }
+    } catch (error) {
+      console.error('Error adding tag:', error)
+    }
+  }
+
+  const handleRemoveTag = async (tag: string) => {
+    if (!contact) return
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/contacts/${contact.id}/tags`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag, action: 'remove' })
+      })
+      const data = await res.json()
+      if (data.contact) setContact(prev => prev ? { ...prev, tags: data.contact.tags } : null)
+    } catch (error) {
+      console.error('Error removing tag:', error)
+    }
+  }
+
+  // Block
+  const handleBlockContact = async () => {
+    if (!contact) return
+    try {
+      await fetch(`/api/whatsapp/inbox/contacts/${contact.id}/block`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ block: !contact.is_blocked })
+      })
+      setContact(prev => prev ? { ...prev, is_blocked: !prev.is_blocked } : null)
+    } catch (error) {
+      console.error('Error blocking contact:', error)
+    }
+  }
+
+  // Select conversation
+  const handleSelectConversation = (conv: InboxConversation) => {
+    setSelectedConversation(conv)
+    setMobileView('chat')
+    fetchMessages(conv.id)
+    if (conv.contact_id) {
+      fetchContact(conv.contact_id)
+      fetchOrders(conv.contact_id)
+      fetchDeals(conv.contact_id)
+    }
+  }
+
+  // Effects
+  useEffect(() => { fetchConversations() }, [statusFilter])
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'
+      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`
+    }
+  }, [input])
+
+  // Group messages by date
+  const groupedMessages: { date: string; messages: InboxMessage[] }[] = []
+  let currentDate = ''
+  messages.forEach(msg => {
+    const msgDate = new Date(msg.created_at).toDateString()
+    if (msgDate !== currentDate) {
+      currentDate = msgDate
+      groupedMessages.push({ date: msg.created_at, messages: [msg] })
+    } else {
+      groupedMessages[groupedMessages.length - 1].messages.push(msg)
+    }
+  })
+
+  const contactName = selectedConversation?.contact_name || formatPhone(selectedConversation?.phone_number)
+  const activeDeal = deals.find(d => d.status === 'open')
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage() }
+  }
+
+  const tabs: { id: 'info' | 'crm' | 'orders' | 'notes'; label: string }[] = [
+    { id: 'info', label: 'Info' },
+    { id: 'crm', label: 'CRM' },
+    { id: 'orders', label: 'Pedidos' },
+    { id: 'notes', label: 'Notas' },
+  ]
 
   return (
-    <div className="h-[calc(100vh-120px)] flex bg-slate-900/30 rounded-2xl border border-slate-800/50 overflow-hidden">
-      {/* ======= CONVERSATIONS LIST ======= */}
-      <div className={`w-full md:w-96 flex-shrink-0 border-r border-slate-800/50 flex flex-col ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
-        {/* Header */}
-        <div className="p-4 border-b border-slate-800/50">
+    <div className="h-[calc(100vh-80px)] flex bg-dark-900/50 rounded-2xl border border-dark-700/50 overflow-hidden">
+      {/* ========== CONVERSATION LIST ========== */}
+      <div className={`w-full md:w-[360px] flex-shrink-0 border-r border-dark-700/50 flex flex-col bg-dark-900/30 ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
+        <div className="p-4 border-b border-dark-700/50">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Conversas</h2>
             <div className="flex gap-2">
-              <button onClick={() => fetchConversations()} className="p-2 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white">
-                <RefreshCw className={`w-5 h-5 ${convsLoading ? 'animate-spin' : ''}`} />
+              <button onClick={fetchConversations} disabled={conversationsLoading} className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors disabled:opacity-50">
+                <RefreshCw className={`w-5 h-5 ${conversationsLoading ? 'animate-spin' : ''}`} />
               </button>
-              <button className="p-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700">
+              <button className="p-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors">
                 <Plus className="w-5 h-5" />
               </button>
             </div>
           </div>
-          
           <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-violet-500/50"
-            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+            <input type="text" placeholder="Buscar por nome ou telefone..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchConversations()} className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-colors" />
           </div>
-
-          <div className="flex gap-2">
-            {['all', 'open', 'closed'].map(s => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
-                  statusFilter === s ? 'bg-violet-600 text-white' : 'bg-slate-800/50 text-slate-400 hover:text-white'
-                }`}
-              >
-                {s === 'all' ? 'Todas' : s === 'open' ? 'Abertas' : 'Fechadas'}
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {[{ id: 'all', label: 'Todas' }, { id: 'open', label: 'Abertas' }, { id: 'pending', label: 'Pendentes' }, { id: 'closed', label: 'Fechadas' }].map((filter) => (
+              <button key={filter.id} onClick={() => setStatusFilter(filter.id)} className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${statusFilter === filter.id ? 'bg-primary-500 text-white' : 'bg-dark-800/50 text-dark-400 hover:text-white hover:bg-dark-700/50'}`}>
+                {filter.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* List */}
         <div className="flex-1 overflow-y-auto">
-          {convsLoading && conversations.length === 0 ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-slate-500">
-              <MessageSquare className="w-10 h-10 mb-2 opacity-50" />
-              <p className="text-sm">Nenhuma conversa</p>
+          {conversationsLoading && conversations.length === 0 ? (
+            <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 text-primary-400 animate-spin" /></div>
+          ) : conversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-dark-400 p-8">
+              <div className="w-16 h-16 rounded-2xl bg-dark-800/50 flex items-center justify-center mb-4"><MessageSquare className="w-8 h-8 opacity-50" /></div>
+              <p className="text-sm font-medium">Nenhuma conversa</p>
+              <p className="text-xs text-dark-500 mt-1 text-center">Aguardando novas mensagens ou inicie uma nova conversa</p>
             </div>
           ) : (
-            filtered.map(conv => (
-              <div
-                key={conv.id}
-                onClick={() => handleSelect(conv)}
-                className={`flex items-start gap-3 p-4 cursor-pointer border-b border-slate-800/30 transition-colors ${
-                  selectedConversation?.id === conv.id ? 'bg-violet-600/10' : 'hover:bg-slate-800/30'
-                }`}
-              >
-                <div className="relative flex-shrink-0">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
-                    <span className="text-white font-semibold">{getInitials(conv.contact_name || conv.phone_number)}</span>
+            conversations.map((conv) => {
+              const name = conv.contact_name || formatPhone(conv.phone_number)
+              const hasUnread = conv.unread_count > 0
+              return (
+                <motion.div key={conv.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} onClick={() => handleSelectConversation(conv)} className={`flex items-start gap-3 p-4 cursor-pointer border-b border-dark-700/30 transition-all ${selectedConversation?.id === conv.id ? 'bg-primary-500/10 border-l-2 border-l-primary-500' : 'hover:bg-dark-800/50 border-l-2 border-l-transparent'}`}>
+                  <div className="relative flex-shrink-0">
+                    {conv.contact_avatar ? <img src={conv.contact_avatar} alt={name} className="w-12 h-12 rounded-full object-cover" /> : (
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+                        <span className="text-white font-semibold text-sm">{getInitials(conv.contact_name || conv.phone_number)}</span>
+                      </div>
+                    )}
+                    {conv.is_bot_active && <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center border-2 border-dark-900"><Bot className="w-3 h-3 text-white" /></div>}
                   </div>
-                  {conv.is_bot_active && (
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-violet-600 rounded-full flex items-center justify-center border-2 border-slate-900">
-                      <Bot className="w-3 h-3 text-white" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <span className={`font-medium truncate ${hasUnread ? 'text-white' : 'text-dark-200'}`}>{name}</span>
+                      <span className={`text-xs flex-shrink-0 ${hasUnread ? 'text-primary-400 font-medium' : 'text-dark-500'}`}>{formatTime(conv.last_message_at)}</span>
                     </div>
-                  )}
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between mb-1">
-                    <span className="font-medium text-white truncate">{conv.contact_name || formatPhone(conv.phone_number)}</span>
-                    <span className={`text-xs ${conv.unread_count > 0 ? 'text-violet-400 font-medium' : 'text-slate-500'}`}>
-                      {formatTime(conv.last_message_at)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <p className={`text-sm truncate ${conv.unread_count > 0 ? 'text-slate-300' : 'text-slate-500'}`}>
-                      {conv.last_message_preview || 'Nova conversa'}
-                    </p>
-                    {conv.unread_count > 0 && (
-                      <span className="ml-2 px-2 py-0.5 bg-violet-600 rounded-full text-[10px] font-bold text-white">
-                        {conv.unread_count}
-                      </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className={`text-sm truncate ${hasUnread ? 'text-dark-300' : 'text-dark-500'}`}>{conv.last_message_preview || 'Nova conversa'}</p>
+                      {hasUnread && <span className="flex-shrink-0 px-2 py-0.5 bg-primary-500 rounded-full text-[10px] font-bold text-white min-w-[20px] text-center">{conv.unread_count > 99 ? '99+' : conv.unread_count}</span>}
+                    </div>
+                    {conv.contact_tags && conv.contact_tags.length > 0 && (
+                      <div className="flex gap-1 mt-2 overflow-hidden">
+                        {conv.contact_tags.slice(0, 2).map((tag, i) => <span key={i} className="px-2 py-0.5 bg-dark-700/50 rounded text-[10px] text-dark-300 truncate max-w-[80px]">{tag}</span>)}
+                        {conv.contact_tags.length > 2 && <span className="px-2 py-0.5 bg-dark-700/50 rounded text-[10px] text-dark-400">+{conv.contact_tags.length - 2}</span>}
+                      </div>
                     )}
                   </div>
-                  <div className="flex gap-2 mt-1.5">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                      conv.status === 'open' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/50 text-slate-400'
-                    }`}>
-                      {conv.status === 'open' ? 'Aberta' : 'Fechada'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))
+                </motion.div>
+              )
+            })
           )}
         </div>
       </div>
 
-      {/* ======= CHAT WINDOW ======= */}
-      {selectedConversation ? (
-        <div className={`flex-1 flex flex-col ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
-          {/* Chat Header */}
-          <div className="p-4 border-b border-slate-800/50 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setMobileView('list')} className="md:hidden p-2 rounded-lg hover:bg-slate-800/50 text-slate-400">
-                <X className="w-5 h-5" />
-              </button>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
-                <span className="text-white font-semibold text-sm">{getInitials(selectedConversation.contact_name || selectedConversation.phone_number)}</span>
-              </div>
-              <div>
-                <h3 className="font-semibold text-white">{selectedConversation.contact_name || formatPhone(selectedConversation.phone_number)}</h3>
-                <p className="text-xs text-slate-400">{formatPhone(selectedConversation.phone_number)}</p>
-              </div>
-            </div>
-            
-            <div className="flex gap-1">
-              <button onClick={toggleBot} className={`p-2 rounded-lg ${selectedConversation.is_bot_active ? 'bg-violet-600/20 text-violet-400' : 'hover:bg-slate-800/50 text-slate-400'}`} title="Bot">
-                <Bot className="w-5 h-5" />
-              </button>
-              <button onClick={() => setShowInfo(!showInfo)} className={`p-2 rounded-lg ${showInfo ? 'bg-violet-600/20 text-violet-400' : 'hover:bg-slate-800/50 text-slate-400'}`}>
-                <User className="w-5 h-5" />
-              </button>
-              <button className="p-2 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white">
-                <MoreVertical className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/30">
-            {msgsLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                <MessageSquare className="w-16 h-16 mb-4 opacity-30" />
-                <p>Nenhuma mensagem</p>
-              </div>
-            ) : (
-              messages.map((msg: any) => (
-                <div key={msg.id} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl ${
-                    msg.direction === 'outbound'
-                      ? 'bg-gradient-to-r from-violet-600 to-violet-700 text-white rounded-br-md'
-                      : 'bg-slate-800/70 text-white rounded-bl-md'
-                  }`}>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content || `[${msg.type}]`}</p>
-                    <div className={`flex items-center gap-1 mt-1 ${msg.direction === 'outbound' ? 'justify-end' : ''}`}>
-                      <span className="text-[10px] text-slate-300/70">{formatMsgTime(msg.sent_at)}</span>
-                      {msg.direction === 'outbound' && <StatusIcon status={msg.status} />}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-            <div ref={msgEndRef} />
-          </div>
-
-          {/* Input */}
-          <div className="p-4 border-t border-slate-800/50 bg-slate-900/50">
-            <div className="flex items-center gap-3">
-              <button className="p-2.5 rounded-xl hover:bg-slate-800/50 text-slate-400 hover:text-white">
-                <Smile className="w-5 h-5" />
-              </button>
-              <button className="p-2.5 rounded-xl hover:bg-slate-800/50 text-slate-400 hover:text-white">
-                <Paperclip className="w-5 h-5" />
-              </button>
-              <input
-                type="text"
-                placeholder="Digite uma mensagem..."
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="flex-1 px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-violet-500/50"
-              />
-              {input.trim() ? (
-                <button onClick={handleSend} disabled={msgsLoading} className="p-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50">
-                  {msgsLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                </button>
-              ) : (
-                <button className="p-2.5 rounded-xl hover:bg-slate-800/50 text-slate-400 hover:text-white">
-                  <Mic className="w-5 h-5" />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 hidden md:flex items-center justify-center text-slate-500">
-          <div className="text-center">
-            <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p>Selecione uma conversa</p>
-          </div>
-        </div>
-      )}
-
-      {/* ======= CONTACT INFO ======= */}
-      <AnimatePresence>
-        {showInfo && selectedConversation && (
-          <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 320, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            className="hidden lg:flex flex-col border-l border-slate-800/50 overflow-hidden"
-          >
-            <div className="p-4 border-b border-slate-800/50 flex items-center justify-between">
-              <h3 className="font-semibold text-white">Contato</h3>
-              <button onClick={() => setShowInfo(false)} className="p-1.5 rounded-lg hover:bg-slate-800/50 text-slate-400">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              {/* Profile */}
-              <div className="text-center">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-2xl font-bold text-white">{getInitials(selectedConversation.contact_name || selectedConversation.phone_number)}</span>
-                </div>
-                <h4 className="font-semibold text-white">{selectedConversation.contact_name || 'Desconhecido'}</h4>
-                <p className="text-sm text-slate-400">{formatPhone(selectedConversation.phone_number)}</p>
-              </div>
-
-              {/* Info */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-sm">
-                  <Phone className="w-4 h-4 text-slate-400" />
-                  <span className="text-slate-300">{formatPhone(selectedConversation.phone_number)}</span>
-                </div>
-                {selectedConversation.contact?.email && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <Mail className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-300">{selectedConversation.contact.email}</span>
-                  </div>
+      {/* ========== CHAT PANEL ========== */}
+      <div className={`flex-1 flex flex-col min-w-0 ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
+        {selectedConversation ? (
+          <>
+            <div className="flex items-center justify-between p-4 border-b border-dark-700/50 bg-dark-800/30">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setMobileView('list')} className="md:hidden p-2 rounded-lg hover:bg-dark-700/50 text-dark-400"><ArrowLeft className="w-5 h-5" /></button>
+                {selectedConversation.contact_avatar ? <img src={selectedConversation.contact_avatar} alt={contactName} className="w-10 h-10 rounded-full object-cover" /> : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center"><span className="text-white font-semibold text-sm">{getInitials(contactName)}</span></div>
                 )}
-              </div>
-
-              {/* Bot Status */}
-              <div className="p-3 bg-slate-800/30 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Bot className="w-4 h-4 text-violet-400" />
-                    <span className="text-sm text-slate-300">Bot Automático</span>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                    selectedConversation.is_bot_active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/50 text-slate-400'
-                  }`}>
-                    {selectedConversation.is_bot_active ? 'Ativo' : 'Inativo'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Stats */}
-              {selectedConversation.contact && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 bg-slate-800/30 rounded-xl">
-                    <div className="flex items-center gap-2 mb-1">
-                      <ShoppingCart className="w-4 h-4 text-violet-400" />
-                      <span className="text-xs text-slate-400">Pedidos</span>
-                    </div>
-                    <p className="text-lg font-bold text-white">{selectedConversation.contact.total_orders || 0}</p>
-                  </div>
-                  <div className="p-3 bg-slate-800/30 rounded-xl">
-                    <div className="flex items-center gap-2 mb-1">
-                      <DollarSign className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs text-slate-400">Total</span>
-                    </div>
-                    <p className="text-lg font-bold text-white">{formatCurrency(selectedConversation.contact.total_spent)}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Tags */}
-              {selectedConversation.tags && selectedConversation.tags.length > 0 && (
                 <div>
-                  <h5 className="text-xs font-semibold text-slate-400 uppercase mb-2">Tags</h5>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedConversation.tags.map((t: any) => (
-                      <span key={t.tag?.id} style={{ backgroundColor: t.tag?.color + '30', color: t.tag?.color }} className="px-2 py-1 rounded-lg text-xs font-medium">
-                        {t.tag?.title}
-                      </span>
-                    ))}
-                  </div>
+                  <h3 className="font-semibold text-white">{contactName}</h3>
+                  <p className="text-xs text-dark-400">{formatPhone(selectedConversation.phone_number)}</p>
                 </div>
-              )}
-
-              {/* Agent */}
-              <div>
-                <h5 className="text-xs font-semibold text-slate-400 uppercase mb-2">Agente</h5>
-                {selectedConversation.assigned_agent ? (
-                  <div className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-xl">
-                    <UserCircle className="w-8 h-8 text-violet-400" />
-                    <div>
-                      <p className="text-sm font-medium text-white">{selectedConversation.assigned_agent.name}</p>
-                      <p className="text-xs text-slate-400">{selectedConversation.assigned_agent.email}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-slate-800/30 rounded-xl text-center">
-                    <p className="text-sm text-slate-400">Sem agente</p>
-                    <button className="mt-2 px-3 py-1.5 text-xs bg-violet-600 text-white rounded-lg hover:bg-violet-700">
-                      Atribuir
-                    </button>
-                  </div>
-                )}
               </div>
-
-              {/* Notes */}
-              <div>
-                <h5 className="text-xs font-semibold text-slate-400 uppercase mb-2">Notas</h5>
-                <textarea
-                  placeholder="Adicionar nota..."
-                  defaultValue={selectedConversation.chat_note || ''}
-                  className="w-full p-3 bg-slate-800/30 border border-slate-700/50 rounded-xl text-sm text-white placeholder-slate-500 resize-none h-24 focus:outline-none focus:border-violet-500/50"
-                />
+              <div className="flex items-center gap-2">
+                <button onClick={handleToggleBot} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedConversation.is_bot_active ? 'bg-primary-500/10 text-primary-400 border border-primary-500/30' : 'bg-dark-700/50 text-dark-400 hover:text-white'}`}>
+                  <Bot className="w-4 h-4" /><span className="hidden sm:inline">{selectedConversation.is_bot_active ? 'Bot Ativo' : 'Bot Off'}</span>
+                </button>
+                <button className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors"><UserPlus className="w-5 h-5" /></button>
+                <button className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors"><MoreVertical className="w-5 h-5" /></button>
+                <button onClick={() => setShowContactPanel(!showContactPanel)} className="hidden lg:block p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors">
+                  {showContactPanel ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
+                </button>
               </div>
             </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messagesLoading ? (
+                <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 text-primary-400 animate-spin" /></div>
+              ) : messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-dark-400">
+                  <div className="w-16 h-16 rounded-2xl bg-dark-800/50 flex items-center justify-center mb-4"><Send className="w-8 h-8 opacity-50" /></div>
+                  <p className="text-sm">Nenhuma mensagem ainda</p>
+                  <p className="text-xs text-dark-500 mt-1">Envie uma mensagem para iniciar a conversa</p>
+                </div>
+              ) : (
+                <>
+                  {groupedMessages.map((group, gi) => (
+                    <div key={gi}>
+                      <DateSeparator date={group.date} />
+                      <div className="space-y-3">
+                        {group.messages.map((msg) => {
+                          const isOutbound = msg.direction === 'outbound'
+                          return (
+                            <div key={msg.id} className={`flex gap-3 ${isOutbound ? 'justify-end' : 'justify-start'}`}>
+                              {!isOutbound && <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0 mt-1"><span className="text-white text-xs font-semibold">{getInitials(contactName)}</span></div>}
+                              <div className={`max-w-[70%] ${isOutbound ? 'items-end' : 'items-start'}`}>
+                                <div className={`relative rounded-2xl px-4 py-2.5 ${isOutbound ? msg.sent_by_bot ? 'bg-gradient-to-r from-primary-500 to-primary-600 rounded-tr-md' : 'bg-primary-500 rounded-tr-md' : 'bg-dark-800 border border-dark-700/50 rounded-tl-md'}`}>
+                                  {msg.sent_by_bot && <div className="absolute top-2 right-2"><Bot className="w-3 h-3 text-white/50" /></div>}
+                                  {msg.message_type === 'document' && msg.media_url && <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-dark-700/50 rounded-lg mb-2 hover:bg-dark-700"><FileText className="w-5 h-5 text-primary-400" /><span className="text-sm text-white truncate">{msg.media_filename || 'Documento'}</span></a>}
+                                  {msg.content && <p className={`text-sm whitespace-pre-wrap break-words ${isOutbound ? 'text-white' : 'text-dark-100'}`}>{msg.content}</p>}
+                                </div>
+                                <div className={`flex items-center gap-1.5 mt-1 px-1 ${isOutbound ? 'justify-end' : 'justify-start'}`}>
+                                  {msg.sent_by_bot && isOutbound && <span className="text-[10px] text-dark-500">via Bot</span>}
+                                  <span className="text-[10px] text-dark-500">{formatMessageTime(msg.created_at)}</span>
+                                  {isOutbound && <MessageStatus status={msg.status} />}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-dark-700/50 bg-dark-800/30">
+              {selectedConversation.can_send_template_only && (
+                <div className="flex items-center gap-2 p-3 mb-3 bg-warning-500/10 border border-warning-500/20 rounded-xl">
+                  <AlertCircle className="w-4 h-4 text-warning-400 flex-shrink-0" />
+                  <span className="text-sm text-warning-400">Janela de 24h expirada. Use um template.</span>
+                  <button className="ml-auto text-sm text-primary-400 font-medium hover:underline whitespace-nowrap">Enviar Template</button>
+                </div>
+              )}
+              <div className="flex items-end gap-2">
+                <button className="p-2.5 rounded-xl hover:bg-dark-700/50 text-dark-400 hover:text-primary-400 transition-colors"><Smile className="w-5 h-5" /></button>
+                <button className="p-2.5 rounded-xl hover:bg-dark-700/50 text-dark-400 hover:text-primary-400 transition-colors"><Paperclip className="w-5 h-5" /></button>
+                <div className="flex-1 relative">
+                  <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Digite uma mensagem..." disabled={isSending} rows={1} className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 resize-none transition-colors disabled:opacity-50" style={{ maxHeight: '120px' }} />
+                </div>
+                <button onClick={handleSendMessage} disabled={!input.trim() || isSending} className="p-3 rounded-xl bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                </button>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <button className="px-3 py-1.5 text-xs bg-dark-700/50 text-dark-400 rounded-lg hover:text-white hover:bg-dark-700 transition-colors">/atalhos</button>
+                <button className="px-3 py-1.5 text-xs bg-dark-700/50 text-dark-400 rounded-lg hover:text-white hover:bg-dark-700 transition-colors">📋 Templates</button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-dark-400">
+            <MessageSquare className="w-16 h-16 mb-4 opacity-30" />
+            <p className="text-lg font-medium">Selecione uma conversa</p>
+            <p className="text-sm text-dark-500 mt-1">Escolha uma conversa da lista para começar</p>
+          </div>
+        )}
+      </div>
+
+      {/* ========== CONTACT PANEL ========== */}
+      <AnimatePresence>
+        {selectedConversation && showContactPanel && (
+          <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 380, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="hidden lg:flex flex-col flex-shrink-0 border-l border-dark-700/50 bg-dark-900/30 overflow-hidden">
+            {contactLoading || !contact ? (
+              <div className="w-[380px] h-full flex items-center justify-center"><Loader2 className="w-8 h-8 text-primary-400 animate-spin" /></div>
+            ) : (
+              <div className="w-[380px] flex flex-col h-full">
+                <div className="p-6 border-b border-dark-700/50 text-center">
+                  {contact.profile_picture_url ? <img src={contact.profile_picture_url} alt={contact.name || 'Contato'} className="w-20 h-20 mx-auto rounded-full object-cover mb-4 ring-4 ring-primary-500/20" /> : (
+                    <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center mb-4 ring-4 ring-primary-500/20"><span className="text-white font-bold text-2xl">{getInitials(contact.name || contact.phone_number)}</span></div>
+                  )}
+                  <h3 className="text-lg font-semibold text-white mb-1">{contact.name || 'Sem nome'}</h3>
+                  <p className="text-sm text-dark-400 mb-3">{contact.phone_number}</p>
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
+                    {contact.is_blocked ? <span className="px-2.5 py-1 bg-red-500/10 text-red-400 text-xs font-medium rounded-lg">Bloqueado</span> : <span className="px-2.5 py-1 bg-green-500/10 text-green-400 text-xs font-medium rounded-lg">Ativo</span>}
+                    {contact.total_orders > 0 && <span className="px-2.5 py-1 bg-primary-500/10 text-primary-400 text-xs font-medium rounded-lg">Cliente</span>}
+                  </div>
+                </div>
+
+                <div className="flex border-b border-dark-700/50">
+                  {tabs.map((tab) => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-3 text-sm font-medium transition-all border-b-2 ${activeTab === tab.id ? 'text-primary-400 border-primary-500' : 'text-dark-400 border-transparent hover:text-white'}`}>{tab.label}</button>)}
+                </div>
+
+                <div className="flex-1 overflow-y-auto">
+                  {activeTab === 'info' && (
+                    <div className="p-4 space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"><Mail className="w-5 h-5 text-dark-400" /><div className="flex-1 min-w-0"><p className="text-xs text-dark-500">Email</p><p className="text-sm text-white truncate">{contact.email || 'Não informado'}</p></div></div>
+                        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"><Phone className="w-5 h-5 text-dark-400" /><div className="flex-1"><p className="text-xs text-dark-500">Telefone</p><p className="text-sm text-white">{contact.phone_number}</p></div></div>
+                        {contact.address?.city && <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"><MapPin className="w-5 h-5 text-dark-400" /><div className="flex-1"><p className="text-xs text-dark-500">Cidade</p><p className="text-sm text-white">{contact.address.city}{contact.address.state ? `, ${contact.address.state}` : ''}</p></div></div>}
+                        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"><Calendar className="w-5 h-5 text-dark-400" /><div className="flex-1"><p className="text-xs text-dark-500">Contato desde</p><p className="text-sm text-white">{formatDate(contact.created_at)}</p></div></div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2"><h4 className="text-sm font-medium text-dark-300">Tags</h4><button onClick={() => setShowAddTag(true)} className="p-1 hover:bg-dark-700 rounded transition-colors"><Plus className="w-4 h-4 text-dark-400" /></button></div>
+                        <div className="flex flex-wrap gap-2">
+                          {contact.tags?.map((tag, i) => <span key={i} className="px-2.5 py-1 bg-primary-500/10 text-primary-400 text-xs rounded-lg flex items-center gap-1 group">{tag}<button onClick={() => handleRemoveTag(tag)} className="opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3 hover:text-white" /></button></span>)}
+                          {showAddTag && (
+                            <div className="flex items-center gap-1">
+                              <input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTag()} placeholder="Nova tag" className="w-24 px-2 py-1 text-xs bg-dark-700 border border-dark-600 rounded text-white placeholder-dark-400 focus:outline-none focus:border-primary-500" autoFocus />
+                              <button onClick={handleAddTag} className="text-primary-400 hover:text-primary-300"><CheckCircle className="w-4 h-4" /></button>
+                              <button onClick={() => setShowAddTag(false)} className="text-dark-400 hover:text-white"><X className="w-4 h-4" /></button>
+                            </div>
+                          )}
+                          {(!contact.tags || contact.tags.length === 0) && !showAddTag && <span className="text-xs text-dark-500">Nenhuma tag</span>}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-dark-800/50 rounded-xl text-center"><p className="text-2xl font-bold text-white">{contact.total_messages_received}</p><p className="text-xs text-dark-400">Msg Recebidas</p></div>
+                        <div className="p-3 bg-dark-800/50 rounded-xl text-center"><p className="text-2xl font-bold text-white">{contact.total_messages_sent}</p><p className="text-xs text-dark-400">Msg Enviadas</p></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'crm' && (
+                    <div className="p-4 space-y-4">
+                      {activeDeal ? (
+                        <div className="p-4 bg-gradient-to-br from-primary-500/10 to-yellow-500/10 border border-primary-500/20 rounded-xl">
+                          <div className="flex items-center justify-between mb-3"><h4 className="font-medium text-white">Deal Ativo</h4><span className="px-2 py-0.5 bg-primary-500 text-white text-xs rounded">{activeDeal.stage?.name || 'Em andamento'}</span></div>
+                          <p className="text-2xl font-bold text-white mb-1">{formatCurrency(activeDeal.value)}</p>
+                          <p className="text-sm text-dark-400">{activeDeal.pipeline?.name || 'Pipeline'}</p>
+                        </div>
+                      ) : (
+                        <button className="w-full py-4 border border-dashed border-dark-600 rounded-xl text-dark-400 hover:text-white hover:border-primary-500 transition-all flex items-center justify-center gap-2"><Plus className="w-4 h-4" />Criar Novo Deal</button>
+                      )}
+                      {deals.length > 0 && (
+                        <div><h4 className="text-sm font-medium text-dark-300 mb-3">Histórico</h4>
+                          <div className="space-y-2">
+                            {deals.filter(d => d.id !== activeDeal?.id).slice(0, 5).map((deal) => (
+                              <div key={deal.id} className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
+                                <div className={`w-2 h-2 rounded-full ${deal.status === 'won' ? 'bg-green-500' : deal.status === 'lost' ? 'bg-red-500' : 'bg-yellow-500'}`} />
+                                <div className="flex-1 min-w-0"><p className="text-sm text-white truncate">{deal.title}</p><p className="text-xs text-dark-400">{formatCurrency(deal.value)}</p></div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === 'orders' && (
+                    <div className="p-4 space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-dark-800/50 rounded-xl text-center"><p className="text-2xl font-bold text-white">{contact.total_orders}</p><p className="text-xs text-dark-400">Pedidos</p></div>
+                        <div className="p-3 bg-dark-800/50 rounded-xl text-center"><p className="text-2xl font-bold text-primary-400">{formatCurrency(contact.total_spent)}</p><p className="text-xs text-dark-400">Total Gasto</p></div>
+                      </div>
+                      {cart && (
+                        <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+                          <div className="flex items-center gap-2 mb-3"><ShoppingCart className="w-5 h-5 text-yellow-400" /><h4 className="font-medium text-yellow-400">Carrinho Abandonado</h4></div>
+                          <p className="text-sm text-dark-300 mb-1">{cart.line_items?.length || 0} itens • {formatCurrency(cart.total_price)}</p>
+                          <p className="text-xs text-dark-500 mb-3">Abandonado {formatRelativeTime(cart.created_at)}</p>
+                          <button className="w-full py-2 bg-yellow-500 text-white text-sm rounded-lg hover:bg-yellow-600 transition-colors">Enviar Recuperação</button>
+                        </div>
+                      )}
+                      {orders.length > 0 && (
+                        <div className="p-4 bg-dark-800/50 rounded-xl">
+                          <div className="flex items-center justify-between mb-3"><h4 className="font-medium text-white">Último Pedido</h4><span className={`px-2 py-0.5 text-xs rounded ${orders[0].fulfillment_status === 'fulfilled' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>{orders[0].fulfillment_status === 'fulfilled' ? 'Entregue' : 'Pendente'}</span></div>
+                          <p className="text-sm text-dark-300 mb-2">#{orders[0].order_number} • {orders[0].line_items?.length || 0} itens</p>
+                          <p className="text-lg font-semibold text-white">{formatCurrency(orders[0].total_price)}</p>
+                        </div>
+                      )}
+                      {orders.length === 0 && !cart && <div className="text-center py-8 text-dark-400"><Package className="w-12 h-12 mx-auto mb-3 opacity-30" /><p className="text-sm">Nenhum pedido encontrado</p></div>}
+                    </div>
+                  )}
+
+                  {activeTab === 'notes' && (
+                    <div className="p-4 space-y-4">
+                      <div className="relative">
+                        <textarea value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="Adicionar uma nota..." className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 resize-none min-h-[80px]" />
+                        <button onClick={handleAddNote} disabled={!newNote.trim() || isSavingNote} className="absolute bottom-3 right-3 p-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50">
+                          {isSavingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <div className="space-y-4">
+                        {notes.length > 0 ? notes.map((note) => (
+                          <div key={note.id} className="relative pl-6 border-l-2 border-dark-700">
+                            <div className="absolute left-[-5px] top-0 w-2 h-2 bg-primary-500 rounded-full" />
+                            <div className="pb-4">
+                              <div className="flex items-center gap-2 mb-1"><span className="text-sm font-medium text-white">{note.created_by_name || 'Usuário'}</span><span className="text-xs text-dark-500">{formatRelativeTime(note.created_at)}</span></div>
+                              <p className="text-sm text-dark-300">{note.content}</p>
+                            </div>
+                          </div>
+                        )) : <div className="text-center py-8 text-dark-400"><FileText className="w-12 h-12 mx-auto mb-3 opacity-30" /><p className="text-sm">Nenhuma nota ainda</p></div>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-4 border-t border-dark-700/50 bg-dark-800/30">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><Tag className="w-4 h-4" /><span className="text-sm">Tag</span></button>
+                    <button className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><UserPlus className="w-4 h-4" /><span className="text-sm">Atribuir</span></button>
+                    <button className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><DollarSign className="w-4 h-4" /><span className="text-sm">Deal</span></button>
+                    <button onClick={handleBlockContact} className={`flex items-center justify-center gap-2 p-3 rounded-xl transition-all ${contact.is_blocked ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}><Ban className="w-4 h-4" /><span className="text-sm">{contact.is_blocked ? 'Desbloquear' : 'Bloquear'}</span></button>
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
