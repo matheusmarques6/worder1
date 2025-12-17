@@ -7,8 +7,8 @@ import { useState, useCallback } from 'react';
 import type {
   AIAnalyticsResponse,
   AIAgentDetailResponse,
-  DateRange,
 } from '@/types/whatsapp-ai-analytics';
+import type { DateRange } from '@/types/whatsapp-analytics';
 
 interface UseWhatsAppAIAnalyticsReturn {
   data: AIAnalyticsResponse | null;
