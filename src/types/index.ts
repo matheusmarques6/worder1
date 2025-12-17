@@ -309,19 +309,45 @@ export interface WhatsAppConversation {
   bot_disabled_until?: string;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   source?: string;
+  // Relações
+  contact?: {
+    id?: string;
+    email?: string;
+    phone?: string;
+    total_orders?: number;
+    total_spent?: number;
+  };
+  tags?: Array<{
+    tag?: {
+      id?: string;
+      title?: string;
+      color?: string;
+    };
+  }>;
+  assigned_agent?: {
+    id?: string;
+    name?: string;
+    email?: string;
+  };
 }
 
 export interface WhatsAppMessage {
   id: string;
   conversation_id: string;
-  from_number: string;
-  to_number: string;
+  from_number?: string;
+  to_number?: string;
   type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'template';
   content: string;
   media_url?: string;
-  status: 'sent' | 'delivered' | 'read' | 'failed';
-  is_outgoing: boolean;
+  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+  is_outgoing?: boolean;
+  direction?: 'inbound' | 'outbound';
+  sent_at?: string;
+  delivered_at?: string;
+  read_at?: string;
   created_at: string;
+  meta_message_id?: string;
+  wa_message_id?: string;
 }
 
 export interface WhatsAppTemplate {
