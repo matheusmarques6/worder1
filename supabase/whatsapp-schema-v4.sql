@@ -25,37 +25,76 @@ CREATE TABLE IF NOT EXISTS whatsapp_configs (
 -- Índice único por organização
 CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_configs_org ON whatsapp_configs(organization_id);
 
--- RLS
+-- ============================================
+-- TABELA: whatsapp_instances (QR Code / Evolution)
+-- ============================================
+DO $$ BEGIN
+  ALTER TABLE whatsapp_instances ADD COLUMN IF NOT EXISTS api_type VARCHAR(50) DEFAULT 'EVOLUTION';
+  ALTER TABLE whatsapp_instances ADD COLUMN IF NOT EXISTS api_url TEXT;
+  ALTER TABLE whatsapp_instances ADD COLUMN IF NOT EXISTS api_key TEXT;
+EXCEPTION WHEN undefined_table THEN
+  CREATE TABLE whatsapp_instances (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    phone_number VARCHAR(50),
+    unique_id VARCHAR(255) UNIQUE NOT NULL,
+    qr_code TEXT,
+    session_data JSONB,
+    status VARCHAR(50) DEFAULT 'GENERATING',
+    online_status VARCHAR(50) DEFAULT 'unavailable',
+    api_type VARCHAR(50) DEFAULT 'EVOLUTION',
+    api_url TEXT,
+    api_key TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
+END $$;
+
+-- ============================================
+-- RLS POLICIES
+-- ============================================
 ALTER TABLE whatsapp_configs ENABLE ROW LEVEL SECURITY;
 
--- Policies
 DROP POLICY IF EXISTS "configs_select" ON whatsapp_configs;
 CREATE POLICY "configs_select" ON whatsapp_configs FOR SELECT USING (
   EXISTS (SELECT 1 FROM organization_members WHERE organization_id = whatsapp_configs.organization_id AND user_id = auth.uid())
 );
 
-DROP POLICY IF EXISTS "configs_insert" ON whatsapp_configs;
-CREATE POLICY "configs_insert" ON whatsapp_configs FOR INSERT WITH CHECK (
+DROP POLICY IF EXISTS "configs_all" ON whatsapp_configs;
+CREATE POLICY "configs_all" ON whatsapp_configs FOR ALL USING (
   EXISTS (SELECT 1 FROM organization_members WHERE organization_id = whatsapp_configs.organization_id AND user_id = auth.uid())
 );
 
-DROP POLICY IF EXISTS "configs_update" ON whatsapp_configs;
-CREATE POLICY "configs_update" ON whatsapp_configs FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM organization_members WHERE organization_id = whatsapp_configs.organization_id AND user_id = auth.uid())
+-- Instances RLS
+ALTER TABLE whatsapp_instances ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "instances_select" ON whatsapp_instances;
+CREATE POLICY "instances_select" ON whatsapp_instances FOR SELECT USING (
+  EXISTS (SELECT 1 FROM organization_members WHERE organization_id = whatsapp_instances.organization_id AND user_id = auth.uid())
 );
 
--- Grant
+DROP POLICY IF EXISTS "instances_all" ON whatsapp_instances;
+CREATE POLICY "instances_all" ON whatsapp_instances FOR ALL USING (
+  EXISTS (SELECT 1 FROM organization_members WHERE organization_id = whatsapp_instances.organization_id AND user_id = auth.uid())
+);
+
+-- Grants
 GRANT ALL ON whatsapp_configs TO service_role;
+GRANT ALL ON whatsapp_instances TO service_role;
 
 -- ============================================
 -- HABILITAR REALTIME NAS TABELAS
 -- ============================================
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_conversations;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- Habilitar realtime para conversas
-ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_conversations;
-
--- Habilitar realtime para mensagens
-ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_messages;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_messages;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================
 -- FUNÇÃO PARA NOTIFICAR NOVA MENSAGEM
@@ -63,14 +102,13 @@ ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_messages;
 CREATE OR REPLACE FUNCTION notify_new_message()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- Atualizar conversa com última mensagem
   UPDATE whatsapp_conversations
   SET 
     last_message = NEW.content,
-    last_message_at = NEW.created_at,
+    last_message_at = COALESCE(NEW.sent_at, NOW()),
     last_message_preview = LEFT(NEW.content, 100),
     unread_count = CASE 
-      WHEN NEW.direction = 'inbound' THEN unread_count + 1 
+      WHEN NEW.direction = 'inbound' THEN COALESCE(unread_count, 0) + 1 
       ELSE unread_count 
     END,
     updated_at = NOW()
@@ -80,20 +118,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger para nova mensagem
 DROP TRIGGER IF EXISTS trigger_new_message ON whatsapp_messages;
 CREATE TRIGGER trigger_new_message
 AFTER INSERT ON whatsapp_messages
 FOR EACH ROW EXECUTE FUNCTION notify_new_message();
 
 -- ============================================
--- ÍNDICES ADICIONAIS PARA PERFORMANCE
+-- ÍNDICES PARA PERFORMANCE
 -- ============================================
 CREATE INDEX IF NOT EXISTS idx_wa_messages_created ON whatsapp_messages(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_wa_conv_updated ON whatsapp_conversations(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_wa_conv_last_msg ON whatsapp_conversations(last_message_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wa_configs_phone ON whatsapp_configs(phone_number_id);
 
 -- ============================================
 -- SUCESSO!
 -- ============================================
-SELECT '✅ WhatsApp CRM Schema v4 (Realtime + Configs) instalado!' AS resultado;
+SELECT '✅ WhatsApp CRM Schema v4 instalado!' AS resultado;

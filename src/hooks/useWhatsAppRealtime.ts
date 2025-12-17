@@ -8,6 +8,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 import { useWhatsAppStore } from '@/stores';
+import type { WhatsAppConversation, WhatsAppMessage } from '@/types';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,8 +18,8 @@ const supabase = createClient(
 interface UseRealtimeOptions {
   organizationId?: string;
   conversationId?: string;
-  onNewMessage?: (message: any) => void;
-  onConversationUpdate?: (conversation: any) => void;
+  onNewMessage?: (message: WhatsAppMessage) => void;
+  onConversationUpdate?: (conversation: WhatsAppConversation) => void;
   onStatusUpdate?: (status: any) => void;
 }
 
@@ -48,7 +49,6 @@ export function useWhatsAppRealtime(options: UseRealtimeOptions = {}) {
   useEffect(() => {
     if (!organizationId) return;
 
-    // Canal para conversas
     const channel = supabase
       .channel(`conversations:${organizationId}`)
       .on(
@@ -63,14 +63,17 @@ export function useWhatsAppRealtime(options: UseRealtimeOptions = {}) {
           console.log('📥 Conversation update:', payload);
 
           if (payload.eventType === 'INSERT') {
-            // Nova conversa
-            const newConv = payload.new;
-            setConversations([newConv, ...conversations]);
-            onConversationUpdate?.(newConv);
+            const newConv = payload.new as WhatsAppConversation;
+            if (newConv && newConv.id) {
+              setConversations([newConv, ...conversations]);
+              onConversationUpdate?.(newConv);
+            }
           } else if (payload.eventType === 'UPDATE') {
-            // Conversa atualizada
-            updateConversation(payload.new.id, payload.new);
-            onConversationUpdate?.(payload.new);
+            const updatedConv = payload.new as WhatsAppConversation;
+            if (updatedConv && updatedConv.id) {
+              updateConversation(updatedConv.id, updatedConv);
+              onConversationUpdate?.(updatedConv);
+            }
           }
         }
       )
@@ -98,7 +101,6 @@ export function useWhatsAppRealtime(options: UseRealtimeOptions = {}) {
       return;
     }
 
-    // Canal para mensagens da conversa atual
     const channel = supabase
       .channel(`messages:${conversationId}`)
       .on(
@@ -111,13 +113,14 @@ export function useWhatsAppRealtime(options: UseRealtimeOptions = {}) {
         },
         (payload) => {
           console.log('📨 New message:', payload);
-          const newMessage = payload.new;
-          addMessage(conversationId, newMessage);
-          onNewMessage?.(newMessage);
+          const newMessage = payload.new as WhatsAppMessage;
+          if (newMessage && newMessage.id) {
+            addMessage(conversationId, newMessage);
+            onNewMessage?.(newMessage);
 
-          // Tocar som de notificação para mensagens recebidas
-          if (newMessage.direction === 'inbound') {
-            playNotificationSound();
+            if (newMessage.direction === 'inbound') {
+              playNotificationSound();
+            }
           }
         }
       )
@@ -153,7 +156,6 @@ export function useWhatsAppRealtime(options: UseRealtimeOptions = {}) {
       const audio = new Audio('/sounds/notification.mp3');
       audio.volume = 0.5;
       audio.play().catch(() => {
-        // Browser pode bloquear autoplay
         console.log('Audio autoplay blocked');
       });
     } catch (e) {
@@ -161,9 +163,6 @@ export function useWhatsAppRealtime(options: UseRealtimeOptions = {}) {
     }
   }, []);
 
-  // =============================================
-  // BROADCAST PARA OUTROS CLIENTES
-  // =============================================
   const broadcastTyping = useCallback((isTyping: boolean) => {
     if (!conversationId || !channelRef.current) return;
 
@@ -194,8 +193,7 @@ export function useWhatsAppRealtime(options: UseRealtimeOptions = {}) {
 // =============================================
 export function useDesktopNotifications() {
   const requestPermission = useCallback(async () => {
-    if (!('Notification' in window)) {
-      console.log('Browser does not support notifications');
+    if (typeof window === 'undefined' || !('Notification' in window)) {
       return false;
     }
 
@@ -212,6 +210,8 @@ export function useDesktopNotifications() {
   }, []);
 
   const showNotification = useCallback((title: string, options?: NotificationOptions) => {
+    if (typeof window === 'undefined') return;
+    
     if (Notification.permission === 'granted') {
       const notification = new Notification(title, {
         icon: '/icon-192.png',
@@ -224,7 +224,6 @@ export function useDesktopNotifications() {
         notification.close();
       };
 
-      // Auto-close após 5 segundos
       setTimeout(() => notification.close(), 5000);
 
       return notification;
@@ -241,9 +240,6 @@ export function useDesktopNotifications() {
   };
 }
 
-// =============================================
-// PROVIDER PARA CONTEXTO
-// =============================================
 export function createRealtimeSubscription(organizationId: string) {
   const channel = supabase
     .channel(`org:${organizationId}`)
@@ -256,8 +252,9 @@ export function createRealtimeSubscription(organizationId: string) {
         filter: `organization_id=eq.${organizationId}`,
       },
       (payload) => {
-        // Emitir evento customizado
-        window.dispatchEvent(new CustomEvent('whatsapp:conversation', { detail: payload }));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('whatsapp:conversation', { detail: payload }));
+        }
       }
     )
     .on(
@@ -268,7 +265,9 @@ export function createRealtimeSubscription(organizationId: string) {
         table: 'whatsapp_messages',
       },
       (payload) => {
-        window.dispatchEvent(new CustomEvent('whatsapp:message', { detail: payload }));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('whatsapp:message', { detail: payload }));
+        }
       }
     )
     .subscribe();

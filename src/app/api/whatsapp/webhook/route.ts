@@ -4,8 +4,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { generateWhatsAppResponse } from '@/lib/whatsapp/ai-providers';
-import { sendTextMessage } from '@/lib/whatsapp/meta-api';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,14 +44,17 @@ export async function POST(request: NextRequest) {
     const phoneNumberId = value.metadata?.phone_number_id;
 
     // Buscar config pelo phone_number_id
+    let config: any = null;
+    
     const { data: waConfig } = await supabase
       .from('whatsapp_accounts')
       .select('*, organization:organizations(*)')
       .eq('phone_number_id', phoneNumberId)
       .single();
 
+    config = waConfig;
+
     // Fallback para whatsapp_configs
-    let config = waConfig;
     if (!config) {
       const { data: altConfig } = await supabase
         .from('whatsapp_configs')
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
     // Processar status de entrega
     if (value.statuses) {
       for (const status of value.statuses) {
-        await processMessageStatus(orgId, status);
+        await processMessageStatus(status);
       }
     }
 
@@ -141,14 +142,16 @@ async function processIncomingMessage(orgId: string, waConfig: any, message: any
   }
 
   // Buscar ou criar conversa
-  let { data: conversation } = await supabase
+  let conversation: any = null;
+  
+  const { data: existingConv } = await supabase
     .from('whatsapp_conversations')
     .select('*')
     .eq('organization_id', orgId)
     .eq('phone_number', senderPhone)
     .single();
 
-  if (!conversation) {
+  if (!existingConv) {
     const { data: newConv } = await supabase
       .from('whatsapp_conversations')
       .insert({
@@ -169,19 +172,26 @@ async function processIncomingMessage(orgId: string, waConfig: any, message: any
     await supabase
       .from('whatsapp_conversations')
       .update({
-        unread_count: (conversation.unread_count || 0) + 1,
+        unread_count: (existingConv.unread_count || 0) + 1,
         last_message_at: timestamp,
         last_message_preview: content.substring(0, 100),
-        status: conversation.status === 'closed' ? 'open' : conversation.status,
+        status: existingConv.status === 'closed' ? 'open' : existingConv.status,
       })
-      .eq('id', conversation.id);
+      .eq('id', existingConv.id);
+    
+    conversation = existingConv;
+  }
+
+  if (!conversation) {
+    console.error('Failed to create/get conversation');
+    return;
   }
 
   // Salvar mensagem
-  const { data: savedMessage } = await supabase
+  await supabase
     .from('whatsapp_messages')
     .insert({
-      conversation_id: conversation!.id,
+      conversation_id: conversation.id,
       wa_message_id: message.id,
       direction: 'inbound',
       type: messageType,
@@ -189,30 +199,21 @@ async function processIncomingMessage(orgId: string, waConfig: any, message: any
       media_url: mediaUrl || null,
       status: 'received',
       sent_at: timestamp,
-    })
-    .select()
-    .single();
+    });
 
-  console.log(`💬 Message saved: ${conversation!.id} - ${content.substring(0, 50)}`);
+  console.log(`💬 Message saved: ${conversation.id} - ${content.substring(0, 50)}`);
 
-  // Verificar se deve responder automaticamente
-  if (conversation!.is_bot_active) {
-    // Verificar se bot não está temporariamente desabilitado
-    if (conversation!.bot_disabled_until) {
-      const disabledUntil = new Date(conversation!.bot_disabled_until);
+  // Verificar se deve responder automaticamente com IA
+  if (conversation.is_bot_active) {
+    if (conversation.bot_disabled_until) {
+      const disabledUntil = new Date(conversation.bot_disabled_until);
       if (disabledUntil > new Date()) {
         console.log('⏸️ Bot temporarily disabled');
         return;
       }
     }
 
-    // Tentar chatbot de fluxo primeiro
-    const usedFlow = await triggerChatbot(orgId, conversation!, savedMessage!, content);
-
-    // Se não usou fluxo, tentar IA
-    if (!usedFlow) {
-      await triggerAIResponse(orgId, waConfig, conversation!, content);
-    }
+    await triggerAIResponse(orgId, waConfig, conversation, content);
   }
 }
 
@@ -245,35 +246,33 @@ async function triggerAIResponse(orgId: string, waConfig: any, conversation: any
       .order('created_at', { ascending: true })
       .limit(20);
 
-    // Gerar resposta
-    const response = await generateWhatsAppResponse({
-      config: {
-        provider: aiConfig.provider,
-        apiKey,
-        model: aiConfig.model,
-        systemPrompt: aiConfig.system_prompt,
-        temperature: aiConfig.temperature,
-        maxTokens: aiConfig.max_tokens,
-      },
+    // Gerar resposta com IA
+    const response = await generateAIResponse({
+      provider: aiConfig.provider,
+      apiKey,
+      model: aiConfig.model,
+      systemPrompt: aiConfig.system_prompt,
+      temperature: aiConfig.temperature,
+      maxTokens: aiConfig.max_tokens,
       conversationHistory: history || [],
       userMessage,
       contactName: conversation.contact_name,
     });
 
     if (response) {
-      // Enviar resposta
+      // Enviar resposta via WhatsApp
       const phoneNumberId = waConfig.phone_number_id;
       const accessToken = waConfig.access_token;
 
-      const result = await sendTextMessage({
-        phoneNumberId,
-        accessToken,
-        to: conversation.phone_number,
-        content: response,
-      });
+      const result = await sendWhatsAppMessage(
+        phoneNumberId, 
+        accessToken, 
+        conversation.phone_number, 
+        response
+      );
 
       // Salvar mensagem de resposta
-      if (result.messages?.[0]?.id) {
+      if (result?.messages?.[0]?.id) {
         await supabase
           .from('whatsapp_messages')
           .insert({
@@ -295,187 +294,124 @@ async function triggerAIResponse(orgId: string, waConfig: any, conversation: any
 }
 
 // =============================================
-// TRIGGER CHATBOT (FLUXO)
+// GERAR RESPOSTA COM IA
 // =============================================
-async function triggerChatbot(orgId: string, conversation: any, message: any, content: string): Promise<boolean> {
+async function generateAIResponse(params: {
+  provider: string;
+  apiKey: string;
+  model: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+  conversationHistory: any[];
+  userMessage: string;
+  contactName?: string;
+}): Promise<string | null> {
+  const { provider, apiKey, model, systemPrompt, temperature, maxTokens, conversationHistory, userMessage, contactName } = params;
+
+  const defaultPrompt = `Você é um assistente virtual amigável de atendimento ao cliente via WhatsApp.
+${contactName ? `O cliente se chama ${contactName}.` : ''}
+Regras:
+- Seja cordial e profissional
+- Respostas curtas e diretas
+- Use emojis com moderação
+- Se não souber a resposta, ofereça transferir para um atendente humano`;
+
+  const messages = [
+    { role: 'system', content: systemPrompt || defaultPrompt },
+    ...conversationHistory.slice(-10).map((msg: any) => ({
+      role: msg.direction === 'outbound' ? 'assistant' : 'user',
+      content: msg.content,
+    })),
+    { role: 'user', content: userMessage },
+  ];
+
   try {
-    const { data: chatbot } = await supabase
-      .from('whatsapp_chatbots')
-      .select('*, flow:whatsapp_flows(*)')
-      .eq('organization_id', orgId)
-      .eq('is_active', true)
-      .single();
+    let aiResponse = '';
 
-    if (!chatbot || !chatbot.flow) return false;
+    if (provider === 'openai') {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: model || 'gpt-4o-mini',
+          messages,
+          temperature: temperature ?? 0.7,
+          max_tokens: maxTokens ?? 1000,
+        }),
+      });
+      const data = await response.json();
+      aiResponse = data.choices?.[0]?.message?.content || '';
+    } 
+    else if (provider === 'anthropic') {
+      const systemMsg = messages.find(m => m.role === 'system');
+      const chatMsgs = messages.filter(m => m.role !== 'system');
 
-    // Verificar trigger
-    if (chatbot.trigger_type === 'keyword' && chatbot.trigger_keywords?.length > 0) {
-      const lowerContent = content.toLowerCase();
-      const hasKeyword = chatbot.trigger_keywords.some((kw: string) => 
-        lowerContent.includes(kw.toLowerCase())
-      );
-      if (!hasKeyword) return false;
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: model || 'claude-3-haiku-20240307',
+          max_tokens: maxTokens ?? 1000,
+          system: systemMsg?.content || '',
+          messages: chatMsgs,
+        }),
+      });
+      const data = await response.json();
+      aiResponse = data.content?.[0]?.text || '';
     }
+    else if (provider === 'gemini') {
+      const systemMsg = messages.find(m => m.role === 'system');
+      const chatMsgs = messages.filter(m => m.role !== 'system');
 
-    // Buscar ou criar sessão de fluxo
-    let { data: session } = await supabase
-      .from('whatsapp_flow_sessions')
-      .select('*')
-      .eq('conversation_id', conversation.id)
-      .eq('flow_id', chatbot.flow_id)
-      .eq('status', 'active')
-      .single();
+      const contents = chatMsgs.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
 
-    if (!session) {
-      const startNode = chatbot.flow.nodes?.find((n: any) => n.type === 'START');
-      
-      const { data: newSession } = await supabase
-        .from('whatsapp_flow_sessions')
-        .insert({
-          organization_id: orgId,
-          flow_id: chatbot.flow_id,
-          chatbot_id: chatbot.id,
-          conversation_id: conversation.id,
-          origin: 'META',
-          sender_mobile: conversation.phone_number,
-          current_node_id: startNode?.id || 'start_1',
-          session_data: {},
-          status: 'active',
-        })
-        .select()
-        .single();
-
-      session = newSession;
-    }
-
-    // Processar fluxo
-    await processFlowNode(orgId, conversation, chatbot.flow, session, content);
-    return true;
-
-  } catch (error) {
-    console.error('❌ Chatbot trigger error:', error);
-    return false;
-  }
-}
-
-// =============================================
-// PROCESSAR NÓ DO FLUXO
-// =============================================
-async function processFlowNode(orgId: string, conversation: any, flow: any, session: any, userInput: string) {
-  const nodes = flow.nodes || [];
-  const currentNode = nodes.find((n: any) => n.id === session.current_node_id);
-
-  if (!currentNode) return;
-
-  // Buscar config WhatsApp
-  let { data: waConfig } = await supabase
-    .from('whatsapp_accounts')
-    .select('*')
-    .eq('organization_id', orgId)
-    .eq('is_active', true)
-    .single();
-
-  if (!waConfig) {
-    const { data: altConfig } = await supabase
-      .from('whatsapp_configs')
-      .select('*')
-      .eq('organization_id', orgId)
-      .single();
-    waConfig = altConfig;
-  }
-
-  if (!waConfig) return;
-
-  let nextNodeId = null;
-  const edges = flow.edges || [];
-
-  switch (currentNode.type) {
-    case 'START':
-      const startEdge = edges.find((e: any) => e.source === currentNode.id);
-      nextNodeId = startEdge?.target;
-      break;
-
-    case 'MESSAGE':
-      if (currentNode.data?.content) {
-        await sendWAMessage(waConfig, conversation.phone_number, currentNode.data.content, conversation.id);
-      }
-      const msgEdge = edges.find((e: any) => e.source === currentNode.id);
-      nextNodeId = msgEdge?.target;
-      break;
-
-    case 'QUESTION':
-      if (userInput && session.session_data?.waitingForAnswer) {
-        const options = currentNode.data?.options || [];
-        const answerIndex = options.findIndex((opt: string) => 
-          opt.toLowerCase().includes(userInput.toLowerCase()) ||
-          userInput === String(options.indexOf(opt) + 1)
-        );
-        
-        const questionEdges = edges.filter((e: any) => e.source === currentNode.id);
-        nextNodeId = questionEdges[answerIndex]?.target || questionEdges[0]?.target;
-      } else {
-        if (currentNode.data?.content) {
-          let questionText = currentNode.data.content;
-          if (currentNode.data?.options?.length > 0) {
-            questionText += '\n\n' + currentNode.data.options.map((opt: string, i: number) => `${i + 1}. ${opt}`).join('\n');
-          }
-          await sendWAMessage(waConfig, conversation.phone_number, questionText, conversation.id);
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents,
+            systemInstruction: systemMsg ? { parts: [{ text: systemMsg.content }] } : undefined,
+            generationConfig: {
+              temperature: temperature ?? 0.7,
+              maxOutputTokens: maxTokens ?? 1000,
+            },
+          }),
         }
-        await supabase
-          .from('whatsapp_flow_sessions')
-          .update({ session_data: { ...session.session_data, waitingForAnswer: true } })
-          .eq('id', session.id);
-        return;
-      }
-      break;
+      );
+      const data = await response.json();
+      aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    }
 
-    case 'DELAY':
-      const delay = (currentNode.data?.delay || 0) * 1000;
-      await new Promise(resolve => setTimeout(resolve, Math.min(delay, 5000)));
-      const delayEdge = edges.find((e: any) => e.source === currentNode.id);
-      nextNodeId = delayEdge?.target;
-      break;
-
-    case 'AI':
-      // Usar IA para responder
-      await triggerAIResponse(orgId, waConfig, conversation, userInput);
-      const aiEdge = edges.find((e: any) => e.source === currentNode.id);
-      nextNodeId = aiEdge?.target;
-      break;
-
-    case 'END':
-      await supabase
-        .from('whatsapp_flow_sessions')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', session.id);
-      return;
-  }
-
-  if (nextNodeId) {
-    await supabase
-      .from('whatsapp_flow_sessions')
-      .update({ 
-        current_node_id: nextNodeId,
-        session_data: { ...session.session_data, waitingForAnswer: false },
-        last_interaction_at: new Date().toISOString()
-      })
-      .eq('id', session.id);
-
-    const updatedSession = { ...session, current_node_id: nextNodeId, session_data: { ...session.session_data, waitingForAnswer: false } };
-    await processFlowNode(orgId, conversation, flow, updatedSession, '');
+    return aiResponse || null;
+  } catch (error) {
+    console.error('AI generation error:', error);
+    return null;
   }
 }
 
 // =============================================
 // ENVIAR MENSAGEM WHATSAPP
 // =============================================
-async function sendWAMessage(waConfig: any, to: string, text: string, conversationId: string) {
+async function sendWhatsAppMessage(phoneNumberId: string, accessToken: string, to: string, text: string) {
   try {
-    const response = await fetch(`https://graph.facebook.com/v18.0/${waConfig.phone_number_id}/messages`, {
+    const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${waConfig.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
@@ -485,33 +421,17 @@ async function sendWAMessage(waConfig: any, to: string, text: string, conversati
       }),
     });
 
-    const result = await response.json();
-    
-    if (result.messages?.[0]?.id) {
-      // Salvar mensagem enviada
-      await supabase
-        .from('whatsapp_messages')
-        .insert({
-          conversation_id: conversationId,
-          wa_message_id: result.messages[0].id,
-          direction: 'outbound',
-          type: 'text',
-          content: text,
-          status: 'sent',
-          sent_at: new Date().toISOString(),
-        });
-    }
-
-    return result;
+    return await response.json();
   } catch (error) {
-    console.error('❌ sendWAMessage error:', error);
+    console.error('❌ sendWhatsAppMessage error:', error);
+    return null;
   }
 }
 
 // =============================================
 // PROCESSAR STATUS DE MENSAGEM
 // =============================================
-async function processMessageStatus(orgId: string, status: any) {
+async function processMessageStatus(status: any) {
   const waMessageId = status.id;
   const statusValue = status.status;
 
@@ -522,7 +442,7 @@ async function processMessageStatus(orgId: string, status: any) {
 
   // Atualizar log de campanha se aplicável
   if (waMessageId) {
-    const updateData: any = { delivery_status: statusValue };
+    const updateData: Record<string, any> = { delivery_status: statusValue };
     
     if (statusValue === 'delivered') {
       updateData.delivery_time = new Date().toISOString();
@@ -530,20 +450,10 @@ async function processMessageStatus(orgId: string, status: any) {
       updateData.read_time = new Date().toISOString();
     }
 
-    const { data: log } = await supabase
+    await supabase
       .from('whatsapp_campaign_logs')
       .update(updateData)
-      .eq('meta_message_id', waMessageId)
-      .select()
-      .single();
-
-    if (log) {
-      if (statusValue === 'delivered') {
-        await supabase.rpc('increment_campaign_delivered', { p_campaign_id: log.campaign_id });
-      } else if (statusValue === 'read') {
-        await supabase.rpc('increment_campaign_read', { p_campaign_id: log.campaign_id });
-      }
-    }
+      .eq('meta_message_id', waMessageId);
   }
 
   console.log(`📊 Status: ${waMessageId} -> ${statusValue}`);
