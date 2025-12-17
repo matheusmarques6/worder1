@@ -2,7 +2,11 @@
 // WHATSAPP AI ANALYTICS TYPES
 // ===============================
 
-export interface DateRange {
+// DateRange deve ser consistente com whatsapp-analytics.ts
+export type DateRange = 'today' | '7d' | '30d' | '90d' | 'all' | 'custom';
+
+// Interface para quando precisar de datas específicas
+export interface DateRangeObject {
   startDate: string;
   endDate: string;
 }
@@ -181,4 +185,46 @@ export interface ConversationsResponse {
     totalPages: number;
   };
   error?: string;
+}
+
+// Response de detalhes de um agente específico
+export interface AIAgentDetailResponse {
+  agent: {
+    id: string;
+    name: string;
+    provider: string;
+    model: string;
+    status: 'active' | 'inactive' | 'error';
+    created_at: string;
+  };
+  summary: {
+    total_interactions: number;
+    total_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
+    estimated_cost_usd: number;
+    avg_response_time_ms: number;
+    success_rate: number;
+    resolution_rate: number;
+  };
+  trends: {
+    interactions_change: number;
+    tokens_change: number;
+    cost_change: number;
+    latency_change: number;
+  };
+  chart_data: Array<{
+    date: string;
+    interactions: number;
+    tokens: number;
+    avg_latency_ms: number;
+    success_rate: number;
+  }>;
+  hourly_distribution: Array<{
+    hour: number;
+    interactions: number;
+    avg_latency_ms: number;
+  }>;
+  recent_conversations: ConversationSummary[];
+  error_breakdown: AIErrorBreakdown[];
 }
