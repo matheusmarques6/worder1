@@ -40,11 +40,13 @@ import {
   PlayCircle,
   Loader2,
   CheckCircle2,
+  History,
 } from 'lucide-react';
 import { Button, Input, Badge, Textarea } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { AutomationNode, AutomationEdge } from '@/types';
 import { TestModal, TestResultPanel } from './TestModal';
+import { ExecutionHistory } from './ExecutionHistory';
 
 // Tipos de execução de teste
 interface NodeExecutionStatus {
@@ -1690,6 +1692,9 @@ export function AutomationCanvas({
   const [orgId, setOrgId] = useState<string | undefined>(propOrgId);
   const [isDraggingFromPalette, setIsDraggingFromPalette] = useState(false);
   
+  // Tab ativa (canvas ou execuções)
+  const [activeTab, setActiveTab] = useState<'canvas' | 'executions'>('canvas');
+  
   // Estados de teste
   const [showTestModal, setShowTestModal] = useState(false);
   const [showTestResults, setShowTestResults] = useState(false);
@@ -2206,7 +2211,55 @@ export function AutomationCanvas({
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Tabs - Canvas vs Execuções */}
+      <div className="flex items-center gap-1 px-4 py-2 border-b border-[#222222] bg-[#0f0f0f] flex-shrink-0">
+        <button
+          onClick={() => setActiveTab('canvas')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all',
+            activeTab === 'canvas'
+              ? 'bg-primary-500 text-white'
+              : 'text-[#666666] hover:text-white hover:bg-[#1a1a1a]'
+          )}
+        >
+          <Zap className="w-4 h-4" />
+          Canvas
+        </button>
+        <button
+          onClick={() => setActiveTab('executions')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all',
+            activeTab === 'executions'
+              ? 'bg-primary-500 text-white'
+              : 'text-[#666666] hover:text-white hover:bg-[#1a1a1a]'
+          )}
+        >
+          <History className="w-4 h-4" />
+          Execuções
+        </button>
+      </div>
+
+      {/* Executions Tab */}
+      {activeTab === 'executions' && automationId && automationId !== 'new' && orgId && (
+        <div className="flex-1 overflow-hidden">
+          <ExecutionHistory 
+            organizationId={orgId} 
+            automationId={automationId}
+          />
+        </div>
+      )}
+      
+      {activeTab === 'executions' && (!automationId || automationId === 'new') && (
+        <div className="flex-1 flex items-center justify-center bg-[#0a0a0a]">
+          <div className="text-center">
+            <History className="w-12 h-12 text-[#333333] mx-auto mb-3" />
+            <p className="text-[#666666]">Salve a automação primeiro para ver as execuções</p>
+          </div>
+        </div>
+      )}
+
+      {/* Canvas Tab - Main Content */}
+      {activeTab === 'canvas' && (
       <div className="flex-1 flex overflow-hidden">
         <NodePalette onAddNode={handleAddNode} />
 
@@ -2336,6 +2389,7 @@ export function AutomationCanvas({
           />
         )}
       </div>
+      )}
 
       {/* Modal de Teste */}
       <TestModal

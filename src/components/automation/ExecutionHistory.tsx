@@ -248,6 +248,26 @@ export function ExecutionHistory({
     }
   };
 
+  // Processar fila manualmente
+  const processQueue = async () => {
+    try {
+      setRefreshing(true);
+      const response = await fetch('/api/webhooks/process-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 10 }),
+      });
+      const data = await response.json();
+      console.log('[Queue] Processed:', data);
+      // Recarregar execuções
+      await fetchRuns(true);
+    } catch (err) {
+      console.error('[Queue] Error:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Header com filtros */}
@@ -288,6 +308,17 @@ export function ExecutionHistory({
             <option value="all">Tudo</option>
           </select>
 
+          {/* Botão Processar Fila */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={processQueue}
+            disabled={refreshing}
+            title="Processar fila de automações"
+          >
+            <Zap className={cn('w-4 h-4', refreshing && 'animate-pulse text-amber-400')} />
+          </Button>
+
           {/* Botão Refresh */}
           <Button
             variant="ghost"
@@ -315,10 +346,21 @@ export function ExecutionHistory({
             </Button>
           </div>
         ) : runs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-dark-400">
+          <div className="flex flex-col items-center justify-center py-12 px-4 text-dark-400">
             <PlayCircle className="w-12 h-12 mb-3 text-dark-600" />
             <p className="text-lg font-medium text-white mb-1">Nenhuma execução</p>
-            <p className="text-sm">As execuções das suas automações aparecerão aqui</p>
+            <p className="text-sm text-center max-w-md mb-4">
+              {automationId 
+                ? 'Esta automação ainda não foi executada. Certifique-se de que está ativa e que o trigger foi disparado.'
+                : 'As execuções das suas automações aparecerão aqui.'
+              }
+            </p>
+            <div className="text-xs text-dark-500 text-center space-y-1">
+              <p>Para ver execuções:</p>
+              <p>1. Ative a automação</p>
+              <p>2. Dispare o trigger (ex: mude um deal de estágio)</p>
+              <p>3. Clique no ⚡ para processar a fila</p>
+            </div>
           </div>
         ) : (
           <div className="divide-y divide-[#1a1a1a]">
