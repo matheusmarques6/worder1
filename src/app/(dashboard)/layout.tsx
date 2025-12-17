@@ -91,6 +91,7 @@ const analyticsNav = [
   { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon },
   { name: 'Google Ads', href: '/analytics/google', icon: GoogleIcon },
   { name: 'TikTok Ads', href: '/analytics/tiktok', icon: TikTokIcon },
+  { name: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
 ]
 
 const systemNav = [
