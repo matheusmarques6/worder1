@@ -287,16 +287,28 @@ export interface WhatsAppIntegration {
 
 export interface WhatsAppConversation {
   id: string;
-  user_id: string;
+  user_id?: string;
+  organization_id?: string;
   contact_id?: string;
   phone_number: string;
   contact_name?: string;
   last_message?: string;
   last_message_at?: string;
+  last_message_preview?: string;
   unread_count: number;
   status: 'open' | 'closed' | 'pending';
   assigned_to?: string;
+  assigned_agent_id?: string;
   created_at: string;
+  updated_at?: string;
+  // Novas propriedades do CRM
+  origin?: 'meta' | 'qr' | 'evolution';
+  instance_id?: string;
+  chat_note?: string;
+  is_bot_active?: boolean;
+  bot_disabled_until?: string;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  source?: string;
 }
 
 export interface WhatsAppMessage {
