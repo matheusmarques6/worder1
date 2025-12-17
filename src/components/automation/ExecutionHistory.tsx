@@ -254,7 +254,7 @@ export function ExecutionHistory({
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#222222] bg-[#111111]">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold text-white">Execuções</h2>
-          <Badge variant="secondary">{total}</Badge>
+          <Badge variant="default">{total}</Badge>
         </div>
 
         <div className="flex items-center gap-2">
