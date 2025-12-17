@@ -369,6 +369,7 @@ const KlaviyoConfigModal = ({
 export default function SettingsPage() {
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams.get('tab');
+  const configFromUrl = searchParams.get('config');
   
   const [activeTab, setActiveTab] = useState(tabFromUrl || 'integrations');
   const [isLoading, setIsLoading] = useState(true);
@@ -386,6 +387,13 @@ export default function SettingsPage() {
       setActiveTab(tabFromUrl);
     }
   }, [tabFromUrl]);
+
+  // Open config modal when URL has config param
+  useEffect(() => {
+    if (configFromUrl === 'klaviyo') {
+      setShowKlaviyoModal(true);
+    }
+  }, [configFromUrl]);
 
   // Fetch integrations status
   const fetchIntegrations = useCallback(async () => {
