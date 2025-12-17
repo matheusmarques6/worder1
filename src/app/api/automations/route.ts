@@ -490,11 +490,14 @@ async function executeEmailNode(organizationId: string, config: any, context: an
     
     if (response.ok) {
       console.log(`✅ Email enviado para ${email}`);
-      await supabase.rpc('increment_automation_metric', {
-        p_automation_id: context.automation_id,
-        p_metric: 'emails_sent',
-        p_value: 1,
-      }).catch(() => {});
+      // Incrementar métrica (ignorar erro se RPC não existir)
+      try {
+        await supabase.rpc('increment_automation_metric', {
+          p_automation_id: context.automation_id,
+          p_metric: 'emails_sent',
+          p_value: 1,
+        });
+      } catch (e) { /* RPC pode não existir */ }
 
       return { emailSent: true, klaviyoResponse: result };
     } else {
@@ -572,11 +575,13 @@ async function executeWhatsAppNode(organizationId: string, config: any, context:
 
     if (response.ok) {
       console.log(`✅ WhatsApp enviado para ${phone}`);
-      await supabase.rpc('increment_automation_metric', {
-        p_automation_id: context.automation_id,
-        p_metric: 'whatsapp_sent',
-        p_value: 1,
-      }).catch(() => {});
+      try {
+        await supabase.rpc('increment_automation_metric', {
+          p_automation_id: context.automation_id,
+          p_metric: 'whatsapp_sent',
+          p_value: 1,
+        });
+      } catch (e) { /* RPC pode não existir */ }
 
       return { whatsappSent: true, whatsappResponse: result };
     } else {
@@ -636,11 +641,13 @@ async function executeSmsNode(organizationId: string, config: any, context: any)
 
     if (response.ok) {
       console.log(`✅ SMS enviado para ${phone}`);
-      await supabase.rpc('increment_automation_metric', {
-        p_automation_id: context.automation_id,
-        p_metric: 'sms_sent',
-        p_value: 1,
-      }).catch(() => {});
+      try {
+        await supabase.rpc('increment_automation_metric', {
+          p_automation_id: context.automation_id,
+          p_metric: 'sms_sent',
+          p_value: 1,
+        });
+      } catch (e) { /* RPC pode não existir */ }
 
       return { smsSent: true, twilioSid: result.sid };
     } else {
@@ -887,19 +894,22 @@ async function executeNotifyTeamNode(organizationId: string, config: any, contex
 
   // Se houver deal_id, registrar como atividade do deal
   if (context.deal_id) {
-    await supabase
-      .from('deal_activities')
-      .insert({
-        deal_id: context.deal_id,
-        type: 'note',
-        title: title,
-        content: message,
-        metadata: {
-          automation_id: context.automation_id,
-          notification_type: 'automation',
-        }
-      })
-      .catch((err) => console.warn('⚠️ Não foi possível registrar atividade:', err));
+    try {
+      await supabase
+        .from('deal_activities')
+        .insert({
+          deal_id: context.deal_id,
+          type: 'note',
+          title: title,
+          content: message,
+          metadata: {
+            automation_id: context.automation_id,
+            notification_type: 'automation',
+          }
+        });
+    } catch (err) {
+      console.warn('⚠️ Não foi possível registrar atividade:', err);
+    }
   }
 
   // Tentar criar notificação na tabela notifications (se existir)
@@ -1068,20 +1078,21 @@ async function executeMoveDealNode(organizationId: string, config: any, context:
     return { dealMoved: false, error: error.message };
   }
 
-  // Registrar atividade de mudança de estágio
-  await supabase
-    .from('deal_activities')
-    .insert({
-      deal_id: dealId,
-      type: 'stage_change',
-      title: 'Deal movido por automação',
-      metadata: {
-        previous_stage_id: previousStageId,
-        new_stage_id: config.stageId,
-        automation_id: context.automation_id,
-      }
-    })
-    .catch(() => {}); // Não falhar se não conseguir registrar atividade
+  // Registrar atividade de mudança de estágio (ignorar erro se falhar)
+  try {
+    await supabase
+      .from('deal_activities')
+      .insert({
+        deal_id: dealId,
+        type: 'stage_change',
+        title: 'Deal movido por automação',
+        metadata: {
+          previous_stage_id: previousStageId,
+          new_stage_id: config.stageId,
+          automation_id: context.automation_id,
+        }
+      });
+  } catch (e) { /* Não falhar se não conseguir registrar atividade */ }
 
   console.log(`✅ Deal movido para estágio ${config.stageId}`);
   return { 
