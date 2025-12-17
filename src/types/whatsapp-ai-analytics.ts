@@ -5,6 +5,97 @@
 // DateRange deve ser consistente com whatsapp-analytics.ts
 export type DateRange = 'today' | '7d' | '30d' | '90d' | 'all' | 'custom';
 
+// ===============================
+// AI PROVIDER TYPE
+// ===============================
+
+export type AIProvider = 'openai' | 'anthropic' | 'google' | 'groq' | 'cohere' | 'mistral' | 'azure' | 'unknown';
+
+// ===============================
+// CONSTANTS
+// ===============================
+
+export const PROVIDER_COLORS: Record<AIProvider, string> = {
+  openai: '#10A37F',
+  anthropic: '#D97706',
+  google: '#4285F4',
+  groq: '#F55036',
+  cohere: '#39594D',
+  mistral: '#FF7000',
+  azure: '#0078D4',
+  unknown: '#6B7280',
+};
+
+export const PROVIDER_NAMES: Record<AIProvider, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google AI',
+  groq: 'Groq',
+  cohere: 'Cohere',
+  mistral: 'Mistral',
+  azure: 'Azure OpenAI',
+  unknown: 'Desconhecido',
+};
+
+export const AI_COLORS = {
+  interactions: '#8B5CF6',
+  tokens: '#10B981',
+  cost: '#F59E0B',
+  latency: '#3B82F6',
+  success: '#22C55E',
+  error: '#EF4444',
+  input_tokens: '#06B6D4',
+  output_tokens: '#8B5CF6',
+  grid: 'rgba(255,255,255,0.05)',
+  axis: '#6B7280',
+} as const;
+
+// ===============================
+// HELPER FUNCTIONS
+// ===============================
+
+/**
+ * Formata número de tokens para exibição
+ * @example formatTokens(1500) => "1.5K"
+ * @example formatTokens(1500000) => "1.5M"
+ */
+export function formatTokens(tokens: number): string {
+  if (tokens >= 1000000) {
+    return (tokens / 1000000).toFixed(1) + 'M';
+  }
+  if (tokens >= 1000) {
+    return (tokens / 1000).toFixed(1) + 'K';
+  }
+  return tokens.toString();
+}
+
+/**
+ * Formata custo em USD para exibição
+ * @example formatCost(0.0012) => "$0.0012"
+ * @example formatCost(1.5) => "$1.50"
+ */
+export function formatCost(cost: number): string {
+  if (cost < 0.01) {
+    return '$' + cost.toFixed(4);
+  }
+  if (cost < 1) {
+    return '$' + cost.toFixed(3);
+  }
+  return '$' + cost.toFixed(2);
+}
+
+/**
+ * Formata latência em milissegundos para exibição
+ * @example formatLatency(150) => "150ms"
+ * @example formatLatency(1500) => "1.5s"
+ */
+export function formatLatency(ms: number): string {
+  if (ms >= 1000) {
+    return (ms / 1000).toFixed(1) + 's';
+  }
+  return Math.round(ms) + 'ms';
+}
+
 // Interface para quando precisar de datas específicas
 export interface DateRangeObject {
   startDate: string;
