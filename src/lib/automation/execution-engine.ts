@@ -168,7 +168,7 @@ export function redactSensitiveData(
   if (typeof obj !== 'object') return obj;
   
   if (Array.isArray(obj)) {
-    return obj.map(item => redactSensitiveData(item, options));
+    return obj.map((item: any) => redactSensitiveData(item, options));
   }
   
   const result: Record<string, any> = {};
@@ -177,13 +177,13 @@ export function redactSensitiveData(
     const keyLower = key.toLowerCase();
     
     // Redactar chaves sensíveis
-    if (SENSITIVE_KEYS.some(k => keyLower.includes(k))) {
+    if (SENSITIVE_KEYS.some((k: string) => keyLower.includes(k))) {
       result[key] = '[REDACTED]';
       continue;
     }
     
     // Redactar PII se configurado
-    if (options.redactPII && PII_KEYS.some(k => keyLower.includes(k))) {
+    if (options.redactPII && PII_KEYS.some((k: string) => keyLower.includes(k))) {
       if (typeof value === 'string') {
         // Mascarar parcialmente
         if (keyLower.includes('email') && value.includes('@')) {
@@ -329,7 +329,7 @@ export class AutomationExecutionEngine {
     const startTime = Date.now();
     
     // 1. Encontrar nó de trigger
-    const triggerNode = automation.nodes.find(n => n.type?.startsWith('trigger_'));
+    const triggerNode = automation.nodes.find((n: AutomationNode) => n.type?.startsWith('trigger_'));
     if (!triggerNode) {
       throw new Error('Automação sem nó de trigger');
     }
@@ -369,7 +369,7 @@ export class AutomationExecutionEngine {
         }
         
         const nodeId = readyQueue.shift()!;
-        const node = automation.nodes.find(n => n.id === nodeId);
+        const node = automation.nodes.find((n: AutomationNode) => n.id === nodeId);
         
         if (!node || executed.has(nodeId)) continue;
         
@@ -661,20 +661,20 @@ export class AutomationExecutionEngine {
     output: Record<string, any>,
     nodeType: string
   ): string[] {
-    const outgoingEdges = edges.filter(e => e.source === currentNodeId);
+    const outgoingEdges = edges.filter((e: AutomationEdge) => e.source === currentNodeId);
     
     // Para nós de condição/split, filtrar por sourceHandle
     if (nodeType === 'logic_condition' || nodeType === 'logic_split') {
       const result = output.condition_result ?? output.branch_taken ?? output.variant;
       const expectedHandle = result === true || result === 'true' || result === 'A' ? 'true' : 'false';
       
-      const matchingEdges = outgoingEdges.filter(e => 
+      const matchingEdges = outgoingEdges.filter((e: AutomationEdge) => 
         e.sourceHandle === expectedHandle || 
         e.sourceHandle === (result === 'A' ? 'A' : 'B')
       );
       
       if (matchingEdges.length > 0) {
-        return matchingEdges.map(e => e.target);
+        return matchingEdges.map((e: AutomationEdge) => e.target);
       }
     }
     
@@ -683,7 +683,7 @@ export class AutomationExecutionEngine {
       return [];
     }
     
-    return outgoingEdges.map(e => e.target);
+    return outgoingEdges.map((e: AutomationEdge) => e.target);
   }
   
   /**

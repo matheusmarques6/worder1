@@ -488,7 +488,7 @@ export function interpolateString(
         path
       });
       // Checar se tem default
-      const defaultFormatter = formatters.find(f => f.startsWith('default'));
+      const defaultFormatter = formatters.find((f: string) => f.startsWith('default'));
       if (!defaultFormatter) {
         return ''; // Retorna vazio se não tem default
       }
@@ -496,7 +496,7 @@ export function interpolateString(
     
     // Warning se vazio (mas não undefined)
     if (value === '' || value === null) {
-      const hasDefault = formatters.some(f => f.startsWith('default'));
+      const hasDefault = formatters.some((f: string) => f.startsWith('default'));
       if (!hasDefault) {
         warnings.push({
           type: 'empty',
@@ -557,7 +557,7 @@ export function interpolateConfig(
     }
     
     if (Array.isArray(value)) {
-      return value.map((item, index) => processValue(item, `${path}[${index}]`));
+      return value.map((item: any, index: number) => processValue(item, `${path}[${index}]`));
     }
     
     if (value !== null && typeof value === 'object') {
