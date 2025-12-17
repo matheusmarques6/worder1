@@ -728,10 +728,51 @@ interface PipelineOption {
   stages: { id: string; name: string; color: string }[];
 }
 
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+}
+
+// Operadores para condições
+const CONDITION_OPERATORS = [
+  { value: 'equals', label: 'Igual a' },
+  { value: 'not_equals', label: 'Diferente de' },
+  { value: 'contains', label: 'Contém' },
+  { value: 'not_contains', label: 'Não contém' },
+  { value: 'starts_with', label: 'Começa com' },
+  { value: 'ends_with', label: 'Termina com' },
+  { value: 'greater_than', label: 'Maior que' },
+  { value: 'less_than', label: 'Menor que' },
+  { value: 'is_empty', label: 'Está vazio' },
+  { value: 'is_not_empty', label: 'Não está vazio' },
+  { value: 'in_list', label: 'Está na lista' },
+];
+
+// Campos disponíveis para condições
+const CONDITION_FIELDS = [
+  { value: 'contact.email', label: 'Email' },
+  { value: 'contact.phone', label: 'Telefone' },
+  { value: 'contact.first_name', label: 'Nome' },
+  { value: 'contact.last_name', label: 'Sobrenome' },
+  { value: 'contact.tags', label: 'Tags' },
+  { value: 'contact.total_orders', label: 'Total de Pedidos' },
+  { value: 'contact.total_spent', label: 'Total Gasto' },
+  { value: 'contact.created_at', label: 'Data de Cadastro' },
+  { value: 'contact.city', label: 'Cidade' },
+  { value: 'contact.state', label: 'Estado' },
+  { value: 'trigger.order_value', label: 'Valor do Pedido' },
+  { value: 'trigger.cart_value', label: 'Valor do Carrinho' },
+];
+
 function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: NodePropertiesProps) {
   const [pipelines, setPipelines] = useState<PipelineOption[]>([]);
   const [loadingPipelines, setLoadingPipelines] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [integrations, setIntegrations] = useState<any[]>([]);
+  const [webhookUrl, setWebhookUrl] = useState('');
 
+  // Fetch pipelines
   useEffect(() => {
     if (!organizationId) return;
     
@@ -752,6 +793,14 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
     fetchPipelines();
   }, [organizationId]);
 
+  // Gerar URL do webhook
+  useEffect(() => {
+    if (node?.type === 'trigger_webhook' && organizationId) {
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      setWebhookUrl(`${baseUrl}/api/webhooks/automation/${organizationId}/${node.id}`);
+    }
+  }, [node?.type, node?.id, organizationId]);
+
   const selectedPipeline = pipelines.find(p => p.id === node?.data.config?.pipelineId);
   const stages = selectedPipeline?.stages || [];
 
@@ -763,8 +812,49 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
   const Icon = nodeType?.icon || Zap;
   const isTrigger = node.type?.startsWith('trigger_');
 
+  // Helper para atualizar config
+  const updateConfig = (key: string, value: any) => {
+    onUpdate({ config: { ...node.data.config, [key]: value } });
+  };
+
+  // Componente de Select estilizado
+  const StyledSelect = ({ label, value, onChange, options, placeholder, disabled = false }: any) => (
+    <div>
+      <label className="text-sm font-medium text-white mb-2 block">{label}</label>
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50 disabled:opacity-50"
+      >
+        <option value="">{placeholder || 'Selecionar...'}</option>
+        {options.map((opt: any) => (
+          <option key={opt.value || opt.id} value={opt.value || opt.id}>
+            {opt.label || opt.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  // Componente de alerta de credencial
+  const CredentialAlert = ({ service, configPath }: { service: string; configPath: string }) => (
+    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+      <p className="text-xs text-amber-400">
+        ⚠️ Requer integração com <strong>{service}</strong>
+      </p>
+      <a 
+        href={configPath} 
+        className="text-xs text-amber-300 underline hover:text-amber-200 mt-1 inline-block"
+      >
+        Configurar em Integrações →
+      </a>
+    </div>
+  );
+
   return (
     <div className="w-80 bg-[#111111] border-l border-[#222222] overflow-y-auto flex-shrink-0">
+      {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-[#222222]">
         <div className="flex items-center gap-3">
           {isTrigger && (
@@ -789,6 +879,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
       </div>
 
       <div className="p-4 space-y-4">
+        {/* Campos comuns a todos os nós */}
         <Input
           label="Nome do bloco"
           value={node.data.label || ''}
@@ -804,6 +895,514 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
           rows={2}
         />
 
+        {/* ==================== TRIGGERS ==================== */}
+        
+        {/* Trigger: Pedido Realizado */}
+        {node.type === 'trigger_order' && (
+          <div className="space-y-3">
+            <CredentialAlert service="Shopify" configPath="/settings/integrations" />
+            <StyledSelect
+              label="Status do pedido"
+              value={node.data.config?.orderStatus}
+              onChange={(v: string) => updateConfig('orderStatus', v)}
+              options={[
+                { value: 'any', label: 'Qualquer status' },
+                { value: 'paid', label: 'Pago' },
+                { value: 'fulfilled', label: 'Enviado' },
+                { value: 'delivered', label: 'Entregue' },
+              ]}
+              placeholder="Selecionar status..."
+            />
+            <Input
+              label="Valor mínimo (R$)"
+              type="number"
+              value={node.data.config?.minValue || ''}
+              onChange={(e) => updateConfig('minValue', e.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+        )}
+
+        {/* Trigger: Carrinho Abandonado */}
+        {node.type === 'trigger_abandon' && (
+          <div className="space-y-3">
+            <CredentialAlert service="Shopify" configPath="/settings/integrations" />
+            <div>
+              <label className="text-sm font-medium text-white mb-2 block">Tempo de abandono</label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  value={node.data.config?.abandonTime || 30}
+                  onChange={(e) => updateConfig('abandonTime', parseInt(e.target.value))}
+                  className="flex-1"
+                />
+                <select
+                  value={node.data.config?.abandonTimeUnit || 'minutes'}
+                  onChange={(e) => updateConfig('abandonTimeUnit', e.target.value)}
+                  className="bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white"
+                >
+                  <option value="minutes">Minutos</option>
+                  <option value="hours">Horas</option>
+                </select>
+              </div>
+            </div>
+            <Input
+              label="Valor mínimo do carrinho (R$)"
+              type="number"
+              value={node.data.config?.minCartValue || ''}
+              onChange={(e) => updateConfig('minCartValue', e.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+        )}
+
+        {/* Trigger: Novo Cadastro */}
+        {node.type === 'trigger_signup' && (
+          <div className="space-y-3">
+            <StyledSelect
+              label="Fonte do cadastro"
+              value={node.data.config?.source}
+              onChange={(v: string) => updateConfig('source', v)}
+              options={[
+                { value: 'any', label: 'Qualquer fonte' },
+                { value: 'website', label: 'Website' },
+                { value: 'landing', label: 'Landing Page' },
+                { value: 'import', label: 'Importação' },
+                { value: 'api', label: 'API' },
+              ]}
+              placeholder="Selecionar fonte..."
+            />
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="requireEmail"
+                checked={node.data.config?.requireEmail ?? true}
+                onChange={(e) => updateConfig('requireEmail', e.target.checked)}
+                className="rounded bg-[#0d0d0d] border-[#333333]"
+              />
+              <label htmlFor="requireEmail" className="text-sm text-white">Obrigatório ter email</label>
+            </div>
+          </div>
+        )}
+
+        {/* Trigger: Tag Adicionada */}
+        {node.type === 'trigger_tag' && (
+          <div className="space-y-3">
+            <Input
+              label="Tags que disparam"
+              value={node.data.config?.tags || ''}
+              onChange={(e) => updateConfig('tags', e.target.value)}
+              placeholder="vip, cliente, lead (separar por vírgula)"
+            />
+            <StyledSelect
+              label="Condição"
+              value={node.data.config?.matchType}
+              onChange={(v: string) => updateConfig('matchType', v)}
+              options={[
+                { value: 'any', label: 'Qualquer uma das tags' },
+                { value: 'all', label: 'Todas as tags' },
+              ]}
+            />
+          </div>
+        )}
+
+        {/* Trigger: Data Especial */}
+        {node.type === 'trigger_date' && (
+          <div className="space-y-3">
+            <StyledSelect
+              label="Campo de data"
+              value={node.data.config?.dateField}
+              onChange={(v: string) => updateConfig('dateField', v)}
+              options={[
+                { value: 'birthday', label: 'Aniversário' },
+                { value: 'created_at', label: 'Data de cadastro' },
+                { value: 'last_purchase', label: 'Última compra' },
+              ]}
+              placeholder="Selecionar campo..."
+            />
+            <Input
+              label="Dias de antecedência"
+              type="number"
+              value={node.data.config?.daysBefore || 0}
+              onChange={(e) => updateConfig('daysBefore', parseInt(e.target.value))}
+              placeholder="0"
+            />
+            <Input
+              label="Horário de disparo"
+              type="time"
+              value={node.data.config?.triggerTime || '09:00'}
+              onChange={(e) => updateConfig('triggerTime', e.target.value)}
+            />
+          </div>
+        )}
+
+        {/* Trigger: Entrou em Segmento */}
+        {node.type === 'trigger_segment' && (
+          <div className="space-y-3">
+            <Input
+              label="Nome do segmento"
+              value={node.data.config?.segmentName || ''}
+              onChange={(e) => updateConfig('segmentName', e.target.value)}
+              placeholder="Ex: Clientes VIP"
+            />
+            <p className="text-xs text-[#555555]">
+              O segmento será avaliado automaticamente quando houver mudanças nos contatos.
+            </p>
+          </div>
+        )}
+
+        {/* Trigger: Webhook */}
+        {node.type === 'trigger_webhook' && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium text-white mb-2 block">URL do Webhook</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={webhookUrl}
+                  readOnly
+                  className="flex-1 bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-xs text-[#666666] font-mono"
+                />
+                <button
+                  onClick={() => navigator.clipboard.writeText(webhookUrl)}
+                  className="px-3 py-2 bg-[#1a1a1a] hover:bg-[#222222] rounded-lg text-white text-xs"
+                >
+                  Copiar
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="validatePayload"
+                checked={node.data.config?.validatePayload ?? true}
+                onChange={(e) => updateConfig('validatePayload', e.target.checked)}
+                className="rounded bg-[#0d0d0d] border-[#333333]"
+              />
+              <label htmlFor="validatePayload" className="text-sm text-white">Validar assinatura</label>
+            </div>
+          </div>
+        )}
+
+        {/* Triggers de Deal (pipeline selector) */}
+        {(node.type?.includes('deal') && node.type?.startsWith('trigger_')) && (
+          <div className="space-y-3">
+            <StyledSelect
+              label="Pipeline"
+              value={node.data.config?.pipelineId}
+              onChange={(v: string) => updateConfig('pipelineId', v)}
+              options={pipelines.map(p => ({ value: p.id, label: p.name }))}
+              placeholder={loadingPipelines ? 'Carregando...' : 'Selecionar pipeline...'}
+              disabled={loadingPipelines}
+            />
+            
+            {stages.length > 0 && node.type === 'trigger_deal_stage' && (
+              <StyledSelect
+                label="Estágio"
+                value={node.data.config?.stageId}
+                onChange={(v: string) => updateConfig('stageId', v)}
+                options={stages.map(s => ({ value: s.id, label: s.name }))}
+                placeholder="Selecionar estágio..."
+              />
+            )}
+          </div>
+        )}
+
+        {/* ==================== ACTIONS ==================== */}
+
+        {/* Action: Enviar Email */}
+        {node.type === 'action_email' && (
+          <div className="space-y-3">
+            <CredentialAlert service="Klaviyo ou SMTP" configPath="/settings/integrations" />
+            <Input
+              label="Assunto do email"
+              value={node.data.config?.subject || ''}
+              onChange={(e) => updateConfig('subject', e.target.value)}
+              placeholder="Olá {{contact.first_name}}!"
+            />
+            <StyledSelect
+              label="Template"
+              value={node.data.config?.templateId}
+              onChange={(v: string) => updateConfig('templateId', v)}
+              options={[
+                { value: 'welcome', label: 'Boas-vindas' },
+                { value: 'abandon', label: 'Carrinho Abandonado' },
+                { value: 'order_confirm', label: 'Confirmação de Pedido' },
+                { value: 'custom', label: 'HTML Customizado' },
+              ]}
+              placeholder="Selecionar template..."
+            />
+            {node.data.config?.templateId === 'custom' && (
+              <Textarea
+                label="Corpo do email (HTML)"
+                value={node.data.config?.body || ''}
+                onChange={(e) => updateConfig('body', e.target.value)}
+                placeholder="<p>Olá {{contact.first_name}},</p>"
+                rows={5}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Action: Enviar WhatsApp */}
+        {node.type === 'action_whatsapp' && (
+          <div className="space-y-3">
+            <CredentialAlert service="WhatsApp Business API" configPath="/settings/integrations" />
+            <StyledSelect
+              label="Tipo de mensagem"
+              value={node.data.config?.messageType}
+              onChange={(v: string) => updateConfig('messageType', v)}
+              options={[
+                { value: 'template', label: 'Template aprovado' },
+                { value: 'text', label: 'Mensagem de texto' },
+              ]}
+              placeholder="Selecionar tipo..."
+            />
+            {node.data.config?.messageType === 'template' && (
+              <Input
+                label="Nome do template"
+                value={node.data.config?.templateName || ''}
+                onChange={(e) => updateConfig('templateName', e.target.value)}
+                placeholder="Ex: pedido_confirmado"
+              />
+            )}
+            {node.data.config?.messageType === 'text' && (
+              <Textarea
+                label="Mensagem"
+                value={node.data.config?.message || ''}
+                onChange={(e) => updateConfig('message', e.target.value)}
+                placeholder="Olá {{contact.first_name}}! ..."
+                rows={4}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Action: Enviar SMS */}
+        {node.type === 'action_sms' && (
+          <div className="space-y-3">
+            <CredentialAlert service="Twilio" configPath="/settings/integrations" />
+            <Textarea
+              label="Mensagem (max 160 caracteres)"
+              value={node.data.config?.message || ''}
+              onChange={(e) => updateConfig('message', e.target.value)}
+              placeholder="Olá {{contact.first_name}}!"
+              rows={3}
+            />
+            <p className="text-xs text-[#555555]">
+              {(node.data.config?.message || '').length}/160 caracteres
+            </p>
+          </div>
+        )}
+
+        {/* Action: Adicionar Tag */}
+        {node.type === 'action_tag' && (
+          <div className="space-y-3">
+            <Input
+              label="Nome da tag"
+              value={node.data.config?.tagName || ''}
+              onChange={(e) => updateConfig('tagName', e.target.value)}
+              placeholder="Ex: cliente-vip"
+            />
+            <StyledSelect
+              label="Ação"
+              value={node.data.config?.tagAction}
+              onChange={(v: string) => updateConfig('tagAction', v)}
+              options={[
+                { value: 'add', label: 'Adicionar tag' },
+                { value: 'remove', label: 'Remover tag' },
+              ]}
+            />
+          </div>
+        )}
+
+        {/* Action: Atualizar Contato */}
+        {node.type === 'action_update' && (
+          <div className="space-y-3">
+            <StyledSelect
+              label="Campo para atualizar"
+              value={node.data.config?.updateField}
+              onChange={(v: string) => updateConfig('updateField', v)}
+              options={[
+                { value: 'first_name', label: 'Nome' },
+                { value: 'last_name', label: 'Sobrenome' },
+                { value: 'phone', label: 'Telefone' },
+                { value: 'city', label: 'Cidade' },
+                { value: 'state', label: 'Estado' },
+                { value: 'custom', label: 'Campo customizado' },
+              ]}
+              placeholder="Selecionar campo..."
+            />
+            {node.data.config?.updateField === 'custom' && (
+              <Input
+                label="Nome do campo"
+                value={node.data.config?.customField || ''}
+                onChange={(e) => updateConfig('customField', e.target.value)}
+                placeholder="Ex: score"
+              />
+            )}
+            <Input
+              label="Novo valor"
+              value={node.data.config?.updateValue || ''}
+              onChange={(e) => updateConfig('updateValue', e.target.value)}
+              placeholder="Valor ou {{variável}}"
+            />
+          </div>
+        )}
+
+        {/* Action: Criar Deal */}
+        {node.type === 'action_create_deal' && (
+          <div className="space-y-3">
+            <StyledSelect
+              label="Pipeline"
+              value={node.data.config?.pipelineId}
+              onChange={(v: string) => onUpdate({ config: { ...node.data.config, pipelineId: v, stageId: undefined } })}
+              options={pipelines.map(p => ({ value: p.id, label: p.name }))}
+              placeholder={loadingPipelines ? 'Carregando...' : 'Selecionar pipeline...'}
+              disabled={loadingPipelines}
+            />
+            {stages.length > 0 && (
+              <StyledSelect
+                label="Estágio inicial"
+                value={node.data.config?.stageId}
+                onChange={(v: string) => updateConfig('stageId', v)}
+                options={stages.map(s => ({ value: s.id, label: s.name }))}
+                placeholder="Selecionar estágio..."
+              />
+            )}
+            <Input
+              label="Título do deal"
+              value={node.data.config?.dealTitle || ''}
+              onChange={(e) => updateConfig('dealTitle', e.target.value)}
+              placeholder="Deal de {{contact.first_name}}"
+            />
+            <Input
+              label="Valor (R$)"
+              type="number"
+              value={node.data.config?.dealValue || ''}
+              onChange={(e) => updateConfig('dealValue', e.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+        )}
+
+        {/* Action: Mover Deal */}
+        {node.type === 'action_move_deal' && (
+          <div className="space-y-3">
+            <StyledSelect
+              label="Pipeline"
+              value={node.data.config?.pipelineId}
+              onChange={(v: string) => onUpdate({ config: { ...node.data.config, pipelineId: v, stageId: undefined } })}
+              options={pipelines.map(p => ({ value: p.id, label: p.name }))}
+              placeholder={loadingPipelines ? 'Carregando...' : 'Selecionar pipeline...'}
+              disabled={loadingPipelines}
+            />
+            {stages.length > 0 && (
+              <StyledSelect
+                label="Mover para estágio"
+                value={node.data.config?.stageId}
+                onChange={(v: string) => updateConfig('stageId', v)}
+                options={stages.map(s => ({ value: s.id, label: s.name }))}
+                placeholder="Selecionar estágio..."
+              />
+            )}
+          </div>
+        )}
+
+        {/* Action: Atribuir Deal */}
+        {node.type === 'action_assign_deal' && (
+          <div className="space-y-3">
+            <StyledSelect
+              label="Tipo de atribuição"
+              value={node.data.config?.assignmentType}
+              onChange={(v: string) => updateConfig('assignmentType', v)}
+              options={[
+                { value: 'specific', label: 'Usuário específico' },
+                { value: 'round_robin', label: 'Rodízio (Round Robin)' },
+              ]}
+              placeholder="Selecionar tipo..."
+            />
+            {node.data.config?.assignmentType === 'specific' && (
+              <Input
+                label="Email do responsável"
+                type="email"
+                value={node.data.config?.assigneeEmail || ''}
+                onChange={(e) => updateConfig('assigneeEmail', e.target.value)}
+                placeholder="usuario@email.com"
+              />
+            )}
+          </div>
+        )}
+
+        {/* Action: Notificação Interna */}
+        {node.type === 'action_notify' && (
+          <div className="space-y-3">
+            <Input
+              label="Título"
+              value={node.data.config?.title || ''}
+              onChange={(e) => updateConfig('title', e.target.value)}
+              placeholder="Nova conversão!"
+            />
+            <Textarea
+              label="Mensagem"
+              value={node.data.config?.message || ''}
+              onChange={(e) => updateConfig('message', e.target.value)}
+              placeholder="{{contact.first_name}} converteu..."
+              rows={3}
+            />
+            <StyledSelect
+              label="Notificar"
+              value={node.data.config?.notifyTarget}
+              onChange={(v: string) => updateConfig('notifyTarget', v)}
+              options={[
+                { value: 'all', label: 'Todos os usuários' },
+                { value: 'owner', label: 'Responsável do deal' },
+                { value: 'specific', label: 'Usuário específico' },
+              ]}
+            />
+          </div>
+        )}
+
+        {/* Action: Chamar Webhook */}
+        {node.type === 'action_webhook' && (
+          <div className="space-y-3">
+            <Input
+              label="URL"
+              value={node.data.config?.webhookUrl || ''}
+              onChange={(e) => updateConfig('webhookUrl', e.target.value)}
+              placeholder="https://api.exemplo.com/webhook"
+            />
+            <StyledSelect
+              label="Método"
+              value={node.data.config?.method}
+              onChange={(v: string) => updateConfig('method', v)}
+              options={[
+                { value: 'POST', label: 'POST' },
+                { value: 'GET', label: 'GET' },
+                { value: 'PUT', label: 'PUT' },
+                { value: 'PATCH', label: 'PATCH' },
+              ]}
+            />
+            <Textarea
+              label="Headers (JSON)"
+              value={node.data.config?.headers || ''}
+              onChange={(e) => updateConfig('headers', e.target.value)}
+              placeholder='{"Authorization": "Bearer token"}'
+              rows={2}
+            />
+            <Textarea
+              label="Body (JSON)"
+              value={node.data.config?.webhookBody || ''}
+              onChange={(e) => updateConfig('webhookBody', e.target.value)}
+              placeholder='{"email": "{{contact.email}}"}'
+              rows={4}
+            />
+          </div>
+        )}
+
+        {/* ==================== LOGIC ==================== */}
+
+        {/* Logic: Aguardar */}
         {node.type === 'logic_delay' && (
           <div className="space-y-3">
             <label className="text-sm font-medium text-white">Tempo de espera</label>
@@ -841,100 +1440,101 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
           </div>
         )}
 
-        {node.type === 'action_email' && (
+        {/* Logic: Condição */}
+        {node.type === 'logic_condition' && (
           <div className="space-y-3">
-            <Input
-              label="Assunto do email"
-              value={node.data.config?.subject || ''}
-              onChange={(e) => onUpdate({ config: { ...node.data.config, subject: e.target.value } })}
-              placeholder="Assunto do email..."
+            <StyledSelect
+              label="Campo"
+              value={node.data.config?.conditionField}
+              onChange={(v: string) => updateConfig('conditionField', v)}
+              options={CONDITION_FIELDS}
+              placeholder="Selecionar campo..."
             />
-            <div>
-              <label className="text-sm font-medium text-white mb-2 block">Template</label>
-              <select
-                value={node.data.config?.templateId || ''}
-                onChange={(e) => onUpdate({ config: { ...node.data.config, templateId: e.target.value } })}
-                className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50"
-              >
-                <option value="">Selecionar template...</option>
-                <option value="welcome">Boas-vindas</option>
-                <option value="abandon">Carrinho Abandonado</option>
-                <option value="order_confirm">Confirmação de Pedido</option>
-              </select>
-            </div>
-          </div>
-        )}
-
-        {node.type === 'action_tag' && (
-          <Input
-            label="Nome da tag"
-            value={node.data.config?.tagName || ''}
-            onChange={(e) => onUpdate({ config: { ...node.data.config, tagName: e.target.value } })}
-            placeholder="Ex: cliente-vip"
-          />
-        )}
-
-        {(node.type?.includes('deal') || node.type === 'action_create_deal') && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium text-white mb-2 block">Pipeline</label>
-              <select
-                value={node.data.config?.pipelineId || ''}
-                onChange={(e) =>
-                  onUpdate({ config: { ...node.data.config, pipelineId: e.target.value, stageId: undefined } })
-                }
-                className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50"
-                disabled={loadingPipelines}
-              >
-                <option value="">{loadingPipelines ? 'Carregando...' : 'Selecionar pipeline...'}</option>
-                {pipelines.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              {!loadingPipelines && pipelines.length === 0 && (
-                <p className="text-xs text-amber-400 mt-1">
-                  Nenhuma pipeline encontrada. Crie uma no CRM primeiro.
-                </p>
-              )}
-            </div>
-            
-            {stages.length > 0 && (node.type === 'trigger_deal_stage' || node.type === 'action_create_deal' || node.type === 'action_move_deal') && (
-              <div>
-                <label className="text-sm font-medium text-white mb-2 block">Estágio</label>
-                <select
-                  value={node.data.config?.stageId || ''}
-                  onChange={(e) => onUpdate({ config: { ...node.data.config, stageId: e.target.value } })}
-                  className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50"
-                >
-                  <option value="">Selecionar estágio...</option>
-                  {stages.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
+            <StyledSelect
+              label="Operador"
+              value={node.data.config?.conditionOperator}
+              onChange={(v: string) => updateConfig('conditionOperator', v)}
+              options={CONDITION_OPERATORS}
+              placeholder="Selecionar operador..."
+            />
+            {!['is_empty', 'is_not_empty'].includes(node.data.config?.conditionOperator || '') && (
+              <Input
+                label="Valor"
+                value={node.data.config?.conditionValue || ''}
+                onChange={(e) => updateConfig('conditionValue', e.target.value)}
+                placeholder="Valor para comparar..."
+              />
             )}
+            <p className="text-xs text-[#555555]">
+              ✅ Verdadeiro → Caminho verde<br />
+              ❌ Falso → Caminho vermelho
+            </p>
           </div>
         )}
 
-        {node.type === 'action_notify' && (
+        {/* Logic: Teste A/B */}
+        {node.type === 'logic_split' && (
           <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium text-white mb-2 block">
+                Divisão: {node.data.config?.splitPercentage || 50}% / {100 - (node.data.config?.splitPercentage || 50)}%
+              </label>
+              <input
+                type="range"
+                min="10"
+                max="90"
+                step="5"
+                value={node.data.config?.splitPercentage || 50}
+                onChange={(e) => updateConfig('splitPercentage', parseInt(e.target.value))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-[#555555] mt-1">
+                <span className="text-emerald-400">Caminho A: {node.data.config?.splitPercentage || 50}%</span>
+                <span className="text-red-400">Caminho B: {100 - (node.data.config?.splitPercentage || 50)}%</span>
+              </div>
+            </div>
             <Input
-              label="Título"
-              value={node.data.config?.title || ''}
-              onChange={(e) => onUpdate({ config: { ...node.data.config, title: e.target.value } })}
-              placeholder="Título da notificação"
+              label="Nome do teste"
+              value={node.data.config?.testName || ''}
+              onChange={(e) => updateConfig('testName', e.target.value)}
+              placeholder="Ex: Teste email vs whatsapp"
             />
-            <Textarea
-              label="Mensagem"
-              value={node.data.config?.message || ''}
-              onChange={(e) => onUpdate({ config: { ...node.data.config, message: e.target.value } })}
-              placeholder="Mensagem..."
-              rows={3}
+          </div>
+        )}
+
+        {/* Logic: Filtrar */}
+        {node.type === 'logic_filter' && (
+          <div className="space-y-3">
+            <StyledSelect
+              label="Campo"
+              value={node.data.config?.filterField}
+              onChange={(v: string) => updateConfig('filterField', v)}
+              options={CONDITION_FIELDS}
+              placeholder="Selecionar campo..."
             />
+            <StyledSelect
+              label="Operador"
+              value={node.data.config?.filterOperator}
+              onChange={(v: string) => updateConfig('filterOperator', v)}
+              options={CONDITION_OPERATORS}
+              placeholder="Selecionar operador..."
+            />
+            {!['is_empty', 'is_not_empty'].includes(node.data.config?.filterOperator || '') && (
+              <Input
+                label="Valor"
+                value={node.data.config?.filterValue || ''}
+                onChange={(e) => updateConfig('filterValue', e.target.value)}
+                placeholder="Valor para filtrar..."
+              />
+            )}
+            <p className="text-xs text-[#555555]">
+              Apenas contatos que passarem no filtro continuam no fluxo.
+            </p>
           </div>
         )}
       </div>
 
+      {/* Botão de excluir */}
       <div className="p-4 border-t border-white/10">
         <Button variant="ghost" className="w-full text-red-400 hover:bg-red-500/10" onClick={onDelete}>
           <Trash2 className="w-4 h-4 mr-2" />
