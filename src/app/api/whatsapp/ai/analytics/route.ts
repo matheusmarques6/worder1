@@ -17,8 +17,8 @@ import type {
   PerformanceMetrics,
   QualityMetrics,
   AIErrorBreakdown,
-  DateRange,
 } from '@/types/whatsapp-ai-analytics';
+import type { DateRange } from '@/types/whatsapp-analytics';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
