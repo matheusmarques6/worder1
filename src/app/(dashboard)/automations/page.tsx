@@ -130,11 +130,11 @@ export default function AutomationsPage() {
     setEditingAutomation(automation);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<string | undefined> => {
     if (!organizationId) {
       console.error('❌ organizationId não encontrado. User:', user);
       alert('Erro: Organização não identificada. Aguarde o carregamento ou faça login novamente.');
-      return;
+      return undefined;
     }
     
     const triggerNode = canvasNodes.find(n => n.type?.startsWith('trigger_'));
@@ -172,9 +172,11 @@ export default function AutomationsPage() {
           console.log('✅ Automação criada com sucesso:', data.automation.id);
           setAutomations(prev => [...prev, data.automation]);
           setEditingAutomation(data.automation);
+          return data.automation.id;
         } else {
           console.error('❌ Erro ao criar:', data);
           alert('Erro ao salvar: ' + (data.error || 'Erro desconhecido'));
+          return undefined;
         }
       } else if (editingAutomation?.id) {
         const res = await fetch('/api/automations', {
@@ -190,14 +192,18 @@ export default function AutomationsPage() {
           console.log('✅ Automação atualizada com sucesso:', data.automation.id);
           setAutomations(prev => prev.map(a => a.id === data.automation.id ? data.automation : a));
           setEditingAutomation(data.automation);
+          return data.automation.id;
         } else {
           console.error('❌ Erro ao atualizar:', data);
           alert('Erro ao salvar: ' + (data.error || 'Erro desconhecido'));
+          return undefined;
         }
       }
+      return undefined;
     } catch (e) {
       console.error('❌ Erro de rede ao salvar:', e);
       alert('Erro de conexão ao salvar automação.');
+      return undefined;
     }
   };
 

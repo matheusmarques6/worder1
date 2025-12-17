@@ -1647,7 +1647,7 @@ interface AutomationCanvasProps {
   onNodesChange: (nodes: AutomationNode[]) => void;
   onEdgesChange: (edges: AutomationEdge[]) => void;
   onNameChange: (name: string) => void;
-  onSave: () => Promise<void>;
+  onSave: () => Promise<string | undefined>;
   onActivate: () => Promise<void>;
   onTest: () => Promise<void>;
   onBack: () => void;
@@ -1655,6 +1655,7 @@ interface AutomationCanvasProps {
 }
 
 export function AutomationCanvas({
+  automationId,
   automationName,
   automationStatus,
   nodes,
@@ -2005,12 +2006,14 @@ export function AutomationCanvas({
     });
 
     try {
-      // Pega o ID da automação da URL
-      const urlParts = window.location.pathname.split('/');
-      const automationId = urlParts[urlParts.length - 1];
+      // Primeiro, salva a automação e obtém o ID
+      const savedId = await onSave();
+      const testAutomationId = savedId || automationId;
       
-      // Primeiro, salva a automação
-      await onSave();
+      // Verifica se tem ID válido
+      if (!testAutomationId || testAutomationId === 'new') {
+        throw new Error('Erro ao salvar automação. Tente salvar manualmente primeiro.');
+      }
 
       // Marca todos os nós como "em espera" e o primeiro como "running"
       const triggerNode = nodes.find((n: AutomationNode) => n.type?.startsWith('trigger_'));
@@ -2025,7 +2028,7 @@ export function AutomationCanvas({
       }
 
       // Chama API de teste
-      const response = await fetch(`/api/automations/${automationId}/test`, {
+      const response = await fetch(`/api/automations/${testAutomationId}/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
