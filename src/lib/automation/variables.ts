@@ -779,11 +779,7 @@ function getSampleTriggerData(triggerType: string): Record<string, any> {
 }
 
 // =============================================
-// EXPORTS
+// EXPORT FORMATTERS (BASE_VARIABLES e TRIGGER_VARIABLES já exportados acima)
 // =============================================
 
-export {
-  FORMATTERS,
-  BASE_VARIABLES,
-  TRIGGER_VARIABLES
-};
+export { FORMATTERS };
