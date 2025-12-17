@@ -3,397 +3,243 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Search,
-  Phone,
-  Video,
-  MoreVertical,
-  Smile,
-  Paperclip,
-  Mic,
-  Send,
-  Check,
-  CheckCheck,
-  Clock,
-  Image as ImageIcon,
-  File,
-  MapPin,
-  User,
-  Building2,
-  Mail,
-  Tag,
-  ShoppingCart,
-  DollarSign,
-  Calendar,
-  MessageSquare,
-  Filter,
-  Archive,
-  Star,
-  StarOff,
-  Pin,
-  X,
-  ChevronLeft,
-  Plus
+  Search, Phone, MoreVertical, Smile, Paperclip, Mic, Send, Check, CheckCheck,
+  Clock, User, Building2, Mail, Tag, ShoppingCart, DollarSign, MessageSquare,
+  Filter, X, Plus, RefreshCw, Bot, UserCircle, Loader2, AlertCircle, Settings,
+  ChevronDown
 } from 'lucide-react'
+import { 
+  useWhatsAppConversations, useWhatsAppMessages, useWhatsAppTags, useWhatsAppAgents
+} from '@/hooks/useWhatsApp'
 
-interface Message {
-  id: string
-  content: string
-  timestamp: string
-  sender: 'user' | 'contact'
-  status: 'sending' | 'sent' | 'delivered' | 'read'
-  type: 'text' | 'image' | 'file' | 'audio'
+// Helpers
+const formatPhone = (p: string) => {
+  if (!p) return ''
+  const c = p.replace(/\D/g, '')
+  if (c.length === 13) return `+${c.slice(0,2)} ${c.slice(2,4)} ${c.slice(4,9)}-${c.slice(9)}`
+  return p
 }
 
-interface Conversation {
-  id: string
-  contact: {
-    name: string
-    phone: string
-    avatar?: string
-    email?: string
-    company?: string
-    tags: string[]
+const formatTime = (d: string) => {
+  if (!d) return ''
+  const now = new Date(), dt = new Date(d)
+  const diff = Math.floor((now.getTime() - dt.getTime()) / 60000)
+  if (diff < 1) return 'Agora'
+  if (diff < 60) return `${diff}min`
+  if (diff < 1440) return `${Math.floor(diff/60)}h`
+  if (diff < 2880) return 'Ontem'
+  return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+}
+
+const formatMsgTime = (d: string) => d ? new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''
+
+const getInitials = (n: string) => (n || 'UN').split(' ').map(x => x[0]).join('').slice(0,2).toUpperCase()
+
+const formatCurrency = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
+
+// Status Icon
+const StatusIcon = ({ status }: { status: string }) => {
+  const icons: Record<string, JSX.Element> = {
+    pending: <Clock className="w-3.5 h-3.5 text-slate-500" />,
+    sent: <Check className="w-3.5 h-3.5 text-slate-500" />,
+    delivered: <CheckCheck className="w-3.5 h-3.5 text-slate-500" />,
+    read: <CheckCheck className="w-3.5 h-3.5 text-cyan-400" />,
+    failed: <AlertCircle className="w-3.5 h-3.5 text-red-400" />,
   }
-  lastMessage: string
-  lastMessageTime: string
-  unreadCount: number
-  isStarred: boolean
-  isPinned: boolean
-  status: 'online' | 'offline' | 'typing'
-}
-
-interface CustomerInfo {
-  totalOrders: number
-  totalSpent: number
-  lastOrder?: {
-    id: string
-    date: string
-    total: number
-    status: string
-  }
-  activities: {
-    type: string
-    description: string
-    date: string
-  }[]
-}
-
-const mockConversations: Conversation[] = [
-  {
-    id: '1',
-    contact: {
-      name: 'Maria Silva',
-      phone: '+55 11 99999-0001',
-      email: 'maria@empresa.com',
-      company: 'Tech Store',
-      tags: ['cliente', 'vip']
-    },
-    lastMessage: 'Olá! Gostaria de saber sobre o status do meu pedido',
-    lastMessageTime: '10:30',
-    unreadCount: 2,
-    isStarred: true,
-    isPinned: true,
-    status: 'online'
-  },
-  {
-    id: '2',
-    contact: {
-      name: 'João Santos',
-      phone: '+55 11 99999-0002',
-      email: 'joao@loja.com',
-      company: 'Loja Virtual',
-      tags: ['prospect']
-    },
-    lastMessage: 'Obrigado pela informação!',
-    lastMessageTime: '09:45',
-    unreadCount: 0,
-    isStarred: false,
-    isPinned: false,
-    status: 'offline'
-  },
-  {
-    id: '3',
-    contact: {
-      name: 'Ana Costa',
-      phone: '+55 11 99999-0003',
-      email: 'ana@moda.com',
-      company: 'Moda Fashion',
-      tags: ['cliente', 'email']
-    },
-    lastMessage: 'Vocês têm essa peça em outra cor?',
-    lastMessageTime: '09:15',
-    unreadCount: 1,
-    isStarred: false,
-    isPinned: false,
-    status: 'typing'
-  },
-  {
-    id: '4',
-    contact: {
-      name: 'Pedro Lima',
-      phone: '+55 11 99999-0004',
-      email: 'pedro@tech.com',
-      company: 'TechBr',
-      tags: ['suporte']
-    },
-    lastMessage: 'Pode me ajudar com a integração?',
-    lastMessageTime: 'Ontem',
-    unreadCount: 0,
-    isStarred: false,
-    isPinned: false,
-    status: 'offline'
-  },
-  {
-    id: '5',
-    contact: {
-      name: 'Carla Souza',
-      phone: '+55 11 99999-0005',
-      company: 'Mega Store',
-      tags: ['lead']
-    },
-    lastMessage: 'Qual o prazo de entrega?',
-    lastMessageTime: 'Ontem',
-    unreadCount: 0,
-    isStarred: true,
-    isPinned: false,
-    status: 'offline'
-  },
-]
-
-const mockMessages: Record<string, Message[]> = {
-  '1': [
-    { id: 'm1', content: 'Olá! Bom dia!', timestamp: '10:00', sender: 'contact', status: 'read', type: 'text' },
-    { id: 'm2', content: 'Bom dia Maria! Como posso ajudar?', timestamp: '10:02', sender: 'user', status: 'read', type: 'text' },
-    { id: 'm3', content: 'Gostaria de saber sobre o status do meu pedido #12345', timestamp: '10:05', sender: 'contact', status: 'read', type: 'text' },
-    { id: 'm4', content: 'Claro! Deixe-me verificar para você. Um momento...', timestamp: '10:06', sender: 'user', status: 'read', type: 'text' },
-    { id: 'm5', content: 'Seu pedido está em separação e será despachado hoje! Você receberá o código de rastreio assim que sair para entrega.', timestamp: '10:10', sender: 'user', status: 'read', type: 'text' },
-    { id: 'm6', content: 'Maravilha! Muito obrigada! 😊', timestamp: '10:15', sender: 'contact', status: 'read', type: 'text' },
-    { id: 'm7', content: 'Por nada! Qualquer dúvida estou à disposição.', timestamp: '10:16', sender: 'user', status: 'delivered', type: 'text' },
-    { id: 'm8', content: 'Olá! Gostaria de saber sobre o status do meu pedido', timestamp: '10:30', sender: 'contact', status: 'delivered', type: 'text' },
-  ],
-}
-
-const mockCustomerInfo: CustomerInfo = {
-  totalOrders: 8,
-  totalSpent: 4580,
-  lastOrder: {
-    id: '#12345',
-    date: '2024-01-15',
-    total: 459.90,
-    status: 'Em separação'
-  },
-  activities: [
-    { type: 'order', description: 'Fez um pedido #12345', date: '2024-01-15' },
-    { type: 'email', description: 'Abriu e-mail "Novidades de Janeiro"', date: '2024-01-14' },
-    { type: 'visit', description: 'Visitou a página de produtos', date: '2024-01-13' },
-    { type: 'chat', description: 'Conversou pelo WhatsApp', date: '2024-01-10' },
-  ]
-}
-
-const tagColors: Record<string, string> = {
-  'cliente': 'bg-emerald-500/20 text-emerald-400',
-  'vip': 'bg-amber-500/20 text-amber-400',
-  'prospect': 'bg-blue-500/20 text-blue-400',
-  'lead': 'bg-violet-500/20 text-violet-400',
-  'suporte': 'bg-red-500/20 text-red-400',
-  'email': 'bg-cyan-500/20 text-cyan-400',
-}
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value)
+  return icons[status] || <Check className="w-3.5 h-3.5 text-slate-500" />
 }
 
 export default function WhatsAppPage() {
-  const [conversations, setConversations] = useState(mockConversations)
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(mockConversations[0])
-  const [messages, setMessages] = useState<Message[]>(mockMessages['1'] || [])
-  const [inputMessage, setInputMessage] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showContactInfo, setShowContactInfo] = useState(true)
+  // Hooks
+  const {
+    conversations, selectedConversation, setSelectedConversation,
+    isLoading: convsLoading, fetchConversations, updateConversation
+  } = useWhatsAppConversations()
+
+  const {
+    messages, isLoading: msgsLoading, sendMessage, fetchMessages
+  } = useWhatsAppMessages(selectedConversation?.id || null)
+
+  const { tags, fetchTags } = useWhatsAppTags()
+  const { agents, fetchAgents, assignChat } = useWhatsAppAgents()
+
+  // State
+  const [input, setInput] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [showInfo, setShowInfo] = useState(true)
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const msgEndRef = useRef<HTMLDivElement>(null)
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
+  // Load data
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    fetchConversations({ status: statusFilter !== 'all' ? statusFilter : undefined })
+    fetchTags()
+    fetchAgents()
+  }, [statusFilter])
 
-  const handleSelectConversation = (conv: Conversation) => {
-    setSelectedConversation(conv)
-    setMessages(mockMessages[conv.id] || [])
-    setMobileView('chat')
+  // Scroll to bottom
+  useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  // Handlers
+  const handleSelect = (c: any) => { setSelectedConversation(c); setMobileView('chat') }
+
+  const handleSend = async () => {
+    if (!input.trim() || !selectedConversation) return
+    try {
+      await sendMessage(input)
+      setInput('')
+    } catch (e) { console.error(e) }
   }
 
-  const handleSendMessage = () => {
-    if (!inputMessage.trim() || !selectedConversation) return
-
-    const newMessage: Message = {
-      id: `m${Date.now()}`,
-      content: inputMessage,
-      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      sender: 'user',
-      status: 'sending',
-      type: 'text'
-    }
-
-    setMessages([...messages, newMessage])
-    setInputMessage('')
-
-    // Simulate message status updates
-    setTimeout(() => {
-      setMessages(prev => prev.map(m => m.id === newMessage.id ? { ...m, status: 'sent' as const } : m))
-    }, 500)
-    setTimeout(() => {
-      setMessages(prev => prev.map(m => m.id === newMessage.id ? { ...m, status: 'delivered' as const } : m))
-    }, 1000)
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
-  const MessageStatus = ({ status }: { status: Message['status'] }) => {
-    switch (status) {
-      case 'sending':
-        return <Clock className="w-3.5 h-3.5 text-slate-500" />
-      case 'sent':
-        return <Check className="w-3.5 h-3.5 text-slate-500" />
-      case 'delivered':
-        return <CheckCheck className="w-3.5 h-3.5 text-slate-500" />
-      case 'read':
-        return <CheckCheck className="w-3.5 h-3.5 text-cyan-400" />
-      default:
-        return null
+  const toggleBot = () => {
+    if (selectedConversation) {
+      updateConversation(selectedConversation.id, { is_bot_active: !selectedConversation.is_bot_active })
     }
   }
 
-  const filteredConversations = conversations.filter(conv =>
-    conv.contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    conv.contact.phone.includes(searchQuery)
+  // Filter
+  const filtered = conversations.filter(c =>
+    (c.contact_name?.toLowerCase().includes(search.toLowerCase()) ||
+     c.phone_number?.includes(search))
   )
 
   return (
     <div className="h-[calc(100vh-120px)] flex bg-slate-900/30 rounded-2xl border border-slate-800/50 overflow-hidden">
-      {/* Conversations List */}
+      {/* ======= CONVERSATIONS LIST ======= */}
       <div className={`w-full md:w-96 flex-shrink-0 border-r border-slate-800/50 flex flex-col ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
         {/* Header */}
         <div className="p-4 border-b border-slate-800/50">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Conversas</h2>
-            <div className="flex items-center gap-2">
-              <button className="p-2 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors">
-                <Filter className="w-5 h-5" />
+            <div className="flex gap-2">
+              <button onClick={() => fetchConversations()} className="p-2 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white">
+                <RefreshCw className={`w-5 h-5 ${convsLoading ? 'animate-spin' : ''}`} />
               </button>
-              <button className="p-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors">
+              <button className="p-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700">
                 <Plus className="w-5 h-5" />
               </button>
             </div>
           </div>
-          <div className="relative">
+          
+          <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Buscar conversas..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-violet-500/50"
             />
           </div>
+
+          <div className="flex gap-2">
+            {['all', 'open', 'closed'].map(s => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+                  statusFilter === s ? 'bg-violet-600 text-white' : 'bg-slate-800/50 text-slate-400 hover:text-white'
+                }`}
+              >
+                {s === 'all' ? 'Todas' : s === 'open' ? 'Abertas' : 'Fechadas'}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Conversations */}
+        {/* List */}
         <div className="flex-1 overflow-y-auto">
-          {filteredConversations.map((conv) => (
-            <div
-              key={conv.id}
-              onClick={() => handleSelectConversation(conv)}
-              className={`
-                flex items-start gap-3 p-4 cursor-pointer transition-all border-b border-slate-800/30
-                ${selectedConversation?.id === conv.id ? 'bg-violet-600/10' : 'hover:bg-slate-800/30'}
-              `}
-            >
-              <div className="relative flex-shrink-0">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
-                  <span className="text-white font-semibold">
-                    {conv.contact.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                  </span>
-                </div>
-                {conv.status === 'online' && (
-                  <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-slate-900" />
-                )}
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-white truncate">{conv.contact.name}</span>
-                    {conv.isPinned && <Pin className="w-3 h-3 text-violet-400" />}
-                    {conv.isStarred && <Star className="w-3 h-3 text-amber-400 fill-amber-400" />}
+          {convsLoading && conversations.length === 0 ? (
+            <div className="flex items-center justify-center h-32">
+              <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-32 text-slate-500">
+              <MessageSquare className="w-10 h-10 mb-2 opacity-50" />
+              <p className="text-sm">Nenhuma conversa</p>
+            </div>
+          ) : (
+            filtered.map(conv => (
+              <div
+                key={conv.id}
+                onClick={() => handleSelect(conv)}
+                className={`flex items-start gap-3 p-4 cursor-pointer border-b border-slate-800/30 transition-colors ${
+                  selectedConversation?.id === conv.id ? 'bg-violet-600/10' : 'hover:bg-slate-800/30'
+                }`}
+              >
+                <div className="relative flex-shrink-0">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
+                    <span className="text-white font-semibold">{getInitials(conv.contact_name || conv.phone_number)}</span>
                   </div>
-                  <span className={`text-xs ${conv.unreadCount > 0 ? 'text-violet-400 font-medium' : 'text-slate-500'}`}>
-                    {conv.lastMessageTime}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'text-slate-300' : 'text-slate-500'}`}>
-                    {conv.status === 'typing' ? (
-                      <span className="text-emerald-400 italic">Digitando...</span>
-                    ) : conv.lastMessage}
-                  </p>
-                  {conv.unreadCount > 0 && (
-                    <span className="flex-shrink-0 ml-2 px-2 py-0.5 bg-violet-600 rounded-full text-[10px] font-bold text-white">
-                      {conv.unreadCount}
-                    </span>
+                  {conv.is_bot_active && (
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-violet-600 rounded-full flex items-center justify-center border-2 border-slate-900">
+                      <Bot className="w-3 h-3 text-white" />
+                    </div>
                   )}
                 </div>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between mb-1">
+                    <span className="font-medium text-white truncate">{conv.contact_name || formatPhone(conv.phone_number)}</span>
+                    <span className={`text-xs ${conv.unread_count > 0 ? 'text-violet-400 font-medium' : 'text-slate-500'}`}>
+                      {formatTime(conv.last_message_at)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <p className={`text-sm truncate ${conv.unread_count > 0 ? 'text-slate-300' : 'text-slate-500'}`}>
+                      {conv.last_message_preview || 'Nova conversa'}
+                    </p>
+                    {conv.unread_count > 0 && (
+                      <span className="ml-2 px-2 py-0.5 bg-violet-600 rounded-full text-[10px] font-bold text-white">
+                        {conv.unread_count}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2 mt-1.5">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                      conv.status === 'open' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/50 text-slate-400'
+                    }`}>
+                      {conv.status === 'open' ? 'Aberta' : 'Fechada'}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
-      {/* Chat Area */}
+      {/* ======= CHAT WINDOW ======= */}
       {selectedConversation ? (
         <div className={`flex-1 flex flex-col ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
           {/* Chat Header */}
-          <div className="flex items-center justify-between p-4 border-b border-slate-800/50 bg-slate-900/50">
+          <div className="p-4 border-b border-slate-800/50 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setMobileView('list')}
-                className="md:hidden p-2 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5" />
+              <button onClick={() => setMobileView('list')} className="md:hidden p-2 rounded-lg hover:bg-slate-800/50 text-slate-400">
+                <X className="w-5 h-5" />
               </button>
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
-                <span className="text-white font-semibold text-sm">
-                  {selectedConversation.contact.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                </span>
+                <span className="text-white font-semibold text-sm">{getInitials(selectedConversation.contact_name || selectedConversation.phone_number)}</span>
               </div>
               <div>
-                <h3 className="font-medium text-white">{selectedConversation.contact.name}</h3>
-                <p className="text-xs text-slate-400">
-                  {selectedConversation.status === 'online' && <span className="text-emerald-400">Online</span>}
-                  {selectedConversation.status === 'typing' && <span className="text-emerald-400">Digitando...</span>}
-                  {selectedConversation.status === 'offline' && 'Visto por último hoje às 09:30'}
-                </p>
+                <h3 className="font-semibold text-white">{selectedConversation.contact_name || formatPhone(selectedConversation.phone_number)}</h3>
+                <p className="text-xs text-slate-400">{formatPhone(selectedConversation.phone_number)}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button className="p-2 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors">
-                <Phone className="w-5 h-5" />
+            
+            <div className="flex gap-1">
+              <button onClick={toggleBot} className={`p-2 rounded-lg ${selectedConversation.is_bot_active ? 'bg-violet-600/20 text-violet-400' : 'hover:bg-slate-800/50 text-slate-400'}`} title="Bot">
+                <Bot className="w-5 h-5" />
               </button>
-              <button className="p-2 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors">
-                <Video className="w-5 h-5" />
-              </button>
-              <button 
-                onClick={() => setShowContactInfo(!showContactInfo)}
-                className={`p-2 rounded-lg transition-colors ${showContactInfo ? 'bg-violet-600/20 text-violet-400' : 'hover:bg-slate-800/50 text-slate-400 hover:text-white'}`}
-              >
+              <button onClick={() => setShowInfo(!showInfo)} className={`p-2 rounded-lg ${showInfo ? 'bg-violet-600/20 text-violet-400' : 'hover:bg-slate-800/50 text-slate-400'}`}>
                 <User className="w-5 h-5" />
               </button>
-              <button className="p-2 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors">
+              <button className="p-2 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white">
                 <MoreVertical className="w-5 h-5" />
               </button>
             </div>
@@ -401,57 +247,58 @@ export default function WhatsAppPage() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/30">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`
-                    max-w-[70%] px-4 py-2.5 rounded-2xl
-                    ${message.sender === 'user'
+            {msgsLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                <MessageSquare className="w-16 h-16 mb-4 opacity-30" />
+                <p>Nenhuma mensagem</p>
+              </div>
+            ) : (
+              messages.map((msg: any) => (
+                <div key={msg.id} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl ${
+                    msg.direction === 'outbound'
                       ? 'bg-gradient-to-r from-violet-600 to-violet-700 text-white rounded-br-md'
                       : 'bg-slate-800/70 text-white rounded-bl-md'
-                    }
-                  `}
-                >
-                  <p className="text-sm leading-relaxed">{message.content}</p>
-                  <div className={`flex items-center gap-1 mt-1 ${message.sender === 'user' ? 'justify-end' : ''}`}>
-                    <span className="text-[10px] text-slate-300/70">{message.timestamp}</span>
-                    {message.sender === 'user' && <MessageStatus status={message.status} />}
+                  }`}>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content || `[${msg.type}]`}</p>
+                    <div className={`flex items-center gap-1 mt-1 ${msg.direction === 'outbound' ? 'justify-end' : ''}`}>
+                      <span className="text-[10px] text-slate-300/70">{formatMsgTime(msg.sent_at)}</span>
+                      {msg.direction === 'outbound' && <StatusIcon status={msg.status} />}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
+              ))
+            )}
+            <div ref={msgEndRef} />
           </div>
 
           {/* Input */}
           <div className="p-4 border-t border-slate-800/50 bg-slate-900/50">
             <div className="flex items-center gap-3">
-              <button className="p-2.5 rounded-xl hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors">
+              <button className="p-2.5 rounded-xl hover:bg-slate-800/50 text-slate-400 hover:text-white">
                 <Smile className="w-5 h-5" />
               </button>
-              <button className="p-2.5 rounded-xl hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors">
+              <button className="p-2.5 rounded-xl hover:bg-slate-800/50 text-slate-400 hover:text-white">
                 <Paperclip className="w-5 h-5" />
               </button>
               <input
                 type="text"
                 placeholder="Digite uma mensagem..."
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
                 className="flex-1 px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-violet-500/50"
               />
-              {inputMessage.trim() ? (
-                <button
-                  onClick={handleSendMessage}
-                  className="p-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-700 transition-colors"
-                >
-                  <Send className="w-5 h-5" />
+              {input.trim() ? (
+                <button onClick={handleSend} disabled={msgsLoading} className="p-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50">
+                  {msgsLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                 </button>
               ) : (
-                <button className="p-2.5 rounded-xl hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors">
+                <button className="p-2.5 rounded-xl hover:bg-slate-800/50 text-slate-400 hover:text-white">
                   <Mic className="w-5 h-5" />
                 </button>
               )}
@@ -462,14 +309,14 @@ export default function WhatsAppPage() {
         <div className="flex-1 hidden md:flex items-center justify-center text-slate-500">
           <div className="text-center">
             <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p>Selecione uma conversa para começar</p>
+            <p>Selecione uma conversa</p>
           </div>
         </div>
       )}
 
-      {/* Contact Info Sidebar */}
+      {/* ======= CONTACT INFO ======= */}
       <AnimatePresence>
-        {showContactInfo && selectedConversation && (
+        {showInfo && selectedConversation && (
           <motion.div
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 320, opacity: 1 }}
@@ -477,11 +324,8 @@ export default function WhatsAppPage() {
             className="hidden lg:flex flex-col border-l border-slate-800/50 overflow-hidden"
           >
             <div className="p-4 border-b border-slate-800/50 flex items-center justify-between">
-              <h3 className="font-semibold text-white">Informações do Contato</h3>
-              <button
-                onClick={() => setShowContactInfo(false)}
-                className="p-1.5 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors"
-              >
+              <h3 className="font-semibold text-white">Contato</h3>
+              <button onClick={() => setShowInfo(false)} className="p-1.5 rounded-lg hover:bg-slate-800/50 text-slate-400">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -490,103 +334,104 @@ export default function WhatsAppPage() {
               {/* Profile */}
               <div className="text-center">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-2xl font-bold text-white">
-                    {selectedConversation.contact.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                  </span>
+                  <span className="text-2xl font-bold text-white">{getInitials(selectedConversation.contact_name || selectedConversation.phone_number)}</span>
                 </div>
-                <h4 className="font-semibold text-white">{selectedConversation.contact.name}</h4>
-                <p className="text-sm text-slate-400">{selectedConversation.contact.phone}</p>
+                <h4 className="font-semibold text-white">{selectedConversation.contact_name || 'Desconhecido'}</h4>
+                <p className="text-sm text-slate-400">{formatPhone(selectedConversation.phone_number)}</p>
               </div>
 
-              {/* Quick Info */}
+              {/* Info */}
               <div className="space-y-3">
-                {selectedConversation.contact.email && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Phone className="w-4 h-4 text-slate-400" />
+                  <span className="text-slate-300">{formatPhone(selectedConversation.phone_number)}</span>
+                </div>
+                {selectedConversation.contact?.email && (
                   <div className="flex items-center gap-3 text-sm">
                     <Mail className="w-4 h-4 text-slate-400" />
                     <span className="text-slate-300">{selectedConversation.contact.email}</span>
                   </div>
                 )}
-                {selectedConversation.contact.company && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <Building2 className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-300">{selectedConversation.contact.company}</span>
-                  </div>
-                )}
               </div>
 
+              {/* Bot Status */}
+              <div className="p-3 bg-slate-800/30 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-violet-400" />
+                    <span className="text-sm text-slate-300">Bot Automático</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                    selectedConversation.is_bot_active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/50 text-slate-400'
+                  }`}>
+                    {selectedConversation.is_bot_active ? 'Ativo' : 'Inativo'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Stats */}
+              {selectedConversation.contact && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-slate-800/30 rounded-xl">
+                    <div className="flex items-center gap-2 mb-1">
+                      <ShoppingCart className="w-4 h-4 text-violet-400" />
+                      <span className="text-xs text-slate-400">Pedidos</span>
+                    </div>
+                    <p className="text-lg font-bold text-white">{selectedConversation.contact.total_orders || 0}</p>
+                  </div>
+                  <div className="p-3 bg-slate-800/30 rounded-xl">
+                    <div className="flex items-center gap-2 mb-1">
+                      <DollarSign className="w-4 h-4 text-emerald-400" />
+                      <span className="text-xs text-slate-400">Total</span>
+                    </div>
+                    <p className="text-lg font-bold text-white">{formatCurrency(selectedConversation.contact.total_spent)}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Tags */}
-              {selectedConversation.contact.tags.length > 0 && (
+              {selectedConversation.tags && selectedConversation.tags.length > 0 && (
                 <div>
                   <h5 className="text-xs font-semibold text-slate-400 uppercase mb-2">Tags</h5>
                   <div className="flex flex-wrap gap-2">
-                    {selectedConversation.contact.tags.map(tag => (
-                      <span
-                        key={tag}
-                        className={`px-2 py-1 rounded-lg text-xs font-medium ${tagColors[tag] || 'bg-slate-700/50 text-slate-400'}`}
-                      >
-                        {tag}
+                    {selectedConversation.tags.map((t: any) => (
+                      <span key={t.tag?.id} style={{ backgroundColor: t.tag?.color + '30', color: t.tag?.color }} className="px-2 py-1 rounded-lg text-xs font-medium">
+                        {t.tag?.title}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Stats */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-slate-800/30 rounded-xl">
-                  <div className="flex items-center gap-2 mb-1">
-                    <ShoppingCart className="w-4 h-4 text-violet-400" />
-                    <span className="text-xs text-slate-400">Pedidos</span>
+              {/* Agent */}
+              <div>
+                <h5 className="text-xs font-semibold text-slate-400 uppercase mb-2">Agente</h5>
+                {selectedConversation.assigned_agent ? (
+                  <div className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-xl">
+                    <UserCircle className="w-8 h-8 text-violet-400" />
+                    <div>
+                      <p className="text-sm font-medium text-white">{selectedConversation.assigned_agent.name}</p>
+                      <p className="text-xs text-slate-400">{selectedConversation.assigned_agent.email}</p>
+                    </div>
                   </div>
-                  <p className="text-lg font-bold text-white">{mockCustomerInfo.totalOrders}</p>
-                </div>
-                <div className="p-3 bg-slate-800/30 rounded-xl">
-                  <div className="flex items-center gap-2 mb-1">
-                    <DollarSign className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs text-slate-400">Total Gasto</span>
+                ) : (
+                  <div className="p-3 bg-slate-800/30 rounded-xl text-center">
+                    <p className="text-sm text-slate-400">Sem agente</p>
+                    <button className="mt-2 px-3 py-1.5 text-xs bg-violet-600 text-white rounded-lg hover:bg-violet-700">
+                      Atribuir
+                    </button>
                   </div>
-                  <p className="text-lg font-bold text-white">{formatCurrency(mockCustomerInfo.totalSpent)}</p>
-                </div>
+                )}
               </div>
 
-              {/* Last Order */}
-              {mockCustomerInfo.lastOrder && (
-                <div className="p-3 bg-slate-800/30 rounded-xl">
-                  <h5 className="text-xs font-semibold text-slate-400 uppercase mb-2">Último Pedido</h5>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-white">{mockCustomerInfo.lastOrder.id}</span>
-                    <span className="text-xs text-slate-400">{mockCustomerInfo.lastOrder.date}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-emerald-400 font-medium">
-                      {formatCurrency(mockCustomerInfo.lastOrder.total)}
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-xs bg-amber-500/20 text-amber-400">
-                      {mockCustomerInfo.lastOrder.status}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Activity */}
+              {/* Notes */}
               <div>
-                <h5 className="text-xs font-semibold text-slate-400 uppercase mb-3">Atividade Recente</h5>
-                <div className="space-y-3">
-                  {mockCustomerInfo.activities.map((activity, index) => (
-                    <div key={index} className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-800/50 flex items-center justify-center flex-shrink-0">
-                        {activity.type === 'order' && <ShoppingCart className="w-4 h-4 text-violet-400" />}
-                        {activity.type === 'email' && <Mail className="w-4 h-4 text-cyan-400" />}
-                        {activity.type === 'visit' && <User className="w-4 h-4 text-emerald-400" />}
-                        {activity.type === 'chat' && <MessageSquare className="w-4 h-4 text-amber-400" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-300">{activity.description}</p>
-                        <p className="text-xs text-slate-500">{activity.date}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <h5 className="text-xs font-semibold text-slate-400 uppercase mb-2">Notas</h5>
+                <textarea
+                  placeholder="Adicionar nota..."
+                  defaultValue={selectedConversation.chat_note || ''}
+                  className="w-full p-3 bg-slate-800/30 border border-slate-700/50 rounded-xl text-sm text-white placeholder-slate-500 resize-none h-24 focus:outline-none focus:border-violet-500/50"
+                />
               </div>
             </div>
           </motion.div>
