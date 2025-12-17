@@ -13,14 +13,14 @@ import {
 } from '@/hooks/useWhatsApp'
 
 // Helpers
-const formatPhone = (p: string) => {
+const formatPhone = (p?: string) => {
   if (!p) return ''
   const c = p.replace(/\D/g, '')
   if (c.length === 13) return `+${c.slice(0,2)} ${c.slice(2,4)} ${c.slice(4,9)}-${c.slice(9)}`
   return p
 }
 
-const formatTime = (d: string) => {
+const formatTime = (d?: string) => {
   if (!d) return ''
   const now = new Date(), dt = new Date(d)
   const diff = Math.floor((now.getTime() - dt.getTime()) / 60000)
@@ -31,11 +31,11 @@ const formatTime = (d: string) => {
   return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
-const formatMsgTime = (d: string) => d ? new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''
+const formatMsgTime = (d?: string) => d ? new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''
 
-const getInitials = (n: string) => (n || 'UN').split(' ').map(x => x[0]).join('').slice(0,2).toUpperCase()
+const getInitials = (n?: string) => (n || 'UN').split(' ').map(x => x[0]).join('').slice(0,2).toUpperCase()
 
-const formatCurrency = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
+const formatCurrency = (v?: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
 
 // Status Icon
 const StatusIcon = ({ status }: { status: string }) => {
