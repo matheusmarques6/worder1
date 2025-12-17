@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Formatar resposta
-    const formattedRuns = runs?.map(run => ({
+    const formattedRuns = runs?.map((run: any) => ({
       id: run.id,
       automation_id: run.automation_id,
       automation_name: run.automations?.name,
