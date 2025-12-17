@@ -89,18 +89,40 @@ export async function GET(request: NextRequest) {
     if (error) throw error
 
     // Formatar resposta
-    const conversations = data?.map(conv => ({
-      ...conv,
-      contact_name: conv.contact?.name || null,
-      contact_email: conv.contact?.email || null,
-      contact_avatar: conv.contact?.profile_picture_url || null,
-      contact_tags: conv.contact?.tags || [],
-      contact_total_orders: conv.contact?.total_orders || 0,
-      contact_total_spent: conv.contact?.total_spent || 0,
-      contact_is_blocked: conv.contact?.is_blocked || false,
-      agent_name: conv.assigned_agent?.raw_user_meta_data?.name || null,
-      tags: conv.tags?.map((t: any) => t.tag) || []
-    }))
+    const conversations = data?.map((conv: any) => {
+      const contact = conv.contact as any
+      const assignedAgent = conv.assigned_agent as any
+      const convTags = conv.tags as any[]
+      
+      return {
+        id: conv.id,
+        organization_id: conv.organization_id,
+        contact_id: conv.contact_id,
+        instance_id: conv.instance_id,
+        phone_number: conv.phone_number,
+        status: conv.status,
+        priority: conv.priority,
+        unread_count: conv.unread_count,
+        is_bot_active: conv.is_bot_active,
+        last_message_at: conv.last_message_at,
+        last_message_preview: conv.last_message_preview,
+        last_message_type: conv.last_message_type,
+        last_message_direction: conv.last_message_direction,
+        assigned_agent_id: conv.assigned_agent_id,
+        created_at: conv.created_at,
+        updated_at: conv.updated_at,
+        total_messages: conv.total_messages,
+        contact_name: contact?.name || null,
+        contact_email: contact?.email || null,
+        contact_avatar: contact?.profile_picture_url || null,
+        contact_tags: contact?.tags || [],
+        contact_total_orders: contact?.total_orders || 0,
+        contact_total_spent: contact?.total_spent || 0,
+        contact_is_blocked: contact?.is_blocked || false,
+        agent_name: assignedAgent?.raw_user_meta_data?.name || null,
+        tags: convTags?.map((t: any) => t.tag) || []
+      }
+    })
 
     return NextResponse.json({
       conversations,

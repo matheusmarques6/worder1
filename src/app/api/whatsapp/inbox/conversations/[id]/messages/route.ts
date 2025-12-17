@@ -104,7 +104,7 @@ export async function POST(
     }
 
     // Cria mensagem no banco
-    const { data: message, error: msgError } = await supabase
+    const { data: messageData, error: msgError } = await supabase
       .from('whatsapp_messages')
       .insert({
         conversation_id: id,
@@ -130,6 +130,8 @@ export async function POST(
       .single()
 
     if (msgError) throw msgError
+    
+    const message = messageData as any
 
     // TODO: Aqui deve chamar a API da Meta para enviar a mensagem
     // e atualizar o status para 'sent' com o meta_message_id
@@ -157,7 +159,26 @@ export async function POST(
       })
       .eq('id', id)
 
-    return NextResponse.json({ message: { ...message, status: 'sent' } })
+    // Retornar mensagem com status atualizado
+    const responseMessage = {
+      id: message.id,
+      conversation_id: message.conversation_id,
+      contact_id: message.contact_id,
+      direction: message.direction,
+      message_type: message.message_type,
+      content: message.content,
+      media_url: message.media_url,
+      media_mime_type: message.media_mime_type,
+      media_filename: message.media_filename,
+      status: 'sent',
+      sent_by_user_id: message.sent_by_user_id,
+      sent_by_user_name: message.sent_by_user_name,
+      sent_by_bot: message.sent_by_bot,
+      created_at: message.created_at,
+      sent_at: new Date().toISOString()
+    }
+
+    return NextResponse.json({ message: responseMessage })
 
   } catch (error) {
     console.error('Error sending message:', error)
