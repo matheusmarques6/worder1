@@ -31,16 +31,13 @@ import {
   ExternalLink,
   Trash2,
 } from 'lucide-react'
-import { useOrganization } from '@/hooks/useOrganization'
+import { useAuthStore } from '@/stores'
 import {
   useTikTokDashboard,
   useCampaignManagement,
   useTikTokConnection,
   useTikTokSync,
-  TikTokKPIs,
-  TikTokEngagement,
   TikTokCampaign,
-  VideoFunnelItem,
 } from '@/hooks/useTikTokAds'
 
 // ==========================================
@@ -247,9 +244,9 @@ export default function TikTokAdsPage() {
   const [selectedTab, setSelectedTab] = useState<'campaigns' | 'creatives' | 'audience'>('campaigns')
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
   
-  // Get organization
-  const { organization } = useOrganization()
-  const organizationId = organization?.id || null
+  // Get organization from auth store
+  const { user } = useAuthStore()
+  const organizationId = user?.organization_id || null
 
   // Hooks
   const {
@@ -276,7 +273,6 @@ export default function TikTokAdsPage() {
     connecting,
     error: connectionError,
     connect,
-    disconnect,
   } = useTikTokConnection(organizationId)
 
   const {
@@ -284,6 +280,15 @@ export default function TikTokAdsPage() {
     lastSyncAt,
     sync,
   } = useTikTokSync(organizationId)
+
+  // Close action menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setActionMenuOpen(null)
+    if (actionMenuOpen) {
+      document.addEventListener('click', handleClickOutside)
+      return () => document.removeEventListener('click', handleClickOutside)
+    }
+  }, [actionMenuOpen])
 
   // Handle campaign status toggle
   const handleToggleCampaignStatus = async (campaign: TikTokCampaign) => {
@@ -568,7 +573,7 @@ export default function TikTokAdsPage() {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setSelectedTab(tab.id as any)}
+              onClick={() => setSelectedTab(tab.id as typeof selectedTab)}
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                 selectedTab === tab.id
                   ? 'bg-gradient-to-r from-pink-500/20 to-cyan-500/20 text-white'
@@ -651,7 +656,10 @@ export default function TikTokAdsPage() {
                           </td>
                           <td className="py-4 text-right relative">
                             <button 
-                              onClick={() => setActionMenuOpen(actionMenuOpen === campaign.id ? null : campaign.id)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setActionMenuOpen(actionMenuOpen === campaign.id ? null : campaign.id)
+                              }}
                               className="p-2 hover:bg-dark-700/50 rounded-lg transition-colors"
                             >
                               <MoreHorizontal className="w-4 h-4 text-dark-400" />
@@ -659,7 +667,10 @@ export default function TikTokAdsPage() {
                             
                             {/* Action Menu */}
                             {actionMenuOpen === campaign.id && (
-                              <div className="absolute right-0 top-full mt-1 w-48 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-10">
+                              <div 
+                                className="absolute right-0 top-full mt-1 w-48 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-10"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <button
                                   onClick={() => handleToggleCampaignStatus(campaign)}
                                   disabled={campaignLoading}
