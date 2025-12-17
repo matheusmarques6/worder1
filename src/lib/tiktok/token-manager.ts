@@ -161,19 +161,16 @@ export function createTikTokError(code: number, message: string, requestId?: str
   const error = new Error(message) as TikTokApiError;
   error.code = code;
   error.request_id = requestId;
-  error.isRetryable = [
-    TIKTOK_ERROR_CODES.RATE_LIMIT,
-    TIKTOK_ERROR_CODES.INTERNAL_ERROR,
-  ].includes(code);
+  error.isRetryable = (
+    [TIKTOK_ERROR_CODES.RATE_LIMIT, TIKTOK_ERROR_CODES.INTERNAL_ERROR] as number[]
+  ).includes(code);
   return error;
 }
 
 export function isTokenError(code: number): boolean {
-  return [
-    TIKTOK_ERROR_CODES.INVALID_TOKEN,
-    TIKTOK_ERROR_CODES.TOKEN_EXPIRED,
-    TIKTOK_ERROR_CODES.PERMISSION_DENIED,
-  ].includes(code);
+  return (
+    [TIKTOK_ERROR_CODES.INVALID_TOKEN, TIKTOK_ERROR_CODES.TOKEN_EXPIRED, TIKTOK_ERROR_CODES.PERMISSION_DENIED] as number[]
+  ).includes(code);
 }
 
 // ==========================================
@@ -254,12 +251,10 @@ export class TikTokTokenManager {
         needsReauth = true;
         
         // Atualiza flag no banco (fire and forget)
-        this.supabase
+        void this.supabase
           .from('tiktok_accounts')
           .update({ needs_reauth: true })
-          .eq('id', account.id)
-          .then(() => {})
-          .catch(() => {});
+          .eq('id', account.id);
       }
     }
 
