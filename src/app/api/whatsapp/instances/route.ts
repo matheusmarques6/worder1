@@ -442,40 +442,4 @@ async function disconnectEvolution(instance: any) {
   }
 }
 
-// =============================================
-// ENVIAR MENSAGEM VIA EVOLUTION
-// =============================================
-export async function sendEvolutionMessage(instance: any, to: string, message: any) {
-  try {
-    const endpoint = message.type === 'text' 
-      ? 'sendText' 
-      : message.type === 'image' 
-        ? 'sendMedia' 
-        : 'sendText';
-
-    const body = message.type === 'text' 
-      ? {
-          number: to,
-          text: message.content,
-        }
-      : {
-          number: to,
-          mediatype: message.type,
-          media: message.url,
-          caption: message.caption,
-        };
-
-    const response = await fetch(`${instance.api_url}/message/${endpoint}/${instance.unique_id}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': instance.api_key,
-      },
-      body: JSON.stringify(body),
-    });
-
-    return await response.json();
-  } catch (error: any) {
-    return { error: error.message };
-  }
-}
+// sendEvolutionMessage foi movido para /lib/whatsapp/evolution-api.ts
