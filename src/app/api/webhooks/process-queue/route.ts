@@ -15,8 +15,8 @@ const supabase = new Proxy({} as SupabaseClient, {
   get(_, prop) { return (getDb() as any)[prop]; }
 });
 
-// Importar executor de ações
-import { executeAction } from '@/lib/automation/actions';
+// Importar executor de ações e tipo
+import { executeAction, ActionContext } from '@/lib/automation/actions';
 
 // =====================================================
 // TYPES
@@ -193,7 +193,7 @@ async function executeAutomation(params: ExecuteAutomationParams): Promise<void>
 
   try {
     // 2. Construir contexto de execução
-    const context: Record<string, any> = {
+    const context: ActionContext = {
       contact: contact || {},
       deal: deal || {},
       trigger: triggerData,
@@ -202,7 +202,7 @@ async function executeAutomation(params: ExecuteAutomationParams): Promise<void>
         automation_name: automationName,
         execution_id: runId,
       },
-      nodes: {} as Record<string, any>,
+      nodes: {},
     };
 
     // 3. Ordenar nós para execução (topological sort)
@@ -370,7 +370,7 @@ interface NodeExecutionResult {
 
 async function executeNodeAction(
   node: AutomationNode,
-  context: Record<string, any>,
+  context: ActionContext,
   organizationId: string
 ): Promise<NodeExecutionResult> {
   const { type, data } = node;
@@ -558,7 +558,7 @@ async function scheduleDelayedContinuation(
   automationId: string,
   organizationId: string,
   afterNodeId: string,
-  context: any,
+  context: ActionContext,
   delayMs: number,
   contactId?: string,
   dealId?: string
