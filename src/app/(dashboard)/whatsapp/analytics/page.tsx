@@ -41,6 +41,21 @@ import {
 } from 'recharts'
 
 // Types
+interface Campaign {
+  id: string
+  name: string
+  status: 'completed' | 'active' | 'scheduled' | 'failed'
+  sentAt: string
+  enviadas: number
+  entregues: number
+  lidas: number
+  respondidas: number
+  falhas: number
+  taxaEntrega: number
+  taxaLeitura: number
+  taxaResposta: number
+}
+
 interface CampaignMetrics {
   enviadas: number
   enviadasChange: number
@@ -365,6 +380,94 @@ export default function WhatsAppAnalyticsPage() {
     },
   ])
 
+  // Campaigns data - ordered by performance (taxa de resposta)
+  const [campaigns, setCampaigns] = useState<Campaign[]>([
+    {
+      id: '1',
+      name: 'Black Friday 2024',
+      status: 'completed',
+      sentAt: '2024-11-29T10:00:00',
+      enviadas: 5420,
+      entregues: 5280,
+      lidas: 4350,
+      respondidas: 1520,
+      falhas: 140,
+      taxaEntrega: 97.4,
+      taxaLeitura: 82.4,
+      taxaResposta: 28.0,
+    },
+    {
+      id: '2',
+      name: 'Cyber Monday',
+      status: 'completed',
+      sentAt: '2024-12-02T09:00:00',
+      enviadas: 3850,
+      entregues: 3720,
+      lidas: 2980,
+      respondidas: 890,
+      falhas: 130,
+      taxaEntrega: 96.6,
+      taxaLeitura: 80.1,
+      taxaResposta: 23.1,
+    },
+    {
+      id: '3',
+      name: 'Promoção Natal',
+      status: 'active',
+      sentAt: '2024-12-15T08:00:00',
+      enviadas: 2850,
+      entregues: 2780,
+      lidas: 2100,
+      respondidas: 620,
+      falhas: 70,
+      taxaEntrega: 97.5,
+      taxaLeitura: 75.5,
+      taxaResposta: 21.8,
+    },
+    {
+      id: '4',
+      name: 'Recuperação Carrinho',
+      status: 'active',
+      sentAt: '2024-12-10T14:00:00',
+      enviadas: 1580,
+      entregues: 1520,
+      lidas: 1180,
+      respondidas: 320,
+      falhas: 60,
+      taxaEntrega: 96.2,
+      taxaLeitura: 77.6,
+      taxaResposta: 20.3,
+    },
+    {
+      id: '5',
+      name: 'Boas Vindas',
+      status: 'active',
+      sentAt: '2024-12-01T00:00:00',
+      enviadas: 1720,
+      entregues: 1680,
+      lidas: 1250,
+      respondidas: 280,
+      falhas: 40,
+      taxaEntrega: 97.7,
+      taxaLeitura: 74.4,
+      taxaResposta: 16.3,
+    },
+    {
+      id: '6',
+      name: 'Pós-Venda',
+      status: 'completed',
+      sentAt: '2024-12-05T11:00:00',
+      enviadas: 980,
+      entregues: 920,
+      lidas: 680,
+      respondidas: 145,
+      falhas: 60,
+      taxaEntrega: 93.9,
+      taxaLeitura: 73.9,
+      taxaResposta: 14.8,
+    },
+  ])
+
   // Chart data
   const campaignChartData = [
     { date: 'Seg', enviadas: 2100, entregues: 2020, lidas: 1520, respondidas: 420 },
@@ -539,6 +642,164 @@ export default function WhatsAppAnalyticsPage() {
                   <Line type="monotone" dataKey="respondidas" name="Respondidas" stroke="#a855f7" strokeWidth={2} dot={{ fill: '#a855f7' }} />
                 </ComposedChart>
               </ResponsiveContainer>
+            </div>
+          </motion.div>
+
+          {/* Campaigns Table */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-dark-800/60 border border-dark-700/50 rounded-xl overflow-hidden"
+          >
+            <div className="p-6 border-b border-dark-700/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Ranking de Campanhas</h3>
+                  <p className="text-sm text-dark-400 mt-1">Ordenado por taxa de resposta no período</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select className="bg-dark-700/50 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500">
+                    <option value="response">Taxa de Resposta</option>
+                    <option value="read">Taxa de Leitura</option>
+                    <option value="delivery">Taxa de Entrega</option>
+                    <option value="sent">Total Enviadas</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-dark-700/50">
+                    <th className="text-left py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">#</th>
+                    <th className="text-left py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Campanha</th>
+                    <th className="text-left py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Status</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Enviadas</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Entregues</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Lidas</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Respondidas</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Tx. Entrega</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Tx. Leitura</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Tx. Resposta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {campaigns
+                    .sort((a, b) => b.taxaResposta - a.taxaResposta)
+                    .map((campaign, index) => (
+                    <tr 
+                      key={campaign.id} 
+                      className="border-b border-dark-700/30 hover:bg-dark-700/20 transition-colors"
+                    >
+                      <td className="py-4 px-6">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${
+                          index === 0 ? 'bg-yellow-500/20 text-yellow-400' :
+                          index === 1 ? 'bg-gray-400/20 text-gray-300' :
+                          index === 2 ? 'bg-orange-700/20 text-orange-400' :
+                          'bg-dark-700/50 text-dark-400'
+                        }`}>
+                          {index + 1}
+                        </div>
+                      </td>
+                      <td className="py-4 px-6">
+                        <div>
+                          <p className="font-medium text-white">{campaign.name}</p>
+                          <p className="text-xs text-dark-400">
+                            {new Date(campaign.sentAt).toLocaleDateString('pt-BR', { 
+                              day: '2-digit', 
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${
+                          campaign.status === 'completed' ? 'bg-green-500/10 text-green-400' :
+                          campaign.status === 'active' ? 'bg-blue-500/10 text-blue-400' :
+                          campaign.status === 'scheduled' ? 'bg-yellow-500/10 text-yellow-400' :
+                          'bg-red-500/10 text-red-400'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            campaign.status === 'completed' ? 'bg-green-400' :
+                            campaign.status === 'active' ? 'bg-blue-400' :
+                            campaign.status === 'scheduled' ? 'bg-yellow-400' :
+                            'bg-red-400'
+                          }`} />
+                          {campaign.status === 'completed' ? 'Concluída' :
+                           campaign.status === 'active' ? 'Ativa' :
+                           campaign.status === 'scheduled' ? 'Agendada' : 'Falha'}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <span className="text-white font-medium">{formatNumber(campaign.enviadas)}</span>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <span className="text-white">{formatNumber(campaign.entregues)}</span>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <span className="text-white">{formatNumber(campaign.lidas)}</span>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <span className="text-white">{formatNumber(campaign.respondidas)}</span>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-green-500 rounded-full" 
+                              style={{ width: `${campaign.taxaEntrega}%` }}
+                            />
+                          </div>
+                          <span className="text-green-400 text-sm font-medium w-12 text-right">
+                            {formatPercent(campaign.taxaEntrega)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-blue-500 rounded-full" 
+                              style={{ width: `${campaign.taxaLeitura}%` }}
+                            />
+                          </div>
+                          <span className="text-blue-400 text-sm font-medium w-12 text-right">
+                            {formatPercent(campaign.taxaLeitura)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-purple-500 rounded-full" 
+                              style={{ width: `${campaign.taxaResposta * 3}%` }}
+                            />
+                          </div>
+                          <span className="text-purple-400 text-sm font-medium w-12 text-right">
+                            {formatPercent(campaign.taxaResposta)}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Summary Footer */}
+            <div className="p-4 bg-dark-700/30 border-t border-dark-700/50">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-dark-400">
+                  Mostrando {campaigns.length} campanhas no período selecionado
+                </span>
+                <button className="text-primary-400 hover:text-primary-300 font-medium transition-colors">
+                  Ver todas as campanhas →
+                </button>
+              </div>
             </div>
           </motion.div>
         </motion.div>
