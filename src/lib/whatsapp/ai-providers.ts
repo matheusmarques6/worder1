@@ -221,12 +221,12 @@ export async function generateWhatsAppResponse(params: {
 
   // Construir histórico de mensagens
   const messages: AIMessage[] = conversationHistory.slice(-10).map(msg => ({
-    role: msg.direction === 'outbound' ? 'assistant' : 'user',
+    role: (msg.direction === 'outbound' ? 'assistant' : 'user') as 'assistant' | 'user',
     content: msg.content,
   }));
 
   // Adicionar mensagem atual
-  messages.push({ role: 'user', content: userMessage });
+  messages.push({ role: 'user' as const, content: userMessage });
 
   // System prompt padrão para WhatsApp
   const defaultSystemPrompt = `Você é um assistente virtual amigável de atendimento ao cliente via WhatsApp.
@@ -264,13 +264,15 @@ export async function suggestResponse(params: {
 Baseado na conversa, sugira 3 possíveis respostas curtas e profissionais.
 Retorne APENAS as 3 sugestões, uma por linha, sem numeração.`;
 
+  const historyMessages: AIMessage[] = conversationHistory.slice(-5).map(msg => ({
+    role: (msg.direction === 'outbound' ? 'assistant' : 'user') as 'assistant' | 'user',
+    content: msg.content,
+  }));
+
   const messages: AIMessage[] = [
-    { role: 'system', content: systemPrompt },
-    ...conversationHistory.slice(-5).map(msg => ({
-      role: msg.direction === 'outbound' ? 'assistant' : 'user' as const,
-      content: msg.content,
-    })),
-    { role: 'user', content: userMessage },
+    { role: 'system' as const, content: systemPrompt },
+    ...historyMessages,
+    { role: 'user' as const, content: userMessage },
   ];
 
   const response = await callAI({ ...config, systemPrompt: undefined }, messages);
