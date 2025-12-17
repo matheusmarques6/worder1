@@ -858,11 +858,18 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
     </div>
   );
 
-  // Componente de alerta de credencial - só mostra se integração não estiver conectada
+  // Componente de alerta de credencial - mostra status da integração
   const CredentialAlert = ({ service, configPath, integrationId }: { service: string; configPath: string; integrationId?: string }) => {
-    // Se passou integrationId e ela está conectada, não mostra o alerta
+    // Se passou integrationId e ela está conectada, mostra badge verde
     if (integrationId && isIntegrationConnected(integrationId)) {
-      return null;
+      return (
+        <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <p className="text-xs text-green-400">
+            <strong>{service}</strong> conectado
+          </p>
+        </div>
+      );
     }
     
     return (
