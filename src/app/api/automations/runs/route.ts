@@ -30,6 +30,10 @@ export async function GET(request: NextRequest) {
     const automationId = searchParams.get('automationId');
     const runId = searchParams.get('runId');
     const status = searchParams.get('status');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    const contactId = searchParams.get('contactId');
+    const triggerType = searchParams.get('triggerType');
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '20', 10), 100);
     const includeSteps = searchParams.get('includeSteps') === 'true';
@@ -49,10 +53,11 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         automations(name),
-        contacts(id, email, first_name, last_name)
+        contacts(id, email, first_name, last_name),
+        deals(id, title, value)
       `, { count: 'exact' })
       .eq('organization_id', organizationId)
-      .order('created_at', { ascending: false });
+      .order('started_at', { ascending: false });
     
     if (automationId) {
       query = query.eq('automation_id', automationId);
@@ -60,6 +65,22 @@ export async function GET(request: NextRequest) {
     
     if (status) {
       query = query.eq('status', status);
+    }
+    
+    if (startDate) {
+      query = query.gte('started_at', startDate);
+    }
+    
+    if (endDate) {
+      query = query.lte('started_at', endDate);
+    }
+    
+    if (contactId) {
+      query = query.eq('contact_id', contactId);
+    }
+    
+    if (triggerType) {
+      query = query.eq('trigger_type', triggerType);
     }
     
     // Paginação
@@ -84,14 +105,19 @@ export async function GET(request: NextRequest) {
       contact: run.contacts ? {
         id: run.contacts.id,
         email: run.contacts.email,
-        name: `${run.contacts.first_name || ''} ${run.contacts.last_name || ''}`.trim()
+        name: `${run.contacts.first_name || ''} ${run.contacts.last_name || ''}`.trim() || run.contacts.email
       } : null,
-      nodes_executed: run.nodes_executed,
-      nodes_total: run.nodes_total,
-      nodes_failed: run.nodes_failed,
+      deal: run.deals ? {
+        id: run.deals.id,
+        title: run.deals.title,
+        value: run.deals.value
+      } : null,
+      total_steps: run.total_steps,
+      completed_steps: run.completed_steps,
+      failed_steps: run.failed_steps,
       duration_ms: run.duration_ms,
       error_message: run.error_message,
-      error_suggestion: run.error_suggestion,
+      error_node_id: run.error_node_id,
       started_at: run.started_at,
       completed_at: run.completed_at
     }));
@@ -126,8 +152,9 @@ async function getRunDetail(
     .from('automation_runs')
     .select(`
       *,
-      automations(name),
-      contacts(id, email, first_name, last_name, phone, tags)
+      automations(name, trigger_type),
+      contacts(id, email, first_name, last_name, phone),
+      deals(id, title, value, status, pipeline:pipelines(name), stage:pipeline_stages(name))
     `)
     .eq('id', runId)
     .eq('organization_id', organizationId)
@@ -152,19 +179,13 @@ async function getRunDetail(
       node_type: step.node_type,
       node_label: step.node_label,
       step_order: step.step_order,
-      branch_path: step.branch_path,
       status: step.status,
       input_data: step.input_data,
-      input_truncated: step.input_truncated,
       output_data: step.output_data,
-      output_truncated: step.output_truncated,
       config_used: step.config_used,
       variables_resolved: step.variables_resolved,
-      error: step.error_message ? {
-        type: step.error_type,
-        message: step.error_message,
-        context: step.error_context
-      } : null,
+      error_message: step.error_message,
+      error_details: step.error_details,
       duration_ms: step.duration_ms,
       started_at: step.started_at,
       completed_at: step.completed_at
@@ -182,20 +203,25 @@ async function getRunDetail(
       contact: run.contacts ? {
         id: run.contacts.id,
         email: run.contacts.email,
-        name: `${run.contacts.first_name || ''} ${run.contacts.last_name || ''}`.trim(),
-        phone: run.contacts.phone,
-        tags: run.contacts.tags
+        name: `${run.contacts.first_name || ''} ${run.contacts.last_name || ''}`.trim() || run.contacts.email,
+        phone: run.contacts.phone
       } : null,
-      nodes_executed: run.nodes_executed,
-      nodes_total: run.nodes_total,
-      nodes_failed: run.nodes_failed,
-      nodes_skipped: run.nodes_skipped,
+      deal: run.deals ? {
+        id: run.deals.id,
+        title: run.deals.title,
+        value: run.deals.value,
+        status: run.deals.status,
+        pipeline: run.deals.pipeline?.name,
+        stage: run.deals.stage?.name
+      } : null,
+      total_steps: run.total_steps,
+      completed_steps: run.completed_steps,
+      failed_steps: run.failed_steps,
       error: run.error_message ? {
         node_id: run.error_node_id,
-        type: run.error_type,
-        message: run.error_message,
-        suggestion: run.error_suggestion
+        message: run.error_message
       } : null,
+      context: run.context,
       duration_ms: run.duration_ms,
       started_at: run.started_at,
       completed_at: run.completed_at

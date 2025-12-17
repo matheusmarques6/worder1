@@ -12,6 +12,7 @@ import {
   Users,
   DollarSign,
   X,
+  History,
 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import {
@@ -20,6 +21,7 @@ import {
   AutomationTemplateCard,
   AUTOMATION_TEMPLATES,
 } from '@/components/automation';
+import { ExecutionHistory } from '@/components/automation/ExecutionHistory';
 import { AutomationNode, AutomationEdge } from '@/types';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
@@ -45,6 +47,7 @@ interface Automation {
 
 export default function AutomationsPage() {
   const { user } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<'automations' | 'executions'>('automations');
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'draft'>('all');
@@ -319,52 +322,90 @@ export default function AutomationsPage() {
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-[#111111] border border-[#222222] rounded-xl"
-          >
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                'p-2.5 rounded-lg',
-                stat.color === 'emerald' && 'bg-emerald-500/15',
-                stat.color === 'violet' && 'bg-violet-500/15',
-                stat.color === 'cyan' && 'bg-cyan-500/15',
-                stat.color === 'amber' && 'bg-amber-500/15'
-              )}>
-                <stat.icon className={cn(
-                  'w-5 h-5',
-                  stat.color === 'emerald' && 'text-emerald-400',
-                  stat.color === 'violet' && 'text-violet-400',
-                  stat.color === 'cyan' && 'text-cyan-400',
-                  stat.color === 'amber' && 'text-amber-400'
-                )} />
-              </div>
-              <div>
-                <p className="text-xl font-bold text-white">{stat.value}</p>
-                <p className="text-xs text-[#666666]">{stat.label}</p>
-              </div>
-            </div>
-          </motion.div>
-        ))}
+      {/* Tabs */}
+      <div className="flex items-center gap-1 p-1 bg-[#111111] border border-[#222222] rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab('automations')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            activeTab === 'automations'
+              ? 'bg-primary-500 text-white'
+              : 'text-[#666666] hover:text-white hover:bg-[#1a1a1a]'
+          )}
+        >
+          <Zap className="w-4 h-4" />
+          Automações
+        </button>
+        <button
+          onClick={() => setActiveTab('executions')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            activeTab === 'executions'
+              ? 'bg-primary-500 text-white'
+              : 'text-[#666666] hover:text-white hover:bg-[#1a1a1a]'
+          )}
+        >
+          <History className="w-4 h-4" />
+          Execuções
+        </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#555555]" />
-          <input
-            type="text"
-            placeholder="Buscar automações..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-[#111111] border border-[#222222] rounded-xl text-white placeholder-[#555555] focus:outline-none focus:border-primary-500/50 transition-colors"
-          />
+      {/* Executions Tab Content */}
+      {activeTab === 'executions' && organizationId && (
+        <div className="bg-[#111111] border border-[#222222] rounded-xl overflow-hidden" style={{ height: 'calc(100vh - 280px)' }}>
+          <ExecutionHistory organizationId={organizationId} />
         </div>
+      )}
+
+      {/* Automations Tab Content */}
+      {activeTab === 'automations' && (
+        <>
+          {/* Stats */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {stats.map((stat) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 bg-[#111111] border border-[#222222] rounded-xl"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    'p-2.5 rounded-lg',
+                    stat.color === 'emerald' && 'bg-emerald-500/15',
+                    stat.color === 'violet' && 'bg-violet-500/15',
+                    stat.color === 'cyan' && 'bg-cyan-500/15',
+                    stat.color === 'amber' && 'bg-amber-500/15'
+                  )}>
+                    <stat.icon className={cn(
+                      'w-5 h-5',
+                      stat.color === 'emerald' && 'text-emerald-400',
+                      stat.color === 'violet' && 'text-violet-400',
+                      stat.color === 'cyan' && 'text-cyan-400',
+                      stat.color === 'amber' && 'text-amber-400'
+                    )} />
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-white">{stat.value}</p>
+                    <p className="text-xs text-[#666666]">{stat.label}</p>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#555555]" />
+              <input
+                type="text"
+                placeholder="Buscar automações..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-[#111111] border border-[#222222] rounded-xl text-white placeholder-[#555555] focus:outline-none focus:border-primary-500/50 transition-colors"
+              />
+            </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center bg-[#111111] border border-[#222222] rounded-xl p-1">
             {(['all', 'active', 'paused', 'draft'] as const).map((status) => (
@@ -460,6 +501,8 @@ export default function AutomationsPage() {
             Nova Automação
           </Button>
         </div>
+      )}
+      </>
       )}
 
       {/* Modal Nova Automação */}
