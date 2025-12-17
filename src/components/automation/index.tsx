@@ -769,8 +769,24 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
   const [pipelines, setPipelines] = useState<PipelineOption[]>([]);
   const [loadingPipelines, setLoadingPipelines] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [integrations, setIntegrations] = useState<any[]>([]);
+  const [integrations, setIntegrations] = useState<Record<string, { connected: boolean }>>({});
   const [webhookUrl, setWebhookUrl] = useState('');
+
+  // Fetch integrations status
+  useEffect(() => {
+    async function fetchIntegrations() {
+      try {
+        const res = await fetch('/api/integrations/status');
+        if (res.ok) {
+          const data = await res.json();
+          setIntegrations(data.integrations || {});
+        }
+      } catch (e) {
+        console.error('Erro ao buscar integrações:', e);
+      }
+    }
+    fetchIntegrations();
+  }, []);
 
   // Fetch pipelines
   useEffect(() => {
@@ -817,6 +833,11 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
     onUpdate({ config: { ...node.data.config, [key]: value } });
   };
 
+  // Helper para verificar se integração está conectada
+  const isIntegrationConnected = (integrationId: string): boolean => {
+    return integrations[integrationId]?.connected === true;
+  };
+
   // Componente de Select estilizado
   const StyledSelect = ({ label, value, onChange, options, placeholder, disabled = false }: any) => (
     <div>
@@ -837,17 +858,23 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
     </div>
   );
 
-  // Componente de alerta de credencial
-  const CredentialAlert = ({ service, configPath }: { service: string; configPath: string }) => (
-    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-      <p className="text-xs text-amber-400">
-        ⚠️ Requer integração com <strong>{service}</strong>
-      </p>
-      <a 
-        href={configPath} 
-        className="text-xs text-amber-300 underline hover:text-amber-200 mt-1 inline-block"
-      >
-        Configurar em Integrações →
+  // Componente de alerta de credencial - só mostra se integração não estiver conectada
+  const CredentialAlert = ({ service, configPath, integrationId }: { service: string; configPath: string; integrationId?: string }) => {
+    // Se passou integrationId e ela está conectada, não mostra o alerta
+    if (integrationId && isIntegrationConnected(integrationId)) {
+      return null;
+    }
+    
+    return (
+      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+        <p className="text-xs text-amber-400">
+          ⚠️ Requer integração com <strong>{service}</strong>
+        </p>
+        <a 
+          href={configPath} 
+          className="text-xs text-amber-300 underline hover:text-amber-200 mt-1 inline-block"
+        >
+          Configurar em Integrações →
       </a>
     </div>
   );
@@ -900,7 +927,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {/* Trigger: Pedido Realizado */}
         {node.type === 'trigger_order' && (
           <div className="space-y-3">
-            <CredentialAlert service="Shopify" configPath="/settings/integrations" />
+            <CredentialAlert service="Shopify" configPath="/settings?tab=integrations" integrationId="shopify" />
             <StyledSelect
               label="Status do pedido"
               value={node.data.config?.orderStatus}
@@ -926,7 +953,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {/* Trigger: Carrinho Abandonado */}
         {node.type === 'trigger_abandon' && (
           <div className="space-y-3">
-            <CredentialAlert service="Shopify" configPath="/settings/integrations" />
+            <CredentialAlert service="Shopify" configPath="/settings?tab=integrations" integrationId="shopify" />
             <div>
               <label className="text-sm font-medium text-white mb-2 block">Tempo de abandono</label>
               <div className="flex gap-2">
@@ -1113,7 +1140,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {/* Action: Enviar Email */}
         {node.type === 'action_email' && (
           <div className="space-y-3">
-            <CredentialAlert service="Klaviyo ou SMTP" configPath="/settings/integrations" />
+            <CredentialAlert service="Klaviyo ou SMTP" configPath="/settings?tab=integrations" integrationId="klaviyo" />
             <Input
               label="Assunto do email"
               value={node.data.config?.subject || ''}
@@ -1147,7 +1174,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {/* Action: Enviar WhatsApp */}
         {node.type === 'action_whatsapp' && (
           <div className="space-y-3">
-            <CredentialAlert service="WhatsApp Business API" configPath="/settings/integrations" />
+            <CredentialAlert service="WhatsApp Business API" configPath="/settings?tab=integrations" integrationId="whatsapp" />
             <StyledSelect
               label="Tipo de mensagem"
               value={node.data.config?.messageType}
@@ -1181,7 +1208,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {/* Action: Enviar SMS */}
         {node.type === 'action_sms' && (
           <div className="space-y-3">
-            <CredentialAlert service="Twilio" configPath="/settings/integrations" />
+            <CredentialAlert service="Twilio" configPath="/settings?tab=integrations" integrationId="twilio" />
             <Textarea
               label="Mensagem (max 160 caracteres)"
               value={node.data.config?.message || ''}
