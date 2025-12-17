@@ -259,7 +259,7 @@ export default function TikTokAdsPage() {
     isConnected,
     needsReauth,
     account,
-    refresh,
+    refetch,
   } = useTikTokDashboard(organizationId, dateRange)
 
   const {
@@ -295,7 +295,7 @@ export default function TikTokAdsPage() {
     const newStatus = campaign.status === 'active' ? 'DISABLE' : 'ENABLE'
     const success = await updateCampaignStatus([campaign.campaign_id], newStatus)
     if (success) {
-      refresh()
+      refetch()
     }
     setActionMenuOpen(null)
   }
@@ -304,7 +304,7 @@ export default function TikTokAdsPage() {
   const handleSync = async () => {
     const success = await sync()
     if (success) {
-      refresh()
+      refetch()
     }
   }
 
@@ -446,7 +446,7 @@ export default function TikTokAdsPage() {
 
       {/* Error Display */}
       {error && (
-        <ErrorAlert message={error} onRetry={refresh} />
+        <ErrorAlert message={error} onRetry={refetch} />
       )}
 
       {campaignError && (
