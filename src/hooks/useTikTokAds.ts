@@ -695,6 +695,31 @@ export function useTikTokSync(organizationId: string | null) {
 export function useTikTokConnection(organizationId: string | null) {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [configChecked, setConfigChecked] = useState(false);
+
+  // Verifica se as credenciais estão configuradas ao carregar
+  useEffect(() => {
+    if (!organizationId || configChecked) return;
+
+    const checkConfig = async () => {
+      try {
+        const response = await fetch(
+          `/api/integrations/tiktok?action=auth_url&organizationId=${organizationId}`
+        );
+        const data = await response.json();
+        
+        if (!response.ok) {
+          setError(data.error || 'Configuration error');
+        }
+      } catch {
+        // Ignora erros de rede na verificação inicial
+      } finally {
+        setConfigChecked(true);
+      }
+    };
+
+    checkConfig();
+  }, [organizationId, configChecked]);
 
   const connect = useCallback(async (): Promise<void> => {
     if (!organizationId) {

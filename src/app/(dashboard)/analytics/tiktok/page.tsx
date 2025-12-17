@@ -176,35 +176,67 @@ const ErrorAlert = ({ message, onRetry }: { message: string; onRetry?: () => voi
 )
 
 // Connect TikTok Component
-const ConnectTikTok = ({ onConnect, loading }: { onConnect: () => void; loading: boolean }) => (
-  <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-    <motion.div
-      initial={{ scale: 0.9, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      className="p-6 rounded-2xl bg-gradient-to-br from-pink-500/10 to-cyan-500/10 border border-dark-700/50 mb-6"
-    >
-      <TikTokIcon className="w-16 h-16 text-white" />
-    </motion.div>
-    <h2 className="text-2xl font-bold text-white mb-3">Conecte sua conta TikTok Ads</h2>
-    <p className="text-dark-400 max-w-md mb-8">
-      Conecte sua conta do TikTok Business Center para visualizar métricas de campanhas, 
-      engajamento e performance de vídeos em tempo real.
-    </p>
-    <button
-      onClick={onConnect}
-      disabled={loading}
-      className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-cyan-500 
-                 text-white font-semibold rounded-xl hover:opacity-90 transition-all disabled:opacity-50"
-    >
-      {loading ? (
-        <Loader2 className="w-5 h-5 animate-spin" />
+const ConnectTikTok = ({ onConnect, loading, error }: { onConnect: () => void; loading: boolean; error?: string | null }) => {
+  const isNotConfigured = error?.toLowerCase().includes('not configured')
+  
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="p-6 rounded-2xl bg-gradient-to-br from-pink-500/10 to-cyan-500/10 border border-dark-700/50 mb-6"
+      >
+        <TikTokIcon className="w-16 h-16 text-white" />
+      </motion.div>
+      <h2 className="text-2xl font-bold text-white mb-3">Conecte sua conta TikTok Ads</h2>
+      <p className="text-dark-400 max-w-md mb-8">
+        Conecte sua conta do TikTok Business Center para visualizar métricas de campanhas, 
+        engajamento e performance de vídeos em tempo real.
+      </p>
+      
+      {isNotConfigured ? (
+        <div className="max-w-lg mb-6 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30">
+          <div className="flex items-start gap-3 text-left">
+            <AlertCircle className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-yellow-400 font-medium mb-2">Configuração Necessária</p>
+              <p className="text-yellow-400/80 text-sm mb-3">
+                Para usar a integração com TikTok Ads, configure as seguintes variáveis de ambiente no Vercel:
+              </p>
+              <div className="bg-dark-900/50 rounded-lg p-3 font-mono text-xs text-yellow-300">
+                <div>TIKTOK_APP_ID=seu_app_id</div>
+                <div>TIKTOK_APP_SECRET=seu_app_secret</div>
+              </div>
+              <a 
+                href="https://business-api.tiktok.com/portal" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 mt-3 text-sm text-cyan-400 hover:text-cyan-300"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Criar App no TikTok for Business
+              </a>
+            </div>
+          </div>
+        </div>
       ) : (
-        <Link2 className="w-5 h-5" />
+        <button
+          onClick={onConnect}
+          disabled={loading}
+          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-cyan-500 
+                     text-white font-semibold rounded-xl hover:opacity-90 transition-all disabled:opacity-50"
+        >
+          {loading ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Link2 className="w-5 h-5" />
+          )}
+          {loading ? 'Conectando...' : 'Conectar TikTok Ads'}
+        </button>
       )}
-      {loading ? 'Conectando...' : 'Conectar TikTok Ads'}
-    </button>
-  </div>
-)
+    </div>
+  )
+}
 
 // ==========================================
 // HELPER FUNCTIONS
@@ -351,11 +383,11 @@ export default function TikTokAdsPage() {
           </div>
         </div>
         
-        {connectionError && (
+        {connectionError && !connectionError.toLowerCase().includes('not configured') && (
           <ErrorAlert message={connectionError} />
         )}
         
-        <ConnectTikTok onConnect={connect} loading={connecting} />
+        <ConnectTikTok onConnect={connect} loading={connecting} error={connectionError} />
       </div>
     )
   }
