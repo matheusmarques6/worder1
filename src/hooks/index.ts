@@ -6,6 +6,30 @@ import { useAuthStore } from '@/stores';
 // Re-export usePipelines
 export { usePipelines } from './usePipelines';
 
+// Re-export WhatsApp hooks
+export {
+  useWhatsAppConversations,
+  useWhatsAppMessages,
+  useWhatsAppCampaigns,
+  useWhatsAppFlows,
+  useWhatsAppPhonebooks,
+  useWhatsAppTags,
+  useWhatsAppAgents,
+  useWhatsAppTemplates,
+} from './useWhatsApp';
+
+// Re-export WhatsApp hooks
+export {
+  useWhatsAppConversations,
+  useWhatsAppMessages,
+  useWhatsAppCampaigns,
+  useWhatsAppFlows,
+  useWhatsAppPhonebooks,
+  useWhatsAppTags,
+  useWhatsAppAgents,
+  useWhatsAppTemplates,
+} from './useWhatsApp';
+
 // Generic fetch hook
 export function useFetch<T>(url: string, options?: RequestInit) {
   const [data, setData] = useState<T | null>(null);
