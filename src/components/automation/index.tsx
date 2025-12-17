@@ -877,7 +877,8 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
           Configurar em Integrações →
       </a>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="w-80 bg-[#111111] border-l border-[#222222] overflow-y-auto flex-shrink-0">
