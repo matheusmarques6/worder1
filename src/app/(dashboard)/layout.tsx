@@ -56,6 +56,14 @@ const TikTokIcon = () => (
   </svg>
 )
 
+// Inbox icon
+const InboxIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
+    <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
+  </svg>
+)
+
 import { useStoreStore, useAuthStore, type ShopifyStore } from '@/stores'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
 
@@ -80,12 +88,15 @@ const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
   );
 };
 
+// Navigation items with access control
+// agentAllowed: true = agentes podem ver, false/undefined = apenas admin/owner
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'CRM', href: '/crm', icon: Users },
-  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare },
-  { name: 'Automações', href: '/automations', icon: Zap },
-  { name: 'Integrações', href: '/integrations', icon: Puzzle },
+  { name: 'Inbox', href: '/inbox', icon: InboxIcon, agentAllowed: true, agentOnly: true },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, agentAllowed: false },
+  { name: 'CRM', href: '/crm', icon: Users, agentAllowed: false },
+  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, agentAllowed: false },
+  { name: 'Automações', href: '/automations', icon: Zap, agentAllowed: false },
+  { name: 'Integrações', href: '/integrations', icon: Puzzle, agentAllowed: false },
 ]
 
 const analyticsNav = [
@@ -116,6 +127,9 @@ export default function DashboardLayout({
   const { stores, currentStore, setStores, setCurrentStore, addStore } = useStoreStore()
   const { user, setUser } = useAuthStore()
 
+  // Verificar se é agente
+  const isAgent = user?.user_metadata?.is_agent === true
+
   // Initialize user with default organization if not set
   useEffect(() => {
     const initializeUser = async () => {
@@ -129,13 +143,14 @@ export default function DashboardLayout({
           })
           const result = await response.json()
           
-          if (result.organization) {
+          if (result.organization || result.user) {
             setUser({
               id: result.user?.id || 'default-user',
               email: result.user?.email || 'demo@worder.com',
-              name: result.user?.name || 'Demo User',
-              organization_id: result.organization.id,
-              role: 'admin',
+              name: result.user?.name || result.user?.user_metadata?.name || 'Demo User',
+              organization_id: result.organization?.id || result.user?.user_metadata?.organization_id,
+              role: result.user?.role || 'admin',
+              user_metadata: result.user?.user_metadata,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             })
@@ -265,7 +280,7 @@ export default function DashboardLayout({
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="p-4 border-b border-dark-800/50">
-        <Link href="/dashboard" className="flex flex-col gap-0.5">
+        <Link href={isAgent ? "/inbox" : "/dashboard"} className="flex flex-col gap-0.5">
           <WorderLogo size={collapsed ? 'sm' : 'md'} />
           <AnimatePresence mode="wait">
             {!collapsed && (
@@ -292,156 +307,171 @@ export default function DashboardLayout({
             </p>
           )}
           <nav className="space-y-1">
-            {navigation.map((item) => (
-              <NavLink key={item.name} item={item} />
-            ))}
+            {navigation
+              .filter((item: any) => {
+                // Se é agente, mostrar apenas itens com agentAllowed: true
+                if (isAgent) {
+                  return item.agentAllowed === true
+                }
+                // Se não é agente, mostrar itens que NÃO são agentOnly
+                return item.agentOnly !== true
+              })
+              .map((item) => (
+                <NavLink key={item.name} item={item} />
+              ))}
           </nav>
         </div>
 
-        {/* Analytics */}
-        <div>
-          {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
-              Analytics
-            </p>
-          )}
-          <nav className="space-y-1">
-            {analyticsNav.map((item) => (
-              <NavLink key={item.name} item={item} />
-            ))}
-          </nav>
-        </div>
+        {/* Analytics - Apenas para admin/owner */}
+        {!isAgent && (
+          <div>
+            {!collapsed && (
+              <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
+                Analytics
+              </p>
+            )}
+            <nav className="space-y-1">
+              {analyticsNav.map((item) => (
+                <NavLink key={item.name} item={item} />
+              ))}
+            </nav>
+          </div>
+        )}
 
-        {/* System */}
-        <div>
-          {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
-              Sistema
-            </p>
-          )}
-          <nav className="space-y-1">
-            {systemNav.map((item) => (
-              <NavLink key={item.name} item={item} />
-            ))}
-          </nav>
-        </div>
+        {/* System - Apenas para admin/owner */}
+        {!isAgent && (
+          <div>
+            {!collapsed && (
+              <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
+                Sistema
+              </p>
+            )}
+            <nav className="space-y-1">
+              {systemNav.map((item) => (
+                <NavLink key={item.name} item={item} />
+              ))}
+            </nav>
+          </div>
+        )}
       </div>
 
-      {/* Store Selector Section */}
-      <div className="p-3 border-t border-dark-800/50 relative">
-        {/* Store Dropdown */}
-        <AnimatePresence>
-          {storeDropdownOpen && !collapsed && (
-            <motion.div
-              initial={{ opacity: 0, y: 8, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.96 }}
-              transition={{ duration: 0.15 }}
-              className="absolute bottom-full left-3 right-3 mb-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-50"
-            >
-              {/* Stores List */}
-              {stores.length > 0 && (
-                <div className="p-2 border-b border-dark-700">
-                  <p className="px-2 py-1 text-xs font-medium text-dark-500 uppercase tracking-wider">
-                    Suas Lojas
-                  </p>
-                  <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
-                    {stores.map((store) => (
-                      <button
-                        key={store.id}
-                        onClick={() => {
-                          setCurrentStore(store)
-                          setStoreDropdownOpen(false)
-                        }}
-                        className={`
-                          w-full flex items-center gap-3 p-2 rounded-lg transition-colors
-                          ${currentStore?.id === store.id
-                            ? 'bg-primary-500/10 text-primary-400'
-                            : 'hover:bg-dark-700/50 text-white'
-                          }
-                        `}
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center text-xs font-bold">
-                          {getInitials(store.name)}
-                        </div>
-                        <div className="flex-1 text-left min-w-0">
-                          <p className="text-sm font-medium truncate">{store.name}</p>
-                          <p className="text-xs text-dark-400 truncate">{store.domain}</p>
-                        </div>
-                        {currentStore?.id === store.id && (
-                          <Check className="w-4 h-4 text-primary-400 flex-shrink-0" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Add Store Button */}
-              <div className="p-2">
-                <button
-                  onClick={() => {
-                    setAddStoreModalOpen(true)
-                    setStoreDropdownOpen(false)
-                  }}
-                  className="w-full flex items-center gap-3 p-2 rounded-lg text-primary-400 hover:bg-primary-500/10 transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
-                    <Plus className="w-4 h-4" />
-                  </div>
-                  <span className="text-sm font-medium">Adicionar Nova Loja</span>
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Store Selector Button */}
-        <button
-          onClick={() => {
-            if (collapsed) {
-              setAddStoreModalOpen(true)
-            } else {
-              setStoreDropdownOpen(!storeDropdownOpen)
-            }
-          }}
-          className={`
-            w-full flex items-center gap-3 p-2 rounded-xl transition-all
-            bg-dark-800/30 hover:bg-dark-800/50
-            ${storeDropdownOpen ? 'ring-1 ring-primary-500/50' : ''}
-            ${collapsed ? 'justify-center' : ''}
-          `}
-        >
-          {/* Store Avatar */}
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-            {currentStore ? getInitials(currentStore.name) : <Store className="w-4 h-4" />}
-          </div>
-
-          <AnimatePresence mode="wait">
-            {!collapsed && (
+      {/* Store Selector Section - Apenas para admin/owner */}
+      {!isAgent && (
+        <div className="p-3 border-t border-dark-800/50 relative">
+          {/* Store Dropdown */}
+          <AnimatePresence>
+            {storeDropdownOpen && !collapsed && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex-1 min-w-0 text-left"
+                initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                transition={{ duration: 0.15 }}
+                className="absolute bottom-full left-3 right-3 mb-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-50"
               >
-                <p className="text-sm font-medium text-white truncate">
-                  {currentStore?.name || 'Selecionar Loja'}
-                </p>
-                <p className="text-xs text-dark-400 truncate">
-                  {currentStore?.domain || 'Nenhuma loja conectada'}
-                </p>
+                {/* Stores List */}
+                {stores.length > 0 && (
+                  <div className="p-2 border-b border-dark-700">
+                    <p className="px-2 py-1 text-xs font-medium text-dark-500 uppercase tracking-wider">
+                      Suas Lojas
+                    </p>
+                    <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
+                      {stores.map((store) => (
+                        <button
+                          key={store.id}
+                          onClick={() => {
+                            setCurrentStore(store)
+                            setStoreDropdownOpen(false)
+                          }}
+                          className={`
+                            w-full flex items-center gap-3 p-2 rounded-lg transition-colors
+                            ${currentStore?.id === store.id
+                              ? 'bg-primary-500/10 text-primary-400'
+                              : 'hover:bg-dark-700/50 text-white'
+                            }
+                          `}
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center text-xs font-bold">
+                            {getInitials(store.name)}
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="text-sm font-medium truncate">{store.name}</p>
+                            <p className="text-xs text-dark-400 truncate">{store.domain}</p>
+                          </div>
+                          {currentStore?.id === store.id && (
+                            <Check className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Add Store Button */}
+                <div className="p-2">
+                  <button
+                    onClick={() => {
+                      setAddStoreModalOpen(true)
+                      setStoreDropdownOpen(false)
+                    }}
+                    className="w-full flex items-center gap-3 p-2 rounded-lg text-primary-400 hover:bg-primary-500/10 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                      <Plus className="w-4 h-4" />
+                    </div>
+                    <span className="text-sm font-medium">Adicionar Nova Loja</span>
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {!collapsed && (
-            <ChevronDown
-              className={`w-4 h-4 text-dark-400 transition-transform flex-shrink-0 ${storeDropdownOpen ? 'rotate-180' : ''}`}
-            />
-          )}
-        </button>
-      </div>
+          {/* Store Selector Button */}
+          <button
+            onClick={() => {
+              if (collapsed) {
+                setAddStoreModalOpen(true)
+              } else {
+                setStoreDropdownOpen(!storeDropdownOpen)
+              }
+            }}
+            className={`
+              w-full flex items-center gap-3 p-2 rounded-xl transition-all
+              bg-dark-800/30 hover:bg-dark-800/50
+              ${storeDropdownOpen ? 'ring-1 ring-primary-500/50' : ''}
+              ${collapsed ? 'justify-center' : ''}
+            `}
+          >
+            {/* Store Avatar */}
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+              {currentStore ? getInitials(currentStore.name) : <Store className="w-4 h-4" />}
+            </div>
+
+            <AnimatePresence mode="wait">
+              {!collapsed && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <p className="text-sm font-medium text-white truncate">
+                    {currentStore?.name || 'Selecionar Loja'}
+                  </p>
+                  <p className="text-xs text-dark-400 truncate">
+                    {currentStore?.domain || 'Nenhuma loja conectada'}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {!collapsed && (
+              <ChevronDown
+                className={`w-4 h-4 text-dark-400 transition-transform flex-shrink-0 ${storeDropdownOpen ? 'rotate-180' : ''}`}
+              />
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Collapse button - Desktop only */}
       <div className="hidden lg:block p-3 pt-0">

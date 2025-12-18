@@ -1,80 +1,32 @@
-# WORDER - Sistema de Agentes com Restrição de Acesso
+# WORDER - Sistema de Agentes V2
 
-## 📦 Conteúdo do Pacote
+## 🎯 O que mudou nesta versão
 
-Este pacote contém a implementação completa do sistema de restrição de acesso para agentes.
+Agentes agora usam o **mesmo layout** do site, mas com itens de menu filtrados.
+
+### Para Agentes:
+- Veem apenas "Inbox" no menu principal
+- Não veem: Dashboard, CRM, WhatsApp, Automações, Integrações
+- Não veem: Analytics (Shopify, Facebook Ads, etc)
+- Não veem: Sistema (Configurações, Ajuda)
+- Não veem: Seletor de Lojas
+
+### Para Owners/Admins:
+- Veem todos os itens de menu
+- Não veem "Inbox" (usam o WhatsApp direto)
 
 ## 🔧 Instalação
 
-### 1. Execute o SQL no Supabase
-```sql
--- Execute o conteúdo de worder-fix-enum.sql no SQL Editor do Supabase
-```
+1. Execute `worder-fix-enum.sql` no Supabase SQL Editor
+2. Extraia os arquivos:
+   ```bash
+   unzip worder-fase3-v2.zip
+   cp -r worder-fase3-v2/src/* src/
+   ```
+3. Reinicie: `npm run dev`
 
-### 2. Extraia os arquivos
-```bash
-unzip worder-fase3-complete.zip
-cp -r worder-fase3-complete/src/* src/
-```
+## 📁 Arquivos Principais
 
-### 3. Reinicie o servidor
-```bash
-npm run dev
-```
-
-## 📁 Arquivos Incluídos
-
-### Middleware
-- `src/middleware.ts` - Controle de acesso por role
-
-### Layout do Agente
-- `src/app/(agent)/layout.tsx` - Layout simplificado
-- `src/app/(agent)/inbox/page.tsx` - Inbox do agente
-- `src/app/(agent)/profile/page.tsx` - Perfil do agente
-
-### APIs
-- `src/app/api/whatsapp/agents/route.ts` - API principal de agentes
-- `src/app/api/whatsapp/agents/status/route.ts` - Atualizar status
-- `src/app/api/whatsapp/agents/permissions/route.ts` - Gerenciar permissões
-- `src/app/api/whatsapp/agents/reset-password/route.ts` - Resetar senha
-- `src/app/api/whatsapp/conversations/route.ts` - Conversas filtradas
-- `src/app/api/auth/change-password/route.ts` - Trocar senha
-- `src/app/api/profile/route.ts` - Atualizar perfil
-
-### Componentes
-- `src/components/agents/CreateAgentWizard.tsx` - Wizard de criação
-- `src/components/agents/EditAgentModal.tsx` - Modal de edição
-
-### Hooks e Utils
-- `src/hooks/useAgentPermissions.tsx` - Hook de permissões
-- `src/lib/route-permissions.ts` - Configuração de rotas
-- `src/lib/auth-utils.ts` - Utilitários de auth
-
-### Types e Stores
-- `src/types/index.ts` - Tipos atualizados (com user_metadata)
-- `src/stores/index.ts` - Store atualizado (com signOut)
-
-## ✅ Funcionalidades
-
-### Para Agentes:
-- [x] Login redireciona para /inbox
-- [x] Bloqueio de acesso ao dashboard e configurações
-- [x] Inbox com lista de conversas filtrada
-- [x] Apenas conversas dos números permitidos
-- [x] Alterar status (online/away/busy/offline)
-- [x] Alterar perfil e senha
-
-### Para Owners/Admins:
-- [x] Acesso total (sem mudanças)
-- [x] Criar agentes com wizard multi-step
-- [x] Configurar permissões por agente
-- [x] Resetar senha de agentes
-
-## 🧪 Teste
-
-1. Crie um agente com o wizard
-2. Anote a senha temporária
-3. Faça logout
-4. Faça login com as credenciais do agente
-5. Verifique que é redirecionado para /inbox
-6. Tente acessar /dashboard (deve ser bloqueado)
+- `src/app/(dashboard)/layout.tsx` - Layout com menu filtrado por role
+- `src/app/(dashboard)/inbox/page.tsx` - Página de inbox (agentes)
+- `src/middleware.ts` - Proteção de rotas
