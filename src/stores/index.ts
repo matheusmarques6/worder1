@@ -80,6 +80,7 @@ interface AuthState {
   setUser: (user: User | null) => void
   setLoading: (loading: boolean) => void
   logout: () => void
+  signOut: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -88,6 +89,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) => set({ user }),
   setLoading: (isLoading) => set({ isLoading }),
   logout: () => set({ user: null, isLoading: false }),
+  signOut: async () => {
+    try {
+      await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      })
+    } catch (e) {
+      console.error('Logout error:', e)
+    }
+    set({ user: null, isLoading: false })
+  },
 }))
 
 // ===============================

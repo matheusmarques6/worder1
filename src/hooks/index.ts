@@ -25,6 +25,10 @@ export {
 export { useAgents, useAIModels, useApiKeys } from './useAgents';
 export type { Agent, AIConfig, AgentPermissions, CreateAgentData, UpdateAgentData } from './useAgents';
 
+// Re-export agent permissions hook
+export { useAgentPermissions, AgentPermissionsProvider, useAgentPermissionsContext } from './useAgentPermissions';
+export type { UseAgentPermissionsReturn, AgentPermissions as AgentPermissionsType } from './useAgentPermissions';
+
 // Generic fetch hook
 export function useFetch<T>(url: string, options?: RequestInit) {
   const [data, setData] = useState<T | null>(null);

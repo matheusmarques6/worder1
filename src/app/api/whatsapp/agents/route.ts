@@ -499,6 +499,17 @@ export async function POST(request: NextRequest) {
 
       await supabase.from('agent_permissions').upsert(permissionsData, { onConflict: 'agent_id' });
 
+      // Atualizar user_metadata com agent_id
+      await adminClient.auth.admin.updateUserById(authUserId, {
+        user_metadata: {
+          name,
+          role: 'agent',
+          organization_id: orgId,
+          is_agent: true,
+          agent_id: agent.id,
+        }
+      });
+
       // TODO: Enviar email de boas-vindas se send_welcome_email = true
       // Isso seria feito com um serviço de email como Resend, SendGrid, etc.
 
