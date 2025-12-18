@@ -83,16 +83,9 @@ const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'CRM', href: '/crm', icon: Users },
+  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare },
   { name: 'Automações', href: '/automations', icon: Zap },
   { name: 'Integrações', href: '/integrations', icon: Puzzle },
-]
-
-const whatsappNav = [
-  { name: 'Inbox', href: '/whatsapp', icon: MessageSquare },
-  { name: 'Campanhas', href: '/whatsapp/campaigns', icon: Send },
-  { name: 'Phonebooks', href: '/whatsapp/phonebooks', icon: Users },
-  { name: 'Flows', href: '/whatsapp/flows', icon: Zap },
-  { name: 'Analytics', href: '/whatsapp/analytics', icon: BarChart3 },
 ]
 
 const analyticsNav = [
@@ -300,20 +293,6 @@ export default function DashboardLayout({
           )}
           <nav className="space-y-1">
             {navigation.map((item) => (
-              <NavLink key={item.name} item={item} />
-            ))}
-          </nav>
-        </div>
-
-        {/* WhatsApp */}
-        <div>
-          {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
-              WhatsApp
-            </p>
-          )}
-          <nav className="space-y-1">
-            {whatsappNav.map((item) => (
               <NavLink key={item.name} item={item} />
             ))}
           </nav>
