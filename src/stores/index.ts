@@ -336,3 +336,9 @@ export const useAutomationStore = create<AutomationState>((set) => ({
   })),
   setLoading: (isLoading) => set({ isLoading }),
 }))
+
+// ===============================
+// RE-EXPORT INBOX STORE
+// ===============================
+export { useInboxStore, useSelectedConversation, useFilteredConversations, useConversationMessages } from './inboxStore'
+export type { Conversation, Message, WhatsAppNumber } from './inboxStore'

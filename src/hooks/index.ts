@@ -21,6 +21,10 @@ export {
   useWhatsAppTemplates,
 } from './useWhatsApp';
 
+// Re-export new agent hooks
+export { useAgents, useAIModels, useApiKeys } from './useAgents';
+export type { Agent, AIConfig, AgentPermissions, CreateAgentData, UpdateAgentData } from './useAgents';
+
 // Generic fetch hook
 export function useFetch<T>(url: string, options?: RequestInit) {
   const [data, setData] = useState<T | null>(null);

@@ -27,6 +27,8 @@ import {
   Check,
   Plus,
   ShoppingBag,
+  Bot,
+  Key,
 } from 'lucide-react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
@@ -56,6 +58,7 @@ const analyticsNavItems: NavItem[] = [
 
 const settingsNavItems: NavItem[] = [
   { title: 'Configurações', href: '/settings', icon: Settings },
+  { title: 'API Keys', href: '/whatsapp/settings/api-keys', icon: Key },
   { title: 'Ajuda', href: '/help', icon: HelpCircle },
 ]
 
