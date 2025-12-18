@@ -6,6 +6,9 @@ import { useAuthStore } from '@/stores';
 // Re-export usePipelines
 export { usePipelines } from './usePipelines';
 
+// Re-export useWhatsAppConnection
+export { useWhatsAppConnection } from './useWhatsAppConnection';
+
 // Re-export WhatsApp hooks
 export {
   useWhatsAppConversations,

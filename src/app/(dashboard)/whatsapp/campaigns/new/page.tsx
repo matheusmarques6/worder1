@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '@/stores'
-import { ArrowLeft, ArrowRight, Check, Loader2, Send, Calendar, Users, FileText, Clock, Tag, Upload, MessageSquare, Sparkles, RefreshCw, BookUser } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Loader2, Send, Calendar, Users, FileText, Clock, Tag, Upload, MessageSquare, Sparkles, RefreshCw, BookUser, AlertCircle } from 'lucide-react'
+import { useWhatsAppConnection } from '@/hooks/useWhatsAppConnection'
+import { WhatsAppConnectionRequired, WhatsAppConnectionLoading, WhatsAppConnectionBanner } from '@/components/whatsapp/WhatsAppConnectionRequired'
 
 interface Template { id: string; name: string; category: string; body_text: string; body_variables: number; buttons: any[] }
 interface Phonebook { id: string; name: string; description?: string; contact_count: number }
@@ -29,12 +31,16 @@ export default function NewCampaignPage() {
   const { user } = useAuthStore()
   const organizationId = user?.organization_id || ''
   
+  // Verificar conexão do WhatsApp
+  const { connected, loading: connectionLoading, config } = useWhatsAppConnection(organizationId)
+  
   const [currentStep, setCurrentStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [templates, setTemplates] = useState<Template[]>([])
   const [phonebooks, setPhonebooks] = useState<Phonebook[]>([])
   const [audienceCount, setAudienceCount] = useState(0)
+  const [syncError, setSyncError] = useState('')
   
   const [state, setState] = useState<WizardState>({
     name: '', description: '', type: 'broadcast', audienceType: 'all', selectedTags: [], selectedPhonebookId: '',
@@ -43,9 +49,11 @@ export default function NewCampaignPage() {
   })
 
   useEffect(() => {
-    fetch('/api/whatsapp/templates?status=approved').then(r => r.json()).then(d => setTemplates(d.templates || []))
-    fetch('/api/whatsapp/phonebooks').then(r => r.json()).then(d => setPhonebooks(d.phonebooks || []))
-  }, [])
+    if (connected) {
+      fetch('/api/whatsapp/templates?status=approved').then(r => r.json()).then(d => setTemplates(d.templates || []))
+      fetch('/api/whatsapp/phonebooks').then(r => r.json()).then(d => setPhonebooks(d.phonebooks || []))
+    }
+  }, [connected])
 
   useEffect(() => {
     if (state.audienceType === 'all') setAudienceCount(5234)
@@ -115,6 +123,66 @@ export default function NewCampaignPage() {
 
   const costPerMessage = 0.05
   const estimatedCost = audienceCount * costPerMessage
+
+  // Verificar se está carregando a conexão
+  if (connectionLoading) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center gap-4 mb-8">
+          <button onClick={() => router.back()} className="p-2 hover:bg-dark-800 rounded-lg"><ArrowLeft className="w-5 h-5 text-dark-400" /></button>
+          <div><h1 className="text-2xl font-bold text-white">Nova Campanha</h1><p className="text-dark-400 mt-1">Configure e envie sua campanha de WhatsApp</p></div>
+        </div>
+        <WhatsAppConnectionLoading />
+      </div>
+    )
+  }
+
+  // Se não estiver conectado, mostrar tela de conexão necessária
+  if (!connected) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center gap-4 mb-8">
+          <button onClick={() => router.back()} className="p-2 hover:bg-dark-800 rounded-lg"><ArrowLeft className="w-5 h-5 text-dark-400" /></button>
+          <div><h1 className="text-2xl font-bold text-white">Nova Campanha</h1><p className="text-dark-400 mt-1">Configure e envie sua campanha de WhatsApp</p></div>
+        </div>
+        <WhatsAppConnectionRequired 
+          title="Conecte o WhatsApp para criar campanhas"
+          description="Para criar e enviar campanhas, você precisa conectar sua conta do WhatsApp Business API."
+        />
+      </div>
+    )
+  }
+
+  // Função de sincronização com tratamento de erro
+  const handleSyncTemplates = async () => {
+    setIsLoading(true)
+    setSyncError('')
+    try {
+      const res = await fetch('/api/whatsapp/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync' })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        alert(`✅ ${data.message}`)
+        const tRes = await fetch('/api/whatsapp/templates?status=approved')
+        const tData = await tRes.json()
+        setTemplates(tData.templates || [])
+      } else {
+        setSyncError(data.error || 'Erro ao sincronizar')
+        if (data.error?.includes('token') || data.error?.includes('Token') || data.error?.includes('permission')) {
+          alert(`❌ Erro de autenticação. Verifique se o WhatsApp está corretamente conectado nas Integrações.`)
+        } else {
+          alert(`❌ ${data.error}`)
+        }
+      }
+    } catch (e) { 
+      console.error(e)
+      setSyncError('Erro de conexão')
+    }
+    setIsLoading(false)
+  }
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -211,26 +279,7 @@ export default function NewCampaignPage() {
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-white">Selecione o Template</h2>
                 <button 
-                  onClick={async () => {
-                    setIsLoading(true)
-                    try {
-                      const res = await fetch('/api/whatsapp/templates', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'sync' })
-                      })
-                      const data = await res.json()
-                      if (res.ok) {
-                        alert(`✅ ${data.message}`)
-                        const tRes = await fetch('/api/whatsapp/templates?status=approved')
-                        const tData = await tRes.json()
-                        setTemplates(tData.templates || [])
-                      } else {
-                        alert(`❌ ${data.error}`)
-                      }
-                    } catch (e) { console.error(e) }
-                    setIsLoading(false)
-                  }}
+                  onClick={handleSyncTemplates}
                   disabled={isLoading}
                   className="flex items-center gap-2 px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-dark-300 text-sm rounded-lg transition-colors disabled:opacity-50"
                 >
@@ -238,6 +287,15 @@ export default function NewCampaignPage() {
                   Sincronizar da Meta
                 </button>
               </div>
+              
+              {/* Erro de sincronização */}
+              {syncError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400" />
+                  <span className="text-sm text-red-300">{syncError}</span>
+                </div>
+              )}
+              
               <div className="grid lg:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <p className="text-sm text-dark-400">Templates aprovados ({templates.length}):</p>

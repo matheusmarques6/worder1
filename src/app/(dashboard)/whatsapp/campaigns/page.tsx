@@ -9,6 +9,8 @@ import {
   Calendar, Users, Send, CheckCircle, Eye, MessageSquare, Clock,
   XCircle, Loader2, BarChart3,
 } from 'lucide-react'
+import { useWhatsAppConnection } from '@/hooks/useWhatsAppConnection'
+import { WhatsAppConnectionRequired, WhatsAppConnectionLoading, WhatsAppConnectionBanner } from '@/components/whatsapp/WhatsAppConnectionRequired'
 
 interface Campaign {
   id: string
@@ -44,6 +46,9 @@ export default function CampaignsPage() {
   const router = useRouter()
   const { user } = useAuthStore()
   const organizationId = user?.organization_id || ''
+  
+  // Verificar conexão do WhatsApp
+  const { connected, loading: connectionLoading } = useWhatsAppConnection(organizationId)
   
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [metrics, setMetrics] = useState<Metrics | null>(null)
@@ -98,6 +103,39 @@ export default function CampaignsPage() {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
     return num.toString()
+  }
+
+  // Verificar se está carregando a conexão
+  if (connectionLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Campanhas</h1>
+            <p className="text-dark-400 mt-1">Gerencie suas campanhas de WhatsApp Marketing</p>
+          </div>
+        </div>
+        <WhatsAppConnectionLoading />
+      </div>
+    )
+  }
+
+  // Se não estiver conectado, mostrar tela de conexão
+  if (!connected) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Campanhas</h1>
+            <p className="text-dark-400 mt-1">Gerencie suas campanhas de WhatsApp Marketing</p>
+          </div>
+        </div>
+        <WhatsAppConnectionRequired 
+          title="Conecte o WhatsApp para ver campanhas"
+          description="Para criar e gerenciar campanhas de WhatsApp Marketing, você precisa conectar sua conta do WhatsApp Business API."
+        />
+      </div>
+    )
   }
 
   return (

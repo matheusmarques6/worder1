@@ -69,14 +69,26 @@ export async function GET(request: NextRequest) {
     
     const tiktokAccount = tiktokAccounts && tiktokAccounts.length > 0 ? tiktokAccounts[0] : null;
 
-    // Check WhatsApp - using array query to avoid error
-    const { data: whatsappAccounts } = await supabase
-      .from('whatsapp_accounts')
-      .select('id, phone_number, is_active, created_at')
-      .eq('is_active', true)
-      .limit(1);
-    
-    const whatsappAccount = whatsappAccounts && whatsappAccounts.length > 0 ? whatsappAccounts[0] : null;
+    // Check WhatsApp - verificar tanto whatsapp_configs quanto whatsapp_accounts
+    let whatsappConfig = null;
+    try {
+      const { data: whatsappConfigs } = await supabase
+        .from('whatsapp_configs')
+        .select('id, phone_number, phone_number_id, business_name, is_active, created_at')
+        .eq('is_active', true)
+        .limit(1);
+      
+      whatsappConfig = whatsappConfigs && whatsappConfigs.length > 0 ? whatsappConfigs[0] : null;
+    } catch (e) {
+      // Tabela pode não existir, tentar whatsapp_accounts
+      const { data: whatsappAccounts } = await supabase
+        .from('whatsapp_accounts')
+        .select('id, phone_number, is_active, created_at')
+        .eq('is_active', true)
+        .limit(1);
+      
+      whatsappConfig = whatsappAccounts && whatsappAccounts.length > 0 ? whatsappAccounts[0] : null;
+    }
 
     // Format last sync time
     const formatLastSync = (dateStr: string | null) => {
@@ -150,10 +162,11 @@ export async function GET(request: NextRequest) {
         accountName: tiktokAccount?.advertiser_name || null,
       },
       whatsapp: {
-        connected: !!whatsappAccount,
-        status: whatsappAccount ? 'healthy' : 'disconnected',
-        lastSync: whatsappAccount?.created_at ? formatLastSync(whatsappAccount.created_at) : null,
-        phoneNumber: whatsappAccount?.phone_number || null,
+        connected: !!whatsappConfig,
+        status: whatsappConfig ? 'healthy' : 'disconnected',
+        lastSync: whatsappConfig?.created_at ? formatLastSync(whatsappConfig.created_at) : null,
+        phoneNumber: whatsappConfig?.phone_number || null,
+        businessName: whatsappConfig?.business_name || null,
       },
     };
 

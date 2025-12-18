@@ -26,7 +26,8 @@ import {
   Store,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useStoreStore } from '@/stores';
+import { useStoreStore, useAuthStore } from '@/stores';
+import WhatsAppConnectModal from '@/components/whatsapp/WhatsAppConnectModal';
 
 // Types
 interface Integration {
@@ -376,10 +377,12 @@ export default function SettingsPage() {
   const [loadingIntegration, setLoadingIntegration] = useState<string | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [showKlaviyoModal, setShowKlaviyoModal] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKey] = useState('worder_sk_live_xxxxxxxxxxxxxxxxxxxxx');
   
   const { stores } = useStoreStore();
+  const { user } = useAuthStore();
 
   // Update tab when URL changes
   useEffect(() => {
@@ -501,6 +504,9 @@ export default function SettingsPage() {
         window.dispatchEvent(new CustomEvent('openAddStoreModal'));
       } else if (integrationId === 'klaviyo') {
         setShowKlaviyoModal(true);
+      } else if (integrationId === 'whatsapp') {
+        // Open WhatsApp connection modal
+        setShowWhatsAppModal(true);
       } else if (['meta', 'google', 'tiktok'].includes(integrationId)) {
         // OAuth flow
         const response = await fetch(`/api/integrations/${integrationId}?action=auth_url`);
@@ -936,6 +942,19 @@ export default function SettingsPage() {
         onClose={() => setShowKlaviyoModal(false)}
         onSave={handleKlaviyoSave}
       />
+
+      {/* WhatsApp Connection Modal */}
+      {user?.organization_id && (
+        <WhatsAppConnectModal
+          isOpen={showWhatsAppModal}
+          onClose={() => setShowWhatsAppModal(false)}
+          onSuccess={() => {
+            setShowWhatsAppModal(false);
+            fetchIntegrations();
+          }}
+          organizationId={user.organization_id}
+        />
+      )}
     </div>
   );
 }
