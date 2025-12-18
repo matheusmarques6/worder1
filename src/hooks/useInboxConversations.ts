@@ -34,7 +34,11 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
   const [filters, setFilters] = useState<ConversationFilters>({})
 
   const fetchConversations = useCallback(async (newFilters?: ConversationFilters) => {
-    if (!organizationId) return
+    // Permitir buscar mesmo com organizationId = 'default-org', a API vai resolver
+    if (!organizationId) {
+      console.log('⚠️ No organizationId yet, waiting...')
+      return
+    }
     
     setIsLoading(true)
     setError(null)
@@ -51,8 +55,16 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
         ...(currentFilters.search && { search: currentFilters.search }),
       })
 
+      console.log('📡 Fetching conversations:', `/api/whatsapp/inbox/conversations?${params}`)
+      
       const response = await fetch(`/api/whatsapp/inbox/conversations?${params}`)
       const data = await response.json()
+
+      console.log('📥 API Response:', { 
+        ok: response.ok, 
+        conversationsCount: data.conversations?.length,
+        error: data.error 
+      })
 
       if (!response.ok) throw new Error(data.error || 'Failed to fetch conversations')
 
@@ -63,6 +75,7 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
         setFilters(newFilters)
       }
     } catch (err) {
+      console.error('❌ Error fetching conversations:', err)
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setIsLoading(false)

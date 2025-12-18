@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '@/stores'
 import {
@@ -12,6 +12,7 @@ import {
   Loader2,
   PanelRightClose,
   PanelRightOpen,
+  AlertCircle,
 } from 'lucide-react'
 
 // Components
@@ -23,19 +24,22 @@ import { ContactPanel } from '@/components/whatsapp/inbox/ContactPanel'
 import { useInboxConversations } from '@/hooks/useInboxConversations'
 import { useInboxMessages } from '@/hooks/useInboxMessages'
 import { useInboxContact } from '@/hooks/useInboxContact'
+import { useWhatsAppRealtime } from '@/hooks/useWhatsAppRealtime'
 
 // Types
 import type { InboxConversation, ConversationFilters } from '@/types/inbox'
 
 export default function InboxPage() {
   const { user } = useAuthStore()
-  const organizationId = user?.organization_id || ''
+  // Usar organization_id do user ou 'default-org' (a API vai resolver)
+  const organizationId = user?.organization_id || 'default-org'
   
   // Hooks
   const {
     conversations,
     selectedConversation,
     isLoading: conversationsLoading,
+    error: conversationsError,
     filters,
     selectConversation,
     fetchConversations,
@@ -79,15 +83,39 @@ export default function InboxPage() {
     clear: clearContact,
   } = useInboxContact()
 
+  // Realtime subscription
+  const handleNewConversation = useCallback((conv: any) => {
+    console.log('📥 New conversation via realtime:', conv)
+    refreshConversations()
+  }, [refreshConversations])
+
+  const handleNewMessage = useCallback((msg: any) => {
+    console.log('📨 New message via realtime:', msg)
+    if (selectedConversation) {
+      addMessage(msg)
+    }
+    // Atualizar lista de conversas para mostrar nova mensagem
+    refreshConversations()
+  }, [selectedConversation, addMessage, refreshConversations])
+
+  // Hook de realtime
+  useWhatsAppRealtime({
+    organizationId,
+    conversationId: selectedConversation?.id,
+    onConversationUpdate: handleNewConversation,
+    onNewMessage: handleNewMessage,
+  })
+
   // State
   const [showContactPanel, setShowContactPanel] = useState(true)
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
   const [search, setSearch] = useState('')
 
-  // Load conversations on mount
+  // Load conversations on mount and when organizationId changes
   useEffect(() => {
+    console.log('🔄 Loading conversations for org:', organizationId)
     fetchConversations()
-  }, [])
+  }, [organizationId])
 
   // Load messages and contact when conversation changes
   useEffect(() => {

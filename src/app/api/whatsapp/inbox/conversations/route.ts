@@ -10,7 +10,7 @@ const supabase = createClient(
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
+    let organizationId = searchParams.get('organizationId')
     const status = searchParams.get('status')
     const assignedTo = searchParams.get('assignedTo')
     const priority = searchParams.get('priority')
@@ -21,37 +21,33 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = (page - 1) * limit
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
+    // Se organizationId for default-org ou vazio, buscar a primeira organização real
+    if (!organizationId || organizationId === 'default-org') {
+      const { data: firstOrg } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1)
+        .single()
+      
+      if (firstOrg) {
+        organizationId = firstOrg.id
+      } else {
+        return NextResponse.json({ 
+          conversations: [], 
+          pagination: { page: 1, limit, total: 0, totalPages: 0 } 
+        })
+      }
     }
 
-    // Query base
+    console.log('📋 Fetching conversations for org:', organizationId)
+
+    // Query base - Removido o join com auth.users que causa problemas
+    // e o join com whatsapp_contacts que pode não existir
     let query = supabase
       .from('whatsapp_conversations')
-      .select(`
-        *,
-        contact:whatsapp_contacts(
-          id,
-          name,
-          email,
-          phone_number,
-          profile_picture_url,
-          tags,
-          total_orders,
-          total_spent,
-          is_blocked,
-          shopify_customer_id
-        ),
-        tags:whatsapp_conversation_tags(
-          tag:whatsapp_tags(id, name, color)
-        ),
-        assigned_agent:auth.users(
-          id,
-          raw_user_meta_data
-        )
-      `, { count: 'exact' })
+      .select('*', { count: 'exact' })
       .eq('organization_id', organizationId)
-      .order('last_message_at', { ascending: false })
+      .order('last_message_at', { ascending: false, nullsFirst: false })
 
     // Filtros
     if (status && status !== 'all') {
@@ -61,10 +57,7 @@ export async function GET(request: NextRequest) {
     if (assignedTo) {
       if (assignedTo === 'unassigned') {
         query = query.is('assigned_agent_id', null)
-      } else if (assignedTo === 'me') {
-        // Precisaria do user_id do contexto
-        query = query.eq('assigned_agent_id', assignedTo)
-      } else {
+      } else if (assignedTo !== 'all' && assignedTo !== 'me') {
         query = query.eq('assigned_agent_id', assignedTo)
       }
     }
@@ -78,7 +71,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
-      query = query.or(`phone_number.ilike.%${search}%,contact.name.ilike.%${search}%`)
+      // Busca por telefone ou nome do contato
+      query = query.or(`phone_number.ilike.%${search}%,contact_name.ilike.%${search}%`)
     }
 
     // Paginação
@@ -86,43 +80,46 @@ export async function GET(request: NextRequest) {
 
     const { data, error, count } = await query
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Error fetching conversations:', error)
+      throw error
+    }
 
-    // Formatar resposta
-    const conversations = data?.map((conv: any) => {
-      const contact = conv.contact as any
-      const assignedAgent = conv.assigned_agent as any
-      const convTags = conv.tags as any[]
-      
-      return {
-        id: conv.id,
-        organization_id: conv.organization_id,
-        contact_id: conv.contact_id,
-        instance_id: conv.instance_id,
-        phone_number: conv.phone_number,
-        status: conv.status,
-        priority: conv.priority,
-        unread_count: conv.unread_count,
-        is_bot_active: conv.is_bot_active,
-        last_message_at: conv.last_message_at,
-        last_message_preview: conv.last_message_preview,
-        last_message_type: conv.last_message_type,
-        last_message_direction: conv.last_message_direction,
-        assigned_agent_id: conv.assigned_agent_id,
-        created_at: conv.created_at,
-        updated_at: conv.updated_at,
-        total_messages: conv.total_messages,
-        contact_name: contact?.name || null,
-        contact_email: contact?.email || null,
-        contact_avatar: contact?.profile_picture_url || null,
-        contact_tags: contact?.tags || [],
-        contact_total_orders: contact?.total_orders || 0,
-        contact_total_spent: contact?.total_spent || 0,
-        contact_is_blocked: contact?.is_blocked || false,
-        agent_name: assignedAgent?.raw_user_meta_data?.name || null,
-        tags: convTags?.map((t: any) => t.tag) || []
-      }
-    })
+    console.log(`✅ Found ${data?.length || 0} conversations`)
+
+    // Formatar resposta - simplificado sem joins complexos
+    const conversations = data?.map((conv: any) => ({
+      id: conv.id,
+      organization_id: conv.organization_id,
+      contact_id: conv.contact_id,
+      instance_id: conv.instance_id,
+      phone_number: conv.phone_number,
+      status: conv.status || 'open',
+      priority: conv.priority || 'normal',
+      unread_count: conv.unread_count || 0,
+      is_bot_active: conv.is_bot_active ?? true,
+      last_message_at: conv.last_message_at,
+      last_message_preview: conv.last_message_preview,
+      last_message_type: conv.last_message_type,
+      last_message_direction: conv.last_message_direction,
+      assigned_agent_id: conv.assigned_agent_id,
+      created_at: conv.created_at,
+      updated_at: conv.updated_at,
+      total_messages: conv.total_messages || 0,
+      // Dados do contato diretamente da conversa
+      contact_name: conv.contact_name || null,
+      contact_email: null,
+      contact_avatar: null,
+      contact_tags: [],
+      contact_total_orders: 0,
+      contact_total_spent: 0,
+      contact_is_blocked: false,
+      agent_name: null,
+      tags: [],
+      // Campos extras
+      can_send_template_only: conv.can_send_template_only || false,
+      window_expires_at: conv.window_expires_at,
+    })) || []
 
     return NextResponse.json({
       conversations,

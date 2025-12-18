@@ -147,6 +147,75 @@ export async function GET(request: NextRequest) {
         hint: 'Erro ao consultar tabela klaviyo_accounts'
       };
     }
+
+    // 6. Check WhatsApp data
+    let whatsappDebug: any = { found: false };
+    try {
+      // Check organizations
+      const { data: organizations, error: orgError } = await supabase
+        .from('organizations')
+        .select('id, name, slug')
+        .limit(5);
+      
+      // Check whatsapp_conversations
+      const { data: conversations, count: convCount, error: convError } = await supabase
+        .from('whatsapp_conversations')
+        .select('*', { count: 'exact' })
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .limit(5);
+      
+      // Check whatsapp_accounts (configs)
+      const { data: waAccounts, error: waAccError } = await supabase
+        .from('whatsapp_accounts')
+        .select('id, organization_id, phone_number, phone_number_id, business_name, is_connected')
+        .limit(5);
+      
+      // Check whatsapp_configs (alternative config table)
+      let waConfigs = null;
+      try {
+        const { data } = await supabase
+          .from('whatsapp_configs')
+          .select('id, organization_id, phone_number_id')
+          .limit(5);
+        waConfigs = data;
+      } catch (e) {
+        // Table might not exist
+      }
+      
+      whatsappDebug = {
+        found: true,
+        organizations: {
+          total: organizations?.length || 0,
+          items: organizations || [],
+          error: orgError?.message,
+        },
+        conversations: {
+          total: convCount || 0,
+          items: conversations?.map(c => ({
+            id: c.id,
+            organization_id: c.organization_id,
+            phone_number: c.phone_number,
+            contact_name: c.contact_name,
+            status: c.status,
+            unread_count: c.unread_count,
+            last_message_at: c.last_message_at,
+            last_message_preview: c.last_message_preview?.substring(0, 50),
+          })) || [],
+          error: convError?.message,
+        },
+        whatsappAccounts: {
+          total: waAccounts?.length || 0,
+          items: waAccounts || [],
+          error: waAccError?.message,
+        },
+        whatsappConfigs: waConfigs,
+      };
+    } catch (e: any) {
+      whatsappDebug = { 
+        found: false, 
+        error: e.message 
+      };
+    }
     
     return NextResponse.json({
       success: true,
@@ -157,7 +226,9 @@ export async function GET(request: NextRequest) {
         totalOrdersInDb: ordersCount || 0,
         ordersError: ordersError?.message || null,
         klaviyoConnected: klaviyoDebug.activeAccounts > 0,
+        whatsappConversations: whatsappDebug?.conversations?.total || 0,
       },
+      whatsapp: whatsappDebug,
       klaviyo: klaviyoDebug,
       stores: storeTests,
       sampleOrders: sampleOrders || [],
