@@ -31,6 +31,7 @@ import {
   AlertCircle,
   Key,
 } from 'lucide-react'
+import { useAuthStore } from '@/stores'
 
 // Types
 interface Agent {
@@ -91,6 +92,10 @@ const typeConfig = {
 }
 
 export default function AgentsTab() {
+  // Auth
+  const { user } = useAuthStore()
+  const organizationId = user?.organization_id
+
   // State
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
@@ -104,9 +109,10 @@ export default function AgentsTab() {
 
   // Fetch agents
   const fetchAgents = async () => {
+    if (!organizationId) return
     setLoading(true)
     try {
-      const res = await fetch('/api/whatsapp/agents?include_stats=true')
+      const res = await fetch(`/api/whatsapp/agents?organization_id=${organizationId}&include_stats=true`)
       const data = await res.json()
       setAgents(data.agents || [])
     } catch (error) {
@@ -118,8 +124,9 @@ export default function AgentsTab() {
 
   // Fetch AI models
   const fetchModels = async () => {
+    if (!organizationId) return
     try {
-      const res = await fetch('/api/ai/models')
+      const res = await fetch(`/api/ai/models?organization_id=${organizationId}`)
       const data = await res.json()
       setAiModels(data.models || [])
     } catch (error) {
@@ -129,8 +136,9 @@ export default function AgentsTab() {
 
   // Fetch API keys
   const fetchApiKeys = async () => {
+    if (!organizationId) return
     try {
-      const res = await fetch('/api/api-keys')
+      const res = await fetch(`/api/api-keys?organization_id=${organizationId}`)
       const data = await res.json()
       setApiKeys(data.keys || [])
     } catch (error) {
@@ -139,19 +147,23 @@ export default function AgentsTab() {
   }
 
   useEffect(() => {
-    fetchAgents()
-    fetchModels()
-    fetchApiKeys()
-  }, [])
+    if (organizationId) {
+      fetchAgents()
+      fetchModels()
+      fetchApiKeys()
+    }
+  }, [organizationId])
 
   // Toggle agent status
   const handleToggleStatus = async (agent: Agent) => {
+    if (!organizationId) return
     try {
       const res = await fetch('/api/whatsapp/agents', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: agent.id,
+          organization_id: organizationId,
           is_active: !agent.is_active,
         }),
       })
@@ -165,10 +177,11 @@ export default function AgentsTab() {
 
   // Delete agent
   const handleDelete = async (agentId: string) => {
+    if (!organizationId) return
     if (!confirm('Tem certeza que deseja excluir este agente? Esta ação não pode ser desfeita.')) return
     
     try {
-      const res = await fetch(`/api/whatsapp/agents?id=${agentId}`, {
+      const res = await fetch(`/api/whatsapp/agents?id=${agentId}&organization_id=${organizationId}`, {
         method: 'DELETE',
       })
       if (res.ok) {
@@ -380,8 +393,9 @@ export default function AgentsTab() {
 
       {/* Create Modal */}
       <AnimatePresence>
-        {showCreateModal && (
+        {showCreateModal && organizationId && (
           <CreateAgentModal
+            organizationId={organizationId}
             createType={createType}
             setCreateType={setCreateType}
             onClose={() => {
@@ -543,6 +557,7 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
 
 // Create Agent Modal
 function CreateAgentModal({
+  organizationId,
   createType,
   setCreateType,
   onClose,
@@ -551,6 +566,7 @@ function CreateAgentModal({
   apiKeys,
   humanAgentsCount,
 }: {
+  organizationId: string
   createType: 'human' | 'ai' | null
   setCreateType: (type: 'human' | 'ai' | null) => void
   onClose: () => void
@@ -600,6 +616,7 @@ function CreateAgentModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organization_id: organizationId,
           type: 'human',
           name: humanForm.name,
           email: humanForm.email,
@@ -641,6 +658,7 @@ function CreateAgentModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organization_id: organizationId,
           type: 'ai',
           name: aiForm.name,
           ai_config: {

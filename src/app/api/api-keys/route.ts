@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { getSupabaseClient } from '@/lib/api-utils'
+import { SupabaseClient } from '@supabase/supabase-js'
 
-// Helper para pegar organization_id
-async function getOrgId(supabase: any) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  const { data } = await supabase
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
-    .single()
-  return data?.organization_id
+// Module-level lazy client
+let _supabase: SupabaseClient | null = null
+function getDb(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = getSupabaseClient()
+    if (!_supabase) throw new Error('Database not configured')
+  }
+  return _supabase
 }
+
+const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    return (getDb() as any)[prop]
+  }
+})
 
 // Criptografia simples (em produção, usar algo mais robusto)
 function maskApiKey(key: string): string {
@@ -23,13 +27,19 @@ function maskApiKey(key: string): string {
 // GET - Lista API keys da organização
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const orgId = await getOrgId(supabase)
-    
-    if (!orgId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    getDb()
+  } catch {
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  }
 
+  const searchParams = request.nextUrl.searchParams
+  const orgId = searchParams.get('organization_id') || searchParams.get('organizationId')
+  
+  if (!orgId) {
+    return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+  }
+
+  try {
     const { data: keys, error } = await supabase
       .from('organization_api_keys')
       .select('id, provider, api_key_hint, is_active, is_valid, last_validated_at, total_requests, total_tokens_used, last_used_at, created_at')
@@ -55,15 +65,19 @@ export async function GET(request: NextRequest) {
 // POST - Adicionar/atualizar API key
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const orgId = await getOrgId(supabase)
+    getDb()
+  } catch {
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  }
+
+  try {
+    const body = await request.json()
+    const orgId = body.organization_id || body.organizationId
+    const { provider, api_key, base_url } = body
     
     if (!orgId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
-
-    const body = await request.json()
-    const { provider, api_key, base_url } = body
 
     if (!provider || !api_key) {
       return NextResponse.json(
@@ -126,14 +140,19 @@ export async function POST(request: NextRequest) {
 // DELETE - Remover API key
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const orgId = await getOrgId(supabase)
+    getDb()
+  } catch {
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  }
+
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const orgId = searchParams.get('organization_id') || searchParams.get('organizationId')
+    const provider = searchParams.get('provider')
     
     if (!orgId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
-
-    const provider = request.nextUrl.searchParams.get('provider')
     
     if (!provider) {
       return NextResponse.json({ error: 'provider is required' }, { status: 400 })

@@ -1,18 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { getSupabaseClient } from '@/lib/api-utils'
+import { SupabaseClient } from '@supabase/supabase-js'
+
+// Module-level lazy client
+let _supabase: SupabaseClient | null = null
+function getDb(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = getSupabaseClient()
+    if (!_supabase) throw new Error('Database not configured')
+  }
+  return _supabase
+}
+
+const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    return (getDb() as any)[prop]
+  }
+})
 
 // GET - Lista todos os modelos de IA disponíveis
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // Verificar auth
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    getDb()
+  } catch {
+    // Se banco não configurado, retornar modelos padrão
+    return NextResponse.json({
+      models: getDefaultModels(),
+      source: 'fallback'
+    })
+  }
 
+  try {
     // Parâmetros de filtro
     const provider = request.nextUrl.searchParams.get('provider')
     const tier = request.nextUrl.searchParams.get('tier')
