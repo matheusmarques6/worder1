@@ -1,259 +1,125 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
-async function getOrgId(supabase: any) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
-  return data?.organization_id;
-}
-
-// GET - Lista campanhas
+// GET /api/whatsapp/campaigns - Listar campanhas
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const orgId = await getOrgId(supabase);
-    if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const searchParams = request.nextUrl.searchParams;
-    const status = searchParams.get('status');
-    const id = searchParams.get('id');
-
-    if (id) {
-      // Buscar campanha específica com logs
-      const { data, error } = await supabase
-        .from('whatsapp_campaigns')
-        .select(`
-          *,
-          phonebook:phonebooks(*),
-          logs:whatsapp_campaign_logs(*)
-        `)
-        .eq('id', id)
-        .eq('organization_id', orgId)
-        .single();
-
-      if (error) throw error;
-      return NextResponse.json({ campaign: data });
-    }
+    const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organizationId') || 'org-placeholder'
+    const status = searchParams.get('status')
+    const type = searchParams.get('type')
+    const search = searchParams.get('search')
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const offset = (page - 1) * limit
 
     let query = supabase
       .from('whatsapp_campaigns')
-      .select(`*, phonebook:phonebooks(id, name, contact_count)`)
-      .eq('organization_id', orgId)
-      .order('created_at', { ascending: false });
+      .select(`
+        *,
+        template:whatsapp_templates(id, name, category, status, body_text, buttons)
+      `, { count: 'exact' })
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
 
-    if (status && status !== 'all') {
-      query = query.eq('status', status);
+    if (status) query = query.eq('status', status)
+    if (type) query = query.eq('type', type)
+    if (search) query = query.ilike('name', `%${search}%`)
+
+    const { data, error, count } = await query
+    if (error) throw error
+
+    // Métricas agregadas
+    const { data: metricsData } = await supabase
+      .from('whatsapp_campaigns')
+      .select('total_sent, total_delivered, total_read, total_replied')
+      .eq('organization_id', organizationId)
+
+    const metrics = {
+      totalCampaigns: count || 0,
+      totalSent: metricsData?.reduce((sum, c) => sum + (c.total_sent || 0), 0) || 0,
+      totalDelivered: metricsData?.reduce((sum, c) => sum + (c.total_delivered || 0), 0) || 0,
+      totalRead: metricsData?.reduce((sum, c) => sum + (c.total_read || 0), 0) || 0,
     }
 
-    const { data, error } = await query;
-    if (error) throw error;
-
-    return NextResponse.json({ campaigns: data || [] });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({
+      campaigns: data || [],
+      total: count || 0,
+      page, limit,
+      hasMore: (count || 0) > offset + limit,
+      metrics
+    })
+  } catch (error) {
+    console.error('Error fetching campaigns:', error)
+    return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 })
   }
 }
 
-// POST - Criar campanha
+// POST /api/whatsapp/campaigns - Criar campanha
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const orgId = await getOrgId(supabase);
-    if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const body = await request.json();
+    const body = await request.json()
     const {
-      title,
-      template_name,
-      template_language = 'pt_BR',
-      phonebook_id,
-      body_variables = [],
-      header_variable,
-      button_variables = [],
-      media_url,
-      scheduled_at,
-      send_interval_ms = 1000,
-    } = body;
+      organizationId = 'org-placeholder', name, description, type = 'broadcast',
+      template_id, template_name, template_variables, media_url, media_type,
+      audience_type = 'all', audience_tags, audience_segment_id, audience_filters,
+      imported_contacts, scheduled_at, timezone = 'America/Sao_Paulo',
+      messages_per_second = 10, created_by, created_by_name
+    } = body
 
-    if (!title || !template_name || !phonebook_id) {
-      return NextResponse.json({ 
-        error: 'title, template_name, and phonebook_id are required' 
-      }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 })
     }
 
-    // Buscar phonebook
-    const { data: phonebook } = await supabase
-      .from('phonebooks')
-      .select('contact_count')
-      .eq('id', phonebook_id)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (!phonebook) {
-      return NextResponse.json({ error: 'Phonebook not found' }, { status: 404 });
+    // Calcular audiência
+    let audienceCount = 0
+    if (audience_type === 'all') {
+      const { count } = await supabase
+        .from('whatsapp_contacts')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .or('is_blocked.is.null,is_blocked.eq.false')
+      audienceCount = count || 0
+    } else if (audience_type === 'tags' && audience_tags?.length > 0) {
+      const { count } = await supabase
+        .from('whatsapp_contacts')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .or('is_blocked.is.null,is_blocked.eq.false')
+        .overlaps('tags', audience_tags)
+      audienceCount = count || 0
+    } else if (audience_type === 'import' && imported_contacts) {
+      audienceCount = imported_contacts.length
     }
 
-    const campaignId = `camp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const costPerMessage = 0.05
+    const totalCost = audienceCount * costPerMessage
 
-    const { data, error } = await supabase
+    const { data: campaign, error } = await supabase
       .from('whatsapp_campaigns')
       .insert({
-        organization_id: orgId,
-        campaign_id: campaignId,
-        title,
-        template_name,
-        template_language,
-        phonebook_id,
-        body_variables,
-        header_variable,
-        button_variables,
-        media_url,
-        scheduled_at,
-        send_interval_ms,
-        total_contacts: phonebook.contact_count,
-        status: scheduled_at ? 'SCHEDULED' : 'PENDING',
+        organization_id: organizationId, name, description, type,
+        status: scheduled_at ? 'scheduled' : 'draft',
+        template_id, template_name, template_variables: template_variables || {},
+        media_url, media_type, audience_type, audience_tags, audience_segment_id,
+        audience_filters: audience_filters || {}, imported_contacts,
+        audience_count: audienceCount, scheduled_at, timezone, messages_per_second,
+        total_recipients: audienceCount, cost_per_message: costPerMessage,
+        total_cost: totalCost, created_by, created_by_name
       })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    return NextResponse.json({ campaign: data }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-// PATCH - Controlar campanha (start, pause, cancel)
-export async function PATCH(request: NextRequest) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const orgId = await getOrgId(supabase);
-    if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const body = await request.json();
-    const { id, action } = body;
-
-    if (!id || !action) {
-      return NextResponse.json({ error: 'id and action are required' }, { status: 400 });
-    }
-
-    const { data: campaign } = await supabase
-      .from('whatsapp_campaigns')
       .select('*')
-      .eq('id', id)
-      .eq('organization_id', orgId)
-      .single();
+      .single()
 
-    if (!campaign) {
-      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
-    }
-
-    let newStatus = campaign.status;
-    let additionalData: any = {};
-
-    switch (action) {
-      case 'start':
-        if (!['PENDING', 'PAUSED', 'SCHEDULED'].includes(campaign.status)) {
-          return NextResponse.json({ error: 'Campaign cannot be started' }, { status: 400 });
-        }
-        newStatus = 'RUNNING';
-        additionalData.started_at = new Date().toISOString();
-        
-        // Criar logs para cada contato
-        const { data: contacts } = await supabase
-          .from('phonebook_contacts')
-          .select('id, name, mobile')
-          .eq('phonebook_id', campaign.phonebook_id);
-
-        if (contacts && contacts.length > 0) {
-          const logs = contacts.map((c: any) => ({
-            organization_id: orgId,
-            campaign_id: id,
-            contact_id: c.id,
-            contact_name: c.name,
-            contact_mobile: c.mobile,
-            status: 'PENDING',
-          }));
-          
-          await supabase.from('whatsapp_campaign_logs').insert(logs);
-        }
-        break;
-
-      case 'pause':
-        if (campaign.status !== 'RUNNING') {
-          return NextResponse.json({ error: 'Campaign is not running' }, { status: 400 });
-        }
-        newStatus = 'PAUSED';
-        break;
-
-      case 'resume':
-        if (campaign.status !== 'PAUSED') {
-          return NextResponse.json({ error: 'Campaign is not paused' }, { status: 400 });
-        }
-        newStatus = 'RUNNING';
-        break;
-
-      case 'cancel':
-        if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(campaign.status)) {
-          return NextResponse.json({ error: 'Campaign already finished' }, { status: 400 });
-        }
-        newStatus = 'CANCELLED';
-        break;
-
-      default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-    }
-
-    const { data, error } = await supabase
-      .from('whatsapp_campaigns')
-      .update({ 
-        status: newStatus, 
-        ...additionalData,
-        updated_at: new Date().toISOString() 
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    return NextResponse.json({ campaign: data });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-// DELETE - Deletar campanha
-export async function DELETE(request: NextRequest) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const orgId = await getOrgId(supabase);
-    if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const id = request.nextUrl.searchParams.get('id');
-    if (!id) return NextResponse.json({ error: 'Campaign ID required' }, { status: 400 });
-
-    const { data: campaign } = await supabase
-      .from('whatsapp_campaigns')
-      .select('status')
-      .eq('id', id)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (campaign?.status === 'RUNNING') {
-      return NextResponse.json({ error: 'Cannot delete running campaign' }, { status: 400 });
-    }
-
-    await supabase.from('whatsapp_campaign_logs').delete().eq('campaign_id', id);
-    await supabase.from('whatsapp_campaigns').delete().eq('id', id);
-
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) throw error
+    return NextResponse.json({ campaign })
+  } catch (error) {
+    console.error('Error creating campaign:', error)
+    return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 })
   }
 }
