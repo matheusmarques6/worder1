@@ -25,21 +25,60 @@ export default function AgentLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const { user, signOut, isLoading } = useAuthStore()
+  const { user, setUser, isLoading, setLoading } = useAuthStore()
   const [status, setStatus] = useState<'online' | 'away' | 'busy' | 'offline'>('online')
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [initialized, setInitialized] = useState(false)
 
-  // Verificar se é agente
+  // Inicializar usuário
   useEffect(() => {
-    if (!isLoading && user) {
+    const initializeUser = async () => {
+      if (initialized) return
+      
+      try {
+        const response = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'get-or-create-org' }),
+        })
+        const result = await response.json()
+        
+        if (result.user) {
+          setUser({
+            id: result.user.id,
+            email: result.user.email,
+            name: result.user.name || result.user.user_metadata?.name || result.user.email?.split('@')[0],
+            organization_id: result.organization?.id || result.user.user_metadata?.organization_id,
+            role: result.user.role || 'agent',
+            user_metadata: result.user.user_metadata,
+            created_at: result.user.created_at || new Date().toISOString(),
+            updated_at: result.user.updated_at || new Date().toISOString(),
+          })
+        }
+      } catch (error) {
+        console.error('Error initializing user:', error)
+      } finally {
+        setLoading(false)
+        setInitialized(true)
+      }
+    }
+    
+    initializeUser()
+  }, [initialized, setUser, setLoading])
+
+  // Verificar se é agente e redirecionar se necessário
+  useEffect(() => {
+    if (!initialized || isLoading) return
+    
+    if (user) {
       const isAgent = user.user_metadata?.is_agent === true
       if (!isAgent) {
         // Se não é agente, redirecionar para dashboard
         router.push('/dashboard')
       }
     }
-  }, [user, isLoading, router])
+  }, [user, initialized, isLoading, router])
 
   // Atualizar status
   const handleStatusChange = async (newStatus: typeof status) => {
@@ -49,11 +88,11 @@ export default function AgentLayout({
       const orgId = user?.organization_id || user?.user_metadata?.organization_id
       
       if (agentId && orgId) {
-        await fetch('/api/whatsapp/agents', {
+        await fetch('/api/whatsapp/agents/status', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id: agentId,
+            agent_id: agentId,
             organization_id: orgId,
             status: newStatus,
           }),
@@ -72,7 +111,19 @@ export default function AgentLayout({
   const handleLogout = async () => {
     // Marcar como offline antes de sair
     await handleStatusChange('offline')
-    await signOut()
+    
+    try {
+      await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      })
+    } catch (e) {
+      console.error('Logout error:', e)
+    }
+    
+    // Limpar store e redirecionar
+    setUser(null)
     router.push('/')
   }
 
@@ -84,7 +135,8 @@ export default function AgentLayout({
     offline: { label: 'Offline', color: 'bg-gray-500', textColor: 'text-gray-400' },
   }
 
-  if (isLoading) {
+  // Mostrar loading enquanto inicializa
+  if (!initialized || isLoading) {
     return (
       <div className="min-h-screen bg-dark-950 flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
@@ -92,7 +144,16 @@ export default function AgentLayout({
     )
   }
 
-  const userName = user?.user_metadata?.name || user?.email?.split('@')[0] || 'Agente'
+  // Se não tem usuário, mostrar loading (vai redirecionar pelo middleware)
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+      </div>
+    )
+  }
+
+  const userName = user?.user_metadata?.name || user?.name || user?.email?.split('@')[0] || 'Agente'
 
   return (
     <AgentPermissionsProvider>
