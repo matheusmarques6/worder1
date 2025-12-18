@@ -293,7 +293,32 @@ async function handleUpdatePassword(
 // Get or create default organization
 async function handleGetOrCreateOrg(supabase: SupabaseClient) {
   try {
-    // First try to get existing organization
+    // First, try to get the authenticated user
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    
+    if (authUser) {
+      // User is authenticated - return their real data
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*, organization:organizations(*)')
+        .eq('id', authUser.id)
+        .single();
+
+      return NextResponse.json({
+        organization: profile?.organization || { id: authUser.user_metadata?.organization_id || 'default-org' },
+        user: {
+          id: authUser.id,
+          email: authUser.email,
+          name: authUser.user_metadata?.name || profile?.first_name || 'User',
+          first_name: profile?.first_name || authUser.user_metadata?.name?.split(' ')[0],
+          last_name: profile?.last_name || '',
+          role: profile?.role || 'user',
+          user_metadata: authUser.user_metadata, // IMPORTANT: Preserve is_agent, agent_id, etc.
+        },
+      });
+    }
+
+    // No authenticated user - try to get existing organization for demo
     const { data: existingOrg, error: fetchError } = await supabase
       .from('organizations')
       .select('*')

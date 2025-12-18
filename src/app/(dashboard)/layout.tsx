@@ -145,13 +145,16 @@ export default function DashboardLayout({
           const result = await response.json()
           
           if (result.organization || result.user) {
+            // Preserve user_metadata from API response (includes is_agent, agent_id, etc.)
+            const userMetadata = result.user?.user_metadata || {}
+            
             setUser({
               id: result.user?.id || 'default-user',
               email: result.user?.email || 'demo@worder.com',
-              name: result.user?.name || result.user?.user_metadata?.name || 'Demo User',
-              organization_id: result.organization?.id || result.user?.user_metadata?.organization_id,
+              name: result.user?.name || userMetadata?.name || result.user?.first_name || 'Demo User',
+              organization_id: result.organization?.id || userMetadata?.organization_id,
               role: result.user?.role || 'admin',
-              user_metadata: result.user?.user_metadata,
+              user_metadata: userMetadata, // IMPORTANT: Preserve is_agent, agent_id
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             })
@@ -159,15 +162,18 @@ export default function DashboardLayout({
         } catch (error) {
           console.error('Error initializing user:', error)
           // Fallback: set a default user with a temporary org ID
-          setUser({
-            id: 'default-user',
-            email: 'demo@worder.com',
-            name: 'Demo User',
-            organization_id: 'default-org',
-            role: 'admin',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
+          // Only if there's no existing user
+          if (!user) {
+            setUser({
+              id: 'default-user',
+              email: 'demo@worder.com',
+              name: 'Demo User',
+              organization_id: 'default-org',
+              role: 'admin',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+          }
         }
       }
     }
