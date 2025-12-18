@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     const {
       organizationId = 'org-placeholder', name, description, type = 'broadcast',
       template_id, template_name, template_variables, media_url, media_type,
-      audience_type = 'all', audience_tags, audience_segment_id, audience_filters,
+      audience_type = 'all', audience_tags, audience_segment_id, audience_phonebook_id, audience_filters,
       imported_contacts, scheduled_at, timezone = 'America/Sao_Paulo',
       messages_per_second = 10, created_by, created_by_name
     } = body
@@ -94,6 +94,12 @@ export async function POST(request: NextRequest) {
         .or('is_blocked.is.null,is_blocked.eq.false')
         .overlaps('tags', audience_tags)
       audienceCount = count || 0
+    } else if (audience_type === 'phonebook' && audience_phonebook_id) {
+      const { count } = await supabase
+        .from('phonebook_contacts')
+        .select('*', { count: 'exact', head: true })
+        .eq('phonebook_id', audience_phonebook_id)
+      audienceCount = count || 0
     } else if (audience_type === 'import' && imported_contacts) {
       audienceCount = imported_contacts.length
     }
@@ -108,7 +114,7 @@ export async function POST(request: NextRequest) {
         status: scheduled_at ? 'scheduled' : 'draft',
         template_id, template_name, template_variables: template_variables || {},
         media_url, media_type, audience_type, audience_tags, audience_segment_id,
-        audience_filters: audience_filters || {}, imported_contacts,
+        audience_phonebook_id, audience_filters: audience_filters || {}, imported_contacts,
         audience_count: audienceCount, scheduled_at, timezone, messages_per_second,
         total_recipients: audienceCount, cost_per_message: costPerMessage,
         total_cost: totalCost, created_by, created_by_name

@@ -433,28 +433,142 @@ async function sendWhatsAppMessage(phoneNumberId: string, accessToken: string, t
 // =============================================
 async function processMessageStatus(status: any) {
   const waMessageId = status.id;
-  const statusValue = status.status;
+  const statusValue = status.status; // sent, delivered, read, failed
+  const timestamp = status.timestamp ? new Date(parseInt(status.timestamp) * 1000).toISOString() : new Date().toISOString();
 
+  // Atualizar mensagem do inbox
   await supabase
     .from('whatsapp_messages')
     .update({ status: statusValue })
     .eq('wa_message_id', waMessageId);
 
-  // Atualizar log de campanha se aplicável
+  // =============================================
+  // ATUALIZAR RECIPIENT DE CAMPANHA
+  // =============================================
   if (waMessageId) {
-    const updateData: Record<string, any> = { delivery_status: statusValue };
+    // Buscar recipient pelo meta_message_id
+    const { data: recipient } = await supabase
+      .from('whatsapp_campaign_recipients')
+      .select('id, campaign_id, status')
+      .eq('meta_message_id', waMessageId)
+      .single();
+
+    if (recipient) {
+      const updateData: Record<string, any> = {};
+      let newStatus = recipient.status;
+
+      switch (statusValue) {
+        case 'sent':
+          if (['pending', 'queued'].includes(recipient.status)) {
+            newStatus = 'sent';
+            updateData.sent_at = timestamp;
+          }
+          break;
+          
+        case 'delivered':
+          if (['pending', 'queued', 'sent'].includes(recipient.status)) {
+            newStatus = 'delivered';
+            updateData.delivered_at = timestamp;
+          }
+          break;
+          
+        case 'read':
+          if (['pending', 'queued', 'sent', 'delivered'].includes(recipient.status)) {
+            newStatus = 'read';
+            updateData.read_at = timestamp;
+          }
+          break;
+          
+        case 'failed':
+          newStatus = 'failed';
+          updateData.failed_at = timestamp;
+          updateData.error_code = status.errors?.[0]?.code || 'UNKNOWN';
+          updateData.error_message = status.errors?.[0]?.message || status.errors?.[0]?.title || 'Failed';
+          break;
+      }
+
+      if (Object.keys(updateData).length > 0 || newStatus !== recipient.status) {
+        updateData.status = newStatus;
+        
+        await supabase
+          .from('whatsapp_campaign_recipients')
+          .update(updateData)
+          .eq('id', recipient.id);
+
+        // Atualizar métricas da campanha
+        await updateCampaignMetrics(recipient.campaign_id);
+        
+        console.log(`📊 Campaign recipient updated: ${recipient.id} -> ${newStatus}`);
+      }
+    }
+
+    // Também atualizar tabela antiga de logs (compatibilidade)
+    const legacyUpdateData: Record<string, any> = { delivery_status: statusValue };
     
     if (statusValue === 'delivered') {
-      updateData.delivery_time = new Date().toISOString();
+      legacyUpdateData.delivery_time = timestamp;
     } else if (statusValue === 'read') {
-      updateData.read_time = new Date().toISOString();
+      legacyUpdateData.read_time = timestamp;
     }
 
     await supabase
       .from('whatsapp_campaign_logs')
-      .update(updateData)
+      .update(legacyUpdateData)
       .eq('meta_message_id', waMessageId);
   }
 
   console.log(`📊 Status: ${waMessageId} -> ${statusValue}`);
+}
+
+// =============================================
+// ATUALIZAR MÉTRICAS DA CAMPANHA
+// =============================================
+async function updateCampaignMetrics(campaignId: string) {
+  try {
+    // Contar por status
+    const { data: recipients } = await supabase
+      .from('whatsapp_campaign_recipients')
+      .select('status')
+      .eq('campaign_id', campaignId);
+
+    if (!recipients) return;
+
+    const stats = {
+      total_sent: 0,
+      total_delivered: 0,
+      total_read: 0,
+      total_failed: 0
+    };
+
+    recipients.forEach(r => {
+      switch (r.status) {
+        case 'sent':
+          stats.total_sent++;
+          break;
+        case 'delivered':
+          stats.total_sent++;
+          stats.total_delivered++;
+          break;
+        case 'read':
+          stats.total_sent++;
+          stats.total_delivered++;
+          stats.total_read++;
+          break;
+        case 'failed':
+          stats.total_failed++;
+          break;
+      }
+    });
+
+    await supabase
+      .from('whatsapp_campaigns')
+      .update({
+        ...stats,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', campaignId);
+
+  } catch (error) {
+    console.error('Error updating campaign metrics:', error);
+  }
 }

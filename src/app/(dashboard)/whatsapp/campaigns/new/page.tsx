@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '@/stores'
-import { ArrowLeft, ArrowRight, Check, Loader2, Send, Calendar, Users, FileText, Clock, Tag, Upload, MessageSquare, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Loader2, Send, Calendar, Users, FileText, Clock, Tag, Upload, MessageSquare, Sparkles, RefreshCw, BookUser } from 'lucide-react'
 
 interface Template { id: string; name: string; category: string; body_text: string; body_variables: number; buttons: any[] }
+interface Phonebook { id: string; name: string; description?: string; contact_count: number }
 interface WizardState {
   name: string; description: string; type: 'broadcast' | 'automated'
-  audienceType: 'all' | 'tags' | 'import'; selectedTags: string[]
+  audienceType: 'all' | 'tags' | 'import' | 'phonebook'; selectedTags: string[]; selectedPhonebookId: string
   templateId: string; template: Template | null
   templateVariables: Record<string, { type: 'field' | 'static'; value: string }>
   sendNow: boolean; scheduledDate: string; scheduledTime: string
@@ -32,23 +33,29 @@ export default function NewCampaignPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [templates, setTemplates] = useState<Template[]>([])
+  const [phonebooks, setPhonebooks] = useState<Phonebook[]>([])
   const [audienceCount, setAudienceCount] = useState(0)
   
   const [state, setState] = useState<WizardState>({
-    name: '', description: '', type: 'broadcast', audienceType: 'all', selectedTags: [],
+    name: '', description: '', type: 'broadcast', audienceType: 'all', selectedTags: [], selectedPhonebookId: '',
     templateId: '', template: null, templateVariables: {},
     sendNow: true, scheduledDate: '', scheduledTime: '10:00',
   })
 
   useEffect(() => {
     fetch('/api/whatsapp/templates?status=approved').then(r => r.json()).then(d => setTemplates(d.templates || []))
+    fetch('/api/whatsapp/phonebooks').then(r => r.json()).then(d => setPhonebooks(d.phonebooks || []))
   }, [])
 
   useEffect(() => {
     if (state.audienceType === 'all') setAudienceCount(5234)
     else if (state.audienceType === 'tags' && state.selectedTags.length > 0) setAudienceCount(Math.floor(Math.random() * 2000) + 500)
+    else if (state.audienceType === 'phonebook' && state.selectedPhonebookId) {
+      const pb = phonebooks.find(p => p.id === state.selectedPhonebookId)
+      setAudienceCount(pb?.contact_count || 0)
+    }
     else setAudienceCount(0)
-  }, [state.audienceType, state.selectedTags])
+  }, [state.audienceType, state.selectedTags, state.selectedPhonebookId, phonebooks])
 
   useEffect(() => {
     if (state.template && state.template.body_variables > 0) {
@@ -64,7 +71,7 @@ export default function NewCampaignPage() {
 
   const canProceed = () => {
     if (currentStep === 1) return state.name.trim().length > 0
-    if (currentStep === 2) return state.audienceType === 'all' || state.selectedTags.length > 0
+    if (currentStep === 2) return state.audienceType === 'all' || state.selectedTags.length > 0 || (state.audienceType === 'phonebook' && state.selectedPhonebookId)
     if (currentStep === 3) return state.templateId !== ''
     if (currentStep === 4) return state.sendNow || (state.scheduledDate !== '' && state.scheduledTime !== '')
     return false
@@ -76,10 +83,14 @@ export default function NewCampaignPage() {
       const scheduled_at = state.sendNow ? null : new Date(`${state.scheduledDate}T${state.scheduledTime}`).toISOString()
       const res = await fetch('/api/whatsapp/campaigns', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId, name: state.name, description: state.description,
+        body: JSON.stringify({ 
+          organizationId, name: state.name, description: state.description,
           type: state.type, template_id: state.templateId, template_name: state.template?.name,
           template_variables: state.templateVariables, audience_type: state.audienceType,
-          audience_tags: state.selectedTags, scheduled_at })
+          audience_tags: state.selectedTags, 
+          audience_phonebook_id: state.audienceType === 'phonebook' ? state.selectedPhonebookId : null,
+          scheduled_at 
+        })
       })
       const data = await res.json()
       if (res.ok && data.campaign && state.sendNow) await fetch(`/api/whatsapp/campaigns/${data.campaign.id}/send`, { method: 'POST' })
@@ -154,13 +165,42 @@ export default function NewCampaignPage() {
             <motion.div key="s2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
               <h2 className="text-xl font-semibold text-white mb-6">Selecione a Audiência</h2>
               <div className="space-y-4">
-                <button onClick={() => updateState({ audienceType: 'all', selectedTags: [] })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'all' ? 'border-primary-500 bg-primary-500/10' : 'border-dark-700 hover:border-dark-600'}`}>
-                  <div className="flex items-center justify-between"><div className="flex items-center gap-3"><Users className={`w-5 h-5 ${state.audienceType === 'all' ? 'text-primary-400' : 'text-dark-400'}`} /><div><p className="font-medium text-white">Todos os contatos</p><p className="text-xs text-dark-400">Enviar para toda a base</p></div></div><span className="text-sm text-dark-400">~5.234</span></div></button>
-                <button onClick={() => updateState({ audienceType: 'tags' })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'tags' ? 'border-primary-500 bg-primary-500/10' : 'border-dark-700 hover:border-dark-600'}`}>
+                <button onClick={() => updateState({ audienceType: 'all', selectedTags: [], selectedPhonebookId: '' })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'all' ? 'border-primary-500 bg-primary-500/10' : 'border-dark-700 hover:border-dark-600'}`}>
+                  <div className="flex items-center justify-between"><div className="flex items-center gap-3"><Users className={`w-5 h-5 ${state.audienceType === 'all' ? 'text-primary-400' : 'text-dark-400'}`} /><div><p className="font-medium text-white">Todos os contatos</p><p className="text-xs text-dark-400">Enviar para toda a base de contatos</p></div></div><span className="text-sm text-dark-400">~5.234</span></div></button>
+                
+                <button onClick={() => updateState({ audienceType: 'tags', selectedPhonebookId: '' })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'tags' ? 'border-primary-500 bg-primary-500/10' : 'border-dark-700 hover:border-dark-600'}`}>
                   <div className="flex items-center gap-3"><Tag className={`w-5 h-5 ${state.audienceType === 'tags' ? 'text-primary-400' : 'text-dark-400'}`} /><div><p className="font-medium text-white">Filtrar por tags</p><p className="text-xs text-dark-400">Selecione tags específicas</p></div></div></button>
                 {state.audienceType === 'tags' && <div className="ml-8 p-4 bg-dark-800/50 rounded-xl"><p className="text-sm text-dark-300 mb-3">Selecione:</p><div className="flex flex-wrap gap-2">{availableTags.map(t => <button key={t} onClick={() => toggleTag(t)} className={`px-3 py-1.5 rounded-lg text-sm ${state.selectedTags.includes(t) ? 'bg-primary-500 text-white' : 'bg-dark-700 text-dark-300 hover:bg-dark-600'}`}>{t}</button>)}</div></div>}
-                <button onClick={() => updateState({ audienceType: 'import' })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'import' ? 'border-primary-500 bg-primary-500/10' : 'border-dark-700 hover:border-dark-600'}`}>
-                  <div className="flex items-center gap-3"><Upload className={`w-5 h-5 ${state.audienceType === 'import' ? 'text-primary-400' : 'text-dark-400'}`} /><div><p className="font-medium text-white">Importar lista</p><p className="text-xs text-dark-400">Carregar CSV</p></div></div></button>
+                
+                <button onClick={() => updateState({ audienceType: 'phonebook', selectedTags: [] })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'phonebook' ? 'border-primary-500 bg-primary-500/10' : 'border-dark-700 hover:border-dark-600'}`}>
+                  <div className="flex items-center gap-3"><BookUser className={`w-5 h-5 ${state.audienceType === 'phonebook' ? 'text-primary-400' : 'text-dark-400'}`} /><div><p className="font-medium text-white">Lista de contatos (Phonebook)</p><p className="text-xs text-dark-400">Usar uma lista importada</p></div></div></button>
+                {state.audienceType === 'phonebook' && (
+                  <div className="ml-8 p-4 bg-dark-800/50 rounded-xl">
+                    <p className="text-sm text-dark-300 mb-3">Selecione uma lista:</p>
+                    {phonebooks.length === 0 ? (
+                      <div className="text-center py-4">
+                        <p className="text-sm text-dark-400 mb-2">Nenhuma lista encontrada</p>
+                        <button onClick={() => router.push('/whatsapp/phonebooks')} className="text-primary-400 text-sm hover:underline">Criar lista →</button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {phonebooks.map(pb => (
+                          <button key={pb.id} onClick={() => updateState({ selectedPhonebookId: pb.id })} 
+                            className={`w-full p-3 rounded-lg text-left flex items-center justify-between ${state.selectedPhonebookId === pb.id ? 'bg-primary-500/20 border border-primary-500/30' : 'bg-dark-700/50 hover:bg-dark-700'}`}>
+                            <div className="flex items-center gap-3">
+                              <BookUser className="w-4 h-4 text-dark-400" />
+                              <span className="text-white text-sm">{pb.name}</span>
+                            </div>
+                            <span className="text-xs text-dark-400">{pb.contact_count} contatos</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <button onClick={() => updateState({ audienceType: 'import', selectedTags: [], selectedPhonebookId: '' })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'import' ? 'border-primary-500 bg-primary-500/10' : 'border-dark-700 hover:border-dark-600'}`}>
+                  <div className="flex items-center gap-3"><Upload className={`w-5 h-5 ${state.audienceType === 'import' ? 'text-primary-400' : 'text-dark-400'}`} /><div><p className="font-medium text-white">Importar CSV</p><p className="text-xs text-dark-400">Carregar arquivo para esta campanha</p></div></div></button>
               </div>
               {audienceCount > 0 && <div className="mt-6 p-4 bg-primary-500/10 border border-primary-500/20 rounded-xl"><div className="flex items-center gap-2"><Users className="w-5 h-5 text-primary-400" /><span className="text-white font-medium">{audienceCount.toLocaleString()} contatos</span></div></div>}
             </motion.div>
@@ -168,9 +208,46 @@ export default function NewCampaignPage() {
 
           {currentStep === 3 && (
             <motion.div key="s3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-              <h2 className="text-xl font-semibold text-white mb-6">Selecione o Template</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-white">Selecione o Template</h2>
+                <button 
+                  onClick={async () => {
+                    setIsLoading(true)
+                    try {
+                      const res = await fetch('/api/whatsapp/templates', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'sync' })
+                      })
+                      const data = await res.json()
+                      if (res.ok) {
+                        alert(`✅ ${data.message}`)
+                        const tRes = await fetch('/api/whatsapp/templates?status=approved')
+                        const tData = await tRes.json()
+                        setTemplates(tData.templates || [])
+                      } else {
+                        alert(`❌ ${data.error}`)
+                      }
+                    } catch (e) { console.error(e) }
+                    setIsLoading(false)
+                  }}
+                  disabled={isLoading}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-dark-300 text-sm rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  Sincronizar da Meta
+                </button>
+              </div>
               <div className="grid lg:grid-cols-2 gap-6">
-                <div className="space-y-4"><p className="text-sm text-dark-400">Templates aprovados:</p>
+                <div className="space-y-4">
+                  <p className="text-sm text-dark-400">Templates aprovados ({templates.length}):</p>
+                  {templates.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-48 text-dark-400 border border-dashed border-dark-700 rounded-xl">
+                      <FileText className="w-12 h-12 mb-3 opacity-30" />
+                      <p className="text-sm mb-2">Nenhum template encontrado</p>
+                      <p className="text-xs text-dark-500">Clique em "Sincronizar da Meta" para importar</p>
+                    </div>
+                  ) : (
                   <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
                     {templates.map(t => (
                       <button key={t.id} onClick={() => selectTemplate(t)} className={`w-full p-4 rounded-xl border-2 text-left ${state.templateId === t.id ? 'border-primary-500 bg-primary-500/10' : 'border-dark-700 hover:border-dark-600'}`}>
@@ -178,7 +255,9 @@ export default function NewCampaignPage() {
                         <p className="text-xs text-dark-400 mt-2 line-clamp-2">{t.body_text}</p>
                       </button>
                     ))}
-                  </div></div>
+                  </div>
+                  )}
+                </div>
                 <div><p className="text-sm text-dark-400 mb-4">Preview:</p>{state.template ? <div className="space-y-4">{renderPreview()}
                   {state.template.body_variables > 0 && <div className="mt-4 p-4 bg-dark-800/50 rounded-xl"><p className="text-sm font-medium text-dark-300 mb-3">Variáveis:</p><div className="space-y-3">
                     {Object.keys(state.templateVariables).map(k => (
