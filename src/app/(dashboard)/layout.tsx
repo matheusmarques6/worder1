@@ -66,6 +66,7 @@ const InboxIcon = () => (
 
 import { useStoreStore, useAuthStore, type ShopifyStore } from '@/stores'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
+import { UserMenu } from '@/components/layout/UserMenu'
 
 // Worder Logo Component
 const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
@@ -505,7 +506,6 @@ export default function DashboardLayout({
               <Menu className="w-5 h-5" />
             </button>
             <WorderLogo size="sm" />
-            <span className="font-semibold text-white">Worder</span>
           </div>
           <div className="flex items-center gap-2">
             <button className="p-2 rounded-lg bg-dark-800/50 text-dark-400 hover:text-white transition-colors relative">
@@ -516,6 +516,7 @@ export default function DashboardLayout({
                 </span>
               )}
             </button>
+            <UserMenu />
           </div>
         </div>
       </div>
@@ -591,15 +592,7 @@ export default function DashboardLayout({
               )}
             </button>
             <div className="w-px h-8 bg-dark-800" />
-            <button className="flex items-center gap-3 p-1.5 pr-4 rounded-xl hover:bg-dark-800/50 transition-all">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                <span className="text-white font-semibold text-sm">JD</span>
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-medium text-white">João Demo</p>
-                <p className="text-xs text-dark-400">Admin</p>
-              </div>
-            </button>
+            <UserMenu />
           </div>
         </header>
 

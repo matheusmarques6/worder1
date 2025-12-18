@@ -41,6 +41,16 @@ export async function GET(request: NextRequest) {
 
 // PATCH - Atualizar perfil do usuário
 export async function PATCH(request: NextRequest) {
+  return handleProfileUpdate(request);
+}
+
+// PUT - Atualizar perfil do usuário (alias para PATCH)
+export async function PUT(request: NextRequest) {
+  return handleProfileUpdate(request);
+}
+
+// Função interna para atualizar perfil
+async function handleProfileUpdate(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
     
@@ -51,7 +61,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, first_name, last_name, avatar_url } = body;
+    const { name, first_name, last_name, avatar_url, phone } = body;
 
     // Preparar dados para atualização
     const updateData: Record<string, any> = {
@@ -66,6 +76,7 @@ export async function PATCH(request: NextRequest) {
     if (first_name !== undefined) updateData.first_name = first_name;
     if (last_name !== undefined) updateData.last_name = last_name;
     if (avatar_url !== undefined) updateData.avatar_url = avatar_url;
+    if (phone !== undefined) updateData.phone = phone;
 
     // Atualizar perfil
     const { data: profile, error: profileError } = await supabase
@@ -81,14 +92,13 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Atualizar user_metadata no Auth
-    if (name) {
-      await supabase.auth.updateUser({
-        data: {
-          ...user.user_metadata,
-          name,
-        }
-      });
-    }
+    const newMetadata: Record<string, any> = { ...user.user_metadata };
+    if (name) newMetadata.name = name;
+    if (phone) newMetadata.phone = phone;
+
+    await supabase.auth.updateUser({
+      data: newMetadata
+    });
 
     // Se é um agente, atualizar também na tabela agents
     if (user.user_metadata?.is_agent && user.user_metadata?.agent_id) {
@@ -107,7 +117,7 @@ export async function PATCH(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Profile PATCH error:', error);
+    console.error('Profile update error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
