@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+import { getSupabaseClient } from '@/lib/api-utils'
 
-async function getOrgId(supabase: any) {
+async function getOrgIdFromSession(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const { data } = await supabase
@@ -15,14 +16,35 @@ async function getOrgId(supabase: any) {
 
 // GET - Lista números de WhatsApp
 export async function GET(request: NextRequest) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const orgId = await getOrgId(supabase)
-    
-    if (!orgId) {
+  // Primeiro tenta pegar organization_id da query string
+  const orgIdFromQuery = request.nextUrl.searchParams.get('organization_id') || 
+                          request.nextUrl.searchParams.get('organizationId')
+  
+  let supabase: any
+  let orgId: string | null = null
+
+  if (orgIdFromQuery) {
+    // Usar client direto se organization_id foi fornecido
+    supabase = getSupabaseClient()
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+    }
+    orgId = orgIdFromQuery
+  } else {
+    // Fallback para autenticação por sessão
+    try {
+      supabase = createRouteHandlerClient({ cookies })
+      orgId = await getOrgIdFromSession(supabase)
+    } catch {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+  }
+  
+  if (!orgId) {
+    return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+  }
 
+  try {
     // Parâmetros
     const includeStats = request.nextUrl.searchParams.get('include_stats') === 'true'
     const connectedOnly = request.nextUrl.searchParams.get('connected_only') === 'true'
@@ -115,7 +137,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const orgId = await getOrgId(supabase)
+    const orgId = await getOrgIdFromSession(supabase)
     
     if (!orgId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -215,7 +237,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const orgId = await getOrgId(supabase)
+    const orgId = await getOrgIdFromSession(supabase)
     
     if (!orgId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -281,7 +303,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const orgId = await getOrgId(supabase)
+    const orgId = await getOrgIdFromSession(supabase)
     
     if (!orgId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
