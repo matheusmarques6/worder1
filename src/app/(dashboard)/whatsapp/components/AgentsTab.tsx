@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
@@ -30,8 +30,12 @@ import {
   CheckCircle,
   AlertCircle,
   Key,
+  Copy,
+  Check,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
+import { validatePassword, passwordsMatch, generateStrongPassword } from '@/lib/password-validation'
+import { PasswordStrengthIndicator, PasswordMatchIndicator } from '@/components/ui/PasswordStrength'
 
 // Types
 interface Agent {
@@ -577,14 +581,25 @@ function CreateAgentModal({
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [successData, setSuccessData] = useState<{ password?: string; message?: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   // Human form
   const [humanForm, setHumanForm] = useState({
     name: '',
     email: '',
     password: '',
+    passwordConfirmation: '',
     showPassword: false,
+    generatePassword: true, // Default to auto-generate
   })
+
+  // Password validation
+  const passwordValidation = useMemo(() => validatePassword(humanForm.password), [humanForm.password])
+  const passwordsDoMatch = useMemo(
+    () => passwordsMatch(humanForm.password, humanForm.passwordConfirmation),
+    [humanForm.password, humanForm.passwordConfirmation]
+  )
 
   // AI form
   const [aiForm, setAiForm] = useState({
@@ -597,6 +612,14 @@ function CreateAgentModal({
     transfer_keywords: 'atendente, humano, pessoa',
   })
 
+  const handleCopyPassword = () => {
+    if (successData?.password) {
+      navigator.clipboard.writeText(successData.password)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
   const handleCreateHuman = async () => {
     if (!humanForm.name || !humanForm.email) {
       setError('Preencha todos os campos obrigatórios')
@@ -606,6 +629,24 @@ function CreateAgentModal({
     if (humanAgentsCount >= 3) {
       setError('Limite de 3 agentes humanos atingido')
       return
+    }
+
+    // Se não está gerando automaticamente, validar a senha
+    if (!humanForm.generatePassword) {
+      if (!humanForm.password) {
+        setError('Senha é obrigatória')
+        return
+      }
+      
+      if (!passwordValidation.isValid) {
+        setError('Senha não atende aos requisitos mínimos')
+        return
+      }
+
+      if (!passwordsDoMatch) {
+        setError('As senhas não coincidem')
+        return
+      }
     }
 
     setLoading(true)
@@ -620,7 +661,8 @@ function CreateAgentModal({
           type: 'human',
           name: humanForm.name,
           email: humanForm.email,
-          password: humanForm.password || undefined,
+          password: humanForm.generatePassword ? undefined : humanForm.password,
+          force_password_change: true,
         }),
       })
 
@@ -630,7 +672,15 @@ function CreateAgentModal({
         throw new Error(data.error || 'Erro ao criar agente')
       }
 
-      onSuccess()
+      // Se a senha foi gerada, mostrar modal de sucesso com a senha
+      if (data.password_generated && data.temporary_password) {
+        setSuccessData({
+          password: data.temporary_password,
+          message: 'Agente criado com sucesso! Copie a senha temporária abaixo:',
+        })
+      } else {
+        onSuccess()
+      }
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -694,6 +744,84 @@ function CreateAgentModal({
     acc[model.provider].push(model)
     return acc
   }, {} as Record<string, AIModel[]>)
+
+  // Se temos dados de sucesso com senha temporária, mostrar tela de sucesso
+  if (successData) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        onClick={onSuccess}
+      >
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          onClick={(e) => e.stopPropagation()}
+          className="bg-dark-800 rounded-2xl w-full max-w-md border border-dark-700/50 overflow-hidden"
+        >
+          <div className="p-6">
+            {/* Success Icon */}
+            <div className="w-16 h-16 mx-auto rounded-full bg-green-500/20 flex items-center justify-center mb-4">
+              <CheckCircle className="w-8 h-8 text-green-400" />
+            </div>
+
+            <h2 className="text-xl font-semibold text-white text-center mb-2">
+              Agente Criado!
+            </h2>
+            <p className="text-dark-400 text-center text-sm mb-6">
+              {successData.message}
+            </p>
+
+            {/* Password Display */}
+            <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-dark-400">Senha Temporária</span>
+                <button
+                  onClick={handleCopyPassword}
+                  className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3 h-3" />
+                      Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      Copiar
+                    </>
+                  )}
+                </button>
+              </div>
+              <code className="block text-lg font-mono text-white bg-dark-800 rounded-lg p-3 text-center select-all">
+                {successData.password}
+              </code>
+            </div>
+
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 mb-6">
+              <div className="flex gap-2">
+                <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+                <div className="text-xs text-yellow-200">
+                  <strong>Importante:</strong> Anote esta senha agora. Ela não será mostrada novamente.
+                  O agente será solicitado a trocar a senha no primeiro acesso.
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={onSuccess}
+              className="w-full py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-medium transition-colors"
+            >
+              Entendi, fechar
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div
@@ -813,24 +941,94 @@ function CreateAgentModal({
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">Senha inicial</label>
-                <div className="relative">
-                  <input
-                    type={humanForm.showPassword ? 'text' : 'password'}
-                    value={humanForm.password}
-                    onChange={(e) => setHumanForm({ ...humanForm, password: e.target.value })}
-                    placeholder="Deixe vazio para gerar"
-                    className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 pr-10"
-                  />
+              {/* Password Options */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-dark-300">Senha</label>
+                
+                {/* Toggle: Generate or Custom */}
+                <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setHumanForm({ ...humanForm, showPassword: !humanForm.showPassword })}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white"
+                    onClick={() => setHumanForm({ ...humanForm, generatePassword: true, password: '', passwordConfirmation: '' })}
+                    className={`flex-1 py-2 px-3 rounded-xl text-sm transition-all ${
+                      humanForm.generatePassword
+                        ? 'bg-primary-500/20 border-primary-500 text-primary-400 border'
+                        : 'bg-dark-900/50 border-dark-700/50 text-dark-400 border hover:border-dark-600'
+                    }`}
                   >
-                    {humanForm.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    <Sparkles className="w-3.5 h-3.5 inline mr-1.5" />
+                    Gerar Automaticamente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHumanForm({ ...humanForm, generatePassword: false })}
+                    className={`flex-1 py-2 px-3 rounded-xl text-sm transition-all ${
+                      !humanForm.generatePassword
+                        ? 'bg-primary-500/20 border-primary-500 text-primary-400 border'
+                        : 'bg-dark-900/50 border-dark-700/50 text-dark-400 border hover:border-dark-600'
+                    }`}
+                  >
+                    <Key className="w-3.5 h-3.5 inline mr-1.5" />
+                    Definir Manualmente
                   </button>
                 </div>
+
+                {humanForm.generatePassword ? (
+                  <div className="bg-dark-900/30 border border-dark-700/30 rounded-xl p-3">
+                    <div className="flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-primary-400 flex-shrink-0 mt-0.5" />
+                      <div className="text-xs text-dark-400">
+                        Uma senha forte será gerada automaticamente e exibida após a criação.
+                        O agente será solicitado a trocar a senha no primeiro acesso.
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Password Input */}
+                    <div>
+                      <div className="relative">
+                        <input
+                          type={humanForm.showPassword ? 'text' : 'password'}
+                          value={humanForm.password}
+                          onChange={(e) => setHumanForm({ ...humanForm, password: e.target.value })}
+                          placeholder="Digite a senha"
+                          className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setHumanForm({ ...humanForm, showPassword: !humanForm.showPassword })}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white"
+                        >
+                          {humanForm.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      
+                      {/* Password Strength Indicator */}
+                      <PasswordStrengthIndicator password={humanForm.password} showRules={true} />
+                    </div>
+
+                    {/* Confirm Password */}
+                    {humanForm.password && passwordValidation.isValid && (
+                      <div>
+                        <label className="block text-sm font-medium text-dark-300 mb-2">Confirmar Senha *</label>
+                        <div className="relative">
+                          <input
+                            type={humanForm.showPassword ? 'text' : 'password'}
+                            value={humanForm.passwordConfirmation}
+                            onChange={(e) => setHumanForm({ ...humanForm, passwordConfirmation: e.target.value })}
+                            placeholder="Repita a senha"
+                            className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50"
+                          />
+                        </div>
+                        <PasswordMatchIndicator 
+                          password={humanForm.password} 
+                          confirmation={humanForm.passwordConfirmation} 
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {error && (
@@ -841,7 +1039,7 @@ function CreateAgentModal({
 
               <button
                 onClick={handleCreateHuman}
-                disabled={loading || !humanForm.name || !humanForm.email}
+                disabled={loading || !humanForm.name || !humanForm.email || (!humanForm.generatePassword && (!passwordValidation.isValid || !passwordsDoMatch))}
                 className="w-full py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-600 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}

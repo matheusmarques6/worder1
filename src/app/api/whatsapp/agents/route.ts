@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 
@@ -19,6 +20,66 @@ const supabase = new Proxy({} as SupabaseClient, {
   }
 });
 
+// Admin client para criar usuários (usa service role key)
+function getAdminClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!url || !serviceKey) return null;
+  
+  return createClient(url, serviceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    }
+  });
+}
+
+// Validação de senha forte
+function validatePassword(password: string): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  
+  if (password.length < 8) {
+    errors.push('Senha deve ter no mínimo 8 caracteres');
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Senha deve conter pelo menos uma letra maiúscula');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('Senha deve conter pelo menos uma letra minúscula');
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('Senha deve conter pelo menos um número');
+  }
+  if (!/[!@#$%^&*(),.?":{}|<>\-_=+\[\]\\;'/`~]/.test(password)) {
+    errors.push('Senha deve conter pelo menos um caractere especial');
+  }
+  
+  return { valid: errors.length === 0, errors };
+}
+
+// Gerar senha forte aleatória
+function generateStrongPassword(length: number = 12): string {
+  const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+  const numbers = '0123456789';
+  const special = '!@#$%^&*()_+-=';
+  
+  const allChars = uppercase + lowercase + numbers + special;
+  
+  let password = '';
+  password += uppercase[Math.floor(Math.random() * uppercase.length)];
+  password += lowercase[Math.floor(Math.random() * lowercase.length)];
+  password += numbers[Math.floor(Math.random() * numbers.length)];
+  password += special[Math.floor(Math.random() * special.length)];
+  
+  for (let i = password.length; i < length; i++) {
+    password += allChars[Math.floor(Math.random() * allChars.length)];
+  }
+  
+  return password.split('').sort(() => Math.random() - 0.5).join('');
+}
+
 // GET - Lista agentes
 export async function GET(request: NextRequest) {
   try {
@@ -36,7 +97,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const includeStats = searchParams.get('include_stats') === 'true';
-    const typeFilter = searchParams.get('type'); // 'human' | 'ai' | null
+    const typeFilter = searchParams.get('type');
 
     // Primeiro tenta a nova tabela 'agents'
     let { data, error } = await supabase
@@ -60,7 +121,7 @@ export async function GET(request: NextRequest) {
       if (data) {
         data = data.map((agent: any) => ({
           ...agent,
-          type: agent.type || 'human', // Default para human se não tiver type
+          type: agent.type || 'human',
           status: agent.is_available ? 'online' : 'offline',
           total_conversations: agent.conversations_count || 0,
           total_messages: agent.messages_count || 0,
@@ -77,17 +138,17 @@ export async function GET(request: NextRequest) {
       agents = agents.filter((a: any) => a.type === typeFilter);
     }
 
-    // Adicionar stats se solicitado
+    // Incluir estatísticas se solicitado
     if (includeStats) {
       for (const agent of agents) {
-        // Tenta nova tabela primeiro
+        // Tentar nova tabela chat_assignments
         let { count: active } = await supabase
           .from('chat_assignments')
           .select('*', { count: 'exact', head: true })
           .eq('agent_id', agent.id)
           .eq('status', 'active');
 
-        // Se não encontrou, tenta tabela antiga
+        // Se não existe, tenta antiga
         if (active === null) {
           const result = await supabase
             .from('whatsapp_agent_assignments')
@@ -146,13 +207,11 @@ export async function POST(request: NextRequest) {
       if (!conversation_id) return NextResponse.json({ error: 'conversation_id required' }, { status: 400 });
 
       if (!agent_id) {
-        // Remover atribuição
         await supabase.from('whatsapp_agent_assignments').delete().eq('conversation_id', conversation_id);
         await supabase.from('whatsapp_conversations').update({ assigned_agent_id: null }).eq('id', conversation_id);
         return NextResponse.json({ success: true, message: 'Assignment removed' });
       }
 
-      // Verificar agente (tenta nova tabela, depois antiga)
       let { data: agent }: { data: any } = await supabase
         .from('agents')
         .select('id, type')
@@ -174,7 +233,6 @@ export async function POST(request: NextRequest) {
 
       if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
 
-      // Criar/atualizar atribuição
       await supabase.from('whatsapp_agent_assignments').upsert({
         organization_id: orgId,
         agent_id,
@@ -196,139 +254,317 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    // Criar agente
-    const { name, email, role = 'agent', ai_config, password } = body;
+    // =====================================================
+    // CRIAR AGENTE
+    // =====================================================
+    const { 
+      name, 
+      email, 
+      password,
+      role = 'agent', 
+      ai_config,
+      permissions,
+      send_welcome_email = false,
+      force_password_change = true,
+    } = body;
     const agentType = type || 'human';
 
-    if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    }
 
-    // Validações específicas por tipo
+    // =====================================================
+    // CRIAR AGENTE HUMANO
+    // =====================================================
     if (agentType === 'human') {
-      if (!email) return NextResponse.json({ error: 'email is required for human agents' }, { status: 400 });
+      if (!email) {
+        return NextResponse.json({ error: 'email is required for human agents' }, { status: 400 });
+      }
 
       // Verificar limite de 3 agentes humanos
-      const { count: humanCount } = await supabase
+      let humanCount = 0;
+      const { count } = await supabase
         .from('agents')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', orgId)
         .eq('type', 'human');
+      
+      humanCount = count || 0;
 
       // Se a tabela não existe, verificar na antiga
-      if (humanCount === null) {
-        const { count } = await supabase
+      if (count === null) {
+        const { count: oldCount } = await supabase
           .from('whatsapp_agents')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', orgId);
-        
-        if (count && count >= 3) {
-          return NextResponse.json({ error: 'Limite de 3 agentes humanos atingido' }, { status: 400 });
-        }
-      } else if (humanCount >= 3) {
+        humanCount = oldCount || 0;
+      }
+
+      if (humanCount >= 3) {
         return NextResponse.json({ error: 'Limite de 3 agentes humanos atingido' }, { status: 400 });
       }
 
-      // Verificar se email já existe
-      const { data: existing } = await supabase
+      // Verificar se email já existe na organização
+      const { data: existingAgent } = await supabase
         .from('agents')
         .select('id')
         .eq('organization_id', orgId)
         .eq('email', email)
         .single();
 
-      if (!existing) {
-        const { data: existingOld } = await supabase
-          .from('whatsapp_agents')
-          .select('id')
-          .eq('organization_id', orgId)
-          .eq('email', email)
-          .single();
-        
-        if (existingOld) {
-          return NextResponse.json({ error: 'Um agente com este email já existe' }, { status: 409 });
-        }
-      } else {
+      if (existingAgent) {
         return NextResponse.json({ error: 'Um agente com este email já existe' }, { status: 409 });
       }
-    }
 
-    if (agentType === 'ai') {
-      if (!ai_config || !ai_config.model) {
-        return NextResponse.json({ error: 'ai_config with model is required for AI agents' }, { status: 400 });
+      // Gerar ou validar senha
+      let finalPassword = password;
+      let passwordGenerated = false;
+
+      if (!finalPassword) {
+        finalPassword = generateStrongPassword(12);
+        passwordGenerated = true;
+      } else {
+        // Validar força da senha
+        const passwordValidation = validatePassword(finalPassword);
+        if (!passwordValidation.valid) {
+          return NextResponse.json({ 
+            error: 'Senha fraca', 
+            details: passwordValidation.errors 
+          }, { status: 400 });
+        }
       }
-    }
 
-    // Inserir na nova tabela agents
-    const insertData: any = {
-      organization_id: orgId,
-      type: agentType,
-      name,
-      email: email || null,
-      is_active: true,
-      status: agentType === 'ai' ? 'online' : 'offline',
-      total_conversations: 0,
-      total_messages: 0,
-    };
+      // Criar usuário no Supabase Auth
+      const adminClient = getAdminClient();
+      if (!adminClient) {
+        return NextResponse.json({ 
+          error: 'Configuração do servidor incompleta. SUPABASE_SERVICE_ROLE_KEY não definida.' 
+        }, { status: 500 });
+      }
 
-    if (agentType === 'ai' && ai_config) {
-      insertData.ai_config = ai_config;
-    }
+      // Verificar se usuário já existe no Auth
+      const { data: existingAuthUsers } = await adminClient.auth.admin.listUsers();
+      const existingAuthUser = existingAuthUsers?.users?.find(u => u.email === email);
 
-    let { data, error } = await supabase
-      .from('agents')
-      .insert(insertData)
-      .select()
-      .single();
+      let authUserId: string;
 
-    // Se a nova tabela não existe, usa a antiga
-    if (error && error.code === '42P01') {
-      const result = await supabase
-        .from('whatsapp_agents')
-        .insert({
-          organization_id: orgId,
-          name,
+      if (existingAuthUser) {
+        // Usuário já existe no Auth - verificar se pertence a outra organização
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('organization_id')
+          .eq('id', existingAuthUser.id)
+          .single();
+
+        if (existingProfile && existingProfile.organization_id !== orgId) {
+          return NextResponse.json({ 
+            error: 'Este email já está registrado em outra organização' 
+          }, { status: 409 });
+        }
+
+        authUserId = existingAuthUser.id;
+      } else {
+        // Criar novo usuário no Auth
+        const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
           email,
-          role,
-          is_active: true,
-          is_available: agentType === 'ai',
-        })
+          password: finalPassword,
+          email_confirm: true, // Já confirma o email
+          user_metadata: {
+            name,
+            role: 'agent',
+            organization_id: orgId,
+          }
+        });
+
+        if (authError) {
+          console.error('Error creating auth user:', authError);
+          return NextResponse.json({ 
+            error: `Erro ao criar usuário: ${authError.message}` 
+          }, { status: 500 });
+        }
+
+        authUserId = authData.user.id;
+
+        // Criar perfil
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: authUserId,
+            email,
+            first_name: name.split(' ')[0],
+            last_name: name.split(' ').slice(1).join(' ') || '',
+            organization_id: orgId,
+            role: 'agent',
+            must_change_password: force_password_change,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+          // Tentar deletar o usuário criado no Auth
+          await adminClient.auth.admin.deleteUser(authUserId);
+          return NextResponse.json({ 
+            error: `Erro ao criar perfil: ${profileError.message}` 
+          }, { status: 500 });
+        }
+      }
+
+      // Criar agente vinculado ao usuário
+      const agentData = {
+        organization_id: orgId,
+        user_id: authUserId,
+        type: 'human',
+        name,
+        email,
+        is_active: true,
+        status: 'offline',
+        total_conversations: 0,
+        total_messages: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      let { data: agent, error: agentError } = await supabase
+        .from('agents')
+        .insert(agentData)
         .select()
         .single();
-      
-      data = result.data;
-      error = result.error;
-    }
 
-    if (error) throw error;
+      // Se a tabela agents não existe, usar a antiga
+      if (agentError && agentError.code === '42P01') {
+        const result = await supabase
+          .from('whatsapp_agents')
+          .insert({
+            organization_id: orgId,
+            user_id: authUserId,
+            name,
+            email,
+            role,
+            is_active: true,
+            is_available: false,
+          })
+          .select()
+          .single();
+        
+        agent = result.data;
+        agentError = result.error;
+      }
 
-    // Se for agente humano, criar permissões padrão
-    if (agentType === 'human' && data) {
-      await supabase.from('agent_permissions').insert({
-        agent_id: data.id,
+      if (agentError) {
+        console.error('Error creating agent:', agentError);
+        // Cleanup: deletar usuário criado
+        if (!existingAuthUser) {
+          await adminClient.auth.admin.deleteUser(authUserId);
+        }
+        return NextResponse.json({ error: agentError.message }, { status: 500 });
+      }
+
+      // Criar permissões
+      const permissionsData = {
+        agent_id: agent.id,
         access_level: role === 'admin' ? 'admin' : 'agent',
-        whatsapp_access_all: false,
-        pipeline_access_all: false,
-      }).single();
+        whatsapp_access_all: permissions?.whatsapp_access_all || false,
+        whatsapp_number_ids: permissions?.whatsapp_number_ids || [],
+        can_send_messages: permissions?.can_send_messages !== false,
+        can_transfer_chats: permissions?.can_transfer_chats !== false,
+        pipeline_access_all: permissions?.pipeline_access_all || false,
+        pipeline_ids: permissions?.pipeline_ids || [],
+        can_edit_pipeline: permissions?.can_edit_pipeline || false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      await supabase.from('agent_permissions').upsert(permissionsData, { onConflict: 'agent_id' });
+
+      // TODO: Enviar email de boas-vindas se send_welcome_email = true
+      // Isso seria feito com um serviço de email como Resend, SendGrid, etc.
+
+      return NextResponse.json({ 
+        agent,
+        password_generated: passwordGenerated,
+        temporary_password: passwordGenerated ? finalPassword : undefined,
+        message: passwordGenerated 
+          ? 'Agente criado com senha temporária. Anote a senha pois ela não será mostrada novamente.'
+          : 'Agente criado com sucesso.'
+      }, { status: 201 });
     }
 
-    // Se for agente IA, criar configuração
-    if (agentType === 'ai' && data && ai_config) {
-      await supabase.from('ai_agent_configs').insert({
-        agent_id: data.id,
-        provider: ai_config.provider || 'openai',
-        model: ai_config.model,
-        temperature: ai_config.temperature || 0.3,
-        max_tokens: ai_config.max_tokens || 500,
-        system_prompt: ai_config.system_prompt || '',
-        greeting_message: ai_config.greeting_message || '',
-        transfer_keywords: ai_config.transfer_keywords || ['atendente', 'humano', 'pessoa'],
-        transfer_to_queue: ai_config.transfer_to_queue !== false,
-        use_whatsapp: true,
-        always_active: false,
-        only_when_no_human: true,
-      }).single();
+    // =====================================================
+    // CRIAR AGENTE IA
+    // =====================================================
+    if (agentType === 'ai') {
+      if (!ai_config || !ai_config.model) {
+        return NextResponse.json({ 
+          error: 'ai_config with model is required for AI agents' 
+        }, { status: 400 });
+      }
+
+      const agentData = {
+        organization_id: orgId,
+        type: 'ai',
+        name,
+        email: null,
+        is_active: true,
+        status: 'online', // IA está sempre online
+        ai_config,
+        total_conversations: 0,
+        total_messages: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      let { data: agent, error: agentError } = await supabase
+        .from('agents')
+        .insert(agentData)
+        .select()
+        .single();
+
+      // Se a tabela agents não existe, usar a antiga
+      if (agentError && agentError.code === '42P01') {
+        const result = await supabase
+          .from('whatsapp_agents')
+          .insert({
+            organization_id: orgId,
+            name,
+            type: 'ai',
+            is_active: true,
+            is_available: true,
+          })
+          .select()
+          .single();
+        
+        agent = result.data;
+        agentError = result.error;
+      }
+
+      if (agentError) throw agentError;
+
+      // Criar configuração de IA
+      if (agent) {
+        await supabase.from('ai_agent_configs').upsert({
+          agent_id: agent.id,
+          provider: ai_config.provider || 'openai',
+          model: ai_config.model,
+          temperature: ai_config.temperature || 0.3,
+          max_tokens: ai_config.max_tokens || 500,
+          system_prompt: ai_config.system_prompt || '',
+          greeting_message: ai_config.greeting_message || '',
+          transfer_keywords: ai_config.transfer_keywords || ['atendente', 'humano', 'pessoa'],
+          transfer_to_queue: ai_config.transfer_to_queue !== false,
+          use_whatsapp: true,
+          always_active: false,
+          only_when_no_human: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'agent_id' });
+      }
+
+      return NextResponse.json({ agent }, { status: 201 });
     }
 
-    return NextResponse.json({ agent: data }, { status: 201 });
+    return NextResponse.json({ error: 'Invalid agent type' }, { status: 400 });
+
   } catch (error: any) {
     console.error('Error creating agent:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -351,14 +587,15 @@ export async function PATCH(request: NextRequest) {
     if (!id) return NextResponse.json({ error: 'Agent ID required' }, { status: 400 });
     if (!orgId) return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
 
-    const allowed = ['name', 'email', 'role', 'is_active', 'is_available', 'max_concurrent_chats', 'status'];
+    const allowed = ['name', 'email', 'role', 'is_active', 'is_available', 'max_concurrent_chats', 'status', 'avatar_url'];
     const filtered: any = {};
     allowed.forEach(f => { if (f in updateData) filtered[f] = updateData[f]; });
+    filtered.updated_at = new Date().toISOString();
 
     // Tentar nova tabela primeiro
     let { data, error } = await supabase
       .from('agents')
-      .update({ ...filtered, updated_at: new Date().toISOString() })
+      .update(filtered)
       .eq('id', id)
       .eq('organization_id', orgId)
       .select()
@@ -368,7 +605,7 @@ export async function PATCH(request: NextRequest) {
     if (error && error.code === '42P01') {
       const result = await supabase
         .from('whatsapp_agents')
-        .update({ ...filtered, updated_at: new Date().toISOString() })
+        .update(filtered)
         .eq('id', id)
         .eq('organization_id', orgId)
         .select()
@@ -379,6 +616,16 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (error) throw error;
+
+    // Atualizar permissões se fornecidas
+    if (updateData.permissions && data) {
+      await supabase.from('agent_permissions').upsert({
+        agent_id: data.id,
+        ...updateData.permissions,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'agent_id' });
+    }
+
     return NextResponse.json({ agent: data });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -403,18 +650,44 @@ export async function DELETE(request: NextRequest) {
 
     // Verificar chats ativos
     const { count } = await supabase
-      .from('whatsapp_agent_assignments')
+      .from('chat_assignments')
       .select('*', { count: 'exact', head: true })
       .eq('agent_id', id)
       .eq('status', 'active');
 
-    if (count && count > 0) {
-      return NextResponse.json({ error: 'Agente possui chats ativos. Transfira ou finalize antes de excluir.' }, { status: 400 });
+    // Verificar também na tabela antiga
+    if (count === null) {
+      const { count: oldCount } = await supabase
+        .from('whatsapp_agent_assignments')
+        .select('*', { count: 'exact', head: true })
+        .eq('agent_id', id)
+        .eq('status', 'active');
+
+      if (oldCount && oldCount > 0) {
+        return NextResponse.json({ 
+          error: 'Agente possui chats ativos. Transfira ou finalize antes de excluir.' 
+        }, { status: 400 });
+      }
+    } else if (count > 0) {
+      return NextResponse.json({ 
+        error: 'Agente possui chats ativos. Transfira ou finalize antes de excluir.' 
+      }, { status: 400 });
     }
 
+    // Buscar agente para pegar user_id
+    const { data: agent } = await supabase
+      .from('agents')
+      .select('user_id, type')
+      .eq('id', id)
+      .eq('organization_id', orgId)
+      .single();
+
     // Deletar atribuições e referências
+    await supabase.from('chat_assignments').delete().eq('agent_id', id);
     await supabase.from('whatsapp_agent_assignments').delete().eq('agent_id', id);
     await supabase.from('whatsapp_conversations').update({ assigned_agent_id: null }).eq('assigned_agent_id', id);
+    await supabase.from('agent_permissions').delete().eq('agent_id', id);
+    await supabase.from('ai_agent_configs').delete().eq('agent_id', id);
     
     // Tentar deletar da nova tabela
     let { error } = await supabase
@@ -434,6 +707,23 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (error) throw error;
+
+    // Se era agente humano com user_id, deletar também do Auth e profiles
+    if (agent?.user_id && agent.type === 'human') {
+      const adminClient = getAdminClient();
+      if (adminClient) {
+        // Deletar perfil
+        await supabase.from('profiles').delete().eq('id', agent.user_id);
+        
+        // Deletar usuário do Auth
+        try {
+          await adminClient.auth.admin.deleteUser(agent.user_id);
+        } catch (e) {
+          console.warn('Could not delete auth user:', e);
+        }
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
