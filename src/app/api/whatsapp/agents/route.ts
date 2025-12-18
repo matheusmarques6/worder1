@@ -371,8 +371,9 @@ export async function POST(request: NextRequest) {
           email_confirm: true, // Já confirma o email
           user_metadata: {
             name,
-            role: 'agent',
+            role: 'agent', // Metadata pode ter qualquer valor
             organization_id: orgId,
+            is_agent: true,
           }
         });
 
@@ -385,8 +386,9 @@ export async function POST(request: NextRequest) {
 
         authUserId = authData.user.id;
 
-        // Criar perfil
-        const { error: profileError } = await supabase
+        // Criar perfil - tentar com 'agent', se falhar usar 'member'
+        let profileRole = 'agent';
+        let { error: profileError } = await supabase
           .from('profiles')
           .upsert({
             id: authUserId,
@@ -394,11 +396,31 @@ export async function POST(request: NextRequest) {
             first_name: name.split(' ')[0],
             last_name: name.split(' ').slice(1).join(' ') || '',
             organization_id: orgId,
-            role: 'agent',
+            role: profileRole,
             must_change_password: force_password_change,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
+
+        // Se falhou com erro de enum, tentar com 'member'
+        if (profileError && profileError.message.includes('enum')) {
+          console.log('Trying with member role instead of agent');
+          profileRole = 'member';
+          const retryResult = await supabase
+            .from('profiles')
+            .upsert({
+              id: authUserId,
+              email,
+              first_name: name.split(' ')[0],
+              last_name: name.split(' ').slice(1).join(' ') || '',
+              organization_id: orgId,
+              role: profileRole,
+              must_change_password: force_password_change,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'id' });
+          profileError = retryResult.error;
+        }
 
         if (profileError) {
           console.error('Error creating profile:', profileError);
