@@ -29,6 +29,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
+import WhatsAppIntegrationCard from '@/components/whatsapp/WhatsAppIntegrationCard'
 
 // Types
 interface IntegrationCategory {
@@ -496,6 +497,30 @@ export default function IntegrationsPage() {
           </div>
         </div>
       </div>
+
+      {/* Native Integrations - WhatsApp */}
+      {user?.organization_id && !search && !selectedCategory && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <MessageSquare className="w-5 h-5 text-green-400" />
+            <h2 className="text-lg font-semibold text-white">Mensagens</h2>
+            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded-full">
+              Nativo
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <WhatsAppIntegrationCard organizationId={user.organization_id} />
+          </div>
+        </div>
+      )}
+
+      {/* Other Integrations */}
+      {!search && !selectedCategory && integrations.length > 0 && (
+        <div className="flex items-center gap-2 mb-4">
+          <Puzzle className="w-5 h-5 text-primary-400" />
+          <h2 className="text-lg font-semibold text-white">Outras Integrações</h2>
+        </div>
+      )}
 
       {/* Loading */}
       {loading ? (
