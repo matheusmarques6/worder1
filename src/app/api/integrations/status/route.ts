@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     const tiktokAccount = tiktokAccounts && tiktokAccounts.length > 0 ? tiktokAccounts[0] : null;
 
     // Check WhatsApp - verificar tanto whatsapp_configs quanto whatsapp_accounts
-    let whatsappConfig = null;
+    let whatsappConfig: { id: any; phone_number: any; phone_number_id?: any; business_name?: any; is_active: any; created_at: any } | null = null;
     try {
       const { data: whatsappConfigs } = await supabase
         .from('whatsapp_configs')
