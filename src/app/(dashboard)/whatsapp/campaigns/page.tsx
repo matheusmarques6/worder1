@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { useAuthStore } from '@/stores'
 import {
   Plus, Search, RefreshCw, MoreVertical, Play, Pause, Copy, Trash2,
   Calendar, Users, Send, CheckCircle, Eye, MessageSquare, Clock,
@@ -41,6 +42,9 @@ const statusConfig: Record<string, { label: string; color: string; icon: any }> 
 
 export default function CampaignsPage() {
   const router = useRouter()
+  const { user } = useAuthStore()
+  const organizationId = user?.organization_id || ''
+  
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -49,9 +53,10 @@ export default function CampaignsPage() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
 
   const fetchCampaigns = async () => {
+    if (!organizationId) return
     setIsLoading(true)
     try {
-      const params = new URLSearchParams({ organizationId: 'org-placeholder' })
+      const params = new URLSearchParams({ organizationId })
       if (statusFilter !== 'all') params.append('status', statusFilter)
       if (search) params.append('search', search)
       const res = await fetch(`/api/whatsapp/campaigns?${params}`)
@@ -65,7 +70,7 @@ export default function CampaignsPage() {
     }
   }
 
-  useEffect(() => { fetchCampaigns() }, [statusFilter])
+  useEffect(() => { if (organizationId) fetchCampaigns() }, [statusFilter, organizationId])
 
   const handleAction = async (action: string, campaignId: string) => {
     setOpenDropdown(null)

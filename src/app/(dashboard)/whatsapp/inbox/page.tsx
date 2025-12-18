@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useAuthStore } from '@/stores'
 import {
   Search,
   Filter,
@@ -27,8 +28,8 @@ import { useInboxContact } from '@/hooks/useInboxContact'
 import type { InboxConversation, ConversationFilters } from '@/types/inbox'
 
 export default function InboxPage() {
-  // TODO: Pegar do contexto de autenticação
-  const organizationId = 'org-placeholder'
+  const { user } = useAuthStore()
+  const organizationId = user?.organization_id || ''
   
   // Hooks
   const {

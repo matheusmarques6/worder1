@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useAuthStore } from '@/stores'
 import {
   Search,
   RefreshCw,
@@ -201,6 +202,10 @@ function DateSeparator({ date }: { date: string }) {
 }
 
 export default function WhatsAppPage() {
+  // Auth
+  const { user } = useAuthStore()
+  const organizationId = user?.organization_id || ''
+
   // State
   const [conversations, setConversations] = useState<InboxConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<InboxConversation | null>(null)
@@ -231,10 +236,9 @@ export default function WhatsAppPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const organizationId = 'org-placeholder'
-
   // Fetch conversations
   const fetchConversations = async () => {
+    if (!organizationId) return
     setConversationsLoading(true)
     try {
       const params = new URLSearchParams({ organizationId })
@@ -424,7 +428,7 @@ export default function WhatsAppPage() {
   }
 
   // Effects
-  useEffect(() => { fetchConversations() }, [statusFilter])
+  useEffect(() => { if (organizationId) fetchConversations() }, [statusFilter, organizationId])
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
   useEffect(() => {
     if (inputRef.current) {

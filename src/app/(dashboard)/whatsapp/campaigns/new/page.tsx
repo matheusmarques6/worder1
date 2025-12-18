@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useAuthStore } from '@/stores'
 import { ArrowLeft, ArrowRight, Check, Loader2, Send, Calendar, Users, FileText, Clock, Tag, Upload, MessageSquare, Sparkles } from 'lucide-react'
 
 interface Template { id: string; name: string; category: string; body_text: string; body_variables: number; buttons: any[] }
@@ -24,6 +25,9 @@ const availableTags = ['Cliente VIP', 'Lead Quente', 'Comprou 2024', 'Newsletter
 
 export default function NewCampaignPage() {
   const router = useRouter()
+  const { user } = useAuthStore()
+  const organizationId = user?.organization_id || ''
+  
   const [currentStep, setCurrentStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -72,7 +76,7 @@ export default function NewCampaignPage() {
       const scheduled_at = state.sendNow ? null : new Date(`${state.scheduledDate}T${state.scheduledTime}`).toISOString()
       const res = await fetch('/api/whatsapp/campaigns', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId: 'org-placeholder', name: state.name, description: state.description,
+        body: JSON.stringify({ organizationId, name: state.name, description: state.description,
           type: state.type, template_id: state.templateId, template_name: state.template?.name,
           template_variables: state.templateVariables, audience_type: state.audienceType,
           audience_tags: state.selectedTags, scheduled_at })
