@@ -1,0 +1,24 @@
+{
+  "name": "worder-whatsapp-worker",
+  "version": "1.0.0",
+  "description": "WhatsApp Campaign Worker for Worder",
+  "main": "dist/campaign-worker.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/campaign-worker.js",
+    "dev": "npx ts-node --project tsconfig.json campaign-worker.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "@upstash/redis": "^1.27.0",
+    "@upstash/ratelimit": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
