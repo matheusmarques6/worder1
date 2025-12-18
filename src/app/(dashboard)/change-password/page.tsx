@@ -13,7 +13,7 @@ import {
   ArrowLeft,
 } from 'lucide-react'
 import Link from 'next/link'
-import { PasswordStrength } from '@/components/ui/PasswordStrength'
+import { PasswordStrengthIndicator } from '@/components/ui/PasswordStrength'
 
 export default function ChangePasswordPage() {
   const router = useRouter()
@@ -192,7 +192,7 @@ export default function ChangePasswordPage() {
               </div>
               {formData.newPassword && (
                 <div className="mt-2">
-                  <PasswordStrength password={formData.newPassword} />
+                  <PasswordStrengthIndicator password={formData.newPassword} />
                 </div>
               )}
             </div>
