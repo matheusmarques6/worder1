@@ -58,14 +58,7 @@ interface RunDetail {
     name: string;
     phone?: string;
   } | null;
-  deal: {
-    id: string;
-    title: string;
-    value: number;
-    status: string;
-    pipeline: string;
-    stage: string;
-  } | null;
+  deal_id: string | null;
   total_steps: number;
   completed_steps: number;
   failed_steps: number;
@@ -307,23 +300,19 @@ export function ExecutionDetail({
                   </div>
                 )}
 
-                {/* Deal */}
-                {run.deal && (
+                {/* Deal ID */}
+                {run.deal_id && (
                   <div className="flex items-center gap-3 p-3 bg-dark-900/50 rounded-xl">
                     <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
                       <Briefcase className="w-5 h-5 text-blue-400" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-white truncate">
-                        {run.deal.title}
+                        Deal vinculado
                       </p>
-                      <div className="flex items-center gap-2 text-xs text-dark-400">
-                        <span>R$ {run.deal.value.toLocaleString('pt-BR')}</span>
-                        <span>•</span>
-                        <span>{run.deal.pipeline}</span>
-                        <span>→</span>
-                        <span className="text-blue-400">{run.deal.stage}</span>
-                      </div>
+                      <p className="text-xs text-dark-400">
+                        ID: {run.deal_id}
+                      </p>
                     </div>
                   </div>
                 )}

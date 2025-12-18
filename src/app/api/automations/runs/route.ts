@@ -53,8 +53,7 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         automations(name),
-        contacts(id, email, first_name, last_name),
-        deals(id, title, value)
+        contacts(id, email, first_name, last_name)
       `, { count: 'exact' })
       .eq('organization_id', organizationId)
       .order('started_at', { ascending: false });
@@ -107,11 +106,7 @@ export async function GET(request: NextRequest) {
         email: run.contacts.email,
         name: `${run.contacts.first_name || ''} ${run.contacts.last_name || ''}`.trim() || run.contacts.email
       } : null,
-      deal: run.deals ? {
-        id: run.deals.id,
-        title: run.deals.title,
-        value: run.deals.value
-      } : null,
+      deal_id: run.deal_id,
       total_steps: run.total_steps,
       completed_steps: run.completed_steps,
       failed_steps: run.failed_steps,
@@ -153,8 +148,7 @@ async function getRunDetail(
     .select(`
       *,
       automations(name, trigger_type),
-      contacts(id, email, first_name, last_name, phone),
-      deals(id, title, value, status, pipeline:pipelines(name), stage:pipeline_stages(name))
+      contacts(id, email, first_name, last_name, phone)
     `)
     .eq('id', runId)
     .eq('organization_id', organizationId)
@@ -206,14 +200,7 @@ async function getRunDetail(
         name: `${run.contacts.first_name || ''} ${run.contacts.last_name || ''}`.trim() || run.contacts.email,
         phone: run.contacts.phone
       } : null,
-      deal: run.deals ? {
-        id: run.deals.id,
-        title: run.deals.title,
-        value: run.deals.value,
-        status: run.deals.status,
-        pipeline: run.deals.pipeline?.name,
-        stage: run.deals.stage?.name
-      } : null,
+      deal_id: run.deal_id,
       total_steps: run.total_steps,
       completed_steps: run.completed_steps,
       failed_steps: run.failed_steps,

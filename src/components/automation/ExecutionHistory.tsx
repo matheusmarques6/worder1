@@ -36,11 +36,7 @@ interface AutomationRun {
     email: string;
     name: string;
   } | null;
-  deal: {
-    id: string;
-    title: string;
-    value: number;
-  } | null;
+  deal_id: string | null;
   total_steps: number;
   completed_steps: number;
   failed_steps: number;
