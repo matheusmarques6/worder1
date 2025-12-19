@@ -6,95 +6,93 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET /api/whatsapp/inbox/contacts/[id]
+// GET - Buscar contato
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const contactId = params.id
 
     const { data: contact, error } = await supabase
       .from('whatsapp_contacts')
       .select('*')
-      .eq('id', id)
+      .eq('id', contactId)
       .single()
 
     if (error) throw error
 
-    if (!contact) {
-      return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
-    }
-
-    // Buscar conversas do contato
-    const { data: conversations } = await supabase
-      .from('whatsapp_conversations')
-      .select('id, status, created_at, last_message_at')
-      .eq('contact_id', id)
-      .order('created_at', { ascending: false })
-      .limit(5)
-
-    // Buscar atividades recentes
-    const { data: activities } = await supabase
-      .from('whatsapp_contact_activities')
-      .select('*')
-      .eq('contact_id', id)
-      .order('created_at', { ascending: false })
-      .limit(10)
-
-    // Buscar notas
+    // Buscar notas do contato
     const { data: notes } = await supabase
       .from('whatsapp_contact_notes')
       .select('*')
-      .eq('contact_id', id)
+      .eq('contact_id', contactId)
       .order('created_at', { ascending: false })
 
-    return NextResponse.json({
-      contact,
-      conversations: conversations || [],
-      activities: activities || [],
-      notes: notes || []
-    })
+    // Contar mensagens
+    const { count: messagesReceived } = await supabase
+      .from('whatsapp_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('contact_id', contactId)
+      .eq('direction', 'inbound')
 
-  } catch (error) {
+    const { count: messagesSent } = await supabase
+      .from('whatsapp_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('contact_id', contactId)
+      .eq('direction', 'outbound')
+
+    const formattedContact = {
+      id: contact.id,
+      organization_id: contact.organization_id,
+      phone_number: contact.phone_number,
+      name: contact.name || contact.profile_name,
+      email: contact.email,
+      profile_picture_url: contact.profile_picture_url,
+      address: contact.address || {},
+      tags: contact.tags || [],
+      total_orders: contact.total_orders || 0,
+      total_spent: contact.total_spent || 0,
+      is_blocked: contact.is_blocked || false,
+      total_messages_received: messagesReceived || 0,
+      total_messages_sent: messagesSent || 0,
+      created_at: contact.created_at,
+    }
+
+    return NextResponse.json({ 
+      contact: formattedContact,
+      notes: notes || [],
+    })
+  } catch (error: any) {
     console.error('Error fetching contact:', error)
-    return NextResponse.json({ error: 'Failed to fetch contact' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
-// PUT /api/whatsapp/inbox/contacts/[id]
-export async function PUT(
+// PATCH - Atualizar contato
+export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const contactId = params.id
     const body = await request.json()
-    const { name, email, address, customFields, tags } = body
-
-    const updates: any = {
-      updated_at: new Date().toISOString()
-    }
-
-    if (name !== undefined) updates.name = name
-    if (email !== undefined) updates.email = email
-    if (address !== undefined) updates.address = address
-    if (customFields !== undefined) updates.custom_fields = customFields
-    if (tags !== undefined) updates.tags = tags
 
     const { data, error } = await supabase
       .from('whatsapp_contacts')
-      .update(updates)
-      .eq('id', id)
-      .select('*')
+      .update({
+        ...body,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', contactId)
+      .select()
       .single()
 
     if (error) throw error
 
     return NextResponse.json({ contact: data })
-
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating contact:', error)
-    return NextResponse.json({ error: 'Failed to update contact' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

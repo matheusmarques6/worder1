@@ -6,182 +6,150 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET /api/whatsapp/inbox/conversations/[id]/messages
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host'
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11'
+
+// GET - Buscar mensagens
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
-    const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const before = searchParams.get('before') // cursor para paginação
-    const offset = (page - 1) * limit
+    const conversationId = params.id
 
-    let query = supabase
+    const { data, error } = await supabase
       .from('whatsapp_messages')
-      .select('*', { count: 'exact' })
-      .eq('conversation_id', id)
-      .eq('is_deleted', false)
-      .order('created_at', { ascending: false })
-
-    if (before) {
-      query = query.lt('created_at', before)
-    }
-
-    query = query.range(offset, offset + limit - 1)
-
-    const { data, error, count } = await query
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
 
     if (error) throw error
 
-    // Inverter para ordem cronológica na resposta
-    const messages = data?.reverse() || []
+    // Marcar conversa como lida
+    await supabase
+      .from('whatsapp_conversations')
+      .update({ unread_count: 0 })
+      .eq('id', conversationId)
 
-    return NextResponse.json({
-      messages,
-      pagination: {
-        page,
-        limit,
-        total: count || 0,
-        hasMore: (count || 0) > offset + limit
-      }
-    })
+    const messages = (data || []).map(msg => ({
+      id: msg.id,
+      conversation_id: msg.conversation_id,
+      direction: msg.direction,
+      message_type: msg.message_type || 'text',
+      content: msg.content,
+      media_url: msg.media_url,
+      media_filename: msg.metadata?.fileName,
+      status: msg.status || 'sent',
+      sent_by_bot: msg.metadata?.ai_generated || false,
+      created_at: msg.created_at,
+    }))
 
-  } catch (error) {
+    return NextResponse.json({ messages })
+  } catch (error: any) {
     console.error('Error fetching messages:', error)
-    return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
-// POST /api/whatsapp/inbox/conversations/[id]/messages
+// POST - Enviar mensagem
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const conversationId = params.id
     const body = await request.json()
-    const { 
-      content, 
-      messageType = 'text', 
-      mediaUrl, 
-      mediaMimeType,
-      mediaFilename,
-      templateId,
-      templateName,
-      templateVariables,
-      replyToMessageId,
-      sentByUserId,
-      sentByUserName,
-      sentByBot = false
-    } = body
+    const { content, message_type = 'text' } = body
 
-    // Busca dados da conversa
-    const { data: conversation, error: convError } = await supabase
+    if (!content) {
+      return NextResponse.json({ error: 'content required' }, { status: 400 })
+    }
+
+    // Buscar conversa e instância
+    const { data: conversation } = await supabase
       .from('whatsapp_conversations')
-      .select('*, contact:whatsapp_contacts(phone_number)')
-      .eq('id', id)
+      .select('*, contact:whatsapp_contacts(*)')
+      .eq('id', conversationId)
       .single()
 
-    if (convError || !conversation) {
+    if (!conversation) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
-    // Se tem reply, busca a mensagem citada
-    let quotedMessage = null
-    if (replyToMessageId) {
-      const { data: replyMsg } = await supabase
-        .from('whatsapp_messages')
-        .select('id, content, message_type, direction')
-        .eq('id', replyToMessageId)
-        .single()
-      
-      if (replyMsg) {
-        quotedMessage = replyMsg
-      }
-    }
-
-    // Cria mensagem no banco
-    const { data: messageData, error: msgError } = await supabase
-      .from('whatsapp_messages')
-      .insert({
-        conversation_id: id,
-        contact_id: conversation.contact_id,
-        direction: 'outbound',
-        message_type: messageType,
-        content: content,
-        media_url: mediaUrl,
-        media_mime_type: mediaMimeType,
-        media_filename: mediaFilename,
-        template_id: templateId,
-        template_name: templateName,
-        template_variables: templateVariables,
-        reply_to_message_id: replyToMessageId,
-        quoted_message: quotedMessage,
-        status: 'pending',
-        sent_by_user_id: sentByUserId,
-        sent_by_user_name: sentByUserName,
-        sent_by_bot: sentByBot,
-        created_at: new Date().toISOString()
-      })
+    // Buscar instância ativa
+    const { data: instance } = await supabase
+      .from('whatsapp_instances')
       .select('*')
+      .eq('organization_id', conversation.organization_id)
+      .eq('status', 'connected')
       .single()
 
-    if (msgError) throw msgError
-    
-    const message = messageData as any
+    if (!instance) {
+      return NextResponse.json({ error: 'No connected WhatsApp instance' }, { status: 400 })
+    }
 
-    // TODO: Aqui deve chamar a API da Meta para enviar a mensagem
-    // e atualizar o status para 'sent' com o meta_message_id
+    // Enviar via Evolution API
+    const apiUrl = instance.api_url || EVOLUTION_API_URL
+    const apiKey = instance.api_key || EVOLUTION_API_KEY
 
-    // Por enquanto, simula o envio
-    await supabase
+    const sendResponse = await fetch(`${apiUrl}/message/sendText/${instance.unique_id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': apiKey,
+      },
+      body: JSON.stringify({
+        number: conversation.phone_number,
+        text: content,
+      }),
+    })
+
+    const sendData = await sendResponse.json()
+
+    // Salvar mensagem no banco
+    const { data: savedMessage, error: saveError } = await supabase
       .from('whatsapp_messages')
-      .update({ 
-        status: 'sent',
-        sent_at: new Date().toISOString()
+      .insert({
+        organization_id: conversation.organization_id,
+        conversation_id: conversationId,
+        contact_id: conversation.contact_id,
+        direction: 'outbound',
+        message_type,
+        content,
+        status: sendResponse.ok ? 'sent' : 'failed',
+        wamid: sendData?.key?.id,
+        wa_message_id: sendData?.key?.id,
+        metadata: { evolution_response: sendData },
       })
-      .eq('id', message.id)
+      .select()
+      .single()
 
-    // Atualiza a conversa
+    if (saveError) throw saveError
+
+    // Atualizar conversa
     await supabase
       .from('whatsapp_conversations')
       .update({
         last_message_at: new Date().toISOString(),
-        last_message_preview: content?.substring(0, 100) || `[${messageType}]`,
-        last_message_type: messageType,
-        last_message_direction: 'outbound',
-        total_messages: (conversation.total_messages || 0) + 1,
-        // Reabre se estava fechada
-        status: conversation.status === 'closed' ? 'open' : conversation.status
+        last_message_preview: content.substring(0, 100),
       })
-      .eq('id', id)
+      .eq('id', conversationId)
 
-    // Retornar mensagem com status atualizado
-    const responseMessage = {
-      id: message.id,
-      conversation_id: message.conversation_id,
-      contact_id: message.contact_id,
-      direction: message.direction,
-      message_type: message.message_type,
-      content: message.content,
-      media_url: message.media_url,
-      media_mime_type: message.media_mime_type,
-      media_filename: message.media_filename,
-      status: 'sent',
-      sent_by_user_id: message.sent_by_user_id,
-      sent_by_user_name: message.sent_by_user_name,
-      sent_by_bot: message.sent_by_bot,
-      created_at: message.created_at,
-      sent_at: new Date().toISOString()
-    }
-
-    return NextResponse.json({ message: responseMessage })
-
-  } catch (error) {
+    return NextResponse.json({ 
+      message: {
+        id: savedMessage.id,
+        conversation_id: savedMessage.conversation_id,
+        direction: savedMessage.direction,
+        message_type: savedMessage.message_type,
+        content: savedMessage.content,
+        status: savedMessage.status,
+        sent_by_bot: false,
+        created_at: savedMessage.created_at,
+      },
+      success: sendResponse.ok,
+    })
+  } catch (error: any) {
     console.error('Error sending message:', error)
-    return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
