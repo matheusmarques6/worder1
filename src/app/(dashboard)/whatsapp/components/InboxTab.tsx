@@ -266,6 +266,16 @@ export default function InboxTab() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  
+  // Ref para manter valor atual das mensagens (evita problema de closure)
+  const messagesRef = useRef<InboxMessage[]>([])
+  const conversationsRef = useRef<InboxConversation[]>([])
+  const selectedConvRef = useRef<InboxConversation | null>(null)
+  
+  // Sincronizar refs com state
+  useEffect(() => { messagesRef.current = messages }, [messages])
+  useEffect(() => { conversationsRef.current = conversations }, [conversations])
+  useEffect(() => { selectedConvRef.current = selectedConversation }, [selectedConversation])
 
   // Fetch conversations
   const fetchConversations = async (silent?: boolean | React.MouseEvent) => {
@@ -282,9 +292,12 @@ export default function InboxTab() {
       const res = await fetch(`/api/whatsapp/inbox/conversations?${params}`)
       const data = await res.json()
       
+      // Usar ref para pegar valor atual da conversa selecionada
+      const currentSelected = selectedConvRef.current
+      
       // Atualizar conversas mas preservar unread_count=0 da conversa selecionada
       const updatedConversations = (data.conversations || []).map((conv: InboxConversation) => {
-        if (selectedConversation && conv.id === selectedConversation.id) {
+        if (currentSelected && conv.id === currentSelected.id) {
           return { ...conv, unread_count: 0 }
         }
         return conv
@@ -300,17 +313,20 @@ export default function InboxTab() {
   // Fetch messages - silencioso se já tem mensagens
   const fetchMessages = async (conversationId: string, silent = false) => {
     // Só mostra loading na primeira carga
-    if (!silent && messages.length === 0) setMessagesLoading(true)
+    const currentMessages = messagesRef.current
+    if (!silent && currentMessages.length === 0) setMessagesLoading(true)
     try {
       const res = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}/messages`)
       const data = await res.json()
       const newMessages = data.messages || []
       
-      // Atualiza se quantidade diferente ou último ID diferente
+      // Usar ref para comparação (sempre tem valor atual)
       const lastNewId = newMessages[newMessages.length - 1]?.id
-      const lastCurrentId = messages[messages.length - 1]?.id
+      const lastCurrentId = currentMessages[currentMessages.length - 1]?.id
       
-      if (newMessages.length !== messages.length || lastNewId !== lastCurrentId) {
+      // Atualiza se quantidade diferente ou último ID diferente
+      if (newMessages.length !== currentMessages.length || lastNewId !== lastCurrentId) {
+        console.log('[Polling] Novas mensagens detectadas:', newMessages.length, 'vs', currentMessages.length)
         setMessages(newMessages)
       }
     } catch (error) {
@@ -532,19 +548,30 @@ export default function InboxTab() {
   // Polling para conversas (a cada 5 segundos) - silencioso
   useEffect(() => {
     if (!organizationId) return
+    console.log('[Polling] Iniciando polling de conversas')
     const interval = setInterval(() => {
       fetchConversations(true) // silent = true
     }, 5000)
-    return () => clearInterval(interval)
-  }, [organizationId, statusFilter, selectedConversation?.id])
+    return () => {
+      console.log('[Polling] Parando polling de conversas')
+      clearInterval(interval)
+    }
+  }, [organizationId, statusFilter])
 
   // Polling para mensagens (a cada 2 segundos quando há conversa selecionada)
   useEffect(() => {
-    if (!selectedConversation) return
+    if (!selectedConversation) {
+      console.log('[Polling] Sem conversa selecionada, polling de mensagens desativado')
+      return
+    }
+    console.log('[Polling] Iniciando polling de mensagens para:', selectedConversation.id)
     const interval = setInterval(() => {
       fetchMessages(selectedConversation.id, true) // silent = true
     }, 2000)
-    return () => clearInterval(interval)
+    return () => {
+      console.log('[Polling] Parando polling de mensagens')
+      clearInterval(interval)
+    }
   }, [selectedConversation?.id])
   useEffect(() => {
     if (inputRef.current) {
