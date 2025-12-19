@@ -17,10 +17,11 @@ const authRoutes = ['/', '/signup', '/login'];
 
 // Routes allowed for agents
 const agentAllowedRoutes = [
-  '/inbox',
-  '/agent',
+  '/whatsapp',
+  '/crm',
   '/profile',
   '/change-password',
+  '/help',
 ];
 
 // API routes allowed for agents
@@ -221,17 +222,17 @@ export async function middleware(request: NextRequest) {
         
         // Agent trying to access admin-only route
         if (isAdminOnlyRoute(pathname)) {
-          return NextResponse.redirect(new URL('/inbox', request.url));
+          return NextResponse.redirect(new URL('/whatsapp', request.url));
         }
         
         // Agent accessing root or non-allowed route
         if (pathname === '/' || pathname === '/dashboard') {
-          return NextResponse.redirect(new URL('/inbox', request.url));
+          return NextResponse.redirect(new URL('/whatsapp', request.url));
         }
         
         // Check if route is allowed for agents
         if (!pathname.startsWith('/api/') && !isAgentAllowedRoute(pathname)) {
-          return NextResponse.redirect(new URL('/inbox', request.url));
+          return NextResponse.redirect(new URL('/whatsapp', request.url));
         }
       } else {
         // Owner/Admin accessing root - redirect to dashboard

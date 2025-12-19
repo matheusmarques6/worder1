@@ -83,11 +83,11 @@ const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
 };
 
 // Navigation items with access control
-// permission: 'always' = sempre mostra, 'admin' = só admin, ou nome da permissão
+// permission: 'always' = sempre mostra, 'admin' = só admin, ou nome da permissão específica
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, permission: 'admin' },
   { name: 'CRM', href: '/crm', icon: Users, permission: 'canAccessCrmOrPipelines' },
-  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, permission: 'admin' },
+  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, permission: 'canAccessWhatsApp' },
   { name: 'Automações', href: '/automations', icon: Zap, permission: 'admin' },
   { name: 'Integrações', href: '/integrations', icon: Puzzle, permission: 'admin' },
 ]
@@ -134,16 +134,25 @@ export default function DashboardLayout({
   const hasPermission = (item: { permission?: string }) => {
     if (!item.permission) return true
     if (item.permission === 'always') return true
-    if (item.permission === 'admin') return !isAgent // Admin tem, agente não
     
-    // Verificar permissão específica
+    // Admin sempre tem acesso
     if (isAdmin) return true
-    if (!isAgent) return true
+    if (!isAgent) return true // Se não é agente, é dono/admin
+    
+    // Agente - verificar permissão específica
+    if (item.permission === 'admin') return false // Agente nunca acessa itens admin
+    
     if (!permissions) return false
     
     // Caso especial: CRM ou Pipelines
     if (item.permission === 'canAccessCrmOrPipelines') {
       return (permissions as any).canAccessCrm === true || (permissions as any).canAccessPipelines === true
+    }
+    
+    // Caso especial: WhatsApp (agente sempre pode se tiver acesso a algum número)
+    if (item.permission === 'canAccessWhatsApp') {
+      return (permissions as any).whatsappAccessAll === true || 
+             ((permissions as any).whatsappNumberIds && (permissions as any).whatsappNumberIds.length > 0)
     }
     
     return (permissions as any)[item.permission] === true
@@ -271,16 +280,17 @@ export default function DashboardLayout({
     if (!canAccess) {
       return (
         <div
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-dark-600 cursor-not-allowed opacity-50"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-dark-600 cursor-not-allowed"
+          title="Sem permissão de acesso"
         >
-          <Icon className="w-5 h-5 flex-shrink-0" />
+          <Icon className="w-5 h-5 flex-shrink-0 opacity-50" />
           <AnimatePresence mode="wait">
             {!collapsed && (
               <motion.span
                 initial={{ opacity: 0, width: 0 }}
                 animate={{ opacity: 1, width: 'auto' }}
                 exit={{ opacity: 0, width: 0 }}
-                className="font-medium whitespace-nowrap overflow-hidden"
+                className="font-medium whitespace-nowrap overflow-hidden opacity-50"
               >
                 {item.name}
               </motion.span>
@@ -328,7 +338,7 @@ export default function DashboardLayout({
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="p-4 border-b border-dark-800/50">
-        <Link href={isAgent ? "/inbox" : "/dashboard"} className="flex flex-col gap-0.5">
+        <Link href={isAgent ? "/whatsapp" : "/dashboard"} className="flex flex-col gap-0.5">
           <WorderLogo size={collapsed ? 'sm' : 'md'} />
           <AnimatePresence mode="wait">
             {!collapsed && (
