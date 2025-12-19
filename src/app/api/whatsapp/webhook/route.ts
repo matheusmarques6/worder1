@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import OpenAI from 'openai'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -245,17 +244,8 @@ async function generateAndSendAIResponse(
       return
     }
 
-    // Chamar API da OpenAI
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-    
-    const completion = await openai.chat.completions.create({
-      model: agent.model || 'gpt-4o-mini',
-      messages: messages,
-      temperature: agent.temperature || 0.7,
-      max_tokens: agent.max_tokens || 500,
-    })
-
-    const aiResponse = completion.choices[0]?.message?.content
+    // Chamar API de IA (suporta múltiplos providers)
+    const aiResponse = await callAIProvider(agent, messages)
 
     if (!aiResponse) return
 
@@ -317,5 +307,115 @@ async function generateAndSendAIResponse(
 
   } catch (error) {
     console.error('AI Response error:', error)
+  }
+}
+
+// Função para chamar diferentes providers de IA
+async function callAIProvider(agent: any, messages: any[]): Promise<string | null> {
+  const provider = agent.provider || 'openai'
+  const apiKey = agent.api_key
+
+  if (!apiKey) {
+    console.error('No API key configured for agent')
+    return null
+  }
+
+  try {
+    switch (provider) {
+      case 'openai': {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: agent.model || 'gpt-4o-mini',
+            messages: messages,
+            temperature: agent.temperature || 0.7,
+            max_tokens: agent.max_tokens || 500,
+          }),
+        })
+        const data = await response.json()
+        return data.choices?.[0]?.message?.content || null
+      }
+
+      case 'anthropic': {
+        // Converter mensagens para formato Anthropic
+        const systemPrompt = messages.find(m => m.role === 'system')?.content || ''
+        const chatMessages = messages.filter(m => m.role !== 'system')
+        
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: agent.model || 'claude-3-haiku-20240307',
+            max_tokens: agent.max_tokens || 500,
+            system: systemPrompt,
+            messages: chatMessages,
+          }),
+        })
+        const data = await response.json()
+        return data.content?.[0]?.text || null
+      }
+
+      case 'groq': {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: agent.model || 'llama-3.1-8b-instant',
+            messages: messages,
+            temperature: agent.temperature || 0.7,
+            max_tokens: agent.max_tokens || 500,
+          }),
+        })
+        const data = await response.json()
+        return data.choices?.[0]?.message?.content || null
+      }
+
+      case 'google': {
+        // Google Gemini
+        const systemPrompt = messages.find(m => m.role === 'system')?.content || ''
+        const chatMessages = messages.filter(m => m.role !== 'system')
+        
+        const contents = chatMessages.map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        }))
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${agent.model || 'gemini-1.5-flash'}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents: contents,
+              generationConfig: {
+                temperature: agent.temperature || 0.7,
+                maxOutputTokens: agent.max_tokens || 500,
+              },
+            }),
+          }
+        )
+        const data = await response.json()
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || null
+      }
+
+      default:
+        console.error('Unknown provider:', provider)
+        return null
+    }
+  } catch (error) {
+    console.error('AI Provider error:', error)
+    return null
   }
 }
