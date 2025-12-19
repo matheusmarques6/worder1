@@ -266,16 +266,6 @@ export default function InboxTab() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  
-  // Ref para manter valor atual das mensagens (evita problema de closure)
-  const messagesRef = useRef<InboxMessage[]>([])
-  const conversationsRef = useRef<InboxConversation[]>([])
-  const selectedConvRef = useRef<InboxConversation | null>(null)
-  
-  // Sincronizar refs com state
-  useEffect(() => { messagesRef.current = messages }, [messages])
-  useEffect(() => { conversationsRef.current = conversations }, [conversations])
-  useEffect(() => { selectedConvRef.current = selectedConversation }, [selectedConversation])
 
   // Fetch conversations
   const fetchConversations = async (silent?: boolean | React.MouseEvent) => {
@@ -292,17 +282,8 @@ export default function InboxTab() {
       const res = await fetch(`/api/whatsapp/inbox/conversations?${params}`)
       const data = await res.json()
       
-      // Usar ref para pegar valor atual da conversa selecionada
-      const currentSelected = selectedConvRef.current
-      
-      // Atualizar conversas mas preservar unread_count=0 da conversa selecionada
-      const updatedConversations = (data.conversations || []).map((conv: InboxConversation) => {
-        if (currentSelected && conv.id === currentSelected.id) {
-          return { ...conv, unread_count: 0 }
-        }
-        return conv
-      })
-      setConversations(updatedConversations)
+      // Simplesmente atualizar conversas
+      setConversations(data.conversations || [])
     } catch (error) {
       console.error('Error fetching conversations:', error)
     } finally {
@@ -310,29 +291,25 @@ export default function InboxTab() {
     }
   }
 
-  // Fetch messages - silencioso se já tem mensagens
+  // Fetch messages - SEMPRE atualiza para garantir tempo real
   const fetchMessages = async (conversationId: string, silent = false) => {
-    // Só mostra loading na primeira carga
-    const currentMessages = messagesRef.current
-    if (!silent && currentMessages.length === 0) setMessagesLoading(true)
+    if (!silent) setMessagesLoading(true)
     try {
+      console.log('[fetchMessages] Buscando para:', conversationId)
       const res = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}/messages`)
       const data = await res.json()
+      console.log('[fetchMessages] Resposta:', JSON.stringify(data).substring(0, 200))
+      
       const newMessages = data.messages || []
+      console.log('[fetchMessages] Total mensagens:', newMessages.length)
       
-      // Usar ref para comparação (sempre tem valor atual)
-      const lastNewId = newMessages[newMessages.length - 1]?.id
-      const lastCurrentId = currentMessages[currentMessages.length - 1]?.id
-      
-      // Atualiza se quantidade diferente ou último ID diferente
-      if (newMessages.length !== currentMessages.length || lastNewId !== lastCurrentId) {
-        console.log('[Polling] Novas mensagens detectadas:', newMessages.length, 'vs', currentMessages.length)
-        setMessages(newMessages)
-      }
+      // Força atualização criando novo array
+      setMessages([...newMessages])
+      console.log('[fetchMessages] setMessages executado')
     } catch (error) {
-      console.error('Error fetching messages:', error)
+      console.error('[fetchMessages] ERRO:', error)
     } finally {
-      setMessagesLoading(false)
+      if (!silent) setMessagesLoading(false)
     }
   }
 
@@ -507,8 +484,13 @@ export default function InboxTab() {
 
   // Select conversation
   const handleSelectConversation = (conv: InboxConversation) => {
+    console.log('[handleSelect] Selecionando conversa:', conv.id)
+    
     // Se é a mesma conversa, não faz nada
-    if (selectedConversation?.id === conv.id) return
+    if (selectedConversation?.id === conv.id) {
+      console.log('[handleSelect] Mesma conversa, ignorando')
+      return
+    }
     
     // Zerar unread_count localmente imediatamente
     const updatedConv = { ...conv, unread_count: 0 }
@@ -519,8 +501,8 @@ export default function InboxTab() {
       c.id === conv.id ? { ...c, unread_count: 0 } : c
     ))
     
-    // Limpar dados antigos apenas se mudar de conversa
-    setMessages([])
+    // NÃO limpar mensagens - deixar o polling atualizar
+    console.log('[handleSelect] Limpando dados e carregando novos')
     setContact(null)
     setNotes([])
     setDeals([])
@@ -529,8 +511,10 @@ export default function InboxTab() {
     
     setMobileView('chat')
     
-    // Carregar novos dados (primeira carga, então mostra loading)
+    // Carregar mensagens com loading
+    console.log('[handleSelect] Chamando fetchMessages')
     fetchMessages(conv.id, false)
+    
     if (conv.contact_id) {
       fetchContact(conv.contact_id, false)
       fetchOrders(conv.contact_id)
@@ -561,15 +545,24 @@ export default function InboxTab() {
   // Polling para mensagens (a cada 2 segundos quando há conversa selecionada)
   useEffect(() => {
     if (!selectedConversation) {
-      console.log('[Polling] Sem conversa selecionada, polling de mensagens desativado')
+      console.log('[Polling] Sem conversa selecionada')
       return
     }
-    console.log('[Polling] Iniciando polling de mensagens para:', selectedConversation.id)
+    
+    const convId = selectedConversation.id
+    console.log('[Polling] Iniciando polling para conversa:', convId)
+    
+    // Buscar imediatamente
+    fetchMessages(convId, true)
+    
+    // E depois a cada 2 segundos
     const interval = setInterval(() => {
-      fetchMessages(selectedConversation.id, true) // silent = true
+      console.log('[Polling] Tick - buscando mensagens...')
+      fetchMessages(convId, true)
     }, 2000)
+    
     return () => {
-      console.log('[Polling] Parando polling de mensagens')
+      console.log('[Polling] Limpando interval')
       clearInterval(interval)
     }
   }, [selectedConversation?.id])
@@ -592,6 +585,8 @@ export default function InboxTab() {
       groupedMessages[groupedMessages.length - 1].messages.push(msg)
     }
   })
+  
+  console.log('[RENDER] groupedMessages:', groupedMessages.length, 'grupos')
 
   const contactName = selectedConversation?.contact_name || formatPhone(selectedConversation?.phone_number)
   const activeDeal = deals.find(d => d.status === 'open')
@@ -606,6 +601,9 @@ export default function InboxTab() {
     { id: 'orders', label: 'Pedidos' },
     { id: 'notes', label: 'Notas' },
   ]
+
+  // Debug: log do render
+  console.log('[RENDER] messages.length:', messages.length, 'selectedConversation:', selectedConversation?.id)
 
   return (
     <div className="h-[calc(100vh-80px)] flex bg-dark-900/50 rounded-2xl border border-dark-700/50 overflow-hidden">
@@ -736,6 +734,7 @@ export default function InboxTab() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {console.log('[RENDER AREA] messagesLoading:', messagesLoading, 'messages.length:', messages.length, 'groupedMessages.length:', groupedMessages.length)}
               {messagesLoading ? (
                 <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 text-primary-400 animate-spin" /></div>
               ) : messages.length === 0 ? (
