@@ -379,9 +379,6 @@ export default function DashboardLayout({
             </nav>
           </div>
         )}
-            </nav>
-          </div>
-        )}
       </div>
 
       {/* Store Selector Section - Apenas para admin/owner */}
