@@ -21,22 +21,11 @@ import {
   Power,
   PowerOff
 } from 'lucide-react'
+import { type WhatsAppInstance } from '@/hooks/useWhatsAppConnectionManager'
 
 // =============================================
 // TYPES
 // =============================================
-
-interface WhatsAppInstance {
-  id: string
-  title: string
-  phone_number: string | null
-  phone_number_id: string | null
-  status: 'ACTIVE' | 'INACTIVE' | 'GENERATING' | 'connected' | 'disconnected'
-  online_status: 'available' | 'unavailable' | null
-  api_type: 'EVOLUTION' | 'META_CLOUD'
-  created_at: string
-  updated_at: string
-}
 
 interface ConnectionManagerProps {
   organizationId: string
