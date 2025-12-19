@@ -56,14 +56,6 @@ const TikTokIcon = () => (
   </svg>
 )
 
-// Inbox icon
-const InboxIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
-    <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
-  </svg>
-)
-
 import { useStoreStore, useAuthStore, type ShopifyStore } from '@/stores'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
 import { UserMenu } from '@/components/layout/UserMenu'
@@ -93,9 +85,8 @@ const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
 // Navigation items with access control
 // permission: 'always' = sempre mostra, 'admin' = só admin, ou nome da permissão
 const navigation = [
-  { name: 'Inbox', href: '/inbox', icon: InboxIcon, permission: 'always' },
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, permission: 'admin' },
-  { name: 'CRM', href: '/crm', icon: Users, permission: 'canAccessCrm' },
+  { name: 'CRM', href: '/crm', icon: Users, permission: 'canAccessCrmOrPipelines' },
   { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, permission: 'admin' },
   { name: 'Automações', href: '/automations', icon: Zap, permission: 'admin' },
   { name: 'Integrações', href: '/integrations', icon: Puzzle, permission: 'admin' },
@@ -139,16 +130,21 @@ export default function DashboardLayout({
     canAccessRoute 
   } = useAgentPermissions()
 
-  // Função para verificar se um item do menu deve ser visível
-  const shouldShowMenuItem = (item: { permission?: string }) => {
+  // Função para verificar se o usuário tem permissão para um item
+  const hasPermission = (item: { permission?: string }) => {
     if (!item.permission) return true
     if (item.permission === 'always') return true
-    if (item.permission === 'admin') return isAdmin
+    if (item.permission === 'admin') return !isAgent // Admin tem, agente não
     
     // Verificar permissão específica
     if (isAdmin) return true
     if (!isAgent) return true
     if (!permissions) return false
+    
+    // Caso especial: CRM ou Pipelines
+    if (item.permission === 'canAccessCrmOrPipelines') {
+      return (permissions as any).canAccessCrm === true || (permissions as any).canAccessPipelines === true
+    }
     
     return (permissions as any)[item.permission] === true
   }
@@ -267,9 +263,32 @@ export default function DashboardLayout({
     }
   }, [])
 
-  const NavLink = ({ item }: { item: { name: string; href: string; icon: any } }) => {
+  const NavLink = ({ item, canAccess = true }: { item: { name: string; href: string; icon: any }, canAccess?: boolean }) => {
     const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
     const Icon = item.icon
+
+    // Se não tem permissão, mostrar em cinza sem link
+    if (!canAccess) {
+      return (
+        <div
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-dark-600 cursor-not-allowed opacity-50"
+        >
+          <Icon className="w-5 h-5 flex-shrink-0" />
+          <AnimatePresence mode="wait">
+            {!collapsed && (
+              <motion.span
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                className="font-medium whitespace-nowrap overflow-hidden"
+              >
+                {item.name}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
+      )
+    }
 
     return (
       <Link href={item.href}>
@@ -336,49 +355,39 @@ export default function DashboardLayout({
             </p>
           )}
           <nav className="space-y-1">
-            {navigation
-              .filter(shouldShowMenuItem)
-              .map((item) => (
-                <NavLink key={item.name} item={item} />
-              ))}
+            {navigation.map((item) => (
+              <NavLink key={item.name} item={item} canAccess={hasPermission(item)} />
+            ))}
           </nav>
         </div>
 
-        {/* Analytics - Mostrar se tiver pelo menos um item visível */}
-        {analyticsNav.filter(shouldShowMenuItem).length > 0 && (
-          <div>
-            {!collapsed && (
-              <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
-                Analytics
-              </p>
-            )}
-            <nav className="space-y-1">
-              {analyticsNav
-                .filter(shouldShowMenuItem)
-                .map((item) => (
-                  <NavLink key={item.name} item={item} />
-                ))}
-            </nav>
-          </div>
-        )}
+        {/* Analytics */}
+        <div>
+          {!collapsed && (
+            <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
+              Analytics
+            </p>
+          )}
+          <nav className="space-y-1">
+            {analyticsNav.map((item) => (
+              <NavLink key={item.name} item={item} canAccess={hasPermission(item)} />
+            ))}
+          </nav>
+        </div>
 
-        {/* System - Mostrar se tiver pelo menos um item visível */}
-        {systemNav.filter(shouldShowMenuItem).length > 0 && (
-          <div>
-            {!collapsed && (
-              <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
-                Sistema
-              </p>
-            )}
-            <nav className="space-y-1">
-              {systemNav
-                .filter(shouldShowMenuItem)
-                .map((item) => (
-                  <NavLink key={item.name} item={item} />
-                ))}
-            </nav>
-          </div>
-        )}
+        {/* System */}
+        <div>
+          {!collapsed && (
+            <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
+              Sistema
+            </p>
+          )}
+          <nav className="space-y-1">
+            {systemNav.map((item) => (
+              <NavLink key={item.name} item={item} canAccess={hasPermission(item)} />
+            ))}
+          </nav>
+        </div>
       </div>
 
       {/* Store Selector Section - Apenas para admin/owner */}

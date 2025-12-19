@@ -350,7 +350,7 @@ export default function AgentInboxPage() {
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              {!isAgent && <MessageSquare className="w-10 h-10 text-dark-600 mb-3" />}
+              <MessageSquare className="w-10 h-10 text-dark-600 mb-3" />
               <p className="text-dark-400 text-sm">Nenhuma conversa encontrada</p>
             </div>
           ) : (
@@ -472,7 +472,7 @@ export default function AgentInboxPage() {
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  {!isAgent && <MessageSquare className="w-10 h-10 text-dark-600 mb-3" />}
+                  <MessageSquare className="w-10 h-10 text-dark-600 mb-3" />
                   <p className="text-dark-400 text-sm">Nenhuma mensagem ainda</p>
                 </div>
               ) : (
@@ -559,11 +559,9 @@ export default function AgentInboxPage() {
         ) : (
           /* Empty State */
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-            {!isAgent && (
-              <div className="w-20 h-20 rounded-2xl bg-dark-800 flex items-center justify-center mb-4">
-                <MessageSquare className="w-10 h-10 text-dark-600" />
-              </div>
-            )}
+            <div className="w-20 h-20 rounded-2xl bg-dark-800 flex items-center justify-center mb-4">
+              <MessageSquare className="w-10 h-10 text-dark-600" />
+            </div>
             <h2 className="text-xl font-semibold text-white mb-2">Selecione uma conversa</h2>
             <p className="text-dark-400 max-w-sm">
               Escolha uma conversa da lista ao lado para começar a atender seus clientes.
