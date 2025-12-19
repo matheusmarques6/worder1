@@ -268,9 +268,12 @@ export default function InboxTab() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Fetch conversations
-  const fetchConversations = async (silent = false) => {
+  const fetchConversations = async (silent?: boolean | React.MouseEvent) => {
+    // Se for um evento de clique, não é silent
+    const isSilent = typeof silent === 'boolean' ? silent : false
+    
     if (!organizationId) return
-    if (!silent) setConversationsLoading(true)
+    if (!isSilent) setConversationsLoading(true)
     try {
       const params = new URLSearchParams({ organizationId })
       if (statusFilter !== 'all') params.append('status', statusFilter)
@@ -290,7 +293,7 @@ export default function InboxTab() {
     } catch (error) {
       console.error('Error fetching conversations:', error)
     } finally {
-      if (!silent) setConversationsLoading(false)
+      if (!isSilent) setConversationsLoading(false)
     }
   }
 
