@@ -53,14 +53,6 @@ export default function InboxPage() {
 
   const [showConnectModal, setShowConnectModal] = useState(false)
 
-  const handleInstanceSelect = (instance: WhatsAppInstance | null) => {
-    selectInstance(instance)
-    // Recarregar conversas para a nova instância
-    if (instance) {
-      fetchConversations({ instanceId: instance.id })
-    }
-  }
-
   const handleConnectionSuccess = (instance: any) => {
     fetchInstances()
     setShowConnectModal(false)
@@ -117,6 +109,15 @@ export default function InboxPage() {
     createDeal,
     clear: clearContact,
   } = useInboxContact()
+
+  // Handler para seleção de instância
+  const handleInstanceSelect = (instance: WhatsAppInstance | null) => {
+    selectInstance(instance)
+    // Recarregar conversas para a nova instância
+    if (instance) {
+      refreshConversations()
+    }
+  }
 
   // Realtime subscription
   const handleNewConversation = useCallback((conv: any) => {
