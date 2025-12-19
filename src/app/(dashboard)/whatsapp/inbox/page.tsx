@@ -13,18 +13,23 @@ import {
   PanelRightClose,
   PanelRightOpen,
   AlertCircle,
+  Wifi,
+  WifiOff,
 } from 'lucide-react'
 
 // Components
 import { ConversationList } from '@/components/whatsapp/inbox/ConversationList'
 import { ChatPanel } from '@/components/whatsapp/inbox/ChatPanel'
 import { ContactPanel } from '@/components/whatsapp/inbox/ContactPanel'
+import WhatsAppConnectionManager from '@/components/whatsapp/inbox/WhatsAppConnectionManager'
+import WhatsAppConnectUnified from '@/components/whatsapp/WhatsAppConnectUnified'
 
 // Hooks
 import { useInboxConversations } from '@/hooks/useInboxConversations'
 import { useInboxMessages } from '@/hooks/useInboxMessages'
 import { useInboxContact } from '@/hooks/useInboxContact'
 import { useWhatsAppRealtime } from '@/hooks/useWhatsAppRealtime'
+import { useWhatsAppConnection, type WhatsAppInstance } from '@/hooks/useWhatsAppConnectionManager'
 
 // Types
 import type { InboxConversation, ConversationFilters } from '@/types/inbox'
@@ -34,7 +39,37 @@ export default function InboxPage() {
   // Usar organization_id do user ou 'default-org' (a API vai resolver)
   const organizationId = user?.organization_id || 'default-org'
   
-  // Hooks
+  // =============================================
+  // WHATSAPP CONNECTION MANAGEMENT
+  // =============================================
+  const {
+    instances,
+    selectedInstance,
+    loading: instancesLoading,
+    error: instancesError,
+    selectInstance,
+    fetchInstances,
+  } = useWhatsAppConnection(organizationId)
+
+  const [showConnectModal, setShowConnectModal] = useState(false)
+
+  const handleInstanceSelect = (instance: WhatsAppInstance | null) => {
+    selectInstance(instance)
+    // Recarregar conversas para a nova instância
+    if (instance) {
+      fetchConversations({ instanceId: instance.id })
+    }
+  }
+
+  const handleConnectionSuccess = (instance: any) => {
+    fetchInstances()
+    setShowConnectModal(false)
+    // Toast de sucesso pode ser adicionado aqui
+  }
+
+  // =============================================
+  // INBOX HOOKS
+  // =============================================
   const {
     conversations,
     selectedConversation,
@@ -117,6 +152,14 @@ export default function InboxPage() {
     fetchConversations()
   }, [organizationId])
 
+  // Reload conversations when selected instance changes
+  useEffect(() => {
+    if (selectedInstance) {
+      console.log('📱 Instance changed, reloading conversations:', selectedInstance.id)
+      fetchConversations({ instanceId: selectedInstance.id })
+    }
+  }, [selectedInstance?.id])
+
   // Load messages and contact when conversation changes
   useEffect(() => {
     if (selectedConversation) {
@@ -177,77 +220,140 @@ export default function InboxPage() {
     )
   })
 
+  // =============================================
+  // CHECK IF WHATSAPP IS CONNECTED
+  // =============================================
+  const hasConnectedInstance = instances.some(
+    i => i.status === 'ACTIVE' || i.status === 'connected'
+  )
+
   return (
-    <div className="h-[calc(100vh-80px)] flex bg-dark-900/50 rounded-2xl border border-dark-700/50 overflow-hidden">
-      {/* ========== CONVERSATION LIST ========== */}
-      <div className={`
-        w-full md:w-[360px] flex-shrink-0 border-r border-dark-700/50 flex flex-col bg-dark-900/30
-        ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}
-      `}>
-        {/* Header */}
-        <div className="p-4 border-b border-dark-700/50">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Conversas</h2>
-            <div className="flex gap-2">
-              <button
-                onClick={() => refreshConversations()}
-                disabled={conversationsLoading}
-                className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`w-5 h-5 ${conversationsLoading ? 'animate-spin' : ''}`} />
-              </button>
-              <button className="p-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors">
-                <Plus className="w-5 h-5" />
-              </button>
+    <>
+      {/* ========== CONNECT MODAL ========== */}
+      <WhatsAppConnectUnified
+        isOpen={showConnectModal}
+        onClose={() => setShowConnectModal(false)}
+        onSuccess={handleConnectionSuccess}
+        organizationId={organizationId}
+      />
+
+      <div className="h-[calc(100vh-80px)] flex bg-dark-900/50 rounded-2xl border border-dark-700/50 overflow-hidden">
+        {/* ========== CONVERSATION LIST ========== */}
+        <div className={`
+          w-full md:w-[360px] flex-shrink-0 border-r border-dark-700/50 flex flex-col bg-dark-900/30
+          ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}
+        `}>
+          {/* Header */}
+          <div className="p-4 border-b border-dark-700/50">
+            {/* Connection Manager - Top */}
+            <div className="mb-4">
+              <WhatsAppConnectionManager
+                organizationId={organizationId}
+                selectedInstance={selectedInstance}
+                onSelectInstance={handleInstanceSelect}
+                onConnectClick={() => setShowConnectModal(true)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-white">Conversas</h2>
+                {/* Connection Status Indicator */}
+                {selectedInstance && (
+                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                    selectedInstance.status === 'ACTIVE' || selectedInstance.status === 'connected'
+                      ? 'bg-green-500/20 text-green-400'
+                      : 'bg-red-500/20 text-red-400'
+                  }`}>
+                    {selectedInstance.status === 'ACTIVE' || selectedInstance.status === 'connected' ? (
+                      <><Wifi className="w-3 h-3" /> Online</>
+                    ) : (
+                      <><WifiOff className="w-3 h-3" /> Offline</>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => refreshConversations()}
+                  disabled={conversationsLoading}
+                  className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-5 h-5 ${conversationsLoading ? 'animate-spin' : ''}`} />
+                </button>
+                <button className="p-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors">
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Search */}
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nome ou telefone..."
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl 
+                           text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-colors"
+              />
+            </div>
+
+            {/* Quick Filters */}
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {[
+                { id: 'all', label: 'Todas' },
+                { id: 'open', label: 'Abertas' },
+                { id: 'pending', label: 'Pendentes' },
+                { id: 'closed', label: 'Fechadas' },
+              ].map((filter) => (
+                <button
+                  key={filter.id}
+                  onClick={() => handleFilterChange({ ...filters, status: filter.id as any })}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${
+                    (filters.status || 'all') === filter.id
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-dark-800/50 text-dark-400 hover:text-white hover:bg-dark-700/50'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Search */}
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
-            <input
-              type="text"
-              placeholder="Buscar por nome ou telefone..."
-              value={search}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl 
-                         text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-colors"
-            />
-          </div>
+          {/* No Connection Warning */}
+          {!hasConnectedInstance && !instancesLoading && (
+            <div className="p-4 mx-4 mt-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-amber-300 font-medium">WhatsApp não conectado</p>
+                  <p className="text-xs text-amber-300/70 mt-1">
+                    Conecte seu WhatsApp para começar a receber mensagens
+                  </p>
+                  <button
+                    onClick={() => setShowConnectModal(true)}
+                    className="mt-2 text-xs text-amber-400 hover:text-amber-300 font-medium"
+                  >
+                    Conectar agora →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
-          {/* Quick Filters */}
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {[
-              { id: 'all', label: 'Todas' },
-              { id: 'open', label: 'Abertas' },
-              { id: 'pending', label: 'Pendentes' },
-              { id: 'closed', label: 'Fechadas' },
-            ].map((filter) => (
-              <button
-                key={filter.id}
-                onClick={() => handleFilterChange({ ...filters, status: filter.id as any })}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${
-                  (filters.status || 'all') === filter.id
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-dark-800/50 text-dark-400 hover:text-white hover:bg-dark-700/50'
-                }`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
+              {/* Conversation List */}
+          <ConversationList
+            conversations={filteredConversations}
+            selectedId={selectedConversation?.id}
+            isLoading={conversationsLoading}
+            onSelect={handleSelectConversation}
+          />
         </div>
 
-        {/* Conversation List */}
-        <ConversationList
-          conversations={filteredConversations}
-          selectedId={selectedConversation?.id}
-          isLoading={conversationsLoading}
-          onSelect={handleSelectConversation}
-        />
-      </div>
-
-      {/* ========== CHAT PANEL ========== */}
+        {/* ========== CHAT PANEL ========== */}
       <div className={`
         flex-1 flex flex-col min-w-0
         ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}
@@ -307,5 +413,6 @@ export default function InboxPage() {
         )}
       </AnimatePresence>
     </div>
+    </>
   )
 }
