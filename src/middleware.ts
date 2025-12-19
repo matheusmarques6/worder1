@@ -37,8 +37,6 @@ const agentAllowedApis = [
 // Routes blocked for agents (admin/owner only)
 const adminOnlyRoutes = [
   '/dashboard',
-  '/crm',
-  '/whatsapp',
   '/automations',
   '/integrations',
   '/settings',
