@@ -34,7 +34,14 @@ import {
   FileText,
   Ban,
   CheckCircle,
+  Wifi,
+  WifiOff,
 } from 'lucide-react'
+
+// Connection components
+import WhatsAppConnectionManager from '@/components/whatsapp/inbox/WhatsAppConnectionManager'
+import WhatsAppConnectUnified from '@/components/whatsapp/WhatsAppConnectUnified'
+import { useWhatsAppConnection, type WhatsAppInstance } from '@/hooks/useWhatsAppConnectionManager'
 
 // Types
 interface InboxContact {
@@ -205,6 +212,30 @@ export default function InboxTab() {
   // Auth
   const { user } = useAuthStore()
   const organizationId = user?.organization_id || ''
+
+  // WhatsApp Connection Management
+  const {
+    instances,
+    selectedInstance,
+    loading: instancesLoading,
+    selectInstance,
+    fetchInstances,
+  } = useWhatsAppConnection(organizationId)
+
+  const [showConnectModal, setShowConnectModal] = useState(false)
+
+  const handleInstanceSelect = (instance: WhatsAppInstance | null) => {
+    selectInstance(instance)
+    // Recarregar conversas para a nova instância
+    if (instance) {
+      fetchConversations()
+    }
+  }
+
+  const handleConnectionSuccess = (instance: any) => {
+    fetchInstances()
+    setShowConnectModal(false)
+  }
 
   // State
   const [conversations, setConversations] = useState<InboxConversation[]>([])
@@ -469,8 +500,34 @@ export default function InboxTab() {
       {/* ========== CONVERSATION LIST ========== */}
       <div className={`w-full md:w-[360px] flex-shrink-0 border-r border-dark-700/50 flex flex-col bg-dark-900/30 ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-dark-700/50">
+          {/* Connection Manager */}
+          <div className="mb-4">
+            <WhatsAppConnectionManager
+              organizationId={organizationId}
+              selectedInstance={selectedInstance}
+              onSelectInstance={handleInstanceSelect}
+              onConnectClick={() => setShowConnectModal(true)}
+            />
+          </div>
+
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Conversas</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-white">Conversas</h2>
+              {/* Connection Status Indicator */}
+              {selectedInstance && (
+                <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                  selectedInstance.status === 'ACTIVE' || selectedInstance.status === 'connected'
+                    ? 'bg-green-500/20 text-green-400'
+                    : 'bg-red-500/20 text-red-400'
+                }`}>
+                  {selectedInstance.status === 'ACTIVE' || selectedInstance.status === 'connected' ? (
+                    <><Wifi className="w-3 h-3" /> Online</>
+                  ) : (
+                    <><WifiOff className="w-3 h-3" /> Offline</>
+                  )}
+                </div>
+              )}
+            </div>
             <div className="flex gap-2">
               <button onClick={fetchConversations} disabled={conversationsLoading} className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors disabled:opacity-50">
                 <RefreshCw className={`w-5 h-5 ${conversationsLoading ? 'animate-spin' : ''}`} />
@@ -783,6 +840,14 @@ export default function InboxTab() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* WhatsApp Connect Modal */}
+      <WhatsAppConnectUnified
+        isOpen={showConnectModal}
+        onClose={() => setShowConnectModal(false)}
+        onSuccess={handleConnectionSuccess}
+        organizationId={organizationId}
+      />
     </div>
   )
 }

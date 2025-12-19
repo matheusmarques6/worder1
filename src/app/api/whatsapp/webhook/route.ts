@@ -34,6 +34,16 @@ export async function POST(request: NextRequest) {
     
     console.log('📥 WhatsApp Webhook:', JSON.stringify(body, null, 2));
 
+    // ========================================
+    // EVOLUTION API FORMAT
+    // ========================================
+    if (body.event || body.instance) {
+      return handleEvolutionWebhook(body);
+    }
+
+    // ========================================
+    // META CLOUD API FORMAT
+    // ========================================
     const entry = body.entry?.[0];
     if (!entry) return NextResponse.json({ status: 'ok' });
 
@@ -89,6 +99,366 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Webhook error:', error);
     return NextResponse.json({ status: 'error', message: error.message }, { status: 200 });
+  }
+}
+
+// =============================================
+// EVOLUTION API WEBHOOK HANDLER
+// =============================================
+async function handleEvolutionWebhook(body: any) {
+  const event = body.event;
+  const instanceName = body.instance;
+  const data = body.data;
+
+  console.log(`📱 Evolution Event: ${event} from ${instanceName}`);
+
+  // Buscar instância pelo unique_id
+  const { data: instance } = await supabase
+    .from('whatsapp_instances')
+    .select('*, organization_id')
+    .eq('unique_id', instanceName)
+    .single();
+
+  if (!instance) {
+    console.log('⚠️ Instance not found:', instanceName);
+    return NextResponse.json({ status: 'ok' });
+  }
+
+  const orgId = instance.organization_id;
+
+  switch (event) {
+    case 'messages.upsert':
+    case 'MESSAGES_UPSERT':
+      await handleEvolutionMessage(orgId, instance, data);
+      break;
+
+    case 'messages.update':
+    case 'MESSAGES_UPDATE':
+      await handleEvolutionMessageUpdate(data);
+      break;
+
+    case 'connection.update':
+    case 'CONNECTION_UPDATE':
+      await handleEvolutionConnectionUpdate(instance, data);
+      break;
+
+    case 'qrcode.updated':
+    case 'QRCODE_UPDATED':
+      await handleEvolutionQRUpdate(instance, data);
+      break;
+
+    default:
+      console.log(`⏭️ Unhandled event: ${event}`);
+  }
+
+  return NextResponse.json({ status: 'ok' });
+}
+
+// Processar mensagem da Evolution API
+async function handleEvolutionMessage(orgId: string, instance: any, data: any) {
+  const message = data.message || data;
+  const key = data.key || message.key;
+  
+  // Ignorar mensagens enviadas por nós
+  if (key?.fromMe) {
+    console.log('⏭️ Skipping own message');
+    return;
+  }
+
+  const remoteJid = key?.remoteJid;
+  if (!remoteJid) return;
+
+  // Extrair número de telefone
+  const phoneNumber = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+  
+  // Determinar tipo e conteúdo da mensagem
+  let messageType = 'text';
+  let content = '';
+  let mediaUrl = null;
+
+  if (message.conversation) {
+    content = message.conversation;
+  } else if (message.extendedTextMessage?.text) {
+    content = message.extendedTextMessage.text;
+  } else if (message.imageMessage) {
+    messageType = 'image';
+    content = message.imageMessage.caption || '';
+    mediaUrl = message.imageMessage.url;
+  } else if (message.videoMessage) {
+    messageType = 'video';
+    content = message.videoMessage.caption || '';
+    mediaUrl = message.videoMessage.url;
+  } else if (message.audioMessage) {
+    messageType = 'audio';
+    mediaUrl = message.audioMessage.url;
+  } else if (message.documentMessage) {
+    messageType = 'document';
+    content = message.documentMessage.fileName || '';
+    mediaUrl = message.documentMessage.url;
+  } else if (message.stickerMessage) {
+    messageType = 'sticker';
+  }
+
+  // Buscar nome do contato
+  const pushName = data.pushName || message.pushName || phoneNumber;
+
+  // Buscar ou criar contato
+  let { data: contact } = await supabase
+    .from('whatsapp_contacts')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('phone_number', phoneNumber)
+    .single();
+
+  if (!contact) {
+    const { data: newContact } = await supabase
+      .from('whatsapp_contacts')
+      .insert({
+        organization_id: orgId,
+        phone_number: phoneNumber,
+        name: pushName,
+        profile_name: pushName,
+      })
+      .select()
+      .single();
+    contact = newContact;
+  }
+
+  // Buscar ou criar conversa
+  let { data: conversation } = await supabase
+    .from('whatsapp_conversations')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('contact_id', contact?.id)
+    .eq('status', 'open')
+    .single();
+
+  if (!conversation) {
+    const { data: newConv } = await supabase
+      .from('whatsapp_conversations')
+      .insert({
+        organization_id: orgId,
+        contact_id: contact?.id,
+        phone_number: phoneNumber,
+        status: 'open',
+        is_bot_active: true,
+        last_message_at: new Date().toISOString(),
+        last_message_preview: content?.substring(0, 100) || `[${messageType}]`,
+        unread_count: 1,
+      })
+      .select()
+      .single();
+    conversation = newConv;
+  } else {
+    // Atualizar conversa existente
+    await supabase
+      .from('whatsapp_conversations')
+      .update({
+        last_message_at: new Date().toISOString(),
+        last_message_preview: content?.substring(0, 100) || `[${messageType}]`,
+        unread_count: (conversation.unread_count || 0) + 1,
+      })
+      .eq('id', conversation.id);
+  }
+
+  // Salvar mensagem
+  const { data: savedMessage } = await supabase
+    .from('whatsapp_messages')
+    .insert({
+      organization_id: orgId,
+      conversation_id: conversation?.id,
+      contact_id: contact?.id,
+      wamid: key?.id,
+      direction: 'inbound',
+      message_type: messageType,
+      content,
+      media_url: mediaUrl,
+      status: 'received',
+      sent_by_bot: false,
+      raw_payload: data,
+    })
+    .select()
+    .single();
+
+  console.log('✅ Message saved:', savedMessage?.id);
+
+  // Se bot ativo, processar resposta IA
+  if (conversation?.is_bot_active) {
+    await processAIResponse(orgId, instance, conversation, contact, content, messageType);
+  }
+}
+
+// Processar resposta da IA
+async function processAIResponse(
+  orgId: string, 
+  instance: any, 
+  conversation: any, 
+  contact: any, 
+  userMessage: string,
+  messageType: string
+) {
+  // Importar função de IA do arquivo existente
+  try {
+    // Buscar contexto e configuração do agente
+    const { data: agent } = await supabase
+      .from('ai_agents')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('is_default', true)
+      .single();
+
+    if (!agent) {
+      console.log('⚠️ No default AI agent configured');
+      return;
+    }
+
+    // Buscar histórico de mensagens
+    const { data: history } = await supabase
+      .from('whatsapp_messages')
+      .select('direction, content, message_type')
+      .eq('conversation_id', conversation.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Chamar AI
+    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app'}/api/ai/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        organizationId: orgId,
+        agentId: agent.id,
+        message: userMessage,
+        conversationId: conversation.id,
+        contactId: contact.id,
+        history: history?.reverse(),
+      }),
+    });
+
+    const aiResponse = await response.json();
+    
+    if (aiResponse.message) {
+      // Enviar resposta via Evolution API
+      await sendEvolutionMessage(instance, contact.phone_number, aiResponse.message);
+      
+      // Salvar mensagem da IA
+      await supabase
+        .from('whatsapp_messages')
+        .insert({
+          organization_id: orgId,
+          conversation_id: conversation.id,
+          contact_id: contact.id,
+          direction: 'outbound',
+          message_type: 'text',
+          content: aiResponse.message,
+          status: 'sent',
+          sent_by_bot: true,
+        });
+
+      // Atualizar conversa
+      await supabase
+        .from('whatsapp_conversations')
+        .update({
+          last_message_at: new Date().toISOString(),
+          last_message_preview: aiResponse.message.substring(0, 100),
+        })
+        .eq('id', conversation.id);
+    }
+  } catch (error) {
+    console.error('❌ AI Response error:', error);
+  }
+}
+
+// Enviar mensagem via Evolution API
+async function sendEvolutionMessage(instance: any, phoneNumber: string, message: string) {
+  const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
+  const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+  
+  const apiUrl = instance.api_url || EVOLUTION_API_URL;
+  const apiKey = instance.api_key || EVOLUTION_API_KEY;
+
+  try {
+    const response = await fetch(`${apiUrl}/message/sendText/${instance.unique_id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': apiKey,
+      },
+      body: JSON.stringify({
+        number: phoneNumber,
+        text: message,
+      }),
+    });
+
+    const result = await response.json();
+    console.log('📤 Message sent:', result);
+    return result;
+  } catch (error) {
+    console.error('❌ Send message error:', error);
+    throw error;
+  }
+}
+
+// Atualizar status da mensagem
+async function handleEvolutionMessageUpdate(data: any) {
+  const key = data.key;
+  const status = data.update?.status;
+
+  if (!key?.id || !status) return;
+
+  const statusMap: Record<number, string> = {
+    1: 'pending',
+    2: 'sent',
+    3: 'delivered',
+    4: 'read',
+    5: 'played',
+  };
+
+  await supabase
+    .from('whatsapp_messages')
+    .update({ status: statusMap[status] || 'sent' })
+    .eq('wamid', key.id);
+}
+
+// Atualizar status da conexão
+async function handleEvolutionConnectionUpdate(instance: any, data: any) {
+  const state = data.state;
+  
+  let status = 'disconnected';
+  let onlineStatus = 'unavailable';
+
+  if (state === 'open') {
+    status = 'connected';
+    onlineStatus = 'available';
+  } else if (state === 'connecting') {
+    status = 'GENERATING';
+  }
+
+  await supabase
+    .from('whatsapp_instances')
+    .update({
+      status,
+      online_status: onlineStatus,
+      last_connected_at: state === 'open' ? new Date().toISOString() : undefined,
+    })
+    .eq('id', instance.id);
+
+  console.log(`📱 Connection updated: ${state}`);
+}
+
+// Atualizar QR Code
+async function handleEvolutionQRUpdate(instance: any, data: any) {
+  const qrCode = data.qrcode?.base64 || data.base64;
+
+  if (qrCode) {
+    await supabase
+      .from('whatsapp_instances')
+      .update({
+        qr_code: qrCode,
+        status: 'GENERATING',
+      })
+      .eq('id', instance.id);
+
+    console.log('📱 QR Code updated');
   }
 }
 

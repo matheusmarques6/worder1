@@ -11,6 +11,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// =============================================
+// Evolution API Configuration
+// =============================================
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+const WEBHOOK_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app';
+
 // GET - Listar instâncias
 export async function GET(request: NextRequest) {
   try {
@@ -154,25 +161,41 @@ export async function DELETE(request: NextRequest) {
 // =============================================
 
 async function handleCreate(body: any) {
-  const { organization_id, title, api_type, api_url, api_key } = body;
+  const { organization_id, title, api_type } = body;
+  
+  // Usar credenciais padrão da Evolution API
+  const api_url = body.api_url || EVOLUTION_API_URL;
+  const api_key = body.api_key || EVOLUTION_API_KEY;
 
   if (!organization_id || !title) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
-  const uniqueId = `${organization_id.slice(0, 8)}_${Date.now()}`;
+  const uniqueId = `zapzap_${organization_id.slice(0, 8)}_${Date.now()}`;
 
-  // Se Evolution API, criar instância lá primeiro
-  if (api_type === 'EVOLUTION' && api_url && api_key) {
-    const evolutionResult = await createEvolutionInstance({
+  // Criar instância na Evolution API
+  const evolutionResult = await createEvolutionInstance({
+    apiUrl: api_url,
+    apiKey: api_key,
+    instanceName: uniqueId,
+  });
+
+  if (!evolutionResult.success) {
+    return NextResponse.json({ error: evolutionResult.error }, { status: 400 });
+  }
+
+  // Configurar Webhook para receber mensagens
+  const webhookUrl = `${WEBHOOK_BASE_URL}/api/whatsapp/webhook`;
+  try {
+    await configureEvolutionWebhook({
       apiUrl: api_url,
       apiKey: api_key,
       instanceName: uniqueId,
+      webhookUrl,
     });
-
-    if (!evolutionResult.success) {
-      return NextResponse.json({ error: evolutionResult.error }, { status: 400 });
-    }
+    console.log('✅ Webhook configurado:', webhookUrl);
+  } catch (webhookError) {
+    console.warn('⚠️ Erro ao configurar webhook:', webhookError);
   }
 
   const { data, error } = await supabase
@@ -185,6 +208,7 @@ async function handleCreate(body: any) {
       api_url,
       api_key,
       status: 'GENERATING',
+      webhook_url: webhookUrl,
     })
     .select()
     .single();
@@ -368,17 +392,26 @@ async function createEvolutionInstance(params: { apiUrl: string; apiKey: string;
 
 async function getEvolutionQR(instance: any) {
   try {
-    const response = await fetch(`${instance.api_url}/instance/connect/${instance.unique_id}`, {
+    const apiUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiKey = instance.api_key || EVOLUTION_API_KEY;
+    
+    const response = await fetch(`${apiUrl}/instance/connect/${instance.unique_id}`, {
       method: 'GET',
       headers: {
-        'apikey': instance.api_key,
+        'apikey': apiKey,
       },
     });
 
     const data = await response.json();
+    console.log('📱 QR Response:', data);
 
     if (data.base64) {
       return { qrcode: data.base64 };
+    }
+    
+    if (data.code) {
+      // QR code em formato string (precisa converter para base64 com biblioteca QR)
+      return { qrcode: data.code, needsConversion: true };
     }
 
     if (data.instance?.state === 'open') {
@@ -387,37 +420,50 @@ async function getEvolutionQR(instance: any) {
 
     return { error: 'No QR code available' };
   } catch (error: any) {
+    console.error('❌ getEvolutionQR error:', error);
     return { error: error.message };
   }
 }
 
 async function getEvolutionStatus(instance: any) {
   try {
-    const response = await fetch(`${instance.api_url}/instance/connectionState/${instance.unique_id}`, {
+    const apiUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiKey = instance.api_key || EVOLUTION_API_KEY;
+    
+    const response = await fetch(`${apiUrl}/instance/connectionState/${instance.unique_id}`, {
       method: 'GET',
       headers: {
-        'apikey': instance.api_key,
+        'apikey': apiKey,
       },
     });
 
     const data = await response.json();
+    console.log('📊 Status Response:', data);
+
+    // Evolution API pode retornar em diferentes formatos
+    const state = data.instance?.state || data.state;
+    const isConnected = state === 'open';
 
     return {
-      connected: data.instance?.state === 'open',
-      state: data.instance?.state,
-      phoneNumber: data.instance?.phoneNumber,
+      connected: isConnected,
+      state: state,
+      phoneNumber: data.instance?.phoneNumber || data.phoneNumber,
     };
   } catch (error: any) {
+    console.error('❌ getEvolutionStatus error:', error);
     return { connected: false, error: error.message };
   }
 }
 
 async function connectEvolution(instance: any) {
   try {
-    const response = await fetch(`${instance.api_url}/instance/connect/${instance.unique_id}`, {
+    const apiUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiKey = instance.api_key || EVOLUTION_API_KEY;
+    
+    const response = await fetch(`${apiUrl}/instance/connect/${instance.unique_id}`, {
       method: 'GET',
       headers: {
-        'apikey': instance.api_key,
+        'apikey': apiKey,
       },
     });
 
@@ -429,16 +475,59 @@ async function connectEvolution(instance: any) {
 
 async function disconnectEvolution(instance: any) {
   try {
-    const response = await fetch(`${instance.api_url}/instance/logout/${instance.unique_id}`, {
+    const apiUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiKey = instance.api_key || EVOLUTION_API_KEY;
+    
+    const response = await fetch(`${apiUrl}/instance/logout/${instance.unique_id}`, {
       method: 'DELETE',
       headers: {
-        'apikey': instance.api_key,
+        'apikey': apiKey,
       },
     });
 
     return await response.json();
   } catch (error: any) {
     return { error: error.message };
+  }
+}
+
+async function configureEvolutionWebhook(params: { 
+  apiUrl: string; 
+  apiKey: string; 
+  instanceName: string; 
+  webhookUrl: string 
+}) {
+  try {
+    const response = await fetch(`${params.apiUrl}/webhook/set/${params.instanceName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': params.apiKey,
+      },
+      body: JSON.stringify({
+        webhook: {
+          enabled: true,
+          url: params.webhookUrl,
+          webhookByEvents: true,
+          events: [
+            'MESSAGES_UPSERT',
+            'MESSAGES_UPDATE', 
+            'MESSAGES_DELETE',
+            'SEND_MESSAGE',
+            'CONNECTION_UPDATE',
+            'QRCODE_UPDATED',
+            'CALL',
+          ],
+        },
+      }),
+    });
+
+    const data = await response.json();
+    console.log('🔗 Webhook config response:', data);
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('❌ Webhook config error:', error);
+    return { success: false, error: error.message };
   }
 }
 
