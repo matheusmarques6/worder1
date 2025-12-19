@@ -486,13 +486,40 @@ export async function POST(request: NextRequest) {
       const permissionsData = {
         agent_id: agent.id,
         access_level: role === 'admin' ? 'admin' : 'agent',
+        
+        // WhatsApp/Conversas
         whatsapp_access_all: permissions?.whatsapp_access_all || false,
         whatsapp_number_ids: permissions?.whatsapp_number_ids || [],
-        can_send_messages: permissions?.can_send_messages !== false,
-        can_transfer_chats: permissions?.can_transfer_chats !== false,
+        can_view_all_conversations: permissions?.can_view_all_conversations || false,
+        can_transfer_conversations: permissions?.can_transfer_conversations ?? permissions?.can_transfer_chats ?? true,
+        can_use_ai_suggestions: permissions?.can_use_ai_suggestions ?? true,
+        can_send_media: permissions?.can_send_media ?? permissions?.can_send_messages ?? true,
+        can_use_quick_replies: permissions?.can_use_quick_replies ?? true,
+        
+        // CRM
+        can_access_crm: permissions?.can_access_crm || false,
+        can_access_pipelines: permissions?.can_access_pipelines ?? permissions?.can_edit_pipeline ?? false,
+        can_create_deals: permissions?.can_create_deals || false,
+        can_manage_tags: permissions?.can_manage_tags || false,
         pipeline_access_all: permissions?.pipeline_access_all || false,
         pipeline_ids: permissions?.pipeline_ids || [],
-        can_edit_pipeline: permissions?.can_edit_pipeline || false,
+        
+        // Contatos
+        can_view_contact_info: permissions?.can_view_contact_info ?? true,
+        can_edit_contact_info: permissions?.can_edit_contact_info || false,
+        can_add_notes: permissions?.can_add_notes ?? true,
+        can_view_order_history: permissions?.can_view_order_history ?? true,
+        
+        // Analytics
+        can_view_analytics: permissions?.can_view_analytics || false,
+        can_view_reports: permissions?.can_view_reports || false,
+        
+        // Limites
+        max_concurrent_chats: permissions?.max_concurrent_chats ?? 10,
+        allowed_hours_start: permissions?.allowed_hours_start || null,
+        allowed_hours_end: permissions?.allowed_hours_end || null,
+        allowed_days: permissions?.allowed_days || null,
+        
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };

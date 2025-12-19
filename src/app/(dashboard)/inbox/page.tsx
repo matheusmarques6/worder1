@@ -350,7 +350,6 @@ export default function AgentInboxPage() {
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <MessageSquare className="w-10 h-10 text-dark-600 mb-3" />
               <p className="text-dark-400 text-sm">Nenhuma conversa encontrada</p>
             </div>
           ) : (

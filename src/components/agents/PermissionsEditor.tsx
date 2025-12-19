@@ -46,13 +46,22 @@ interface Pipeline {
 
 interface Permissions {
   access_level: 'owner' | 'admin' | 'agent'
+  // WhatsApp
   whatsapp_access_all: boolean
   whatsapp_allowed_numbers: string[]
   whatsapp_can_send: boolean
   whatsapp_can_transfer: boolean
+  // CRM
+  can_access_crm: boolean
+  can_access_pipelines: boolean
+  can_create_deals: boolean
+  can_manage_tags: boolean
   pipeline_access_all: boolean
   pipeline_allowed_ids: string[]
   pipeline_can_edit: boolean
+  // Analytics
+  can_view_analytics: boolean
+  can_view_reports: boolean
 }
 
 interface PermissionsEditorProps {
@@ -103,19 +112,29 @@ export default function PermissionsEditor({
   // Permissions state
   const [permissions, setPermissions] = useState<Permissions>({
     access_level: 'agent',
+    // WhatsApp
     whatsapp_access_all: false,
     whatsapp_allowed_numbers: [],
     whatsapp_can_send: true,
     whatsapp_can_transfer: true,
+    // CRM
+    can_access_crm: false,
+    can_access_pipelines: false,
+    can_create_deals: false,
+    can_manage_tags: false,
     pipeline_access_all: false,
     pipeline_allowed_ids: [],
     pipeline_can_edit: false,
+    // Analytics
+    can_view_analytics: false,
+    can_view_reports: false,
   })
 
   // Sections
   const [expandedSections, setExpandedSections] = useState({
     whatsapp: true,
-    pipelines: true,
+    crm: true,
+    analytics: true,
   })
 
   // Fetch data
@@ -152,7 +171,7 @@ export default function PermissionsEditor({
   }, [isOpen, agent.id])
 
   // Toggle section
-  const toggleSection = (section: 'whatsapp' | 'pipelines') => {
+  const toggleSection = (section: 'whatsapp' | 'crm' | 'analytics') => {
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section],
@@ -439,27 +458,25 @@ export default function PermissionsEditor({
                 </div>
               )}
 
-              {/* Pipeline Permissions */}
+              {/* CRM & Pipelines Permissions */}
               {permissions.access_level === 'agent' && (
                 <div className="border border-dark-700/50 rounded-xl overflow-hidden">
                   <button
-                    onClick={() => toggleSection('pipelines')}
+                    onClick={() => toggleSection('crm')}
                     className="w-full flex items-center justify-between p-4 hover:bg-dark-700/30 transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                        <Layers className="w-4 h-4 text-purple-400" />
+                        <Users className="w-4 h-4 text-purple-400" />
                       </div>
                       <div className="text-left">
-                        <h3 className="text-white font-medium">Pipelines</h3>
+                        <h3 className="text-white font-medium">CRM & Pipelines</h3>
                         <p className="text-xs text-dark-400">
-                          {permissions.pipeline_access_all
-                            ? 'Acesso a todas as pipelines'
-                            : `${permissions.pipeline_allowed_ids?.length || 0} pipelines selecionadas`}
+                          {permissions.can_access_crm ? 'Acesso ao CRM liberado' : 'Sem acesso ao CRM'}
                         </p>
                       </div>
                     </div>
-                    {expandedSections.pipelines ? (
+                    {expandedSections.crm ? (
                       <ChevronDown className="w-5 h-5 text-dark-400" />
                     ) : (
                       <ChevronRight className="w-5 h-5 text-dark-400" />
@@ -467,7 +484,7 @@ export default function PermissionsEditor({
                   </button>
 
                   <AnimatePresence>
-                    {expandedSections.pipelines && (
+                    {expandedSections.crm && (
                       <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
@@ -475,84 +492,223 @@ export default function PermissionsEditor({
                         className="border-t border-dark-700/50"
                       >
                         <div className="p-4 space-y-4">
-                          {/* Access All Toggle */}
+                          {/* CRM Access Toggle */}
                           <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer">
                             <div className="flex items-center gap-3">
-                              {permissions.pipeline_access_all ? (
-                                <Unlock className="w-4 h-4 text-purple-400" />
-                              ) : (
-                                <Lock className="w-4 h-4 text-dark-400" />
-                              )}
-                              <span className="text-sm text-white">Acesso a todas as pipelines</span>
+                              <Users className="w-4 h-4 text-purple-400" />
+                              <span className="text-sm text-white">Pode acessar o CRM</span>
                             </div>
                             <input
                               type="checkbox"
-                              checked={permissions.pipeline_access_all}
+                              checked={permissions.can_access_crm}
                               onChange={(e) => setPermissions(prev => ({
                                 ...prev,
-                                pipeline_access_all: e.target.checked,
+                                can_access_crm: e.target.checked,
                               }))}
                               className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500 focus:ring-primary-500/50"
                             />
                           </label>
 
-                          {/* Pipelines Selection */}
-                          {!permissions.pipeline_access_all && (
-                            <div className="space-y-2">
-                              <p className="text-xs text-dark-400 mb-2">Selecione as pipelines que este agente pode acessar:</p>
-                              {pipelines.length === 0 ? (
-                                <p className="text-sm text-dark-500 text-center py-4">
-                                  Nenhuma pipeline criada
-                                </p>
-                              ) : (
-                                <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
-                                  {pipelines.map((pipeline) => {
-                                    const isSelected = permissions.pipeline_allowed_ids?.includes(pipeline.id)
-                                    return (
-                                      <label
-                                        key={pipeline.id}
-                                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                                          isSelected
-                                            ? 'bg-purple-500/10 border border-purple-500/30'
-                                            : 'bg-dark-900/50 border border-transparent hover:bg-dark-900'
-                                        }`}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={isSelected}
-                                          onChange={() => togglePipeline(pipeline.id)}
-                                          className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-purple-500 focus:ring-purple-500/50"
-                                        />
-                                        <div className="flex-1">
-                                          <p className="text-sm text-white">{pipeline.name}</p>
-                                          {pipeline.stages_count && (
-                                            <p className="text-xs text-dark-500">
-                                              {pipeline.stages_count} etapas
-                                            </p>
-                                          )}
+                          {permissions.can_access_crm && (
+                            <>
+                              {/* CRM Sub-permissions */}
+                              <div className="space-y-2 pl-4 border-l-2 border-purple-500/30">
+                                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={permissions.can_access_pipelines}
+                                    onChange={(e) => setPermissions(prev => ({
+                                      ...prev,
+                                      can_access_pipelines: e.target.checked,
+                                    }))}
+                                    className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                  />
+                                  <Layers className="w-4 h-4 text-dark-400" />
+                                  <span className="text-sm text-dark-300">Pode acessar Pipelines</span>
+                                </label>
+
+                                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={permissions.can_create_deals}
+                                    onChange={(e) => setPermissions(prev => ({
+                                      ...prev,
+                                      can_create_deals: e.target.checked,
+                                    }))}
+                                    className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                  />
+                                  <Edit className="w-4 h-4 text-dark-400" />
+                                  <span className="text-sm text-dark-300">Pode criar deals</span>
+                                </label>
+
+                                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={permissions.can_manage_tags}
+                                    onChange={(e) => setPermissions(prev => ({
+                                      ...prev,
+                                      can_manage_tags: e.target.checked,
+                                    }))}
+                                    className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                  />
+                                  <span className="text-sm text-dark-300">Pode gerenciar tags</span>
+                                </label>
+                              </div>
+
+                              {/* Pipelines Access */}
+                              {permissions.can_access_pipelines && (
+                                <div className="space-y-3 mt-4 pt-4 border-t border-dark-700/50">
+                                  <p className="text-xs text-dark-400">Selecionar pipelines específicas:</p>
+                                  
+                                  <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer">
+                                    <div className="flex items-center gap-3">
+                                      {permissions.pipeline_access_all ? (
+                                        <Unlock className="w-4 h-4 text-purple-400" />
+                                      ) : (
+                                        <Lock className="w-4 h-4 text-dark-400" />
+                                      )}
+                                      <span className="text-sm text-white">Acesso a todas as pipelines</span>
+                                    </div>
+                                    <input
+                                      type="checkbox"
+                                      checked={permissions.pipeline_access_all}
+                                      onChange={(e) => setPermissions(prev => ({
+                                        ...prev,
+                                        pipeline_access_all: e.target.checked,
+                                      }))}
+                                      className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500 focus:ring-primary-500/50"
+                                    />
+                                  </label>
+
+                                  {!permissions.pipeline_access_all && (
+                                    <div className="space-y-2">
+                                      {pipelines.length === 0 ? (
+                                        <p className="text-sm text-dark-500 text-center py-4">
+                                          Nenhuma pipeline criada
+                                        </p>
+                                      ) : (
+                                        <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
+                                          {pipelines.map((pipeline) => {
+                                            const isSelected = permissions.pipeline_allowed_ids?.includes(pipeline.id)
+                                            return (
+                                              <label
+                                                key={pipeline.id}
+                                                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                                                  isSelected
+                                                    ? 'bg-purple-500/10 border border-purple-500/30'
+                                                    : 'bg-dark-900/50 border border-transparent hover:bg-dark-900'
+                                                }`}
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isSelected}
+                                                  onChange={() => togglePipeline(pipeline.id)}
+                                                  className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-purple-500 focus:ring-purple-500/50"
+                                                />
+                                                <div className="flex-1">
+                                                  <p className="text-sm text-white">{pipeline.name}</p>
+                                                  {pipeline.stages_count && (
+                                                    <p className="text-xs text-dark-500">
+                                                      {pipeline.stages_count} etapas
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              </label>
+                                            )
+                                          })}
                                         </div>
-                                      </label>
-                                    )
-                                  })}
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={permissions.pipeline_can_edit}
+                                      onChange={(e) => setPermissions(prev => ({
+                                        ...prev,
+                                        pipeline_can_edit: e.target.checked,
+                                      }))}
+                                      className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                    />
+                                    <Edit className="w-4 h-4 text-dark-400" />
+                                    <span className="text-sm text-dark-300">Pode editar deals e mover entre etapas</span>
+                                  </label>
                                 </div>
                               )}
-                            </div>
+                            </>
                           )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
 
-                          {/* Can Edit Toggle */}
-                          <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer border-t border-dark-700/50 pt-4">
+              {/* Analytics Permissions */}
+              {permissions.access_level === 'agent' && (
+                <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => toggleSection('analytics')}
+                    className="w-full flex items-center justify-between p-4 hover:bg-dark-700/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <Eye className="w-4 h-4 text-blue-400" />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="text-white font-medium">Analytics</h3>
+                        <p className="text-xs text-dark-400">
+                          {permissions.can_view_analytics ? 'Pode ver relatórios' : 'Sem acesso a analytics'}
+                        </p>
+                      </div>
+                    </div>
+                    {expandedSections.analytics ? (
+                      <ChevronDown className="w-5 h-5 text-dark-400" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5 text-dark-400" />
+                    )}
+                  </button>
+
+                  <AnimatePresence>
+                    {expandedSections.analytics && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="border-t border-dark-700/50"
+                      >
+                        <div className="p-4 space-y-3">
+                          <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer">
+                            <div className="flex items-center gap-3">
+                              <Eye className="w-4 h-4 text-blue-400" />
+                              <span className="text-sm text-white">Pode ver Analytics</span>
+                            </div>
                             <input
                               type="checkbox"
-                              checked={permissions.pipeline_can_edit}
+                              checked={permissions.can_view_analytics}
                               onChange={(e) => setPermissions(prev => ({
                                 ...prev,
-                                pipeline_can_edit: e.target.checked,
+                                can_view_analytics: e.target.checked,
                               }))}
-                              className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                              className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500 focus:ring-primary-500/50"
                             />
-                            <Edit className="w-4 h-4 text-dark-400" />
-                            <span className="text-sm text-dark-300">Pode editar deals e mover entre etapas</span>
                           </label>
+
+                          {permissions.can_view_analytics && (
+                            <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer pl-4 border-l-2 border-blue-500/30">
+                              <input
+                                type="checkbox"
+                                checked={permissions.can_view_reports}
+                                onChange={(e) => setPermissions(prev => ({
+                                  ...prev,
+                                  can_view_reports: e.target.checked,
+                                }))}
+                                className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                              />
+                              <span className="text-sm text-dark-300">Pode ver relatórios detalhados</span>
+                            </label>
+                          )}
                         </div>
                       </motion.div>
                     )}
