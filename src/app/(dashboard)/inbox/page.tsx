@@ -107,7 +107,7 @@ export default function AgentInboxPage() {
       let convs = data.conversations || []
       
       // Filtrar por números permitidos (segurança extra no frontend)
-      if (isAgent && permissions && !permissions.whatsapp_access_all) {
+      if (isAgent && permissions && !permissions.whatsappAccessAll) {
         convs = convs.filter((c: Conversation) => canAccessNumber(c.whatsapp_number_id))
       }
       
