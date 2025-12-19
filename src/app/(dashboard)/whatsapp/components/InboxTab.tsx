@@ -306,8 +306,11 @@ export default function InboxTab() {
       const data = await res.json()
       const newMessages = data.messages || []
       
-      // Só atualiza se houver diferença (evita re-render desnecessário)
-      if (JSON.stringify(newMessages.map((m: any) => m.id)) !== JSON.stringify(messages.map(m => m.id))) {
+      // Atualiza se quantidade diferente ou último ID diferente
+      const lastNewId = newMessages[newMessages.length - 1]?.id
+      const lastCurrentId = messages[messages.length - 1]?.id
+      
+      if (newMessages.length !== messages.length || lastNewId !== lastCurrentId) {
         setMessages(newMessages)
       }
     } catch (error) {
@@ -464,6 +467,28 @@ export default function InboxTab() {
     }
   }
 
+  // Create Deal
+  const handleCreateDeal = async () => {
+    if (!contact) return
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/contacts/${contact.id}/deals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          title: `Deal - ${contact.name || contact.phone_number}`,
+          value: 0,
+        })
+      })
+      const data = await res.json()
+      if (data.deal) {
+        setDeals(prev => [data.deal, ...prev])
+        setActiveTab('crm')
+      }
+    } catch (error) {
+      console.error('Error creating deal:', error)
+    }
+  }
+
   // Select conversation
   const handleSelectConversation = (conv: InboxConversation) => {
     // Se é a mesma conversa, não faz nada
@@ -513,12 +538,12 @@ export default function InboxTab() {
     return () => clearInterval(interval)
   }, [organizationId, statusFilter, selectedConversation?.id])
 
-  // Polling para mensagens (a cada 3 segundos quando há conversa selecionada)
+  // Polling para mensagens (a cada 2 segundos quando há conversa selecionada)
   useEffect(() => {
     if (!selectedConversation) return
     const interval = setInterval(() => {
       fetchMessages(selectedConversation.id, true) // silent = true
-    }, 3000)
+    }, 2000)
     return () => clearInterval(interval)
   }, [selectedConversation?.id])
   useEffect(() => {
@@ -889,11 +914,30 @@ export default function InboxTab() {
 
                 <div className="p-4 border-t border-dark-700/50 bg-dark-800/30">
                   <div className="grid grid-cols-2 gap-2">
-                    <button className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><Tag className="w-4 h-4" /><span className="text-sm">Tag</span></button>
+                    <button onClick={() => setShowAddTag(true)} className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><Tag className="w-4 h-4" /><span className="text-sm">Tag</span></button>
                     <button className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><UserPlus className="w-4 h-4" /><span className="text-sm">Atribuir</span></button>
-                    <button className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><DollarSign className="w-4 h-4" /><span className="text-sm">Deal</span></button>
+                    <button onClick={handleCreateDeal} className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><DollarSign className="w-4 h-4" /><span className="text-sm">Deal</span></button>
                     <button onClick={handleBlockContact} className={`flex items-center justify-center gap-2 p-3 rounded-xl transition-all ${contact.is_blocked ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}><Ban className="w-4 h-4" /><span className="text-sm">{contact.is_blocked ? 'Desbloquear' : 'Bloquear'}</span></button>
                   </div>
+                  
+                  {/* Modal de adicionar tag */}
+                  {showAddTag && (
+                    <div className="mt-3 p-3 bg-dark-800 rounded-xl border border-dark-700">
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={newTag} 
+                          onChange={(e) => setNewTag(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
+                          placeholder="Nome da tag..." 
+                          className="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+                          autoFocus
+                        />
+                        <button onClick={handleAddTag} className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm hover:bg-primary-600">Adicionar</button>
+                        <button onClick={() => { setShowAddTag(false); setNewTag('') }} className="px-3 py-2 bg-dark-600 text-dark-300 rounded-lg text-sm hover:bg-dark-500">X</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
