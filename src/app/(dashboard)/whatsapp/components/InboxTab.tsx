@@ -734,7 +734,7 @@ export default function InboxTab() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {console.log('[RENDER AREA] messagesLoading:', messagesLoading, 'messages.length:', messages.length, 'groupedMessages.length:', groupedMessages.length)}
+              {(() => { console.log('[RENDER AREA] messagesLoading:', messagesLoading, 'messages.length:', messages.length, 'groupedMessages.length:', groupedMessages.length); return null })()}
               {messagesLoading ? (
                 <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 text-primary-400 animate-spin" /></div>
               ) : messages.length === 0 ? (
