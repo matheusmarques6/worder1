@@ -1,27 +1,69 @@
-# CORREÇÃO SIMPLES - Apenas Webhook
+# APIs para Botões - Tag, Deal, Bloquear, Atribuir
 
-Este pacote contém APENAS a correção para evitar duplicação de conversas.
+## O que está incluído:
 
-## O que faz:
-- Busca conversa por `phone_number` (não por contact_id)
-- Só cria nova conversa se não existir nenhuma para esse número
-- Atualiza conversa existente em vez de criar nova
+1. **Block API** - `/api/whatsapp/inbox/contacts/[id]/block`
+   - POST: Bloquear/desbloquear contato
+
+2. **Deals API** - `/api/whatsapp/inbox/contacts/[id]/deals`
+   - GET: Listar deals do contato
+   - POST: Criar novo deal
+
+3. **Assign API** - `/api/whatsapp/inbox/conversations/[id]/assign`
+   - GET: Listar usuários disponíveis
+   - POST: Atribuir conversa a um usuário
 
 ## Instalação:
 
-### 1. Execute o SQL no Supabase (limpar-duplicados.sql)
-Isso vai remover as conversas e contatos duplicados.
+### 1. Execute o SQL no Supabase (migration.sql)
 
-### 2. Substitua o arquivo
-Copie `webhook-route.ts` para:
-`src/app/api/whatsapp/webhook/route.ts`
+### 2. Copie as pastas para seu projeto:
+```
+src/app/api/whatsapp/inbox/contacts/[id]/block/route.ts
+src/app/api/whatsapp/inbox/contacts/[id]/deals/route.ts
+src/app/api/whatsapp/inbox/conversations/[id]/assign/route.ts
+```
 
 ### 3. Deploy
 ```bash
 git add .
-git commit -m "fix: webhook sem duplicação"
+git commit -m "feat: apis block, deal, assign"
 git push
 ```
 
-## Não mexe em mais nada!
-NÃO substitua o InboxTab.tsx - deixe o seu atual.
+## Como os botões devem chamar as APIs:
+
+### Bloquear:
+```javascript
+await fetch(`/api/whatsapp/inbox/contacts/${contact.id}/block`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ block: !contact.is_blocked })
+})
+```
+
+### Criar Deal:
+```javascript
+await fetch(`/api/whatsapp/inbox/contacts/${contact.id}/deals`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ 
+    title: `Deal - ${contact.name}`,
+    value: 0
+  })
+})
+```
+
+### Atribuir:
+```javascript
+// Listar usuários
+const res = await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/assign`)
+const { users } = await res.json()
+
+// Atribuir
+await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/assign`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ user_id: selectedUserId })
+})
+```

@@ -18,8 +18,8 @@ export async function POST(
     const { data: contact, error } = await supabase
       .from('whatsapp_contacts')
       .update({ 
-        is_blocked: block, 
-        updated_at: new Date().toISOString() 
+        is_blocked: block,
+        updated_at: new Date().toISOString()
       })
       .eq('id', contactId)
       .select()

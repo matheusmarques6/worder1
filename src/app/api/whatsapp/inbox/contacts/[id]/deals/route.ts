@@ -25,17 +25,16 @@ export async function GET(
       return NextResponse.json({ deals: [] })
     }
 
-    // Tentar buscar deals da tabela deals (se existir)
+    // Buscar deals do contato
     const { data: deals, error } = await supabase
       .from('deals')
-      .select('*, pipeline:pipelines(*), stage:pipeline_stages(*)')
+      .select('*')
       .eq('organization_id', contact.organization_id)
       .or(`contact_phone.eq.${contact.phone_number},metadata->>whatsapp_contact_id.eq.${contactId}`)
       .order('created_at', { ascending: false })
 
     if (error) {
-      // Tabela não existe, retornar vazio
-      console.log('Deals table not found or error:', error.message)
+      console.log('Deals table error:', error.message)
       return NextResponse.json({ deals: [] })
     }
 
@@ -64,16 +63,18 @@ export async function POST(
       .single()
 
     if (!contact) {
-      return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })
     }
 
     // Buscar pipeline padrão
-    const { data: pipeline } = await supabase
+    const { data: pipelines } = await supabase
       .from('pipelines')
-      .select('id, stages:pipeline_stages(*)')
+      .select('id, stages:pipeline_stages(id, name, position)')
       .eq('organization_id', contact.organization_id)
       .limit(1)
-      .single()
+
+    const pipeline = pipelines?.[0]
+    const firstStage = pipeline?.stages?.sort((a: any, b: any) => a.position - b.position)?.[0]
 
     // Criar deal
     const { data: deal, error } = await supabase
@@ -83,15 +84,15 @@ export async function POST(
         title: title || `Deal - ${contact.name || contact.phone_number}`,
         value: value || 0,
         status: 'open',
-        pipeline_id: pipeline?.id,
-        stage_id: pipeline?.stages?.[0]?.id,
+        pipeline_id: pipeline?.id || null,
+        stage_id: firstStage?.id || null,
         contact_phone: contact.phone_number,
         metadata: { 
           whatsapp_contact_id: contactId,
           source: 'whatsapp'
         },
       })
-      .select('*, pipeline:pipelines(*), stage:pipeline_stages(*)')
+      .select()
       .single()
 
     if (error) {
