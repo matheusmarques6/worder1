@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import OpenAI from 'openai'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host'
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -32,9 +36,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    
-    // Log inicial
-    await logWebhook('RECEIVED', body.instance || 'unknown', { event: body.event })
 
     if (body.event === 'messages.upsert' || body.event === 'MESSAGES_UPSERT') {
       await processMessage(body)
@@ -42,20 +43,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ status: 'ok' })
   } catch (error: any) {
-    await logWebhook('ERROR_MAIN', 'error', { error: error.message })
+    console.error('Webhook error:', error)
     return NextResponse.json({ status: 'error' }, { status: 200 })
-  }
-}
-
-async function logWebhook(eventType: string, instanceName: string, data: any) {
-  try {
-    await supabase.from('webhook_logs').insert({
-      event_type: eventType,
-      instance_name: instanceName,
-      raw_data: data,
-    })
-  } catch (e) {
-    console.error('Log error:', e)
   }
 }
 
@@ -64,40 +53,23 @@ async function processMessage(body: any) {
   const data = body.data
 
   // 1. Buscar instância
-  const { data: instance, error: instError } = await supabase
+  const { data: instance } = await supabase
     .from('whatsapp_instances')
     .select('*')
     .eq('unique_id', instanceName)
     .single()
 
-  if (instError || !instance) {
-    await logWebhook('INSTANCE_NOT_FOUND', instanceName, { error: instError?.message })
-    return
-  }
-
-  await logWebhook('INSTANCE_FOUND', instanceName, { instance_id: instance.id, org_id: instance.organization_id })
+  if (!instance) return
 
   const orgId = instance.organization_id
   const key = data.key
   const message = data.message
 
   // Ignorar mensagens próprias
-  if (key?.fromMe) {
-    await logWebhook('SKIP_OWN_MESSAGE', instanceName, {})
-    return
-  }
+  if (key?.fromMe) return
 
   const remoteJid = key?.remoteJid
-  if (!remoteJid) {
-    await logWebhook('NO_REMOTE_JID', instanceName, {})
-    return
-  }
-
-  // Ignorar grupos
-  if (remoteJid.includes('@g.us')) {
-    await logWebhook('SKIP_GROUP', instanceName, {})
-    return
-  }
+  if (!remoteJid || remoteJid.includes('@g.us')) return
 
   const phoneNumber = remoteJid.replace('@s.whatsapp.net', '')
   const pushName = data.pushName || phoneNumber
@@ -114,23 +86,16 @@ async function processMessage(body: any) {
   if (message?.videoMessage) messageType = 'video'
   if (message?.documentMessage) messageType = 'document'
 
-  await logWebhook('MESSAGE_PARSED', instanceName, { phoneNumber, pushName, content, messageType })
-
   // 2. Buscar ou criar contato
-  let { data: contact, error: contactError } = await supabase
+  let { data: contact } = await supabase
     .from('whatsapp_contacts')
     .select('*')
     .eq('organization_id', orgId)
     .eq('phone_number', phoneNumber)
     .single()
 
-  if (contactError && contactError.code !== 'PGRST116') {
-    await logWebhook('CONTACT_ERROR', instanceName, { error: contactError.message })
-    return
-  }
-
   if (!contact) {
-    const { data: newContact, error: createContactError } = await supabase
+    const { data: newContact } = await supabase
       .from('whatsapp_contacts')
       .insert({
         organization_id: orgId,
@@ -140,33 +105,22 @@ async function processMessage(body: any) {
       })
       .select()
       .single()
-
-    if (createContactError) {
-      await logWebhook('CREATE_CONTACT_ERROR', instanceName, { error: createContactError.message })
-      return
-    }
     contact = newContact
-    await logWebhook('CONTACT_CREATED', instanceName, { contact_id: contact.id })
-  } else {
-    await logWebhook('CONTACT_FOUND', instanceName, { contact_id: contact.id })
   }
 
+  if (!contact) return
+
   // 3. Buscar ou criar conversa
-  let { data: conversation, error: convError } = await supabase
+  let { data: conversation } = await supabase
     .from('whatsapp_conversations')
-    .select('*')
+    .select('*, agent:ai_agents(*)')
     .eq('organization_id', orgId)
     .eq('contact_id', contact.id)
     .eq('status', 'open')
     .single()
 
-  if (convError && convError.code !== 'PGRST116') {
-    await logWebhook('CONV_ERROR', instanceName, { error: convError.message })
-    return
-  }
-
   if (!conversation) {
-    const { data: newConv, error: createConvError } = await supabase
+    const { data: newConv } = await supabase
       .from('whatsapp_conversations')
       .insert({
         organization_id: orgId,
@@ -180,13 +134,7 @@ async function processMessage(body: any) {
       })
       .select()
       .single()
-
-    if (createConvError) {
-      await logWebhook('CREATE_CONV_ERROR', instanceName, { error: createConvError.message })
-      return
-    }
     conversation = newConv
-    await logWebhook('CONV_CREATED', instanceName, { conversation_id: conversation.id })
   } else {
     await supabase
       .from('whatsapp_conversations')
@@ -196,11 +144,12 @@ async function processMessage(body: any) {
         unread_count: (conversation.unread_count || 0) + 1,
       })
       .eq('id', conversation.id)
-    await logWebhook('CONV_UPDATED', instanceName, { conversation_id: conversation.id })
   }
 
-  // 4. Salvar mensagem
-  const { data: savedMsg, error: msgError } = await supabase
+  if (!conversation) return
+
+  // 4. Salvar mensagem recebida
+  await supabase
     .from('whatsapp_messages')
     .insert({
       organization_id: orgId,
@@ -214,13 +163,159 @@ async function processMessage(body: any) {
       status: 'received',
       metadata: { pushName },
     })
-    .select()
-    .single()
 
-  if (msgError) {
-    await logWebhook('MESSAGE_SAVE_ERROR', instanceName, { error: msgError.message })
-    return
+  // 5. Se bot ativo, gerar resposta com IA
+  if (conversation.is_bot_active && conversation.ai_agent_id) {
+    await generateAndSendAIResponse(
+      instance,
+      conversation,
+      contact,
+      content,
+      phoneNumber,
+      orgId
+    )
   }
+}
 
-  await logWebhook('MESSAGE_SAVED', instanceName, { message_id: savedMsg.id })
+async function generateAndSendAIResponse(
+  instance: any,
+  conversation: any,
+  contact: any,
+  userMessage: string,
+  phoneNumber: string,
+  orgId: string
+) {
+  try {
+    // Buscar agente
+    const { data: agent } = await supabase
+      .from('ai_agents')
+      .select('*')
+      .eq('id', conversation.ai_agent_id)
+      .single()
+
+    if (!agent) return
+
+    // Verificar se bot foi parado durante o processamento
+    const { data: currentConv } = await supabase
+      .from('whatsapp_conversations')
+      .select('is_bot_active, bot_stopped_at')
+      .eq('id', conversation.id)
+      .single()
+
+    if (!currentConv?.is_bot_active) {
+      console.log('Bot was stopped, skipping AI response')
+      return
+    }
+
+    // Buscar histórico de mensagens (últimas 10)
+    const { data: history } = await supabase
+      .from('whatsapp_messages')
+      .select('direction, content')
+      .eq('conversation_id', conversation.id)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    // Montar mensagens para a IA
+    const messages: any[] = [
+      { role: 'system', content: agent.system_prompt }
+    ]
+
+    // Adicionar histórico em ordem cronológica
+    if (history) {
+      const reversedHistory = [...history].reverse()
+      for (const msg of reversedHistory) {
+        if (msg.content && msg.content !== '[Mídia]') {
+          messages.push({
+            role: msg.direction === 'inbound' ? 'user' : 'assistant',
+            content: msg.content
+          })
+        }
+      }
+    }
+
+    // Verificar novamente se bot foi parado
+    const { data: checkConv } = await supabase
+      .from('whatsapp_conversations')
+      .select('is_bot_active')
+      .eq('id', conversation.id)
+      .single()
+
+    if (!checkConv?.is_bot_active) {
+      console.log('Bot was stopped before AI call, skipping')
+      return
+    }
+
+    // Chamar API da OpenAI
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    
+    const completion = await openai.chat.completions.create({
+      model: agent.model || 'gpt-4o-mini',
+      messages: messages,
+      temperature: agent.temperature || 0.7,
+      max_tokens: agent.max_tokens || 500,
+    })
+
+    const aiResponse = completion.choices[0]?.message?.content
+
+    if (!aiResponse) return
+
+    // Verificar MAIS UMA VEZ se bot foi parado
+    const { data: finalCheck } = await supabase
+      .from('whatsapp_conversations')
+      .select('is_bot_active')
+      .eq('id', conversation.id)
+      .single()
+
+    if (!finalCheck?.is_bot_active) {
+      console.log('Bot was stopped before sending, skipping')
+      return
+    }
+
+    // Enviar mensagem via Evolution API
+    const sendResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance.unique_id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': instance.api_key || EVOLUTION_API_KEY,
+      },
+      body: JSON.stringify({
+        number: phoneNumber,
+        text: aiResponse,
+      }),
+    })
+
+    const sendData = await sendResponse.json()
+
+    // Salvar mensagem do bot no banco
+    await supabase
+      .from('whatsapp_messages')
+      .insert({
+        organization_id: orgId,
+        conversation_id: conversation.id,
+        contact_id: contact.id,
+        direction: 'outbound',
+        message_type: 'text',
+        content: aiResponse,
+        status: sendResponse.ok ? 'sent' : 'failed',
+        wamid: sendData?.key?.id,
+        wa_message_id: sendData?.key?.id,
+        metadata: { 
+          ai_generated: true,
+          agent_id: agent.id,
+          agent_name: agent.name,
+        },
+      })
+
+    // Atualizar preview da conversa
+    await supabase
+      .from('whatsapp_conversations')
+      .update({
+        last_message_at: new Date().toISOString(),
+        last_message_preview: aiResponse.substring(0, 100),
+      })
+      .eq('id', conversation.id)
+
+  } catch (error) {
+    console.error('AI Response error:', error)
+  }
 }

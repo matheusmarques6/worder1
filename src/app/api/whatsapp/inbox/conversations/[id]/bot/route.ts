@@ -6,56 +6,97 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// POST /api/whatsapp/inbox/conversations/[id]/bot
+// POST - Ativar/desativar bot e selecionar agente
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const conversationId = params.id
     const body = await request.json()
-    const { isActive, reason, userId } = body
+    const { agentId, isActive } = body
 
-    const updates: any = {
-      is_bot_active: isActive,
-      updated_at: new Date().toISOString()
+    // Se desativando o bot
+    if (isActive === false || !agentId) {
+      const { data, error } = await supabase
+        .from('whatsapp_conversations')
+        .update({
+          is_bot_active: false,
+          ai_agent_id: null,
+          bot_stopped_at: new Date().toISOString(), // Marca quando foi parado
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', conversationId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      return NextResponse.json({ 
+        conversation: data,
+        botActive: false,
+        agent: null,
+      })
     }
 
-    if (!isActive) {
-      updates.bot_disabled_reason = reason || 'Desativado manualmente'
-      updates.bot_disabled_by = userId
-    } else {
-      updates.bot_disabled_reason = null
-      updates.bot_disabled_by = null
-      updates.bot_disabled_until = null
+    // Se ativando o bot com um agente
+    const { data: agent } = await supabase
+      .from('ai_agents')
+      .select('*')
+      .eq('id', agentId)
+      .single()
+
+    if (!agent) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
 
     const { data, error } = await supabase
       .from('whatsapp_conversations')
-      .update(updates)
-      .eq('id', id)
-      .select('*, contact:whatsapp_contacts(id, organization_id)')
+      .update({
+        is_bot_active: true,
+        ai_agent_id: agentId,
+        bot_stopped_at: null, // Limpa a flag de parado
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId)
+      .select()
       .single()
 
     if (error) throw error
 
-    // Registra atividade
-    if (data?.contact) {
-      await supabase.from('whatsapp_contact_activities').insert({
-        organization_id: data.contact.organization_id,
-        contact_id: data.contact.id,
-        conversation_id: id,
-        activity_type: isActive ? 'bot_enabled' : 'bot_disabled',
-        title: isActive ? 'Bot ativado' : 'Bot desativado',
-        description: reason || null,
-        created_by: userId
-      })
-    }
-
-    return NextResponse.json({ conversation: data })
-
-  } catch (error) {
+    return NextResponse.json({ 
+      conversation: data,
+      botActive: true,
+      agent: agent,
+    })
+  } catch (error: any) {
     console.error('Error toggling bot:', error)
-    return NextResponse.json({ error: 'Failed to toggle bot' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+// GET - Status atual do bot
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const conversationId = params.id
+
+    const { data: conversation, error } = await supabase
+      .from('whatsapp_conversations')
+      .select('*, agent:ai_agents(*)')
+      .eq('id', conversationId)
+      .single()
+
+    if (error) throw error
+
+    return NextResponse.json({ 
+      botActive: conversation.is_bot_active,
+      agent: conversation.agent,
+    })
+  } catch (error: any) {
+    console.error('Error getting bot status:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

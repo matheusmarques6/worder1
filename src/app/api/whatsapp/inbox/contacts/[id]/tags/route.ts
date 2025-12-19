@@ -6,68 +6,51 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// POST /api/whatsapp/inbox/contacts/[id]/tags
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const contactId = params.id
     const body = await request.json()
-    const { tag, action, userId } = body // action: 'add' | 'remove'
+    const { tag, action } = body
 
-    if (!tag || !action) {
-      return NextResponse.json({ error: 'Tag and action required' }, { status: 400 })
+    if (!tag) {
+      return NextResponse.json({ error: 'tag required' }, { status: 400 })
     }
 
-    // Busca contato atual
+    // Buscar contato atual
     const { data: contact, error: fetchError } = await supabase
       .from('whatsapp_contacts')
-      .select('tags, organization_id')
-      .eq('id', id)
+      .select('tags')
+      .eq('id', contactId)
       .single()
 
-    if (fetchError || !contact) {
-      return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
-    }
+    if (fetchError) throw fetchError
 
     let newTags = contact.tags || []
 
     if (action === 'add') {
       if (!newTags.includes(tag)) {
-        newTags.push(tag)
+        newTags = [...newTags, tag]
       }
     } else if (action === 'remove') {
       newTags = newTags.filter((t: string) => t !== tag)
     }
 
-    // Atualiza tags
-    const { data, error } = await supabase
+    // Atualizar contato
+    const { data: updatedContact, error: updateError } = await supabase
       .from('whatsapp_contacts')
-      .update({ 
-        tags: newTags,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select('*')
+      .update({ tags: newTags, updated_at: new Date().toISOString() })
+      .eq('id', contactId)
+      .select()
       .single()
 
-    if (error) throw error
+    if (updateError) throw updateError
 
-    // Registra atividade
-    await supabase.from('whatsapp_contact_activities').insert({
-      organization_id: contact.organization_id,
-      contact_id: id,
-      activity_type: action === 'add' ? 'tag_added' : 'tag_removed',
-      title: action === 'add' ? `Tag "${tag}" adicionada` : `Tag "${tag}" removida`,
-      metadata: { tag },
-      created_by: userId
-    })
-
-    return NextResponse.json({ contact: data })
-
-  } catch (error) {
+    return NextResponse.json({ contact: updatedContact })
+  } catch (error: any) {
     console.error('Error updating tags:', error)
-    return NextResponse.json({ error: 'Failed to update tags' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

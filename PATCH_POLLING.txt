@@ -1,0 +1,28 @@
+// INSTRUÇÕES:
+// Adicione este código no InboxTab.tsx DEPOIS da linha 462 (após o useEffect de fetchConversations)
+
+// ========== ADICIONE ESTES useEffects PARA TEMPO REAL ==========
+
+  // Polling para conversas (a cada 5 segundos)
+  useEffect(() => {
+    if (!organizationId) return
+    
+    const interval = setInterval(() => {
+      fetchConversations()
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [organizationId, statusFilter])
+
+  // Polling para mensagens (a cada 3 segundos quando há conversa selecionada)
+  useEffect(() => {
+    if (!selectedConversation) return
+
+    const interval = setInterval(() => {
+      fetchMessages(selectedConversation.id)
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [selectedConversation?.id])
+
+// ========== FIM DO CÓDIGO A ADICIONAR ==========

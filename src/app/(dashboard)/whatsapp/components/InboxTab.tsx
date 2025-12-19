@@ -268,9 +268,9 @@ export default function InboxTab() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Fetch conversations
-  const fetchConversations = async () => {
+  const fetchConversations = async (silent = false) => {
     if (!organizationId) return
-    setConversationsLoading(true)
+    if (!silent) setConversationsLoading(true)
     try {
       const params = new URLSearchParams({ organizationId })
       if (statusFilter !== 'all') params.append('status', statusFilter)
@@ -278,11 +278,19 @@ export default function InboxTab() {
       
       const res = await fetch(`/api/whatsapp/inbox/conversations?${params}`)
       const data = await res.json()
-      setConversations(data.conversations || [])
+      
+      // Atualizar conversas mas preservar unread_count=0 da conversa selecionada
+      const updatedConversations = (data.conversations || []).map((conv: InboxConversation) => {
+        if (selectedConversation && conv.id === selectedConversation.id) {
+          return { ...conv, unread_count: 0 }
+        }
+        return conv
+      })
+      setConversations(updatedConversations)
     } catch (error) {
       console.error('Error fetching conversations:', error)
     } finally {
-      setConversationsLoading(false)
+      if (!silent) setConversationsLoading(false)
     }
   }
 
@@ -448,7 +456,15 @@ export default function InboxTab() {
 
   // Select conversation
   const handleSelectConversation = (conv: InboxConversation) => {
-    setSelectedConversation(conv)
+    // Zerar unread_count localmente imediatamente
+    const updatedConv = { ...conv, unread_count: 0 }
+    setSelectedConversation(updatedConv)
+    
+    // Atualizar lista de conversas localmente
+    setConversations(prev => prev.map(c => 
+      c.id === conv.id ? { ...c, unread_count: 0 } : c
+    ))
+    
     setMobileView('chat')
     fetchMessages(conv.id)
     if (conv.contact_id) {
@@ -456,11 +472,32 @@ export default function InboxTab() {
       fetchOrders(conv.contact_id)
       fetchDeals(conv.contact_id)
     }
+    
+    // Zerar no banco (API já faz isso no fetchMessages, mas garantir)
+    fetch(`/api/whatsapp/inbox/conversations/${conv.id}/read`, { method: 'POST' }).catch(() => {})
   }
 
   // Effects
   useEffect(() => { if (organizationId) fetchConversations() }, [statusFilter, organizationId])
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  // Polling para conversas (a cada 5 segundos) - silencioso
+  useEffect(() => {
+    if (!organizationId) return
+    const interval = setInterval(() => {
+      fetchConversations(true) // silent = true
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [organizationId, statusFilter, selectedConversation?.id])
+
+  // Polling para mensagens (a cada 3 segundos quando há conversa selecionada)
+  useEffect(() => {
+    if (!selectedConversation) return
+    const interval = setInterval(() => {
+      fetchMessages(selectedConversation.id)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [selectedConversation?.id])
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.height = 'auto'

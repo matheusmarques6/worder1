@@ -6,35 +6,23 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// POST /api/whatsapp/inbox/conversations/[id]/read
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const conversationId = params.id
 
-    // Marca todas mensagens inbound como lidas
-    await supabase
-      .from('whatsapp_messages')
-      .update({ 
-        status: 'read',
-        read_at: new Date().toISOString()
-      })
-      .eq('conversation_id', id)
-      .eq('direction', 'inbound')
-      .neq('status', 'read')
-
-    // Zera contador de não lidas
-    await supabase
+    const { error } = await supabase
       .from('whatsapp_conversations')
       .update({ unread_count: 0 })
-      .eq('id', id)
+      .eq('id', conversationId)
+
+    if (error) throw error
 
     return NextResponse.json({ success: true })
-
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error marking as read:', error)
-    return NextResponse.json({ error: 'Failed to mark as read' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
