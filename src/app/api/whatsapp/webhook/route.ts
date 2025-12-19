@@ -51,28 +51,43 @@ async function processMessage(body: any) {
   const instanceName = body.instance
   const data = body.data
 
+  console.log('[Webhook] Processing message from instance:', instanceName)
+
   // 1. Buscar instância
-  const { data: instance } = await supabase
+  const { data: instances } = await supabase
     .from('whatsapp_instances')
     .select('*')
     .eq('unique_id', instanceName)
-    .single()
+    .limit(1)
 
-  if (!instance) return
+  const instance = instances?.[0]
+
+  if (!instance) {
+    console.log('[Webhook] Instance not found:', instanceName)
+    return
+  }
 
   const orgId = instance.organization_id
   const key = data.key
   const message = data.message
 
   // Ignorar mensagens próprias
-  if (key?.fromMe) return
+  if (key?.fromMe) {
+    console.log('[Webhook] Skipping own message')
+    return
+  }
 
   const remoteJid = key?.remoteJid
-  if (!remoteJid || remoteJid.includes('@g.us')) return
+  if (!remoteJid || remoteJid.includes('@g.us')) {
+    console.log('[Webhook] Skipping - no jid or group')
+    return
+  }
 
   const phoneNumber = remoteJid.replace('@s.whatsapp.net', '')
   const pushName = data.pushName || phoneNumber
   
+  console.log('[Webhook] Message from:', phoneNumber, 'Name:', pushName)
+
   // Extrair conteúdo
   let content = message?.conversation || 
                 message?.extendedTextMessage?.text || 
@@ -85,16 +100,21 @@ async function processMessage(body: any) {
   if (message?.videoMessage) messageType = 'video'
   if (message?.documentMessage) messageType = 'document'
 
+  console.log('[Webhook] Content:', content, 'Type:', messageType)
+
   // 2. Buscar ou criar contato
-  let { data: contact } = await supabase
+  const { data: contacts } = await supabase
     .from('whatsapp_contacts')
     .select('*')
     .eq('organization_id', orgId)
     .eq('phone_number', phoneNumber)
-    .single()
+    .limit(1)
+
+  let contact = contacts?.[0] || null
 
   if (!contact) {
-    const { data: newContact } = await supabase
+    console.log('[Webhook] Creating new contact')
+    const { data: newContact, error: contactError } = await supabase
       .from('whatsapp_contacts')
       .insert({
         organization_id: orgId,
@@ -104,8 +124,15 @@ async function processMessage(body: any) {
       })
       .select()
       .single()
+    
+    if (contactError) {
+      console.error('[Webhook] Error creating contact:', contactError)
+      return
+    }
     contact = newContact
+    console.log('[Webhook] Contact created:', contact?.id)
   } else {
+    console.log('[Webhook] Found existing contact:', contact.id)
     // Atualizar nome se mudou
     if (pushName && pushName !== contact.name) {
       await supabase
@@ -118,17 +145,21 @@ async function processMessage(body: any) {
   if (!contact) return
 
   // 3. Buscar conversa existente por phone_number (mais confiável)
-  let { data: conversation } = await supabase
+  const { data: conversations } = await supabase
     .from('whatsapp_conversations')
     .select('*, agent:ai_agents(*)')
     .eq('organization_id', orgId)
     .eq('phone_number', phoneNumber)
     .order('created_at', { ascending: false })
     .limit(1)
-    .single()
+
+  let conversation = conversations?.[0] || null
+
+  console.log('[Webhook] Found conversations:', conversations?.length || 0)
 
   if (!conversation) {
-    const { data: newConv } = await supabase
+    console.log('[Webhook] Creating new conversation')
+    const { data: newConv, error: convError } = await supabase
       .from('whatsapp_conversations')
       .insert({
         organization_id: orgId,
@@ -142,8 +173,15 @@ async function processMessage(body: any) {
       })
       .select()
       .single()
+    
+    if (convError) {
+      console.error('[Webhook] Error creating conversation:', convError)
+      return
+    }
     conversation = newConv
+    console.log('[Webhook] Conversation created:', conversation?.id)
   } else {
+    console.log('[Webhook] Updating existing conversation:', conversation.id)
     // Atualizar conversa existente
     await supabase
       .from('whatsapp_conversations')
@@ -155,12 +193,17 @@ async function processMessage(body: any) {
         contact_id: contact.id, // Garantir que contact_id está correto
       })
       .eq('id', conversation.id)
+    
+    console.log('[Webhook] Updated existing conversation:', conversation.id)
   }
 
-  if (!conversation) return
+  if (!conversation) {
+    console.log('[Webhook] No conversation found/created')
+    return
+  }
 
   // 4. Salvar mensagem recebida
-  await supabase
+  const { data: savedMsg, error: msgError } = await supabase
     .from('whatsapp_messages')
     .insert({
       organization_id: orgId,
@@ -174,6 +217,15 @@ async function processMessage(body: any) {
       status: 'received',
       metadata: { pushName },
     })
+    .select()
+    .single()
+
+  if (msgError) {
+    console.error('[Webhook] Error saving message:', msgError)
+    return
+  }
+
+  console.log('[Webhook] Message saved:', savedMsg?.id)
 
   // 5. Se bot ativo, gerar resposta com IA
   if (conversation.is_bot_active && conversation.ai_agent_id) {
