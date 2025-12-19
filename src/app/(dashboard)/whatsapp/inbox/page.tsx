@@ -157,9 +157,9 @@ export default function InboxPage() {
   useEffect(() => {
     if (selectedInstance) {
       console.log('📱 Instance changed, reloading conversations:', selectedInstance.id)
-      fetchConversations({ instanceId: selectedInstance.id })
+      refreshConversations()
     }
-  }, [selectedInstance?.id])
+  }, [selectedInstance?.id, refreshConversations])
 
   // Load messages and contact when conversation changes
   useEffect(() => {
