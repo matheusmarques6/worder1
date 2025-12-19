@@ -145,8 +145,13 @@ export default function WhatsAppConnectUnified({
       const newInstanceId = createData.instance?.id
       setInstanceId(newInstanceId)
 
-      // 2. Gerar QR Code
-      await requestQRCode(newInstanceId)
+      // 2. Usar QR que veio do create (se disponível) ou buscar novo
+      if (createData.qr_code || createData.qr) {
+        setQrCode(createData.qr_code || createData.qr)
+        setQrStatus('generating')
+      } else {
+        await requestQRCode(newInstanceId)
+      }
       
       // 3. Iniciar polling
       startStatusPolling(newInstanceId)
@@ -181,12 +186,15 @@ export default function WhatsAppConnectUnified({
 
       const data = await response.json()
 
-      if (data.qr_code) {
-        setQrCode(data.qr_code)
+      // Aceitar tanto qr_code quanto qrcode
+      const qrCodeValue = data.qr_code || data.qrcode
+      
+      if (qrCodeValue) {
+        setQrCode(qrCodeValue)
         setQrStatus('generating')
-      } else if (data.status === 'ACTIVE') {
+      } else if (data.connected || data.status === 'ACTIVE') {
         setQrStatus('connected')
-        setConnectedNumber(data.phone_number)
+        setConnectedNumber(data.phoneNumber || data.phone_number)
         stopPolling()
       }
     } catch (err: any) {

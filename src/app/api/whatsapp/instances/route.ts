@@ -325,7 +325,8 @@ async function handleCreate(body: any) {
 
   return NextResponse.json({ 
     instance: data, 
-    qr: qrResult.qrcode || null,
+    qr_code: qrResult.qrcode || null,
+    qr: qrResult.qrcode || null, // compatibilidade
     webhook_configured: webhookResult.success,
     webhook_url: webhookUrl,
   });
@@ -383,12 +384,15 @@ async function handleGenerateQR(body: any) {
       .from('whatsapp_instances')
       .update({ 
         status: 'generating',
+        qr_code: qrResult.qrcode,
         updated_at: new Date().toISOString() 
       })
       .eq('id', id);
 
+    // Retornar no formato que o frontend espera
     return NextResponse.json({ 
-      qrcode: qrResult.qrcode,
+      qr_code: qrResult.qrcode,
+      qrcode: qrResult.qrcode, // compatibilidade
       needsConversion: qrResult.needsConversion 
     });
   }
