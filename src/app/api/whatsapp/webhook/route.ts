@@ -105,17 +105,26 @@ async function processMessage(body: any) {
       .select()
       .single()
     contact = newContact
+  } else {
+    // Atualizar nome se mudou
+    if (pushName && pushName !== contact.name) {
+      await supabase
+        .from('whatsapp_contacts')
+        .update({ name: pushName, profile_name: pushName })
+        .eq('id', contact.id)
+    }
   }
 
   if (!contact) return
 
-  // 3. Buscar ou criar conversa
+  // 3. Buscar conversa existente por phone_number (mais confiável)
   let { data: conversation } = await supabase
     .from('whatsapp_conversations')
     .select('*, agent:ai_agents(*)')
     .eq('organization_id', orgId)
-    .eq('contact_id', contact.id)
-    .eq('status', 'open')
+    .eq('phone_number', phoneNumber)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .single()
 
   if (!conversation) {
@@ -135,12 +144,15 @@ async function processMessage(body: any) {
       .single()
     conversation = newConv
   } else {
+    // Atualizar conversa existente
     await supabase
       .from('whatsapp_conversations')
       .update({
+        status: 'open', // Reabrir se estava fechada
         last_message_at: new Date().toISOString(),
         last_message_preview: content.substring(0, 100),
         unread_count: (conversation.unread_count || 0) + 1,
+        contact_id: contact.id, // Garantir que contact_id está correto
       })
       .eq('id', conversation.id)
   }
