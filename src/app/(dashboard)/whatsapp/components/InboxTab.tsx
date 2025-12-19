@@ -297,13 +297,19 @@ export default function InboxTab() {
     }
   }
 
-  // Fetch messages
-  const fetchMessages = async (conversationId: string) => {
-    setMessagesLoading(true)
+  // Fetch messages - silencioso se já tem mensagens
+  const fetchMessages = async (conversationId: string, silent = false) => {
+    // Só mostra loading na primeira carga
+    if (!silent && messages.length === 0) setMessagesLoading(true)
     try {
       const res = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}/messages`)
       const data = await res.json()
-      setMessages(data.messages || [])
+      const newMessages = data.messages || []
+      
+      // Só atualiza se houver diferença (evita re-render desnecessário)
+      if (JSON.stringify(newMessages.map((m: any) => m.id)) !== JSON.stringify(messages.map(m => m.id))) {
+        setMessages(newMessages)
+      }
     } catch (error) {
       console.error('Error fetching messages:', error)
     } finally {
@@ -311,13 +317,14 @@ export default function InboxTab() {
     }
   }
 
-  // Fetch contact
-  const fetchContact = async (contactId: string) => {
-    setContactLoading(true)
+  // Fetch contact - silencioso se já tem contato
+  const fetchContact = async (contactId: string, silent = false) => {
+    // Só mostra loading na primeira carga
+    if (!silent && !contact) setContactLoading(true)
     try {
       const res = await fetch(`/api/whatsapp/inbox/contacts/${contactId}`)
       const data = await res.json()
-      setContact(data.contact || null)
+      if (data.contact) setContact(data.contact)
       setNotes(data.notes || [])
     } catch (error) {
       console.error('Error fetching contact:', error)
@@ -459,6 +466,9 @@ export default function InboxTab() {
 
   // Select conversation
   const handleSelectConversation = (conv: InboxConversation) => {
+    // Se é a mesma conversa, não faz nada
+    if (selectedConversation?.id === conv.id) return
+    
     // Zerar unread_count localmente imediatamente
     const updatedConv = { ...conv, unread_count: 0 }
     setSelectedConversation(updatedConv)
@@ -468,15 +478,25 @@ export default function InboxTab() {
       c.id === conv.id ? { ...c, unread_count: 0 } : c
     ))
     
+    // Limpar dados antigos apenas se mudar de conversa
+    setMessages([])
+    setContact(null)
+    setNotes([])
+    setDeals([])
+    setOrders([])
+    setCart(null)
+    
     setMobileView('chat')
-    fetchMessages(conv.id)
+    
+    // Carregar novos dados (primeira carga, então mostra loading)
+    fetchMessages(conv.id, false)
     if (conv.contact_id) {
-      fetchContact(conv.contact_id)
+      fetchContact(conv.contact_id, false)
       fetchOrders(conv.contact_id)
       fetchDeals(conv.contact_id)
     }
     
-    // Zerar no banco (API já faz isso no fetchMessages, mas garantir)
+    // Zerar no banco
     fetch(`/api/whatsapp/inbox/conversations/${conv.id}/read`, { method: 'POST' }).catch(() => {})
   }
 
@@ -497,7 +517,7 @@ export default function InboxTab() {
   useEffect(() => {
     if (!selectedConversation) return
     const interval = setInterval(() => {
-      fetchMessages(selectedConversation.id)
+      fetchMessages(selectedConversation.id, true) // silent = true
     }, 3000)
     return () => clearInterval(interval)
   }, [selectedConversation?.id])
