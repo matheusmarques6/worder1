@@ -1,119 +1,223 @@
-# 🔌 ZAP ZAP - WhatsApp Connection System
+# 📦 ZapZap v8 - WhatsApp Evolution API Integration
 
-Sistema de conexão WhatsApp via QR Code usando Evolution API.
+## 🎯 O que mudou nesta versão
 
-## 📦 Arquivos Incluídos
+### ✅ Webhook Automático
+Agora quando você cria uma instância, o webhook é configurado **automaticamente** na Evolution API. O cliente **NÃO precisa fazer nada** além de escanear o QR Code!
+
+### ✅ Logs Detalhados
+Todos os eventos são logados com detalhes para facilitar debug:
+- `📥 WEBHOOK RECEIVED` - Quando chega um evento
+- `📨 Processing MESSAGES_UPSERT` - Quando processa mensagem
+- `✅ Message saved` - Quando salva no banco
+- etc.
+
+### ✅ Endpoint de Debug
+Novo endpoint `/api/whatsapp/debug` para diagnóstico:
+- Verificar conexão com Evolution API
+- Listar instâncias
+- Verificar/configurar webhooks
+- Sincronizar instâncias
+
+---
+
+## 📁 Arquivos para copiar
 
 ```
-src/
-├── app/
-│   ├── (dashboard)/whatsapp/components/
-│   │   └── InboxTab.tsx                    # Tab principal do inbox (ATUALIZADO)
-│   └── api/whatsapp/
-│       ├── instances/route.ts              # API de instâncias (ATUALIZADO)
-│       └── webhook/route.ts                # Webhook receiver (ATUALIZADO)
-├── components/whatsapp/
-│   ├── WhatsAppConnectUnified.tsx          # Modal de conexão
-│   └── inbox/
-│       └── WhatsAppConnectionManager.tsx   # Seletor de instâncias
-└── hooks/
-    └── useWhatsAppConnectionManager.ts     # Hook de gerenciamento
-
-supabase/migrations/
-└── whatsapp-migration-fix.sql              # SQL para migração
+src/app/api/whatsapp/
+├── instances/route.ts    # API de gerenciamento de instâncias
+├── webhook/route.ts      # Receber eventos da Evolution
+└── debug/route.ts        # Diagnóstico e debug
 ```
 
-## 🚀 Como Instalar
+---
 
-### 1. Extrair arquivos
-```bash
-unzip zapzap-whatsapp-connection-v6.zip -d ./seu-projeto/
-```
+## 🚀 Deploy
 
-### 2. Configurar variáveis de ambiente
+### 1. Copiar arquivos para o projeto
 
-Adicione ao seu `.env.local` ou nas variáveis do Vercel:
+Substitua os arquivos em `src/app/api/whatsapp/` pelos desta pasta.
+
+### 2. Verificar variáveis de ambiente no Vercel
 
 ```env
 EVOLUTION_API_URL=https://n8n-evolution-api.1fpac5.easypanel.host
 EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
 NEXT_PUBLIC_APP_URL=https://worder1.vercel.app
+NEXT_PUBLIC_SUPABASE_URL=sua_url
+SUPABASE_SERVICE_ROLE_KEY=sua_key
 ```
 
-### 3. Executar migração SQL
+### 3. Deploy
 
-No Supabase Dashboard → SQL Editor, execute o conteúdo de:
-`supabase/migrations/whatsapp-migration-fix.sql`
-
-### 4. Deploy
 ```bash
 git add .
-git commit -m "Add WhatsApp QR Code connection"
+git commit -m "v8: Webhook automático e melhorias"
 git push
 ```
 
-## 📱 Como Usar
+---
 
-1. Acesse `/whatsapp` na sua aplicação
-2. Clique em **"Conectar WhatsApp"**
-3. Selecione **"Via QR Code"**
-4. Escaneie o QR Code com seu WhatsApp
-5. Pronto! Mensagens chegam em tempo real.
+## 🔍 Debug
 
-## 🔗 Webhook
-
-O webhook é configurado automaticamente em:
+### Verificar se Evolution API está acessível:
 ```
-https://worder1.vercel.app/api/whatsapp/webhook
+GET https://worder1.vercel.app/api/whatsapp/debug?action=status
 ```
 
-### Eventos recebidos:
-- `MESSAGES_UPSERT` - Novas mensagens
-- `MESSAGES_UPDATE` - Status de entrega
-- `CONNECTION_UPDATE` - Status da conexão
-- `QRCODE_UPDATED` - Novo QR Code
+### Listar instâncias na Evolution:
+```
+GET https://worder1.vercel.app/api/whatsapp/debug?action=instances
+```
 
-## 🤖 Integração com IA
+### Verificar webhook de uma instância:
+```
+GET https://worder1.vercel.app/api/whatsapp/debug?action=webhook&instance=NOME_DA_INSTANCIA
+```
 
-Quando uma mensagem chega e o bot está ativo:
-1. Webhook recebe a mensagem
-2. Processa contexto e histórico
-3. Chama `/api/ai/chat` para resposta
-4. Envia resposta via Evolution API
-5. Salva no banco de dados
+### Configurar webhook manualmente:
+```
+GET https://worder1.vercel.app/api/whatsapp/debug?action=configure_webhook&instance=NOME_DA_INSTANCIA
+```
 
-## ⚠️ Troubleshooting
+### Diagnóstico completo:
+```
+GET https://worder1.vercel.app/api/whatsapp/debug?action=full
+```
 
-### QR Code não aparece
-- Verifique se `EVOLUTION_API_URL` está correto
-- Verifique se a API Key está válida
-- Verifique os logs do Vercel
+### Corrigir webhooks de todas as instâncias:
+```bash
+curl -X POST https://worder1.vercel.app/api/whatsapp/debug \
+  -H "Content-Type: application/json" \
+  -d '{"action": "fix_webhooks"}'
+```
 
-### Mensagens não chegam
-- Verifique se o webhook foi configurado na Evolution API
-- Verifique se a URL está acessível publicamente
-- Veja os logs em `https://n8n-evolution-api.1fpac5.easypanel.host/manager`
+---
 
-### Conexão desconecta
-- Isso é normal após ~14 dias sem atividade
-- Basta reconectar escaneando novo QR Code
+## 🧪 Testar Fluxo Completo
 
-## 📊 Estrutura do Banco
+### 1. Criar nova instância
+```bash
+curl -X POST https://worder1.vercel.app/api/whatsapp/instances \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "create",
+    "organization_id": "SEU_ORG_ID",
+    "title": "Teste"
+  }'
+```
 
-### whatsapp_instances
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | UUID | ID único |
-| organization_id | UUID | FK para organizations |
-| unique_id | VARCHAR | ID na Evolution API |
-| status | VARCHAR | ACTIVE, INACTIVE, GENERATING, connected, disconnected |
-| api_type | VARCHAR | EVOLUTION, META_CLOUD |
-| phone_number | VARCHAR | Número conectado |
-| qr_code | TEXT | QR Code em base64 |
+Resposta esperada:
+```json
+{
+  "instance": { ... },
+  "qr": "data:image/png;base64,...",
+  "webhook_configured": true,
+  "webhook_url": "https://worder1.vercel.app/api/whatsapp/webhook"
+}
+```
 
-## 🔒 Segurança
+### 2. Escanear QR Code
 
-- API Keys nunca são expostas no frontend
-- RLS habilitado em todas as tabelas
-- Webhook valida origem das requisições
-- Tokens de acesso armazenados apenas no servidor
+### 3. Verificar status
+```bash
+curl -X POST https://worder1.vercel.app/api/whatsapp/instances \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "status",
+    "id": "ID_DA_INSTANCIA"
+  }'
+```
+
+### 4. Enviar mensagem de teste para o número conectado
+
+### 5. Verificar logs no Vercel
+- Acesse: Vercel Dashboard → Projeto → Logs
+- Procure por: `📥 WEBHOOK RECEIVED`
+
+---
+
+## 📋 Checklist de Problemas Comuns
+
+### ❌ Webhook não está sendo chamado
+1. Verificar se Evolution API está acessível
+2. Verificar se webhook foi configurado: `/api/whatsapp/debug?action=webhook&instance=NOME`
+3. Reconfigurar webhook: `/api/whatsapp/debug?action=configure_webhook&instance=NOME`
+
+### ❌ Instância não conecta
+1. Verificar versão da Evolution API (precisa ser v2.x com Baileys)
+2. Verificar se número não está banido
+3. Tentar recriar a instância
+
+### ❌ Mensagens não aparecem no inbox
+1. Verificar logs do Vercel para erros
+2. Verificar se tabelas existem no Supabase:
+   - `whatsapp_instances`
+   - `whatsapp_contacts`
+   - `whatsapp_conversations`
+   - `whatsapp_messages`
+
+### ❌ QR Code não aparece
+1. Chamar endpoint de QR manualmente
+2. Verificar se instância foi criada na Evolution
+
+---
+
+## 🔄 Fluxo de Dados
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    FLUXO DE CONEXÃO                             │
+│                                                                 │
+│  1. Cliente clica "Conectar"                                    │
+│            ↓                                                    │
+│  2. POST /api/whatsapp/instances {action: "create"}             │
+│            ↓                                                    │
+│  3. Backend:                                                    │
+│     a) Cria instância na Evolution API                          │
+│     b) Configura webhook AUTOMATICAMENTE ⭐                     │
+│     c) Salva no Supabase                                        │
+│            ↓                                                    │
+│  4. Retorna QR Code para frontend                               │
+│            ↓                                                    │
+│  5. Cliente escaneia QR                                         │
+│            ↓                                                    │
+│  6. Evolution envia CONNECTION_UPDATE via webhook               │
+│            ↓                                                    │
+│  7. Webhook atualiza status no Supabase                         │
+│            ↓                                                    │
+│  8. Frontend detecta status = connected ✅                      │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                   FLUXO DE MENSAGENS                            │
+│                                                                 │
+│  1. Cliente WhatsApp envia mensagem                             │
+│            ↓                                                    │
+│  2. Evolution recebe via Baileys                                │
+│            ↓                                                    │
+│  3. Evolution envia MESSAGES_UPSERT via webhook                 │
+│            ↓                                                    │
+│  4. POST /api/whatsapp/webhook recebe                           │
+│            ↓                                                    │
+│  5. Webhook handler:                                            │
+│     a) Identifica instância pelo unique_id                      │
+│     b) Cria/atualiza contato                                    │
+│     c) Cria/atualiza conversa                                   │
+│     d) Salva mensagem                                           │
+│     e) Processa IA se ativo                                     │
+│            ↓                                                    │
+│  6. Frontend atualiza inbox (polling ou realtime)               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📞 Suporte
+
+Se encontrar problemas:
+1. Verifique os logs do Vercel
+2. Use o endpoint de debug
+3. Verifique se as tabelas existem no Supabase

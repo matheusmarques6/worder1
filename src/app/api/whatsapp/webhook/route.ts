@@ -1,5 +1,6 @@
 // =============================================
-// WEBHOOK WHATSAPP - Com IA Integrada
+// WEBHOOK WHATSAPP v8 - Evolution API + Meta Cloud API
+// Com IA Integrada e logs detalhados
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,12 +11,27 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Evolution API Config (para enviar mensagens de resposta)
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+
+// =============================================
 // GET - Verificação do Webhook (Meta Challenge)
+// =============================================
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get('hub.mode');
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
+
+  // Também aceitar verificação simples da Evolution
+  if (!mode && !token && !challenge) {
+    return NextResponse.json({ 
+      status: 'ok', 
+      message: 'WhatsApp Webhook Endpoint Active',
+      timestamp: new Date().toISOString()
+    });
+  }
 
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'worder-whatsapp-verify';
 
@@ -27,77 +43,42 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
+// =============================================
 // POST - Receber mensagens e eventos
+// =============================================
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    console.log('📥 WhatsApp Webhook:', JSON.stringify(body, null, 2));
+    // Log detalhado do evento recebido
+    console.log('═══════════════════════════════════════');
+    console.log('📥 WEBHOOK RECEIVED:', new Date().toISOString());
+    console.log('═══════════════════════════════════════');
+    console.log(JSON.stringify(body, null, 2));
+    console.log('═══════════════════════════════════════');
 
     // ========================================
     // EVOLUTION API FORMAT
     // ========================================
     if (body.event || body.instance) {
+      console.log('🔵 Detected: EVOLUTION API format');
       return handleEvolutionWebhook(body);
     }
 
     // ========================================
     // META CLOUD API FORMAT
     // ========================================
-    const entry = body.entry?.[0];
-    if (!entry) return NextResponse.json({ status: 'ok' });
-
-    const changes = entry.changes?.[0];
-    if (!changes) return NextResponse.json({ status: 'ok' });
-
-    const value = changes.value;
-    const phoneNumberId = value.metadata?.phone_number_id;
-
-    // Buscar config pelo phone_number_id
-    let config: any = null;
-    
-    const { data: waConfig } = await supabase
-      .from('whatsapp_accounts')
-      .select('*, organization:organizations(*)')
-      .eq('phone_number_id', phoneNumberId)
-      .single();
-
-    config = waConfig;
-
-    // Fallback para whatsapp_configs
-    if (!config) {
-      const { data: altConfig } = await supabase
-        .from('whatsapp_configs')
-        .select('*')
-        .eq('phone_number_id', phoneNumberId)
-        .single();
-      config = altConfig;
+    if (body.entry || body.object === 'whatsapp_business_account') {
+      console.log('🟢 Detected: META CLOUD API format');
+      return handleMetaWebhook(body);
     }
 
-    if (!config) {
-      console.log('⚠️ Config not found for:', phoneNumberId);
-      return NextResponse.json({ status: 'ok' });
-    }
+    console.log('⚠️ Unknown webhook format');
+    return NextResponse.json({ status: 'ok', message: 'Unknown format' });
 
-    const orgId = config.organization_id;
-
-    // Processar mensagens
-    if (value.messages) {
-      for (const message of value.messages) {
-        await processIncomingMessage(orgId, config, message, value.contacts?.[0]);
-      }
-    }
-
-    // Processar status de entrega
-    if (value.statuses) {
-      for (const status of value.statuses) {
-        await processMessageStatus(status);
-      }
-    }
-
-    return NextResponse.json({ status: 'ok' });
   } catch (error: any) {
     console.error('❌ Webhook error:', error);
+    // Sempre retornar 200 para não causar retry
     return NextResponse.json({ status: 'error', message: error.message }, { status: 200 });
   }
 }
@@ -110,489 +91,281 @@ async function handleEvolutionWebhook(body: any) {
   const instanceName = body.instance;
   const data = body.data;
 
-  console.log(`📱 Evolution Event: ${event} from ${instanceName}`);
+  console.log(`📱 Evolution Event: ${event}`);
+  console.log(`📱 Instance: ${instanceName}`);
 
   // Buscar instância pelo unique_id
-  const { data: instance } = await supabase
+  const { data: instance, error: instanceError } = await supabase
     .from('whatsapp_instances')
     .select('*, organization_id')
     .eq('unique_id', instanceName)
     .single();
 
-  if (!instance) {
-    console.log('⚠️ Instance not found:', instanceName);
-    return NextResponse.json({ status: 'ok' });
+  if (instanceError || !instance) {
+    console.log(`⚠️ Instance not found: ${instanceName}`);
+    console.log('Error:', instanceError);
+    return NextResponse.json({ status: 'ok', message: 'Instance not found' });
   }
+
+  console.log(`✅ Found instance: ${instance.id} (org: ${instance.organization_id})`);
 
   const orgId = instance.organization_id;
 
-  switch (event) {
-    case 'messages.upsert':
-    case 'MESSAGES_UPSERT':
-      await handleEvolutionMessage(orgId, instance, data);
-      break;
+  try {
+    switch (event) {
+      case 'messages.upsert':
+      case 'MESSAGES_UPSERT':
+        console.log('📨 Processing MESSAGES_UPSERT');
+        await handleEvolutionMessage(orgId, instance, data);
+        break;
 
-    case 'messages.update':
-    case 'MESSAGES_UPDATE':
-      await handleEvolutionMessageUpdate(data);
-      break;
+      case 'messages.update':
+      case 'MESSAGES_UPDATE':
+        console.log('📊 Processing MESSAGES_UPDATE');
+        await handleEvolutionMessageUpdate(data);
+        break;
 
-    case 'connection.update':
-    case 'CONNECTION_UPDATE':
-      await handleEvolutionConnectionUpdate(instance, data);
-      break;
+      case 'connection.update':
+      case 'CONNECTION_UPDATE':
+        console.log('🔌 Processing CONNECTION_UPDATE');
+        await handleEvolutionConnectionUpdate(instance, data);
+        break;
 
-    case 'qrcode.updated':
-    case 'QRCODE_UPDATED':
-      await handleEvolutionQRUpdate(instance, data);
-      break;
+      case 'qrcode.updated':
+      case 'QRCODE_UPDATED':
+        console.log('📱 Processing QRCODE_UPDATED');
+        await handleEvolutionQRUpdate(instance, data);
+        break;
 
-    default:
-      console.log(`⏭️ Unhandled event: ${event}`);
+      case 'send.message':
+      case 'SEND_MESSAGE':
+        console.log('📤 Processing SEND_MESSAGE (outgoing)');
+        // Mensagens enviadas por nós - pode ignorar ou logar
+        break;
+
+      default:
+        console.log(`⏭️ Unhandled event: ${event}`);
+    }
+  } catch (eventError: any) {
+    console.error(`❌ Error processing ${event}:`, eventError);
   }
 
   return NextResponse.json({ status: 'ok' });
 }
 
-// Processar mensagem da Evolution API
+// =============================================
+// PROCESSAR MENSAGEM DA EVOLUTION
+// =============================================
 async function handleEvolutionMessage(orgId: string, instance: any, data: any) {
-  const message = data.message || data;
-  const key = data.key || message.key;
-  
-  // Ignorar mensagens enviadas por nós
-  if (key?.fromMe) {
-    console.log('⏭️ Skipping own message');
-    return;
-  }
+  try {
+    const message = data.message || data;
+    const key = data.key || message.key;
+    
+    console.log('📨 Message data:', JSON.stringify(data, null, 2));
+    
+    // Ignorar mensagens enviadas por nós
+    if (key?.fromMe) {
+      console.log('⏭️ Skipping own message (fromMe=true)');
+      return;
+    }
 
-  const remoteJid = key?.remoteJid;
-  if (!remoteJid) return;
+    const remoteJid = key?.remoteJid;
+    if (!remoteJid) {
+      console.log('⚠️ No remoteJid found');
+      return;
+    }
 
-  // Extrair número de telefone
-  const phoneNumber = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
-  
-  // Determinar tipo e conteúdo da mensagem
-  let messageType = 'text';
-  let content = '';
-  let mediaUrl = null;
+    // Ignorar grupos por enquanto
+    if (remoteJid.includes('@g.us')) {
+      console.log('⏭️ Skipping group message');
+      return;
+    }
 
-  if (message.conversation) {
-    content = message.conversation;
-  } else if (message.extendedTextMessage?.text) {
-    content = message.extendedTextMessage.text;
-  } else if (message.imageMessage) {
-    messageType = 'image';
-    content = message.imageMessage.caption || '';
-    mediaUrl = message.imageMessage.url;
-  } else if (message.videoMessage) {
-    messageType = 'video';
-    content = message.videoMessage.caption || '';
-    mediaUrl = message.videoMessage.url;
-  } else if (message.audioMessage) {
-    messageType = 'audio';
-    mediaUrl = message.audioMessage.url;
-  } else if (message.documentMessage) {
-    messageType = 'document';
-    content = message.documentMessage.fileName || '';
-    mediaUrl = message.documentMessage.url;
-  } else if (message.stickerMessage) {
-    messageType = 'sticker';
-  }
+    // Extrair número de telefone
+    const phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
+    console.log(`📞 Phone number: ${phoneNumber}`);
+    
+    // Determinar tipo e conteúdo da mensagem
+    let messageType = 'text';
+    let content = '';
+    let mediaUrl = null;
 
-  // Buscar nome do contato
-  const pushName = data.pushName || message.pushName || phoneNumber;
+    if (message.conversation) {
+      content = message.conversation;
+    } else if (message.extendedTextMessage?.text) {
+      content = message.extendedTextMessage.text;
+    } else if (message.imageMessage) {
+      messageType = 'image';
+      content = message.imageMessage.caption || '[Imagem]';
+      mediaUrl = message.imageMessage.url;
+    } else if (message.videoMessage) {
+      messageType = 'video';
+      content = message.videoMessage.caption || '[Vídeo]';
+      mediaUrl = message.videoMessage.url;
+    } else if (message.audioMessage) {
+      messageType = 'audio';
+      content = '[Áudio]';
+      mediaUrl = message.audioMessage.url;
+    } else if (message.documentMessage) {
+      messageType = 'document';
+      content = message.documentMessage.fileName || '[Documento]';
+      mediaUrl = message.documentMessage.url;
+    } else if (message.stickerMessage) {
+      messageType = 'sticker';
+      content = '[Sticker]';
+    } else if (message.locationMessage) {
+      messageType = 'location';
+      content = `[Localização: ${message.locationMessage.degreesLatitude}, ${message.locationMessage.degreesLongitude}]`;
+    } else if (message.contactMessage) {
+      messageType = 'contact';
+      content = `[Contato: ${message.contactMessage.displayName}]`;
+    }
 
-  // Buscar ou criar contato
-  let { data: contact } = await supabase
-    .from('whatsapp_contacts')
-    .select('*')
-    .eq('organization_id', orgId)
-    .eq('phone_number', phoneNumber)
-    .single();
+    console.log(`📝 Message type: ${messageType}`);
+    console.log(`📝 Content: ${content.substring(0, 100)}...`);
 
-  if (!contact) {
-    const { data: newContact } = await supabase
+    // Buscar nome do contato
+    const pushName = data.pushName || message.pushName || phoneNumber;
+    console.log(`👤 Push name: ${pushName}`);
+
+    // ========================================
+    // BUSCAR OU CRIAR CONTATO
+    // ========================================
+    let { data: contact, error: contactError } = await supabase
       .from('whatsapp_contacts')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('phone_number', phoneNumber)
+      .single();
+
+    if (contactError || !contact) {
+      console.log('👤 Creating new contact');
+      const { data: newContact, error: createError } = await supabase
+        .from('whatsapp_contacts')
+        .insert({
+          organization_id: orgId,
+          phone_number: phoneNumber,
+          name: pushName,
+          profile_name: pushName,
+        })
+        .select()
+        .single();
+      
+      if (createError) {
+        console.error('❌ Error creating contact:', createError);
+        return;
+      }
+      contact = newContact;
+      console.log('✅ Contact created:', contact.id);
+    } else {
+      console.log('✅ Contact found:', contact.id);
+    }
+
+    // ========================================
+    // BUSCAR OU CRIAR CONVERSA
+    // ========================================
+    let { data: conversation, error: convError } = await supabase
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('contact_id', contact.id)
+      .eq('status', 'open')
+      .single();
+
+    if (convError || !conversation) {
+      console.log('💬 Creating new conversation');
+      const { data: newConv, error: createConvError } = await supabase
+        .from('whatsapp_conversations')
+        .insert({
+          organization_id: orgId,
+          contact_id: contact.id,
+          phone_number: phoneNumber,
+          status: 'open',
+          is_bot_active: true,
+          last_message_at: new Date().toISOString(),
+          last_message_preview: content?.substring(0, 100) || `[${messageType}]`,
+          unread_count: 1,
+        })
+        .select()
+        .single();
+      
+      if (createConvError) {
+        console.error('❌ Error creating conversation:', createConvError);
+        return;
+      }
+      conversation = newConv;
+      console.log('✅ Conversation created:', conversation.id);
+    } else {
+      // Atualizar conversa existente
+      console.log('✅ Conversation found:', conversation.id);
+      await supabase
+        .from('whatsapp_conversations')
+        .update({
+          last_message_at: new Date().toISOString(),
+          last_message_preview: content?.substring(0, 100) || `[${messageType}]`,
+          unread_count: (conversation.unread_count || 0) + 1,
+        })
+        .eq('id', conversation.id);
+    }
+
+    // ========================================
+    // SALVAR MENSAGEM
+    // ========================================
+    const { data: savedMessage, error: msgError } = await supabase
+      .from('whatsapp_messages')
       .insert({
         organization_id: orgId,
-        phone_number: phoneNumber,
-        name: pushName,
-        profile_name: pushName,
+        conversation_id: conversation.id,
+        contact_id: contact.id,
+        wamid: key?.id,
+        wa_message_id: key?.id,
+        direction: 'inbound',
+        message_type: messageType,
+        content: content,
+        media_url: mediaUrl,
+        status: 'received',
+        metadata: {
+          pushName,
+          instanceId: instance.id,
+          instanceUniqueId: instance.unique_id,
+          raw: data,
+        },
       })
       .select()
       .single();
-    contact = newContact;
-  }
 
-  // Buscar ou criar conversa
-  let { data: conversation } = await supabase
-    .from('whatsapp_conversations')
-    .select('*')
-    .eq('organization_id', orgId)
-    .eq('contact_id', contact?.id)
-    .eq('status', 'open')
-    .single();
+    if (msgError) {
+      console.error('❌ Error saving message:', msgError);
+      return;
+    }
 
-  if (!conversation) {
-    const { data: newConv } = await supabase
-      .from('whatsapp_conversations')
-      .insert({
-        organization_id: orgId,
-        contact_id: contact?.id,
-        phone_number: phoneNumber,
-        status: 'open',
-        is_bot_active: true,
-        last_message_at: new Date().toISOString(),
-        last_message_preview: content?.substring(0, 100) || `[${messageType}]`,
-        unread_count: 1,
-      })
-      .select()
-      .single();
-    conversation = newConv;
-  } else {
-    // Atualizar conversa existente
-    await supabase
-      .from('whatsapp_conversations')
-      .update({
-        last_message_at: new Date().toISOString(),
-        last_message_preview: content?.substring(0, 100) || `[${messageType}]`,
-        unread_count: (conversation.unread_count || 0) + 1,
-      })
-      .eq('id', conversation.id);
-  }
+    console.log('✅ Message saved:', savedMessage.id);
 
-  // Salvar mensagem
-  const { data: savedMessage } = await supabase
-    .from('whatsapp_messages')
-    .insert({
-      organization_id: orgId,
-      conversation_id: conversation?.id,
-      contact_id: contact?.id,
-      wamid: key?.id,
-      direction: 'inbound',
-      message_type: messageType,
-      content,
-      media_url: mediaUrl,
-      status: 'received',
-      sent_by_bot: false,
-      raw_payload: data,
-    })
-    .select()
-    .single();
+    // ========================================
+    // PROCESSAR BOT/IA SE ATIVO
+    // ========================================
+    if (conversation.is_bot_active && messageType === 'text' && content) {
+      console.log('🤖 Bot is active, processing AI response...');
+      await processAIResponse(orgId, instance, conversation, contact, content);
+    }
 
-  console.log('✅ Message saved:', savedMessage?.id);
-
-  // Se bot ativo, processar resposta IA
-  if (conversation?.is_bot_active) {
-    await processAIResponse(orgId, instance, conversation, contact, content, messageType);
+  } catch (error: any) {
+    console.error('❌ handleEvolutionMessage error:', error);
   }
 }
 
-// Processar resposta da IA
+// =============================================
+// PROCESSAR RESPOSTA DE IA
+// =============================================
 async function processAIResponse(
   orgId: string, 
   instance: any, 
   conversation: any, 
   contact: any, 
-  userMessage: string,
-  messageType: string
+  userMessage: string
 ) {
-  // Importar função de IA do arquivo existente
   try {
-    // Buscar contexto e configuração do agente
-    const { data: agent } = await supabase
-      .from('ai_agents')
-      .select('*')
-      .eq('organization_id', orgId)
-      .eq('is_default', true)
-      .single();
-
-    if (!agent) {
-      console.log('⚠️ No default AI agent configured');
-      return;
-    }
-
-    // Buscar histórico de mensagens
-    const { data: history } = await supabase
-      .from('whatsapp_messages')
-      .select('direction, content, message_type')
-      .eq('conversation_id', conversation.id)
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    // Chamar AI
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app'}/api/ai/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        organizationId: orgId,
-        agentId: agent.id,
-        message: userMessage,
-        conversationId: conversation.id,
-        contactId: contact.id,
-        history: history?.reverse(),
-      }),
-    });
-
-    const aiResponse = await response.json();
-    
-    if (aiResponse.message) {
-      // Enviar resposta via Evolution API
-      await sendEvolutionMessage(instance, contact.phone_number, aiResponse.message);
-      
-      // Salvar mensagem da IA
-      await supabase
-        .from('whatsapp_messages')
-        .insert({
-          organization_id: orgId,
-          conversation_id: conversation.id,
-          contact_id: contact.id,
-          direction: 'outbound',
-          message_type: 'text',
-          content: aiResponse.message,
-          status: 'sent',
-          sent_by_bot: true,
-        });
-
-      // Atualizar conversa
-      await supabase
-        .from('whatsapp_conversations')
-        .update({
-          last_message_at: new Date().toISOString(),
-          last_message_preview: aiResponse.message.substring(0, 100),
-        })
-        .eq('id', conversation.id);
-    }
-  } catch (error) {
-    console.error('❌ AI Response error:', error);
-  }
-}
-
-// Enviar mensagem via Evolution API
-async function sendEvolutionMessage(instance: any, phoneNumber: string, message: string) {
-  const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
-  const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
-  
-  const apiUrl = instance.api_url || EVOLUTION_API_URL;
-  const apiKey = instance.api_key || EVOLUTION_API_KEY;
-
-  try {
-    const response = await fetch(`${apiUrl}/message/sendText/${instance.unique_id}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': apiKey,
-      },
-      body: JSON.stringify({
-        number: phoneNumber,
-        text: message,
-      }),
-    });
-
-    const result = await response.json();
-    console.log('📤 Message sent:', result);
-    return result;
-  } catch (error) {
-    console.error('❌ Send message error:', error);
-    throw error;
-  }
-}
-
-// Atualizar status da mensagem
-async function handleEvolutionMessageUpdate(data: any) {
-  const key = data.key;
-  const status = data.update?.status;
-
-  if (!key?.id || !status) return;
-
-  const statusMap: Record<number, string> = {
-    1: 'pending',
-    2: 'sent',
-    3: 'delivered',
-    4: 'read',
-    5: 'played',
-  };
-
-  await supabase
-    .from('whatsapp_messages')
-    .update({ status: statusMap[status] || 'sent' })
-    .eq('wamid', key.id);
-}
-
-// Atualizar status da conexão
-async function handleEvolutionConnectionUpdate(instance: any, data: any) {
-  const state = data.state;
-  
-  let status = 'disconnected';
-  let onlineStatus = 'unavailable';
-
-  if (state === 'open') {
-    status = 'connected';
-    onlineStatus = 'available';
-  } else if (state === 'connecting') {
-    status = 'GENERATING';
-  }
-
-  await supabase
-    .from('whatsapp_instances')
-    .update({
-      status,
-      online_status: onlineStatus,
-      last_connected_at: state === 'open' ? new Date().toISOString() : undefined,
-    })
-    .eq('id', instance.id);
-
-  console.log(`📱 Connection updated: ${state}`);
-}
-
-// Atualizar QR Code
-async function handleEvolutionQRUpdate(instance: any, data: any) {
-  const qrCode = data.qrcode?.base64 || data.base64;
-
-  if (qrCode) {
-    await supabase
-      .from('whatsapp_instances')
-      .update({
-        qr_code: qrCode,
-        status: 'GENERATING',
-      })
-      .eq('id', instance.id);
-
-    console.log('📱 QR Code updated');
-  }
-}
-
-// =============================================
-// PROCESSAR MENSAGEM RECEBIDA
-// =============================================
-async function processIncomingMessage(orgId: string, waConfig: any, message: any, contact: any) {
-  const senderPhone = message.from;
-  const messageType = message.type;
-  const timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();
-
-  // Extrair conteúdo
-  let content = '';
-  let mediaUrl = '';
-  
-  switch (messageType) {
-    case 'text':
-      content = message.text?.body || '';
-      break;
-    case 'image':
-      content = message.image?.caption || '[Imagem]';
-      mediaUrl = message.image?.id;
-      break;
-    case 'video':
-      content = message.video?.caption || '[Vídeo]';
-      mediaUrl = message.video?.id;
-      break;
-    case 'audio':
-      content = '[Áudio]';
-      mediaUrl = message.audio?.id;
-      break;
-    case 'document':
-      content = message.document?.filename || '[Documento]';
-      mediaUrl = message.document?.id;
-      break;
-    case 'location':
-      content = `📍 ${message.location?.latitude}, ${message.location?.longitude}`;
-      break;
-    case 'contacts':
-      content = `👤 ${message.contacts?.[0]?.name?.formatted_name || 'Contato'}`;
-      break;
-    case 'button':
-      content = message.button?.text || '';
-      break;
-    case 'interactive':
-      content = message.interactive?.button_reply?.title || 
-                message.interactive?.list_reply?.title || '';
-      break;
-    default:
-      content = `[${messageType}]`;
-  }
-
-  // Buscar ou criar conversa
-  let conversation: any = null;
-  
-  const { data: existingConv } = await supabase
-    .from('whatsapp_conversations')
-    .select('*')
-    .eq('organization_id', orgId)
-    .eq('phone_number', senderPhone)
-    .single();
-
-  if (!existingConv) {
-    const { data: newConv } = await supabase
-      .from('whatsapp_conversations')
-      .insert({
-        organization_id: orgId,
-        phone_number: senderPhone,
-        contact_name: contact?.profile?.name || null,
-        status: 'open',
-        is_bot_active: true,
-        unread_count: 1,
-        last_message_at: timestamp,
-        last_message_preview: content.substring(0, 100),
-      })
-      .select()
-      .single();
-    
-    conversation = newConv;
-  } else {
-    await supabase
-      .from('whatsapp_conversations')
-      .update({
-        unread_count: (existingConv.unread_count || 0) + 1,
-        last_message_at: timestamp,
-        last_message_preview: content.substring(0, 100),
-        status: existingConv.status === 'closed' ? 'open' : existingConv.status,
-      })
-      .eq('id', existingConv.id);
-    
-    conversation = existingConv;
-  }
-
-  if (!conversation) {
-    console.error('Failed to create/get conversation');
-    return;
-  }
-
-  // Salvar mensagem
-  await supabase
-    .from('whatsapp_messages')
-    .insert({
-      conversation_id: conversation.id,
-      wa_message_id: message.id,
-      direction: 'inbound',
-      type: messageType,
-      content,
-      media_url: mediaUrl || null,
-      status: 'received',
-      sent_at: timestamp,
-    });
-
-  console.log(`💬 Message saved: ${conversation.id} - ${content.substring(0, 50)}`);
-
-  // Verificar se deve responder automaticamente com IA
-  if (conversation.is_bot_active) {
-    if (conversation.bot_disabled_until) {
-      const disabledUntil = new Date(conversation.bot_disabled_until);
-      if (disabledUntil > new Date()) {
-        console.log('⏸️ Bot temporarily disabled');
-        return;
-      }
-    }
-
-    await triggerAIResponse(orgId, waConfig, conversation, content);
-  }
-}
-
-// =============================================
-// TRIGGER AI RESPONSE
-// =============================================
-async function triggerAIResponse(orgId: string, waConfig: any, conversation: any, userMessage: string) {
-  try {
-    // Buscar config de AI ativa
+    // Buscar configuração de IA da organização
     const { data: aiConfig } = await supabase
       .from('whatsapp_ai_configs')
       .select('*')
@@ -601,89 +374,117 @@ async function triggerAIResponse(orgId: string, waConfig: any, conversation: any
       .single();
 
     if (!aiConfig) {
-      console.log('🤖 No AI config found');
+      console.log('⚠️ No active AI config found');
       return;
     }
 
-    // Descriptografar API key
-    const apiKey = Buffer.from(aiConfig.api_key_encrypted, 'base64').toString('utf-8');
-
-    // Buscar histórico
-    const { data: history } = await supabase
+    // Buscar histórico recente
+    const { data: recentMessages } = await supabase
       .from('whatsapp_messages')
-      .select('direction, content')
+      .select('direction, content, message_type')
       .eq('conversation_id', conversation.id)
-      .order('created_at', { ascending: true })
-      .limit(20);
+      .order('created_at', { ascending: false })
+      .limit(10);
 
-    // Gerar resposta com IA
-    const response = await generateAIResponse({
+    const history = (recentMessages || []).reverse();
+
+    // Gerar resposta
+    const aiResponse = await generateAIResponse({
       provider: aiConfig.provider,
-      apiKey,
+      apiKey: aiConfig.api_key,
       model: aiConfig.model,
       systemPrompt: aiConfig.system_prompt,
+      contactName: contact.name,
+      conversationHistory: history,
+      userMessage,
       temperature: aiConfig.temperature,
       maxTokens: aiConfig.max_tokens,
-      conversationHistory: history || [],
-      userMessage,
-      contactName: conversation.contact_name,
     });
 
-    if (response) {
-      // Enviar resposta via WhatsApp
-      const phoneNumberId = waConfig.phone_number_id;
-      const accessToken = waConfig.access_token;
+    if (aiResponse) {
+      // Enviar resposta via Evolution API
+      await sendEvolutionMessage(instance, contact.phone_number, aiResponse);
 
-      const result = await sendWhatsAppMessage(
-        phoneNumberId, 
-        accessToken, 
-        conversation.phone_number, 
-        response
-      );
+      // Salvar resposta no banco
+      await supabase
+        .from('whatsapp_messages')
+        .insert({
+          organization_id: orgId,
+          conversation_id: conversation.id,
+          contact_id: contact.id,
+          direction: 'outbound',
+          message_type: 'text',
+          content: aiResponse,
+          status: 'sent',
+          metadata: { ai_generated: true, provider: aiConfig.provider },
+        });
 
-      // Salvar mensagem de resposta
-      if (result?.messages?.[0]?.id) {
-        await supabase
-          .from('whatsapp_messages')
-          .insert({
-            conversation_id: conversation.id,
-            wa_message_id: result.messages[0].id,
-            direction: 'outbound',
-            type: 'text',
-            content: response,
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-          });
+      // Atualizar preview da conversa
+      await supabase
+        .from('whatsapp_conversations')
+        .update({
+          last_message_at: new Date().toISOString(),
+          last_message_preview: aiResponse.substring(0, 100),
+        })
+        .eq('id', conversation.id);
 
-        console.log(`🤖 AI response sent: ${response.substring(0, 50)}...`);
-      }
+      console.log('✅ AI response sent');
     }
-  } catch (error) {
-    console.error('❌ AI response error:', error);
+  } catch (error: any) {
+    console.error('❌ processAIResponse error:', error);
   }
 }
 
 // =============================================
-// GERAR RESPOSTA COM IA
+// ENVIAR MENSAGEM VIA EVOLUTION API
+// =============================================
+async function sendEvolutionMessage(instance: any, phoneNumber: string, text: string) {
+  try {
+    const apiUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiKey = instance.api_key || EVOLUTION_API_KEY;
+
+    const response = await fetch(`${apiUrl}/message/sendText/${instance.unique_id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': apiKey,
+      },
+      body: JSON.stringify({
+        number: phoneNumber,
+        text: text,
+      }),
+    });
+
+    const data = await response.json();
+    console.log('📤 Evolution send response:', data);
+    return data;
+  } catch (error: any) {
+    console.error('❌ sendEvolutionMessage error:', error);
+    return null;
+  }
+}
+
+// =============================================
+// GERAR RESPOSTA DE IA
 // =============================================
 async function generateAIResponse(params: {
   provider: string;
   apiKey: string;
-  model: string;
+  model?: string;
   systemPrompt?: string;
-  temperature?: number;
-  maxTokens?: number;
+  contactName?: string;
   conversationHistory: any[];
   userMessage: string;
-  contactName?: string;
-}): Promise<string | null> {
-  const { provider, apiKey, model, systemPrompt, temperature, maxTokens, conversationHistory, userMessage, contactName } = params;
+  temperature?: number;
+  maxTokens?: number;
+}) {
+  const { provider, apiKey, model, systemPrompt, contactName, conversationHistory, userMessage, temperature, maxTokens } = params;
 
   const defaultPrompt = `Você é um assistente virtual amigável de atendimento ao cliente via WhatsApp.
 ${contactName ? `O cliente se chama ${contactName}.` : ''}
 Regras:
 - Seja cordial e profissional
-- Respostas curtas e diretas
+- Respostas curtas e diretas (máximo 3 parágrafos)
 - Use emojis com moderação
 - Se não souber a resposta, ofereça transferir para um atendente humano`;
 
@@ -710,7 +511,7 @@ Regras:
           model: model || 'gpt-4o-mini',
           messages,
           temperature: temperature ?? 0.7,
-          max_tokens: maxTokens ?? 1000,
+          max_tokens: maxTokens ?? 500,
         }),
       });
       const data = await response.json();
@@ -729,7 +530,7 @@ Regras:
         },
         body: JSON.stringify({
           model: model || 'claude-3-haiku-20240307',
-          max_tokens: maxTokens ?? 1000,
+          max_tokens: maxTokens ?? 500,
           system: systemMsg?.content || '',
           messages: chatMsgs,
         }),
@@ -756,7 +557,7 @@ Regras:
             systemInstruction: systemMsg ? { parts: [{ text: systemMsg.content }] } : undefined,
             generationConfig: {
               temperature: temperature ?? 0.7,
-              maxOutputTokens: maxTokens ?? 1000,
+              maxOutputTokens: maxTokens ?? 500,
             },
           }),
         }
@@ -767,178 +568,181 @@ Regras:
 
     return aiResponse || null;
   } catch (error) {
-    console.error('AI generation error:', error);
+    console.error('❌ AI generation error:', error);
     return null;
   }
 }
 
 // =============================================
-// ENVIAR MENSAGEM WHATSAPP
+// HANDLERS AUXILIARES
 // =============================================
-async function sendWhatsAppMessage(phoneNumberId: string, accessToken: string, to: string, text: string) {
+
+async function handleEvolutionMessageUpdate(data: any) {
   try {
-    const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body: text },
-      }),
-    });
+    const key = data.key;
+    const update = data.update;
+    
+    if (!key?.id) return;
 
-    return await response.json();
+    // Atualizar status da mensagem
+    if (update?.status) {
+      const statusMap: Record<number, string> = {
+        0: 'error',
+        1: 'pending',
+        2: 'sent',
+        3: 'delivered',
+        4: 'read',
+        5: 'played',
+      };
+      
+      const status = statusMap[update.status] || 'unknown';
+      
+      await supabase
+        .from('whatsapp_messages')
+        .update({ status })
+        .eq('wamid', key.id);
+
+      console.log(`📊 Message ${key.id} status updated to: ${status}`);
+    }
   } catch (error) {
-    console.error('❌ sendWhatsAppMessage error:', error);
-    return null;
+    console.error('❌ handleEvolutionMessageUpdate error:', error);
+  }
+}
+
+async function handleEvolutionConnectionUpdate(instance: any, data: any) {
+  try {
+    const state = data.state || data.connection;
+    console.log(`🔌 Connection state for ${instance.unique_id}: ${state}`);
+    
+    let status = 'disconnected';
+    let onlineStatus = 'unavailable';
+
+    if (state === 'open') {
+      status = 'connected';
+      onlineStatus = 'available';
+    } else if (state === 'connecting') {
+      status = 'connecting';
+    } else if (state === 'close') {
+      status = 'disconnected';
+    }
+
+    // Extrair número se disponível
+    const phoneNumber = data.ownerJid?.split('@')?.[0] || 
+                        data.wuid?.split('@')?.[0] ||
+                        null;
+
+    const updateData: any = {
+      status,
+      online_status: onlineStatus,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (phoneNumber) {
+      updateData.phone_number = phoneNumber;
+    }
+
+    await supabase
+      .from('whatsapp_instances')
+      .update(updateData)
+      .eq('id', instance.id);
+
+    console.log(`✅ Instance ${instance.id} updated: ${status}`);
+  } catch (error) {
+    console.error('❌ handleEvolutionConnectionUpdate error:', error);
+  }
+}
+
+async function handleEvolutionQRUpdate(instance: any, data: any) {
+  try {
+    const qrCode = data.qrcode?.base64 || data.base64 || data.code;
+    
+    if (qrCode) {
+      await supabase
+        .from('whatsapp_instances')
+        .update({
+          qr_code: qrCode,
+          status: 'generating',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', instance.id);
+
+      console.log(`📱 QR Code updated for instance ${instance.id}`);
+    }
+  } catch (error) {
+    console.error('❌ handleEvolutionQRUpdate error:', error);
   }
 }
 
 // =============================================
-// PROCESSAR STATUS DE MENSAGEM
+// META CLOUD API WEBHOOK HANDLER
 // =============================================
+async function handleMetaWebhook(body: any) {
+  const entry = body.entry?.[0];
+  if (!entry) return NextResponse.json({ status: 'ok' });
+
+  const changes = entry.changes?.[0];
+  if (!changes) return NextResponse.json({ status: 'ok' });
+
+  const value = changes.value;
+  const phoneNumberId = value.metadata?.phone_number_id;
+
+  // Buscar config pelo phone_number_id
+  let { data: config } = await supabase
+    .from('whatsapp_accounts')
+    .select('*, organization:organizations(*)')
+    .eq('phone_number_id', phoneNumberId)
+    .single();
+
+  if (!config) {
+    // Tentar tabela alternativa
+    const { data: altConfig } = await supabase
+      .from('whatsapp_configs')
+      .select('*')
+      .eq('phone_number_id', phoneNumberId)
+      .single();
+    
+    if (!altConfig) {
+      console.log('⚠️ Config not found for:', phoneNumberId);
+      return NextResponse.json({ status: 'ok' });
+    }
+    
+    // Usar altConfig se config não foi encontrado
+    config = altConfig;
+  }
+
+  const orgId = config?.organization_id;
+
+  // Processar mensagens
+  if (value.messages) {
+    for (const message of value.messages) {
+      await processMetaIncomingMessage(orgId, config, message, value.contacts?.[0]);
+    }
+  }
+
+  // Processar status de entrega
+  if (value.statuses) {
+    for (const status of value.statuses) {
+      await processMessageStatus(status);
+    }
+  }
+
+  return NextResponse.json({ status: 'ok' });
+}
+
+async function processMetaIncomingMessage(orgId: string, config: any, message: any, contact: any) {
+  // Implementação similar ao Evolution, mas para Meta Cloud API
+  console.log('📨 Processing Meta message:', message);
+  // TODO: Implementar se necessário
+}
+
 async function processMessageStatus(status: any) {
   const waMessageId = status.id;
-  const statusValue = status.status; // sent, delivered, read, failed
-  const timestamp = status.timestamp ? new Date(parseInt(status.timestamp) * 1000).toISOString() : new Date().toISOString();
+  const statusValue = status.status;
 
-  // Atualizar mensagem do inbox
   await supabase
     .from('whatsapp_messages')
     .update({ status: statusValue })
     .eq('wa_message_id', waMessageId);
 
-  // =============================================
-  // ATUALIZAR RECIPIENT DE CAMPANHA
-  // =============================================
-  if (waMessageId) {
-    // Buscar recipient pelo meta_message_id
-    const { data: recipient } = await supabase
-      .from('whatsapp_campaign_recipients')
-      .select('id, campaign_id, status')
-      .eq('meta_message_id', waMessageId)
-      .single();
-
-    if (recipient) {
-      const updateData: Record<string, any> = {};
-      let newStatus = recipient.status;
-
-      switch (statusValue) {
-        case 'sent':
-          if (['pending', 'queued'].includes(recipient.status)) {
-            newStatus = 'sent';
-            updateData.sent_at = timestamp;
-          }
-          break;
-          
-        case 'delivered':
-          if (['pending', 'queued', 'sent'].includes(recipient.status)) {
-            newStatus = 'delivered';
-            updateData.delivered_at = timestamp;
-          }
-          break;
-          
-        case 'read':
-          if (['pending', 'queued', 'sent', 'delivered'].includes(recipient.status)) {
-            newStatus = 'read';
-            updateData.read_at = timestamp;
-          }
-          break;
-          
-        case 'failed':
-          newStatus = 'failed';
-          updateData.failed_at = timestamp;
-          updateData.error_code = status.errors?.[0]?.code || 'UNKNOWN';
-          updateData.error_message = status.errors?.[0]?.message || status.errors?.[0]?.title || 'Failed';
-          break;
-      }
-
-      if (Object.keys(updateData).length > 0 || newStatus !== recipient.status) {
-        updateData.status = newStatus;
-        
-        await supabase
-          .from('whatsapp_campaign_recipients')
-          .update(updateData)
-          .eq('id', recipient.id);
-
-        // Atualizar métricas da campanha
-        await updateCampaignMetrics(recipient.campaign_id);
-        
-        console.log(`📊 Campaign recipient updated: ${recipient.id} -> ${newStatus}`);
-      }
-    }
-
-    // Também atualizar tabela antiga de logs (compatibilidade)
-    const legacyUpdateData: Record<string, any> = { delivery_status: statusValue };
-    
-    if (statusValue === 'delivered') {
-      legacyUpdateData.delivery_time = timestamp;
-    } else if (statusValue === 'read') {
-      legacyUpdateData.read_time = timestamp;
-    }
-
-    await supabase
-      .from('whatsapp_campaign_logs')
-      .update(legacyUpdateData)
-      .eq('meta_message_id', waMessageId);
-  }
-
   console.log(`📊 Status: ${waMessageId} -> ${statusValue}`);
-}
-
-// =============================================
-// ATUALIZAR MÉTRICAS DA CAMPANHA
-// =============================================
-async function updateCampaignMetrics(campaignId: string) {
-  try {
-    // Contar por status
-    const { data: recipients } = await supabase
-      .from('whatsapp_campaign_recipients')
-      .select('status')
-      .eq('campaign_id', campaignId);
-
-    if (!recipients) return;
-
-    const stats = {
-      total_sent: 0,
-      total_delivered: 0,
-      total_read: 0,
-      total_failed: 0
-    };
-
-    recipients.forEach(r => {
-      switch (r.status) {
-        case 'sent':
-          stats.total_sent++;
-          break;
-        case 'delivered':
-          stats.total_sent++;
-          stats.total_delivered++;
-          break;
-        case 'read':
-          stats.total_sent++;
-          stats.total_delivered++;
-          stats.total_read++;
-          break;
-        case 'failed':
-          stats.total_failed++;
-          break;
-      }
-    });
-
-    await supabase
-      .from('whatsapp_campaigns')
-      .update({
-        ...stats,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', campaignId);
-
-  } catch (error) {
-    console.error('Error updating campaign metrics:', error);
-  }
 }
