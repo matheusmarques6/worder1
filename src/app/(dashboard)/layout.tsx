@@ -67,6 +67,7 @@ const InboxIcon = () => (
 import { useStoreStore, useAuthStore, type ShopifyStore } from '@/stores'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
 import { UserMenu } from '@/components/layout/UserMenu'
+import { useAgentPermissions } from '@/hooks/useAgentPermissions'
 
 // Worder Logo Component
 const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
@@ -90,27 +91,27 @@ const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
 };
 
 // Navigation items with access control
-// agentAllowed: true = agentes podem ver, false/undefined = apenas admin/owner
+// permission: 'always' = sempre mostra, 'admin' = só admin, ou nome da permissão
 const navigation = [
-  { name: 'Inbox', href: '/inbox', icon: InboxIcon, agentAllowed: true, agentOnly: true },
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, agentAllowed: false },
-  { name: 'CRM', href: '/crm', icon: Users, agentAllowed: false },
-  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, agentAllowed: false },
-  { name: 'Automações', href: '/automations', icon: Zap, agentAllowed: false },
-  { name: 'Integrações', href: '/integrations', icon: Puzzle, agentAllowed: false },
+  { name: 'Inbox', href: '/inbox', icon: InboxIcon, permission: 'always' },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, permission: 'admin' },
+  { name: 'CRM', href: '/crm', icon: Users, permission: 'canAccessCrm' },
+  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, permission: 'admin' },
+  { name: 'Automações', href: '/automations', icon: Zap, permission: 'admin' },
+  { name: 'Integrações', href: '/integrations', icon: Puzzle, permission: 'admin' },
 ]
 
 const analyticsNav = [
-  { name: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
-  { name: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
-  { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon },
-  { name: 'Google Ads', href: '/analytics/google', icon: GoogleIcon },
-  { name: 'TikTok Ads', href: '/analytics/tiktok', icon: TikTokIcon },
+  { name: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart, permission: 'canViewAnalytics' },
+  { name: 'E-mail Marketing', href: '/analytics/email', icon: Mail, permission: 'canViewAnalytics' },
+  { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon, permission: 'canViewAnalytics' },
+  { name: 'Google Ads', href: '/analytics/google', icon: GoogleIcon, permission: 'canViewAnalytics' },
+  { name: 'TikTok Ads', href: '/analytics/tiktok', icon: TikTokIcon, permission: 'canViewAnalytics' },
 ]
 
 const systemNav = [
-  { name: 'Configurações', href: '/settings', icon: Settings },
-  { name: 'Ajuda', href: '/help', icon: HelpCircle },
+  { name: 'Configurações', href: '/settings', icon: Settings, permission: 'admin' },
+  { name: 'Ajuda', href: '/help', icon: HelpCircle, permission: 'always' },
 ]
 
 export default function DashboardLayout({
@@ -127,9 +128,30 @@ export default function DashboardLayout({
   
   const { stores, currentStore, setStores, setCurrentStore, addStore } = useStoreStore()
   const { user, setUser } = useAuthStore()
+  
+  // Hook de permissões reais
+  const { 
+    isAgent, 
+    isAdmin, 
+    permissions, 
+    isLoading: permissionsLoading,
+    canAccess,
+    canAccessRoute 
+  } = useAgentPermissions()
 
-  // Verificar se é agente
-  const isAgent = user?.user_metadata?.is_agent === true
+  // Função para verificar se um item do menu deve ser visível
+  const shouldShowMenuItem = (item: { permission?: string }) => {
+    if (!item.permission) return true
+    if (item.permission === 'always') return true
+    if (item.permission === 'admin') return isAdmin
+    
+    // Verificar permissão específica
+    if (isAdmin) return true
+    if (!isAgent) return true
+    if (!permissions) return false
+    
+    return (permissions as any)[item.permission] === true
+  }
 
   // Initialize user with default organization if not set
   useEffect(() => {
@@ -315,22 +337,15 @@ export default function DashboardLayout({
           )}
           <nav className="space-y-1">
             {navigation
-              .filter((item: any) => {
-                // Se é agente, mostrar apenas itens com agentAllowed: true
-                if (isAgent) {
-                  return item.agentAllowed === true
-                }
-                // Se não é agente, mostrar itens que NÃO são agentOnly
-                return item.agentOnly !== true
-              })
+              .filter(shouldShowMenuItem)
               .map((item) => (
                 <NavLink key={item.name} item={item} />
               ))}
           </nav>
         </div>
 
-        {/* Analytics - Apenas para admin/owner */}
-        {!isAgent && (
+        {/* Analytics - Mostrar se tiver pelo menos um item visível */}
+        {analyticsNav.filter(shouldShowMenuItem).length > 0 && (
           <div>
             {!collapsed && (
               <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
@@ -338,15 +353,17 @@ export default function DashboardLayout({
               </p>
             )}
             <nav className="space-y-1">
-              {analyticsNav.map((item) => (
-                <NavLink key={item.name} item={item} />
-              ))}
+              {analyticsNav
+                .filter(shouldShowMenuItem)
+                .map((item) => (
+                  <NavLink key={item.name} item={item} />
+                ))}
             </nav>
           </div>
         )}
 
-        {/* System - Apenas para admin/owner */}
-        {!isAgent && (
+        {/* System - Mostrar se tiver pelo menos um item visível */}
+        {systemNav.filter(shouldShowMenuItem).length > 0 && (
           <div>
             {!collapsed && (
               <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
@@ -354,9 +371,14 @@ export default function DashboardLayout({
               </p>
             )}
             <nav className="space-y-1">
-              {systemNav.map((item) => (
-                <NavLink key={item.name} item={item} />
-              ))}
+              {systemNav
+                .filter(shouldShowMenuItem)
+                .map((item) => (
+                  <NavLink key={item.name} item={item} />
+                ))}
+            </nav>
+          </div>
+        )}
             </nav>
           </div>
         )}
