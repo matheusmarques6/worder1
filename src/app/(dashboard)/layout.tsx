@@ -28,10 +28,8 @@ import {
   TrendingUp,
   Store,
   ChevronDown,
-  Send,
   Check,
   Plus,
-  Puzzle,
 } from 'lucide-react'
 
 // Custom icons for ad platforms
@@ -58,8 +56,6 @@ const TikTokIcon = () => (
 
 import { useStoreStore, useAuthStore, type ShopifyStore } from '@/stores'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
-import { UserMenu } from '@/components/layout/UserMenu'
-import { useAgentPermissions } from '@/hooks/useAgentPermissions'
 
 // Worder Logo Component
 const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
@@ -82,27 +78,24 @@ const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
   );
 };
 
-// Navigation items with access control
-// permission: 'always' = sempre mostra, 'admin' = só admin, ou nome da permissão específica
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, permission: 'admin' },
-  { name: 'CRM', href: '/crm', icon: Users, permission: 'canAccessCrmOrPipelines' },
-  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, permission: 'canAccessWhatsApp' },
-  { name: 'Automações', href: '/automations', icon: Zap, permission: 'admin' },
-  { name: 'Integrações', href: '/integrations', icon: Puzzle, permission: 'admin' },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'CRM', href: '/crm', icon: Users },
+  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare },
+  { name: 'Automações', href: '/automations', icon: Zap },
 ]
 
 const analyticsNav = [
-  { name: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart, permission: 'canViewAnalytics' },
-  { name: 'E-mail Marketing', href: '/analytics/email', icon: Mail, permission: 'canViewAnalytics' },
-  { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon, permission: 'canViewAnalytics' },
-  { name: 'Google Ads', href: '/analytics/google', icon: GoogleIcon, permission: 'canViewAnalytics' },
-  { name: 'TikTok Ads', href: '/analytics/tiktok', icon: TikTokIcon, permission: 'canViewAnalytics' },
+  { name: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
+  { name: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
+  { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon },
+  { name: 'Google Ads', href: '/analytics/google', icon: GoogleIcon },
+  { name: 'TikTok Ads', href: '/analytics/tiktok', icon: TikTokIcon },
 ]
 
 const systemNav = [
-  { name: 'Configurações', href: '/settings', icon: Settings, permission: 'admin' },
-  { name: 'Ajuda', href: '/help', icon: HelpCircle, permission: 'always' },
+  { name: 'Configurações', href: '/settings', icon: Settings },
+  { name: 'Ajuda', href: '/help', icon: HelpCircle },
 ]
 
 export default function DashboardLayout({
@@ -119,44 +112,6 @@ export default function DashboardLayout({
   
   const { stores, currentStore, setStores, setCurrentStore, addStore } = useStoreStore()
   const { user, setUser } = useAuthStore()
-  
-  // Hook de permissões reais
-  const { 
-    isAgent, 
-    isAdmin, 
-    permissions, 
-    isLoading: permissionsLoading,
-    canAccess,
-    canAccessRoute 
-  } = useAgentPermissions()
-
-  // Função para verificar se o usuário tem permissão para um item
-  const hasPermission = (item: { permission?: string }) => {
-    if (!item.permission) return true
-    if (item.permission === 'always') return true
-    
-    // Admin sempre tem acesso
-    if (isAdmin) return true
-    if (!isAgent) return true // Se não é agente, é dono/admin
-    
-    // Agente - verificar permissão específica
-    if (item.permission === 'admin') return false // Agente nunca acessa itens admin
-    
-    if (!permissions) return false
-    
-    // Caso especial: CRM ou Pipelines
-    if (item.permission === 'canAccessCrmOrPipelines') {
-      return (permissions as any).canAccessCrm === true || (permissions as any).canAccessPipelines === true
-    }
-    
-    // Caso especial: WhatsApp (agente sempre pode se tiver acesso a algum número)
-    if (item.permission === 'canAccessWhatsApp') {
-      return (permissions as any).whatsappAccessAll === true || 
-             ((permissions as any).whatsappNumberIds && (permissions as any).whatsappNumberIds.length > 0)
-    }
-    
-    return (permissions as any)[item.permission] === true
-  }
 
   // Initialize user with default organization if not set
   useEffect(() => {
@@ -171,17 +126,13 @@ export default function DashboardLayout({
           })
           const result = await response.json()
           
-          if (result.organization || result.user) {
-            // Preserve user_metadata from API response (includes is_agent, agent_id, etc.)
-            const userMetadata = result.user?.user_metadata || {}
-            
+          if (result.organization) {
             setUser({
               id: result.user?.id || 'default-user',
               email: result.user?.email || 'demo@worder.com',
-              name: result.user?.name || userMetadata?.name || result.user?.first_name || 'Demo User',
-              organization_id: result.organization?.id || userMetadata?.organization_id,
-              role: result.user?.role || 'admin',
-              user_metadata: userMetadata, // IMPORTANT: Preserve is_agent, agent_id
+              name: result.user?.name || 'Demo User',
+              organization_id: result.organization.id,
+              role: 'admin',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             })
@@ -189,18 +140,15 @@ export default function DashboardLayout({
         } catch (error) {
           console.error('Error initializing user:', error)
           // Fallback: set a default user with a temporary org ID
-          // Only if there's no existing user
-          if (!user) {
-            setUser({
-              id: 'default-user',
-              email: 'demo@worder.com',
-              name: 'Demo User',
-              organization_id: 'default-org',
-              role: 'admin',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-          }
+          setUser({
+            id: 'default-user',
+            email: 'demo@worder.com',
+            name: 'Demo User',
+            organization_id: 'default-org',
+            role: 'admin',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
         }
       }
     }
@@ -272,33 +220,9 @@ export default function DashboardLayout({
     }
   }, [])
 
-  const NavLink = ({ item, canAccess = true }: { item: { name: string; href: string; icon: any }, canAccess?: boolean }) => {
+  const NavLink = ({ item }: { item: { name: string; href: string; icon: any } }) => {
     const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
     const Icon = item.icon
-
-    // Se não tem permissão, mostrar em cinza sem link
-    if (!canAccess) {
-      return (
-        <div
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-dark-600 cursor-not-allowed"
-          title="Sem permissão de acesso"
-        >
-          <Icon className="w-5 h-5 flex-shrink-0 opacity-50" />
-          <AnimatePresence mode="wait">
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                className="font-medium whitespace-nowrap overflow-hidden opacity-50"
-              >
-                {item.name}
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </div>
-      )
-    }
 
     return (
       <Link href={item.href}>
@@ -338,7 +262,7 @@ export default function DashboardLayout({
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="p-4 border-b border-dark-800/50">
-        <Link href={isAgent ? "/whatsapp" : "/dashboard"} className="flex flex-col gap-0.5">
+        <Link href="/dashboard" className="flex flex-col gap-0.5">
           <WorderLogo size={collapsed ? 'sm' : 'md'} />
           <AnimatePresence mode="wait">
             {!collapsed && (
@@ -366,7 +290,7 @@ export default function DashboardLayout({
           )}
           <nav className="space-y-1">
             {navigation.map((item) => (
-              <NavLink key={item.name} item={item} canAccess={hasPermission(item)} />
+              <NavLink key={item.name} item={item} />
             ))}
           </nav>
         </div>
@@ -380,7 +304,7 @@ export default function DashboardLayout({
           )}
           <nav className="space-y-1">
             {analyticsNav.map((item) => (
-              <NavLink key={item.name} item={item} canAccess={hasPermission(item)} />
+              <NavLink key={item.name} item={item} />
             ))}
           </nav>
         </div>
@@ -394,129 +318,127 @@ export default function DashboardLayout({
           )}
           <nav className="space-y-1">
             {systemNav.map((item) => (
-              <NavLink key={item.name} item={item} canAccess={hasPermission(item)} />
+              <NavLink key={item.name} item={item} />
             ))}
           </nav>
         </div>
       </div>
 
-      {/* Store Selector Section - Apenas para admin/owner */}
-      {!isAgent && (
-        <div className="p-3 border-t border-dark-800/50 relative">
-          {/* Store Dropdown */}
-          <AnimatePresence>
-            {storeDropdownOpen && !collapsed && (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                transition={{ duration: 0.15 }}
-                className="absolute bottom-full left-3 right-3 mb-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-50"
-              >
-                {/* Stores List */}
-                {stores.length > 0 && (
-                  <div className="p-2 border-b border-dark-700">
-                    <p className="px-2 py-1 text-xs font-medium text-dark-500 uppercase tracking-wider">
-                      Suas Lojas
-                    </p>
-                    <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
-                      {stores.map((store) => (
-                        <button
-                          key={store.id}
-                          onClick={() => {
-                            setCurrentStore(store)
-                            setStoreDropdownOpen(false)
-                          }}
-                          className={`
-                            w-full flex items-center gap-3 p-2 rounded-lg transition-colors
-                            ${currentStore?.id === store.id
-                              ? 'bg-primary-500/10 text-primary-400'
-                              : 'hover:bg-dark-700/50 text-white'
-                            }
-                          `}
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center text-xs font-bold">
-                            {getInitials(store.name)}
-                          </div>
-                          <div className="flex-1 text-left min-w-0">
-                            <p className="text-sm font-medium truncate">{store.name}</p>
-                            <p className="text-xs text-dark-400 truncate">{store.domain}</p>
-                          </div>
-                          {currentStore?.id === store.id && (
-                            <Check className="w-4 h-4 text-primary-400 flex-shrink-0" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
+      {/* Store Selector Section */}
+      <div className="p-3 border-t border-dark-800/50 relative">
+        {/* Store Dropdown */}
+        <AnimatePresence>
+          {storeDropdownOpen && !collapsed && (
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+              transition={{ duration: 0.15 }}
+              className="absolute bottom-full left-3 right-3 mb-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-50"
+            >
+              {/* Stores List */}
+              {stores.length > 0 && (
+                <div className="p-2 border-b border-dark-700">
+                  <p className="px-2 py-1 text-xs font-medium text-dark-500 uppercase tracking-wider">
+                    Suas Lojas
+                  </p>
+                  <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
+                    {stores.map((store) => (
+                      <button
+                        key={store.id}
+                        onClick={() => {
+                          setCurrentStore(store)
+                          setStoreDropdownOpen(false)
+                        }}
+                        className={`
+                          w-full flex items-center gap-3 p-2 rounded-lg transition-colors
+                          ${currentStore?.id === store.id
+                            ? 'bg-primary-500/10 text-primary-400'
+                            : 'hover:bg-dark-700/50 text-white'
+                          }
+                        `}
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center text-xs font-bold">
+                          {getInitials(store.name)}
+                        </div>
+                        <div className="flex-1 text-left min-w-0">
+                          <p className="text-sm font-medium truncate">{store.name}</p>
+                          <p className="text-xs text-dark-400 truncate">{store.domain}</p>
+                        </div>
+                        {currentStore?.id === store.id && (
+                          <Check className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))}
                   </div>
-                )}
-
-                {/* Add Store Button */}
-                <div className="p-2">
-                  <button
-                    onClick={() => {
-                      setAddStoreModalOpen(true)
-                      setStoreDropdownOpen(false)
-                    }}
-                    className="w-full flex items-center gap-3 p-2 rounded-lg text-primary-400 hover:bg-primary-500/10 transition-colors"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
-                      <Plus className="w-4 h-4" />
-                    </div>
-                    <span className="text-sm font-medium">Adicionar Nova Loja</span>
-                  </button>
                 </div>
+              )}
+
+              {/* Add Store Button */}
+              <div className="p-2">
+                <button
+                  onClick={() => {
+                    setAddStoreModalOpen(true)
+                    setStoreDropdownOpen(false)
+                  }}
+                  className="w-full flex items-center gap-3 p-2 rounded-lg text-primary-400 hover:bg-primary-500/10 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                    <Plus className="w-4 h-4" />
+                  </div>
+                  <span className="text-sm font-medium">Adicionar Nova Loja</span>
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Store Selector Button */}
+        <button
+          onClick={() => {
+            if (collapsed) {
+              setAddStoreModalOpen(true)
+            } else {
+              setStoreDropdownOpen(!storeDropdownOpen)
+            }
+          }}
+          className={`
+            w-full flex items-center gap-3 p-2 rounded-xl transition-all
+            bg-dark-800/30 hover:bg-dark-800/50
+            ${storeDropdownOpen ? 'ring-1 ring-primary-500/50' : ''}
+            ${collapsed ? 'justify-center' : ''}
+          `}
+        >
+          {/* Store Avatar */}
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+            {currentStore ? getInitials(currentStore.name) : <Store className="w-4 h-4" />}
+          </div>
+
+          <AnimatePresence mode="wait">
+            {!collapsed && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex-1 min-w-0 text-left"
+              >
+                <p className="text-sm font-medium text-white truncate">
+                  {currentStore?.name || 'Selecionar Loja'}
+                </p>
+                <p className="text-xs text-dark-400 truncate">
+                  {currentStore?.domain || 'Nenhuma loja conectada'}
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Store Selector Button */}
-          <button
-            onClick={() => {
-              if (collapsed) {
-                setAddStoreModalOpen(true)
-              } else {
-                setStoreDropdownOpen(!storeDropdownOpen)
-              }
-            }}
-            className={`
-              w-full flex items-center gap-3 p-2 rounded-xl transition-all
-              bg-dark-800/30 hover:bg-dark-800/50
-              ${storeDropdownOpen ? 'ring-1 ring-primary-500/50' : ''}
-              ${collapsed ? 'justify-center' : ''}
-            `}
-          >
-            {/* Store Avatar */}
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-              {currentStore ? getInitials(currentStore.name) : <Store className="w-4 h-4" />}
-            </div>
-
-            <AnimatePresence mode="wait">
-              {!collapsed && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex-1 min-w-0 text-left"
-                >
-                  <p className="text-sm font-medium text-white truncate">
-                    {currentStore?.name || 'Selecionar Loja'}
-                  </p>
-                  <p className="text-xs text-dark-400 truncate">
-                    {currentStore?.domain || 'Nenhuma loja conectada'}
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {!collapsed && (
-              <ChevronDown
-                className={`w-4 h-4 text-dark-400 transition-transform flex-shrink-0 ${storeDropdownOpen ? 'rotate-180' : ''}`}
-              />
-            )}
-          </button>
-        </div>
-      )}
+          {!collapsed && (
+            <ChevronDown
+              className={`w-4 h-4 text-dark-400 transition-transform flex-shrink-0 ${storeDropdownOpen ? 'rotate-180' : ''}`}
+            />
+          )}
+        </button>
+      </div>
 
       {/* Collapse button - Desktop only */}
       <div className="hidden lg:block p-3 pt-0">
@@ -550,6 +472,7 @@ export default function DashboardLayout({
               <Menu className="w-5 h-5" />
             </button>
             <WorderLogo size="sm" />
+            <span className="font-semibold text-white">Worder</span>
           </div>
           <div className="flex items-center gap-2">
             <button className="p-2 rounded-lg bg-dark-800/50 text-dark-400 hover:text-white transition-colors relative">
@@ -560,7 +483,6 @@ export default function DashboardLayout({
                 </span>
               )}
             </button>
-            <UserMenu />
           </div>
         </div>
       </div>
@@ -636,7 +558,15 @@ export default function DashboardLayout({
               )}
             </button>
             <div className="w-px h-8 bg-dark-800" />
-            <UserMenu />
+            <button className="flex items-center gap-3 p-1.5 pr-4 rounded-xl hover:bg-dark-800/50 transition-all">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+                <span className="text-white font-semibold text-sm">JD</span>
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium text-white">João Demo</p>
+                <p className="text-xs text-dark-400">Admin</p>
+              </div>
+            </button>
           </div>
         </header>
 
