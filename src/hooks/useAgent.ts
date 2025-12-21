@@ -150,8 +150,8 @@ export function useAgent(agentId: string, organizationId: string): UseAgentRetur
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organization_id: organizationId,
           ...agent,
+          organization_id: organizationId,
         }),
       })
 
@@ -217,8 +217,8 @@ export function useAgent(agentId: string, organizationId: string): UseAgentRetur
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organization_id: organizationId,
           ...data,
+          organization_id: organizationId,
         }),
       })
 
@@ -284,8 +284,8 @@ export function useAgent(agentId: string, organizationId: string): UseAgentRetur
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organization_id: organizationId,
           ...data,
+          organization_id: organizationId,
         }),
       })
 
@@ -309,8 +309,8 @@ export function useAgent(agentId: string, organizationId: string): UseAgentRetur
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organization_id: organizationId,
           ...data,
+          organization_id: organizationId,
         }),
       })
       if (res.ok) {
@@ -460,8 +460,8 @@ export function useAgentsList(organizationId: string): UseAgentsListReturn {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organization_id: organizationId,
           ...data,
+          organization_id: organizationId,
         }),
       })
 
