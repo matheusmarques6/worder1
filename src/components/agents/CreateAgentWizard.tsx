@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { validatePassword, passwordsMatch } from '@/lib/password-validation'
 import { PasswordStrengthIndicator, PasswordMatchIndicator } from '@/components/ui/PasswordStrength'
+import CreateAgentModal from './CreateAgentModal'
 
 // Types
 interface WhatsAppNumber {
@@ -81,6 +82,9 @@ export function CreateAgentWizard({
   const [error, setError] = useState('')
   const [successData, setSuccessData] = useState<{ password?: string } | null>(null)
   const [copied, setCopied] = useState(false)
+  
+  // Estado para mostrar o novo modal de AI
+  const [showAIAgentModal, setShowAIAgentModal] = useState(false)
 
   // Data state
   const [whatsappNumbers, setWhatsappNumbers] = useState<WhatsAppNumber[]>([])
@@ -225,6 +229,13 @@ export function CreateAgentWizard({
       setError('Limite de 3 agentes humanos atingido')
       return
     }
+    
+    // Se for AI, abrir o novo modal avançado
+    if (type === 'ai') {
+      setShowAIAgentModal(true)
+      return
+    }
+    
     setAgentType(type)
     setCurrentStep('info')
     setError('')
@@ -912,13 +923,30 @@ export function CreateAgentWizard({
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
+    <>
+      {/* Modal de criação de Agente de IA avançado */}
+      {showAIAgentModal && (
+        <CreateAgentModal
+          organizationId={organizationId}
+          onClose={() => {
+            setShowAIAgentModal(false)
+          }}
+          onCreate={(agentId) => {
+            setShowAIAgentModal(false)
+            onSuccess()
+          }}
+        />
+      )}
+      
+      {/* Wizard original (só aparece se não estiver mostrando o modal de AI) */}
+      {!showAIAgentModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={onClose}
+        >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -1002,5 +1030,7 @@ export function CreateAgentWizard({
         )}
       </motion.div>
     </motion.div>
+      )}
+    </>
   )
 }
