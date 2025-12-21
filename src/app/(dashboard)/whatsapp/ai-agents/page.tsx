@@ -24,8 +24,8 @@ export default function AIAgentsPage() {
     )
   }
 
-  // Redirect if not authenticated or no organization
-  if (!user || !user.organization_id) {
+  // Redirect if not authenticated
+  if (!user) {
     router.push('/login')
     return null
   }

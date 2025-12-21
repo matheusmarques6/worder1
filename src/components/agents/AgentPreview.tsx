@@ -15,7 +15,7 @@ import {
   Zap,
   Database,
 } from 'lucide-react'
-import { AIAgent } from '@/lib/ai/types'
+import { AIAgent } from './AIAgentEditor'
 
 interface AgentPreviewProps {
   agent: AIAgent
