@@ -349,20 +349,22 @@ export class AIAgentEngine {
 
       // Atualizar estatísticas do agente
       if (params.success) {
-        await this.supabase.rpc('update_agent_stats', {
+        const { error: rpcError } = await this.supabase.rpc('update_agent_stats', {
           p_agent_id: this.agent.id,
           p_tokens: totalTokens,
           p_response_time: params.responseTimeMs,
-        }).catch(() => {
-          // Se RPC não existe, fazer update manual
-          this.supabase
+        })
+        
+        // Se RPC não existe, fazer update manual
+        if (rpcError) {
+          await this.supabase
             .from('ai_agents')
             .update({
               total_messages: this.agent.total_messages + 1,
               total_tokens_used: this.agent.total_tokens_used + totalTokens,
             })
             .eq('id', this.agent.id)
-        })
+        }
       }
 
     } catch (error) {
