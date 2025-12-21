@@ -24,25 +24,7 @@ import {
 } from 'lucide-react'
 import AIAgentEditor from './AIAgentEditor'
 import CreateAgentModal from './CreateAgentModal'
-
-interface AIAgent {
-  id: string
-  organization_id: string
-  name: string
-  description?: string
-  provider: string
-  model: string
-  is_active: boolean
-  total_messages: number
-  total_conversations: number
-  total_tokens_used: number
-  created_at: string
-  updated_at: string
-  persona?: {
-    tone?: string
-    language?: string
-  }
-}
+import { AIAgent } from '@/lib/ai/types'
 
 interface AIAgentListProps {
   organizationId: string

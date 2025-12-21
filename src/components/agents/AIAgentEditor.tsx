@@ -31,132 +31,28 @@ import PersonaTab from './tabs/PersonaTab'
 import SettingsTab from './tabs/SettingsTab'
 import AgentPreview from './AgentPreview'
 
-// Types
-export interface AIAgent {
-  id: string
-  organization_id: string
-  name: string
-  description?: string
-  system_prompt?: string
-  provider: string
-  model: string
-  temperature: number
-  max_tokens: number
-  is_active: boolean
-  persona: AgentPersona
-  settings: AgentSettings
-  total_messages: number
-  total_conversations: number
-  total_tokens_used: number
-  avg_response_time_ms?: number
-  created_at: string
-  updated_at: string
-}
+// Types - importar do módulo central
+import {
+  AIAgent,
+  AgentPersona,
+  AgentSettings,
+  AgentSource,
+  AgentAction,
+  ActionCondition,
+  ActionDo,
+  AgentIntegration,
+} from '@/lib/ai/types'
 
-export interface AgentPersona {
-  role_description: string
-  tone: 'casual' | 'friendly' | 'professional'
-  response_length: 'short' | 'medium' | 'long'
-  language: 'pt-BR' | 'en' | 'es' | 'auto'
-  reply_delay: number
-  guidelines: string[]
-}
-
-export interface AgentSettings {
-  channels: {
-    all_channels: boolean
-    channel_ids: string[]
-  }
-  pipelines: {
-    all_pipelines: boolean
-    pipeline_ids: string[]
-    stage_ids: string[]
-  }
-  schedule: {
-    always_active: boolean
-    timezone: string
-    hours: { start: string; end: string }
-    days: string[]
-  }
-  behavior: {
-    activate_on: 'new_message' | 'pipeline_stage' | 'manual'
-    stop_on_human_reply: boolean
-    cooldown_after_transfer: number
-    max_messages_per_conversation: number
-  }
-}
-
-export interface AgentSource {
-  id: string
-  agent_id: string
-  source_type: 'url' | 'file' | 'text' | 'products'
-  name: string
-  url?: string
-  pages_crawled?: number
-  file_url?: string
-  file_size_bytes?: number
-  original_filename?: string
-  text_content?: string
-  integration_id?: string
-  integration_type?: string
-  products_count?: number
-  status: 'pending' | 'processing' | 'ready' | 'error'
-  error_message?: string
-  chunks_count: number
-  created_at: string
-}
-
-export interface AgentAction {
-  id: string
-  agent_id: string
-  name: string
-  description?: string
-  is_active: boolean
-  priority: number
-  conditions: {
-    match_type: 'all' | 'any'
-    items: ActionCondition[]
-  }
-  actions: ActionDo[]
-  times_triggered: number
-  created_at: string
-}
-
-export interface ActionCondition {
-  id: string
-  type: 'intent' | 'sentiment' | 'contains' | 'time' | 'custom'
-  intent?: string
-  custom_intent?: string
-  sentiment?: string
-  keywords?: string[]
-  time_range?: { start: string; end: string }
-  days?: string[]
-}
-
-export interface ActionDo {
-  id: string
-  type: 'transfer' | 'exact_message' | 'use_source' | 'ask_for' | 'dont_mention' | 'bring_up'
-  transfer_to?: 'queue' | 'agent_id'
-  agent_id?: string
-  message?: string
-  source_id?: string
-  ask_field?: string
-  custom_field?: string
-  topic?: string
-}
-
-export interface AgentIntegration {
-  id: string
-  agent_id: string
-  integration_id?: string
-  integration_type: 'shopify' | 'woocommerce' | 'nuvemshop'
-  sync_products: boolean
-  sync_orders: boolean
-  allow_price_info: boolean
-  allow_stock_info: boolean
-  last_sync_at?: string
-  products_synced: number
-  sync_status: string
+// Re-export para compatibilidade
+export type {
+  AIAgent,
+  AgentPersona,
+  AgentSettings,
+  AgentSource,
+  AgentAction,
+  ActionCondition,
+  ActionDo,
+  AgentIntegration,
 }
 
 // Tab Configuration
