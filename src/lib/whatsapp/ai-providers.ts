@@ -2,7 +2,7 @@
 // AI PROVIDERS - OpenAI, Claude, Gemini
 // =============================================
 
-export type AIProvider = 'openai' | 'anthropic' | 'gemini' | 'deepseek';
+export type AIProvider = 'openai' | 'anthropic' | 'gemini' | 'groq' | 'deepseek' | 'google';
 
 interface AIConfig {
   provider: AIProvider;
@@ -185,6 +185,40 @@ async function callDeepSeek(config: AIConfig, messages: AIMessage[]): Promise<AI
 }
 
 // =============================================
+// GROQ (API compatível com OpenAI)
+// =============================================
+async function callGroq(config: AIConfig, messages: AIMessage[]): Promise<AIResponse> {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: config.model || 'llama-3.1-70b-versatile',
+      messages,
+      temperature: config.temperature ?? 0.7,
+      max_tokens: config.maxTokens ?? 1000,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'Groq API error');
+  }
+
+  return {
+    content: data.choices?.[0]?.message?.content || '',
+    usage: {
+      promptTokens: data.usage?.prompt_tokens || 0,
+      completionTokens: data.usage?.completion_tokens || 0,
+      totalTokens: data.usage?.total_tokens || 0,
+    },
+  };
+}
+
+// =============================================
 // FUNÇÃO PRINCIPAL - CHAMAR AI
 // =============================================
 export async function callAI(config: AIConfig, messages: AIMessage[]): Promise<AIResponse> {
@@ -199,7 +233,10 @@ export async function callAI(config: AIConfig, messages: AIMessage[]): Promise<A
     case 'anthropic':
       return callAnthropic(config, finalMessages);
     case 'gemini':
+    case 'google':
       return callGemini(config, finalMessages);
+    case 'groq':
+      return callGroq(config, finalMessages);
     case 'deepseek':
       return callDeepSeek(config, finalMessages);
     default:
@@ -303,6 +340,16 @@ export const AI_MODELS = {
   gemini: [
     { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Rápido)' },
     { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Mais capaz)' },
+  ],
+  google: [
+    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Rápido)' },
+    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Mais capaz)' },
+  ],
+  groq: [
+    { id: 'llama-3.1-70b-versatile', name: 'Llama 3.1 70B (Mais capaz)' },
+    { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B (Ultra rápido)' },
+    { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (Balanceado)' },
+    { id: 'gemma2-9b-it', name: 'Gemma 2 9B (Leve)' },
   ],
   deepseek: [
     { id: 'deepseek-chat', name: 'DeepSeek Chat' },

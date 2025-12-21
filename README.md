@@ -1,69 +1,168 @@
-# APIs para Botões - Tag, Deal, Bloquear, Atribuir
+# 📦 AI Agents - Correções e Integrações
 
-## O que está incluído:
+## 🗂️ Estrutura do ZIP
 
-1. **Block API** - `/api/whatsapp/inbox/contacts/[id]/block`
-   - POST: Bloquear/desbloquear contato
-
-2. **Deals API** - `/api/whatsapp/inbox/contacts/[id]/deals`
-   - GET: Listar deals do contato
-   - POST: Criar novo deal
-
-3. **Assign API** - `/api/whatsapp/inbox/conversations/[id]/assign`
-   - GET: Listar usuários disponíveis
-   - POST: Atribuir conversa a um usuário
-
-## Instalação:
-
-### 1. Execute o SQL no Supabase (migration.sql)
-
-### 2. Copie as pastas para seu projeto:
 ```
-src/app/api/whatsapp/inbox/contacts/[id]/block/route.ts
-src/app/api/whatsapp/inbox/contacts/[id]/deals/route.ts
-src/app/api/whatsapp/inbox/conversations/[id]/assign/route.ts
+ai-agents-correcoes/
+├── docs/
+│   ├── ANALISE-CODIGO-AI-AGENTS.md      # Relatório completo da análise
+│   └── INTEGRACAO-FRONTEND-BACKEND.md   # Documentação de integração
+│
+└── src/
+    ├── types/
+    │   ├── ai-agents.ts    # ✅ NOVO - Tipos compartilhados
+    │   └── index.ts        # 🔄 ATUALIZADO - Re-export dos tipos
+    │
+    ├── hooks/
+    │   ├── useAgent.ts     # ✅ NOVO - Hooks para gerenciar agentes
+    │   └── index.ts        # 🔄 ATUALIZADO - Export do useAgent
+    │
+    └── lib/
+        └── whatsapp/
+            └── ai-providers.ts  # 🔄 ATUALIZADO - Suporte a Groq
 ```
 
-### 3. Deploy
+## 🚀 Instruções de Instalação
+
+### 1. Extrair o ZIP na raiz do projeto
+
 ```bash
-git add .
-git commit -m "feat: apis block, deal, assign"
-git push
+# Na raiz do seu projeto (onde está o package.json)
+unzip ai-agents-correcoes.zip -d .
 ```
 
-## Como os botões devem chamar as APIs:
+Os arquivos serão colocados automaticamente nas pastas corretas:
+- `src/types/ai-agents.ts`
+- `src/types/index.ts` (será substituído)
+- `src/hooks/useAgent.ts`
+- `src/hooks/index.ts` (será substituído)
+- `src/lib/whatsapp/ai-providers.ts` (será substituído)
 
-### Bloquear:
-```javascript
-await fetch(`/api/whatsapp/inbox/contacts/${contact.id}/block`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ block: !contact.is_blocked })
-})
+### 2. Verificar se não há conflitos
+
+Se você modificou os arquivos `index.ts`, faça merge manual:
+
+```bash
+# Para ver diferenças
+diff src/types/index.ts ai-agents-correcoes/src/types/index.ts
+diff src/hooks/index.ts ai-agents-correcoes/src/hooks/index.ts
 ```
 
-### Criar Deal:
-```javascript
-await fetch(`/api/whatsapp/inbox/contacts/${contact.id}/deals`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ 
-    title: `Deal - ${contact.name}`,
-    value: 0
-  })
-})
+### 3. Reiniciar o servidor de desenvolvimento
+
+```bash
+npm run dev
+# ou
+yarn dev
 ```
 
-### Atribuir:
-```javascript
-// Listar usuários
-const res = await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/assign`)
-const { users } = await res.json()
+---
 
-// Atribuir
-await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/assign`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ user_id: selectedUserId })
-})
+## 📝 O que foi corrigido
+
+### ✅ Problemas Críticos Resolvidos
+
+1. **Tipos Duplicados**
+   - Criado arquivo central `src/types/ai-agents.ts`
+   - Todos os tipos agora são importados de um único lugar
+
+2. **Provider Groq Faltando**
+   - Adicionado suporte completo ao Groq em `ai-providers.ts`
+   - Adicionado `google` como alias para `gemini`
+
+3. **Código Duplicado**
+   - Criado `useAgent()` hook para gerenciar agente único
+   - Criado `useAgentsList()` hook para lista de agentes
+
+---
+
+## 🔧 Próximos Passos (Opcional)
+
+### Atualizar imports nos componentes
+
+Após instalar, você pode atualizar os imports nos componentes:
+
+```typescript
+// ANTES (em AIAgentEditor.tsx, tabs/*.tsx)
+import { AIAgent, AgentSource } from '../AIAgentEditor'
+
+// DEPOIS
+import type { 
+  AIAgent, 
+  AgentSource, 
+  AgentAction 
+} from '@/types/ai-agents'
+```
+
+### Usar os novos hooks
+
+```typescript
+// ANTES
+const [agent, setAgent] = useState(null)
+const [loading, setLoading] = useState(true)
+
+useEffect(() => {
+  fetch(`/api/ai/agents/${id}`)
+    .then(res => res.json())
+    .then(data => {
+      setAgent(data.agent)
+      setLoading(false)
+    })
+}, [id])
+
+// DEPOIS
+import { useAgent } from '@/hooks'
+
+const { 
+  agent, 
+  sources,
+  actions,
+  loading, 
+  error,
+  saveAgent,
+  addSource,
+  testAgent 
+} = useAgent(agentId, organizationId)
+```
+
+---
+
+## 📋 Checklist Pós-Instalação
+
+- [ ] Arquivos extraídos nas pastas corretas
+- [ ] Servidor reiniciado sem erros
+- [ ] Página de Agentes IA carrega normalmente
+- [ ] Criar novo agente funciona
+- [ ] Adicionar fonte funciona
+- [ ] Testar agente funciona
+- [ ] Provider Groq aparece na lista
+
+---
+
+## 🆘 Problemas?
+
+Se encontrar erros de TypeScript:
+
+```bash
+# Limpar cache
+rm -rf .next
+rm -rf node_modules/.cache
+
+# Reinstalar dependências
+npm install
+
+# Reiniciar
+npm run dev
+```
+
+Se o erro persistir, verifique se o `tsconfig.json` tem o path `@/`:
+
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
 ```

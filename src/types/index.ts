@@ -1,6 +1,10 @@
 // ===============================
 // USER & AUTH TYPES
 // ===============================
+
+// Re-export AI Agent types
+export * from './ai-agents'
+
 export interface UserMetadata {
   name?: string;
   role?: string;

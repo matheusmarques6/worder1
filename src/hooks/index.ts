@@ -25,6 +25,9 @@ export {
 export { useAgents, useAIModels, useApiKeys } from './useAgents';
 export type { Agent, AIConfig, AgentPermissions, CreateAgentData, UpdateAgentData } from './useAgents';
 
+// Re-export AI Agent hooks (novo sistema de agentes)
+export { useAgent, useAgentsList } from './useAgent';
+
 // Re-export agent permissions hook
 export { useAgentPermissions, AgentPermissionsProvider, useAgentPermissionsContext } from './useAgentPermissions';
 export type { UseAgentPermissionsReturn, AgentPermissions as AgentPermissionsType } from './useAgentPermissions';
