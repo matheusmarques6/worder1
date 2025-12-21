@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 import { processWithAgent } from '@/lib/ai/engine'
 import { EngineMessage } from '@/lib/ai/types'
 
+// Route Segment Config (Next.js 14 App Router)
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // =====================================================
 // SUPABASE CLIENT
 // =====================================================
@@ -130,7 +134,3 @@ export async function POST(
   }
 }
 
-// Config
-export const config = {
-  maxDuration: 60,
-}

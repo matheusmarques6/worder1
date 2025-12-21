@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// Route Segment Config (Next.js 14 App Router)
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // =====================================================
 // SUPABASE CLIENT
 // =====================================================
@@ -181,9 +185,3 @@ async function processFileAsync(
   }
 }
 
-// Config para permitir arquivos grandes
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-}

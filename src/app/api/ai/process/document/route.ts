@@ -3,6 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 import { chunkText, cleanTextForIndexing, extractTextMetadata } from '@/lib/ai/processors/text-processor'
 import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
 
+// Route Segment Config (Next.js 14 App Router)
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
 // =====================================================
 // SUPABASE CLIENT
 // =====================================================
@@ -306,7 +311,3 @@ async function crawlUrl(url: string): Promise<string> {
   }
 }
 
-// Config para timeout maior
-export const config = {
-  maxDuration: 60, // 60 segundos
-}

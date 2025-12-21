@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 import { chunkText } from '@/lib/ai/processors/text-processor'
 import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
 
+// Route Segment Config (Next.js 14 App Router)
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // =====================================================
 // SUPABASE CLIENT
 // =====================================================
@@ -293,7 +297,3 @@ function formatProductForEmbedding(product: any, integration: any): string {
   return parts.join('\n')
 }
 
-// Config para timeout maior
-export const config = {
-  maxDuration: 120, // 2 minutos
-}

@@ -14,7 +14,7 @@ import {
   Circle,
   Loader2,
 } from 'lucide-react'
-import { AIAgent, AgentSettings } from '../AIAgentEditor'
+import { AIAgent, AgentSettings } from '@/lib/ai/types'
 
 interface SettingsTabProps {
   agent: AIAgent

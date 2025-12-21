@@ -35,7 +35,7 @@ import {
   CheckCircle,
   AlertCircle,
 } from 'lucide-react'
-import { AgentAction, ActionCondition, ActionDo } from '../AIAgentEditor'
+import { AgentAction, ActionCondition, ActionDo } from '@/lib/ai/types'
 
 interface ActionsTabProps {
   agentId: string

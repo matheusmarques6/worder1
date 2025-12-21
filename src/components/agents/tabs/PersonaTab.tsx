@@ -16,7 +16,7 @@ import {
   AlignLeft,
   ChevronDown,
 } from 'lucide-react'
-import { AIAgent, AgentPersona } from '../AIAgentEditor'
+import { AIAgent, AgentPersona } from '@/lib/ai/types'
 
 interface PersonaTabProps {
   agent: AIAgent

@@ -18,7 +18,7 @@ import {
   DollarSign,
   Sparkles,
 } from 'lucide-react'
-import { AgentIntegration } from '../AIAgentEditor'
+import { AgentIntegration } from '@/lib/ai/types'
 
 interface IntegrationsTabProps {
   agentId: string

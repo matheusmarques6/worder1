@@ -23,7 +23,7 @@ import {
   ExternalLink,
   Clock,
 } from 'lucide-react'
-import { AgentSource } from '../AIAgentEditor'
+import { AgentSource } from '@/lib/ai/types'
 
 interface SourcesTabProps {
   agentId: string
