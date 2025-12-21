@@ -24,15 +24,17 @@ export default function AIAgentsPage() {
     )
   }
 
-  // Redirect if not authenticated
-  if (!user) {
+  // Redirect if not authenticated or no organization
+  if (!user || !user.organization_id) {
     router.push('/login')
     return null
   }
 
+  const organizationId = user.organization_id as string
+
   return (
     <div className="h-full bg-dark-900">
-      <AIAgentList organizationId={user.organization_id} />
+      <AIAgentList organizationId={organizationId} />
     </div>
   )
 }

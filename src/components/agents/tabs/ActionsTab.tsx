@@ -97,8 +97,8 @@ export default function ActionsTab({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organization_id: organizationId,
           ...action,
+          organization_id: organizationId,
         }),
       })
 
