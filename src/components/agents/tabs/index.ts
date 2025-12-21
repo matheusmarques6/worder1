@@ -1,0 +1,5 @@
+export { default as SourcesTab } from './SourcesTab'
+export { default as ActionsTab } from './ActionsTab'
+export { default as IntegrationsTab } from './IntegrationsTab'
+export { default as PersonaTab } from './PersonaTab'
+export { default as SettingsTab } from './SettingsTab'

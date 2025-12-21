@@ -1,168 +1,196 @@
-# 📦 AI Agents - Correções e Integrações
+# 🤖 Sistema de AI Agents - Estilo Kommo
 
-## 🗂️ Estrutura do ZIP
+## 📦 Conteúdo do Pacote
+
+Este pacote contém o sistema completo de AI Agents com:
+- Knowledge Base (RAG com embeddings)
+- Ações Condicionais (detecção de intenção/sentimento)
+- Integrações E-commerce (Shopify, WooCommerce, Nuvemshop)
+- Persona Configurável (tom, idioma, diretrizes)
+- Configurações Avançadas (horários, canais, pipelines)
+
+---
+
+## 🗂️ Estrutura do Pacote
 
 ```
-ai-agents-correcoes/
-├── docs/
-│   ├── ANALISE-CODIGO-AI-AGENTS.md      # Relatório completo da análise
-│   └── INTEGRACAO-FRONTEND-BACKEND.md   # Documentação de integração
+ai-agents-completo/
+├── sql/
+│   ├── ai-agents-complete-migration.sql  # Tabelas principais
+│   ├── ai-agents-functions.sql           # Funções SQL
+│   └── ai-agents-stored-procedures.sql   # Stored procedures
 │
-└── src/
-    ├── types/
-    │   ├── ai-agents.ts    # ✅ NOVO - Tipos compartilhados
-    │   └── index.ts        # 🔄 ATUALIZADO - Re-export dos tipos
-    │
-    ├── hooks/
-    │   ├── useAgent.ts     # ✅ NOVO - Hooks para gerenciar agentes
-    │   └── index.ts        # 🔄 ATUALIZADO - Export do useAgent
-    │
-    └── lib/
-        └── whatsapp/
-            └── ai-providers.ts  # 🔄 ATUALIZADO - Suporte a Groq
+├── src/
+│   ├── app/
+│   │   ├── api/ai/
+│   │   │   ├── agents/                   # CRUD de agentes
+│   │   │   │   ├── route.ts
+│   │   │   │   └── [id]/
+│   │   │   │       ├── route.ts
+│   │   │   │       ├── sources/          # Fontes de conhecimento
+│   │   │   │       ├── actions/          # Regras condicionais
+│   │   │   │       ├── integrations/     # E-commerce
+│   │   │   │       └── test/             # Testar agente
+│   │   │   └── process/document/         # Processar documentos
+│   │   │
+│   │   └── (dashboard)/whatsapp/ai-agents/
+│   │       └── page.tsx                  # Página principal
+│   │
+│   ├── components/agents/
+│   │   ├── AIAgentList.tsx               # Lista de agentes
+│   │   ├── AIAgentEditor.tsx             # Editor (drawer lateral)
+│   │   ├── CreateAgentModal.tsx          # Modal de criação
+│   │   ├── AgentPreview.tsx              # Preview de teste
+│   │   ├── ModelSelector.tsx             # Seletor de modelo
+│   │   └── tabs/
+│   │       ├── SourcesTab.tsx            # Tab de fontes
+│   │       ├── ActionsTab.tsx            # Tab de ações
+│   │       ├── IntegrationsTab.tsx       # Tab de integrações
+│   │       ├── PersonaTab.tsx            # Tab de persona
+│   │       └── SettingsTab.tsx           # Tab de configurações
+│   │
+│   └── lib/ai/
+│       ├── engine.ts                     # Motor principal
+│       ├── rag.ts                        # Busca semântica
+│       ├── intent-detector.ts            # Detecção de intenção
+│       ├── sentiment-analyzer.ts         # Análise de sentimento
+│       ├── actions-engine.ts             # Executor de ações
+│       ├── embeddings.ts                 # Gerador de embeddings
+│       ├── prompt-builder.ts             # Construtor de prompts
+│       └── types.ts                      # Tipos TypeScript
 ```
 
-## 🚀 Instruções de Instalação
+---
 
-### 1. Extrair o ZIP na raiz do projeto
+## 🚀 Instalação Passo a Passo
+
+### PASSO 1: Executar SQL no Supabase
+
+Acesse o Supabase SQL Editor e execute na ordem:
+
+```sql
+-- 1. Primeiro, habilitar pgvector (se não estiver)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 2. Executar ai-agents-complete-migration.sql
+-- (copia todo o conteúdo do arquivo e executa)
+
+-- 3. Executar ai-agents-functions.sql
+
+-- 4. Executar ai-agents-stored-procedures.sql
+```
+
+### PASSO 2: Copiar Arquivos para o Projeto
 
 ```bash
-# Na raiz do seu projeto (onde está o package.json)
-unzip ai-agents-correcoes.zip -d .
+# Na raiz do projeto Worder
+# Copiar lib/ai (backend)
+cp -r ai-agents-completo/src/lib/ai/ src/lib/
+
+# Copiar API routes
+cp -r ai-agents-completo/src/app/api/ai/* src/app/api/ai/
+
+# Copiar componentes
+cp -r ai-agents-completo/src/components/agents/* src/components/agents/
+
+# Copiar página
+mkdir -p src/app/\(dashboard\)/whatsapp/ai-agents
+cp ai-agents-completo/src/app/\(dashboard\)/whatsapp/ai-agents/page.tsx src/app/\(dashboard\)/whatsapp/ai-agents/
 ```
 
-Os arquivos serão colocados automaticamente nas pastas corretas:
-- `src/types/ai-agents.ts`
-- `src/types/index.ts` (será substituído)
-- `src/hooks/useAgent.ts`
-- `src/hooks/index.ts` (será substituído)
-- `src/lib/whatsapp/ai-providers.ts` (será substituído)
+### PASSO 3: Adicionar Link no Menu/Sidebar
 
-### 2. Verificar se não há conflitos
+Edite o arquivo do Sidebar para adicionar link para `/whatsapp/ai-agents`.
 
-Se você modificou os arquivos `index.ts`, faça merge manual:
-
-```bash
-# Para ver diferenças
-diff src/types/index.ts ai-agents-correcoes/src/types/index.ts
-diff src/hooks/index.ts ai-agents-correcoes/src/hooks/index.ts
-```
-
-### 3. Reiniciar o servidor de desenvolvimento
+### PASSO 4: Reiniciar o Servidor
 
 ```bash
 npm run dev
-# ou
-yarn dev
 ```
 
 ---
 
-## 📝 O que foi corrigido
+## 🔧 Configuração de API Keys
 
-### ✅ Problemas Críticos Resolvidos
+O sistema precisa de API keys para funcionar:
 
-1. **Tipos Duplicados**
-   - Criado arquivo central `src/types/ai-agents.ts`
-   - Todos os tipos agora são importados de um único lugar
+1. **OpenAI** - Para embeddings e respostas
+2. **Anthropic** (opcional) - Claude como alternativa
+3. **Google** (opcional) - Gemini
+4. **Groq** (opcional) - Llama, Mixtral
 
-2. **Provider Groq Faltando**
-   - Adicionado suporte completo ao Groq em `ai-providers.ts`
-   - Adicionado `google` como alias para `gemini`
-
-3. **Código Duplicado**
-   - Criado `useAgent()` hook para gerenciar agente único
-   - Criado `useAgentsList()` hook para lista de agentes
+Configure em Settings → API Keys.
 
 ---
 
-## 🔧 Próximos Passos (Opcional)
+## 📱 Como Usar
 
-### Atualizar imports nos componentes
+### 1. Criar Agente
+- Vá para WhatsApp → AI Agents
+- Clique em "Novo Agente"
+- Configure nome, modelo e sistema prompt básico
 
-Após instalar, você pode atualizar os imports nos componentes:
+### 2. Adicionar Fontes de Conhecimento
+- Tab "Fontes"
+- Adicione URLs, arquivos ou texto
+- Aguarde processamento
 
-```typescript
-// ANTES (em AIAgentEditor.tsx, tabs/*.tsx)
-import { AIAgent, AgentSource } from '../AIAgentEditor'
+### 3. Configurar Ações
+- Tab "Ações"
+- Crie regras: QUANDO X acontecer, FAZER Y
+- Exemplos:
+  - Quando cliente frustrado → Transferir para humano
+  - Quando perguntar preço → Usar fonte "Tabela de Preços"
+  - Quando quiser comprar → Pedir email
 
-// DEPOIS
-import type { 
-  AIAgent, 
-  AgentSource, 
-  AgentAction 
-} from '@/types/ai-agents'
-```
+### 4. Personalizar Persona
+- Tab "Persona"
+- Configure tom de voz
+- Adicione diretrizes
 
-### Usar os novos hooks
-
-```typescript
-// ANTES
-const [agent, setAgent] = useState(null)
-const [loading, setLoading] = useState(true)
-
-useEffect(() => {
-  fetch(`/api/ai/agents/${id}`)
-    .then(res => res.json())
-    .then(data => {
-      setAgent(data.agent)
-      setLoading(false)
-    })
-}, [id])
-
-// DEPOIS
-import { useAgent } from '@/hooks'
-
-const { 
-  agent, 
-  sources,
-  actions,
-  loading, 
-  error,
-  saveAgent,
-  addSource,
-  testAgent 
-} = useAgent(agentId, organizationId)
-```
+### 5. Testar
+- Clique em "Preview"
+- Envie mensagens de teste
+- Verifique se está respondendo corretamente
 
 ---
 
-## 📋 Checklist Pós-Instalação
+## ⚠️ Troubleshooting
 
-- [ ] Arquivos extraídos nas pastas corretas
-- [ ] Servidor reiniciado sem erros
-- [ ] Página de Agentes IA carrega normalmente
-- [ ] Criar novo agente funciona
-- [ ] Adicionar fonte funciona
-- [ ] Testar agente funciona
-- [ ] Provider Groq aparece na lista
+### Erro: pgvector not found
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+### Erro: Tabela não existe
+Execute o SQL migration completo novamente.
+
+### Erro: API key inválida
+Verifique se a API key está configurada em Settings → API Keys.
+
+### Erro: CORS
+Verifique se o domínio está liberado no Supabase.
 
 ---
 
-## 🆘 Problemas?
+## 🔄 Diferenças do Sistema Antigo
 
-Se encontrar erros de TypeScript:
+| Feature | Sistema Antigo | Sistema Novo |
+|---------|---------------|--------------|
+| Knowledge Base | ❌ | ✅ RAG com pgvector |
+| Intent Detection | ❌ | ✅ Detecta intenção |
+| Sentiment Analysis | ❌ | ✅ Detecta sentimento |
+| Conditional Actions | ❌ | ✅ Regras when/do |
+| E-commerce | ❌ | ✅ Shopify, etc |
+| Persona | Básico | ✅ Completo |
+| Horários | ❌ | ✅ Agendamento |
+| Preview | ❌ | ✅ Testar em tempo real |
 
-```bash
-# Limpar cache
-rm -rf .next
-rm -rf node_modules/.cache
+---
 
-# Reinstalar dependências
-npm install
+## 📞 Suporte
 
-# Reiniciar
-npm run dev
-```
-
-Se o erro persistir, verifique se o `tsconfig.json` tem o path `@/`:
-
-```json
-{
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  }
-}
-```
+Se tiver problemas, verifique:
+1. Logs do console (F12)
+2. Logs do Supabase
+3. Status das API keys
