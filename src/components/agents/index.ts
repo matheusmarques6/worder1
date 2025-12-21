@@ -6,7 +6,7 @@ export { default as AgentPreview } from './AgentPreview'
 export { default as ModelSelector } from './ModelSelector'
 export { CreateAgentWizard } from './CreateAgentWizard'
 export { EditAgentModal } from './EditAgentModal'
-export { PermissionsEditor } from './PermissionsEditor'
+export { default as PermissionsEditor } from './PermissionsEditor'
 export { default as AIAgentConfig } from './AIAgentConfig'
 
 // Tabs
