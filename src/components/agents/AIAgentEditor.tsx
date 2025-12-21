@@ -48,6 +48,7 @@ export interface AIAgent {
   total_messages: number
   total_conversations: number
   total_tokens_used: number
+  avg_response_time_ms?: number
   created_at: string
   updated_at: string
 }
