@@ -416,9 +416,10 @@ export class WhatsAppCloudAPI {
   // MÍDIA
   // =============================================
 
-  async uploadMedia(file: Buffer, mimeType: string, filename?: string): Promise<{ id: string }> {
+  async uploadMedia(file: Buffer | Uint8Array, mimeType: string, filename?: string): Promise<{ id: string }> {
     const formData = new FormData();
-    formData.append('file', new Blob([file], { type: mimeType }), filename || 'file');
+    const uint8Array = file instanceof Uint8Array ? file : new Uint8Array(file);
+    formData.append('file', new Blob([uint8Array], { type: mimeType }), filename || 'file');
     formData.append('messaging_product', 'whatsapp');
     formData.append('type', mimeType);
 
@@ -437,7 +438,7 @@ export class WhatsAppCloudAPI {
     return this.request(`/${mediaId}`);
   }
 
-  async downloadMedia(mediaId: string): Promise<{ data: Buffer; mimeType: string }> {
+  async downloadMedia(mediaId: string): Promise<{ data: Uint8Array; mimeType: string }> {
     const mediaInfo = await this.getMediaUrl(mediaId);
     
     const response = await fetch(mediaInfo.url, {
@@ -448,7 +449,7 @@ export class WhatsAppCloudAPI {
 
     const buffer = await response.arrayBuffer();
     return {
-      data: Buffer.from(buffer),
+      data: new Uint8Array(buffer),
       mimeType: mediaInfo.mime_type,
     };
   }
@@ -597,16 +598,29 @@ export function getMessageType(message: WebhookMessage): string {
   return 'unknown';
 }
 
-export function verifyWebhookSignature(
+export async function verifyWebhookSignature(
   payload: string,
   signature: string,
   appSecret: string
-): boolean {
-  const crypto = require('crypto');
-  const expectedSignature = crypto
-    .createHmac('sha256', appSecret)
-    .update(payload)
-    .digest('hex');
+): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(appSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  
+  const signatureBuffer = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    encoder.encode(payload)
+  );
+  
+  const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
   
   return `sha256=${expectedSignature}` === signature;
 }

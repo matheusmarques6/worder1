@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     // Verificar assinatura (opcional mas recomendado)
     const signature = request.headers.get('x-hub-signature-256');
     if (signature && process.env.META_APP_SECRET) {
-      const isValid = verifyWebhookSignature(rawBody, signature, process.env.META_APP_SECRET);
+      const isValid = await verifyWebhookSignature(rawBody, signature, process.env.META_APP_SECRET);
       if (!isValid) {
         console.warn('[WhatsApp Cloud Webhook] Invalid signature');
         // Continuar mesmo assim para não perder mensagens
