@@ -30,6 +30,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
+import WhatsAppIntegrationCard from '@/components/whatsapp/WhatsAppIntegrationCard'
 
 // Types
 interface IntegrationCategory {
@@ -506,6 +507,42 @@ export default function IntegrationsPage() {
           </div>
         </div>
       </div>
+
+      {/* Native Integrations - WhatsApp */}
+      {!search && !selectedCategory && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <MessageSquare className="w-5 h-5 text-green-400" />
+            <h2 className="text-lg font-semibold text-white">Mensagens</h2>
+            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded-full">
+              Nativo
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {user?.organization_id ? (
+              <WhatsAppIntegrationCard organizationId={user.organization_id} />
+            ) : (
+              <div className="p-6 bg-dark-800 border border-dark-700 rounded-xl animate-pulse">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-dark-700 rounded-xl"></div>
+                  <div className="flex-1">
+                    <div className="h-5 bg-dark-700 rounded w-32 mb-2"></div>
+                    <div className="h-4 bg-dark-700 rounded w-48"></div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Other Integrations Header */}
+      {!search && !selectedCategory && sortedIntegrations.length > 0 && (
+        <div className="flex items-center gap-2 mb-4">
+          <Puzzle className="w-5 h-5 text-primary-400" />
+          <h2 className="text-lg font-semibold text-white">Outras Integrações</h2>
+        </div>
+      )}
 
       {/* Loading */}
       {loading ? (
