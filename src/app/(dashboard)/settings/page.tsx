@@ -24,6 +24,8 @@ import {
   EyeOff,
   Loader2,
   Store,
+  CheckCircle,
+  Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStoreStore, useAuthStore } from '@/stores';
@@ -90,12 +92,101 @@ const TikTokIcon = () => (
 const settingsTabs = [
   { id: 'integrations', label: 'Integrações', icon: Plug },
   { id: 'profile', label: 'Perfil', icon: User },
-  { id: 'store', label: 'Loja', icon: Building2 },
+  { id: 'store', label: 'Loja', icon: Store },
   { id: 'billing', label: 'Faturamento', icon: CreditCard },
   { id: 'notifications', label: 'Notificações', icon: Bell },
   { id: 'security', label: 'Segurança', icon: Shield },
-  { id: 'api', label: 'API', icon: Key },
+  { id: 'api', label: 'API Keys', icon: Key },
 ];
+
+// AI Provider Config for API Keys
+const aiProviderConfig: Record<string, {
+  name: string
+  color: string
+  bgColor: string
+  icon: string
+  docsUrl: string
+  createKeyUrl: string
+  description: string
+}> = {
+  openai: {
+    name: 'OpenAI',
+    color: 'text-green-400',
+    bgColor: 'bg-green-500/20',
+    icon: '🤖',
+    docsUrl: 'https://platform.openai.com/docs',
+    createKeyUrl: 'https://platform.openai.com/api-keys',
+    description: 'GPT-5.2, GPT-5.1, GPT-5, GPT-5 Pro/Mini/Nano',
+  },
+  anthropic: {
+    name: 'Anthropic',
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-500/20',
+    icon: '🧠',
+    docsUrl: 'https://docs.anthropic.com',
+    createKeyUrl: 'https://console.anthropic.com/settings/keys',
+    description: 'Claude Opus 4.5, Sonnet 4.5, Haiku 4.5',
+  },
+  google: {
+    name: 'Google AI',
+    color: 'text-blue-400',
+    bgColor: 'bg-blue-500/20',
+    icon: '✨',
+    docsUrl: 'https://ai.google.dev/docs',
+    createKeyUrl: 'https://aistudio.google.com/app/apikey',
+    description: 'Gemini 2.0 Flash, Gemini 1.5 Pro/Flash',
+  },
+  groq: {
+    name: 'Groq',
+    color: 'text-purple-400',
+    bgColor: 'bg-purple-500/20',
+    icon: '⚡',
+    docsUrl: 'https://console.groq.com/docs',
+    createKeyUrl: 'https://console.groq.com/keys',
+    description: 'Llama 3.3 70B, Llama 3.2 Vision (Ultra-rápido)',
+  },
+  mistral: {
+    name: 'Mistral',
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/20',
+    icon: '🌀',
+    docsUrl: 'https://docs.mistral.ai',
+    createKeyUrl: 'https://console.mistral.ai/api-keys',
+    description: 'Mistral Large, Codestral',
+  },
+  deepseek: {
+    name: 'DeepSeek',
+    color: 'text-indigo-400',
+    bgColor: 'bg-indigo-500/20',
+    icon: '🔍',
+    docsUrl: 'https://platform.deepseek.com/docs',
+    createKeyUrl: 'https://platform.deepseek.com/api_keys',
+    description: 'DeepSeek V3, DeepSeek R1 (Muito barato)',
+  },
+  xai: {
+    name: 'xAI',
+    color: 'text-gray-400',
+    bgColor: 'bg-gray-500/20',
+    icon: '𝕏',
+    docsUrl: 'https://docs.x.ai',
+    createKeyUrl: 'https://console.x.ai',
+    description: 'Grok 2, Grok 2 Vision',
+  },
+};
+
+// API Key type
+interface AIApiKey {
+  id: string
+  provider: string
+  api_key_hint: string
+  is_active: boolean
+  is_valid: boolean
+  last_validated_at?: string
+  total_requests: number
+  total_tokens_used: number
+  last_used_at?: string
+  created_at: string
+}
 
 // Badge Component
 const Badge = ({ variant = 'default', children }: { variant?: 'success' | 'warning' | 'error' | 'default'; children: React.ReactNode }) => {
@@ -381,6 +472,17 @@ export default function SettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKey] = useState('worder_sk_live_xxxxxxxxxxxxxxxxxxxxx');
   
+  // API Keys states
+  const [aiApiKeys, setAiApiKeys] = useState<AIApiKey[]>([]);
+  const [loadingApiKeys, setLoadingApiKeys] = useState(false);
+  const [showAddKeyModal, setShowAddKeyModal] = useState(false);
+  const [selectedKeyProvider, setSelectedKeyProvider] = useState<string | null>(null);
+  const [newKeyProvider, setNewKeyProvider] = useState('');
+  const [newKeyValue, setNewKeyValue] = useState('');
+  const [showNewKeyValue, setShowNewKeyValue] = useState(false);
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyError, setKeyError] = useState('');
+  
   const { stores } = useStoreStore();
   const { user } = useAuthStore();
 
@@ -493,6 +595,85 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchIntegrations();
   }, [fetchIntegrations]);
+
+  // Fetch AI API Keys
+  const fetchAiApiKeys = useCallback(async () => {
+    try {
+      setLoadingApiKeys(true);
+      const response = await fetch('/api/api-keys');
+      const data = await response.json();
+      if (data.keys) {
+        setAiApiKeys(data.keys);
+      }
+    } catch (error) {
+      console.error('Error fetching API keys:', error);
+    } finally {
+      setLoadingApiKeys(false);
+    }
+  }, []);
+
+  // Fetch API keys when tab changes to api
+  useEffect(() => {
+    if (activeTab === 'api') {
+      fetchAiApiKeys();
+    }
+  }, [activeTab, fetchAiApiKeys]);
+
+  // Save new API key
+  const handleSaveApiKey = async () => {
+    if (!newKeyProvider || !newKeyValue) {
+      setKeyError('Selecione um provider e insira a API key');
+      return;
+    }
+
+    setSavingKey(true);
+    setKeyError('');
+
+    try {
+      const res = await fetch('/api/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: newKeyProvider, api_key: newKeyValue }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao salvar API key');
+      }
+
+      // Success
+      setShowAddKeyModal(false);
+      setNewKeyProvider('');
+      setNewKeyValue('');
+      fetchAiApiKeys();
+    } catch (err: any) {
+      setKeyError(err.message);
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  // Delete API key
+  const handleDeleteApiKey = async (provider: string) => {
+    if (!confirm(`Deseja realmente remover a API key de ${aiProviderConfig[provider]?.name || provider}?`)) return;
+
+    try {
+      const res = await fetch(`/api/api-keys?provider=${provider}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        fetchAiApiKeys();
+      }
+    } catch (error) {
+      console.error('Error deleting API key:', error);
+    }
+  };
+
+  // Get configured providers
+  const configuredProviders = aiApiKeys.map(k => k.provider);
+  const availableProviders = Object.keys(aiProviderConfig).filter(p => !configuredProviders.includes(p));
 
   // Handle OAuth connect
   const handleConnect = async (integrationId: string) => {
@@ -856,7 +1037,7 @@ export default function SettingsPage() {
               </motion.div>
             )}
 
-            {/* API Tab */}
+            {/* API Keys Tab */}
             {activeTab === 'api' && (
               <motion.div
                 key="api"
@@ -865,56 +1046,304 @@ export default function SettingsPage() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-6"
               >
-                <div className="p-6 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                  <h2 className="text-lg font-semibold text-white mb-2">Chaves de API</h2>
-                  <p className="text-dark-400 mb-6">
-                    Use estas chaves para integrar com a API do Worder
-                  </p>
-
+                {/* Header com botão adicionar */}
+                <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-white mb-2 block">
-                      Chave de Produção
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 flex items-center bg-dark-700 rounded-xl px-4 py-3 border border-dark-600">
-                        <code className="flex-1 text-sm text-dark-300 font-mono">
-                          {showApiKey ? apiKey : '•'.repeat(apiKey.length)}
-                        </code>
-                        <button
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className="p-1 hover:bg-dark-600 rounded"
-                        >
-                          {showApiKey ? (
-                            <EyeOff className="w-4 h-4 text-dark-400" />
-                          ) : (
-                            <Eye className="w-4 h-4 text-dark-400" />
-                          )}
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(apiKey)}
-                        className="p-3 bg-dark-700 hover:bg-dark-600 rounded-xl text-dark-400 hover:text-white transition-colors"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
+                    <h2 className="text-lg font-semibold text-white">API Keys de IA</h2>
+                    <p className="text-dark-400 text-sm">Configure suas chaves para usar modelos de IA</p>
+                  </div>
+                  <button
+                    onClick={() => setShowAddKeyModal(true)}
+                    disabled={availableProviders.length === 0}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 disabled:from-dark-600 disabled:to-dark-600 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Adicionar Key
+                  </button>
+                </div>
+
+                {/* Info Banner */}
+                <div className="p-4 rounded-xl bg-primary-500/10 border border-primary-500/20">
+                  <div className="flex gap-3">
+                    <Info className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="text-primary-300 font-medium mb-1">Como funciona</p>
+                      <p className="text-primary-400/80">
+                        Você usa suas próprias API keys e paga diretamente aos providers (OpenAI, Anthropic, etc).
+                        A Worder não cobra nada pelo uso de IA - você tem controle total sobre seus custos.
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-6 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h2 className="text-lg font-semibold text-white">Documentação</h2>
-                      <p className="text-dark-400">Aprenda a usar a API</p>
-                    </div>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg text-sm font-medium transition-colors">
-                      <ExternalLink className="w-4 h-4" />
-                      Abrir Docs
+                {/* Loading */}
+                {loadingApiKeys ? (
+                  <div className="flex items-center justify-center h-32">
+                    <Loader2 className="w-6 h-6 text-primary-400 animate-spin" />
+                  </div>
+                ) : aiApiKeys.length === 0 ? (
+                  /* Empty State */
+                  <div className="p-8 bg-dark-800/50 rounded-xl border border-dark-700/50 text-center">
+                    <Key className="w-12 h-12 text-dark-500 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-white mb-2">Nenhuma API key configurada</h3>
+                    <p className="text-dark-400 mb-6">Configure suas API keys para usar agentes de IA</p>
+                    <button
+                      onClick={() => setShowAddKeyModal(true)}
+                      className="px-6 py-3 bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 text-white rounded-xl font-medium transition-all"
+                    >
+                      <Plus className="w-4 h-4 inline mr-2" />
+                      Adicionar Primeira Key
                     </button>
                   </div>
-                </div>
+                ) : (
+                  /* Cards de API Keys */
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {aiApiKeys.map((key) => {
+                      const config = aiProviderConfig[key.provider] || {
+                        name: key.provider,
+                        color: 'text-gray-400',
+                        bgColor: 'bg-gray-500/20',
+                        icon: '🔑',
+                        description: '',
+                      };
+
+                      return (
+                        <div
+                          key={key.id}
+                          className={`bg-dark-800/50 border rounded-xl p-5 ${
+                            key.is_valid ? 'border-dark-700/50' : 'border-red-500/50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-12 h-12 rounded-xl ${config.bgColor} flex items-center justify-center text-2xl`}>
+                                {config.icon}
+                              </div>
+                              <div>
+                                <h3 className={`font-medium ${config.color}`}>{config.name}</h3>
+                                <div className="flex items-center gap-2 mt-1">
+                                  {key.is_valid ? (
+                                    <span className="flex items-center gap-1 text-xs text-green-400">
+                                      <CheckCircle className="w-3 h-3" />
+                                      Válida
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-1 text-xs text-red-400">
+                                      <AlertCircle className="w-3 h-3" />
+                                      Inválida
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteApiKey(key.provider)}
+                              className="p-2 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-dark-400">Chave</span>
+                              <span className="text-dark-300 font-mono">{key.api_key_hint}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-dark-400">Requisições</span>
+                              <span className="text-white">{key.total_requests.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-dark-400">Tokens usados</span>
+                              <span className="text-white">{key.total_tokens_used.toLocaleString()}</span>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 pt-4 border-t border-dark-700/50">
+                            <a
+                              href={config.createKeyUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                            >
+                              Gerenciar no {config.name} <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Card para adicionar mais */}
+                    {availableProviders.length > 0 && (
+                      <button
+                        onClick={() => setShowAddKeyModal(true)}
+                        className="bg-dark-800/30 border border-dashed border-dark-600 rounded-xl p-5 flex flex-col items-center justify-center min-h-[200px] hover:border-primary-500/50 hover:bg-dark-800/50 transition-all group"
+                      >
+                        <div className="w-12 h-12 rounded-xl bg-dark-700/50 flex items-center justify-center mb-3 group-hover:bg-primary-500/20 transition-colors">
+                          <Plus className="w-6 h-6 text-dark-400 group-hover:text-primary-400" />
+                        </div>
+                        <p className="text-dark-400 group-hover:text-white font-medium">Adicionar API Key</p>
+                        <p className="text-dark-500 text-sm mt-1">{availableProviders.length} providers disponíveis</p>
+                      </button>
+                    )}
+                  </div>
+                )}
               </motion.div>
             )}
+
+            {/* Modal Adicionar API Key */}
+            <AnimatePresence>
+              {showAddKeyModal && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+                  onClick={() => setShowAddKeyModal(false)}
+                >
+                  <motion.div
+                    initial={{ scale: 0.95, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.95, opacity: 0 }}
+                    className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between p-6 border-b border-dark-700">
+                      <h2 className="text-xl font-semibold text-white">Adicionar API Key</h2>
+                      <button
+                        onClick={() => setShowAddKeyModal(false)}
+                        className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)] space-y-4">
+                      {/* Provider Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-dark-300 mb-3">Provider</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[280px] overflow-y-auto pr-1">
+                          {availableProviders.map((p) => {
+                            const cfg = aiProviderConfig[p];
+                            if (!cfg) return null;
+                            return (
+                              <button
+                                key={p}
+                                onClick={() => setNewKeyProvider(p)}
+                                className={`p-4 rounded-xl border transition-all text-left ${
+                                  newKeyProvider === p
+                                    ? 'border-primary-500 bg-primary-500/10'
+                                    : 'border-dark-700/50 hover:border-dark-600 hover:bg-dark-700/30'
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <span className="text-2xl flex-shrink-0">{cfg.icon}</span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className={`text-sm font-semibold ${cfg.color}`}>{cfg.name}</p>
+                                    <p className="text-xs text-dark-400 mt-0.5 line-clamp-2">{cfg.description}</p>
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Provider Info */}
+                      {newKeyProvider && aiProviderConfig[newKeyProvider] && (
+                        <div className={`p-4 rounded-xl ${aiProviderConfig[newKeyProvider].bgColor}`}>
+                          <div className="flex items-start gap-3">
+                            <span className="text-2xl">{aiProviderConfig[newKeyProvider].icon}</span>
+                            <div>
+                              <h3 className={`font-medium ${aiProviderConfig[newKeyProvider].color}`}>
+                                {aiProviderConfig[newKeyProvider].name}
+                              </h3>
+                              <p className="text-sm text-dark-400 mt-1">{aiProviderConfig[newKeyProvider].description}</p>
+                              <div className="flex gap-3 mt-2">
+                                <a
+                                  href={aiProviderConfig[newKeyProvider].createKeyUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                                >
+                                  Criar API Key <ExternalLink className="w-3 h-3" />
+                                </a>
+                                <a
+                                  href={aiProviderConfig[newKeyProvider].docsUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-dark-400 hover:text-white flex items-center gap-1"
+                                >
+                                  Documentação <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* API Key Input */}
+                      {newKeyProvider && (
+                        <div>
+                          <label className="block text-sm font-medium text-dark-300 mb-2">API Key</label>
+                          <div className="relative">
+                            <input
+                              type={showNewKeyValue ? 'text' : 'password'}
+                              value={newKeyValue}
+                              onChange={(e) => setNewKeyValue(e.target.value)}
+                              placeholder={`Cole sua ${aiProviderConfig[newKeyProvider]?.name || newKeyProvider} API key aqui`}
+                              className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 pr-12"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowNewKeyValue(!showNewKeyValue)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-dark-600 rounded"
+                            >
+                              {showNewKeyValue ? (
+                                <EyeOff className="w-4 h-4 text-dark-400" />
+                              ) : (
+                                <Eye className="w-4 h-4 text-dark-400" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Error */}
+                      {keyError && (
+                        <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                          <span className="text-sm text-red-400">{keyError}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="p-6 border-t border-dark-700 flex gap-3">
+                      <button
+                        onClick={() => {
+                          setShowAddKeyModal(false);
+                          setNewKeyProvider('');
+                          setNewKeyValue('');
+                          setKeyError('');
+                        }}
+                        className="flex-1 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleSaveApiKey}
+                        disabled={!newKeyProvider || !newKeyValue || savingKey}
+                        className="flex-1 py-3 bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 disabled:from-dark-600 disabled:to-dark-600 text-white rounded-xl font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {savingKey && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {savingKey ? 'Salvando...' : 'Salvar'}
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Other tabs - simplified */}
             {['billing', 'notifications', 'security'].includes(activeTab) && (

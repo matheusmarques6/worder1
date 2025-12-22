@@ -58,7 +58,7 @@ const analyticsNavItems: NavItem[] = [
 
 const settingsNavItems: NavItem[] = [
   { title: 'Configurações', href: '/settings', icon: Settings },
-  { title: 'API Keys', href: '/whatsapp/settings/api-keys', icon: Key },
+  { title: 'API Keys', href: '/settings?tab=api', icon: Key },
   { title: 'Ajuda', href: '/help', icon: HelpCircle },
 ]
 

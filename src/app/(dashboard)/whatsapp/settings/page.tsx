@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Settings, Smartphone, Bot, Key, QrCode, Check, X, Loader2, Eye, EyeOff,
-  Plus, Trash2, RefreshCw, Zap, Globe, MessageSquare, ChevronDown, Copy,
+  Settings, Smartphone, Key, QrCode, Check, X, Loader2, Eye, EyeOff,
+  Plus, Trash2, RefreshCw, Globe, MessageSquare, ChevronDown, Copy,
   Wifi, WifiOff, AlertCircle
 } from 'lucide-react'
 
@@ -16,17 +16,6 @@ interface MetaConfig {
   access_token: string
   business_name?: string
   phone_number?: string
-  is_active: boolean
-}
-
-interface AIConfig {
-  id?: string
-  provider: 'openai' | 'anthropic' | 'google' | 'deepseek' | 'groq' | 'mistral' | 'xai'
-  model: string
-  api_key?: string
-  system_prompt?: string
-  temperature: number
-  max_tokens: number
   is_active: boolean
 }
 
@@ -42,49 +31,8 @@ interface Instance {
   api_url?: string
 }
 
-const AI_MODELS = {
-  openai: [
-    { id: 'gpt-5.2', name: 'GPT-5.2 (Mais avançado)' },
-    { id: 'gpt-5.1', name: 'GPT-5.1 (Conversacional)' },
-    { id: 'gpt-5', name: 'GPT-5 (Flagship)' },
-    { id: 'gpt-5-pro', name: 'GPT-5 Pro (Raciocínio estendido)' },
-    { id: 'gpt-5-mini', name: 'GPT-5 Mini (Rápido)' },
-    { id: 'gpt-5-nano', name: 'GPT-5 Nano (Ultra-econômico)' },
-  ],
-  anthropic: [
-    { id: 'claude-opus-4-5-20251124', name: 'Claude Opus 4.5 (Mais inteligente)' },
-    { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5 (Melhor para código)' },
-    { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5 (Rápido)' },
-    { id: 'claude-opus-4-1-20250805', name: 'Claude Opus 4.1 (Revisão de código)' },
-  ],
-  google: [
-    { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (Mais recente)' },
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
-    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-  ],
-  deepseek: [
-    { id: 'deepseek-chat', name: 'DeepSeek V3 (Muito barato)' },
-    { id: 'deepseek-reasoner', name: 'DeepSeek R1 (Raciocínio)' },
-  ],
-  groq: [
-    { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (Ultra-rápido)' },
-    { id: 'llama-3.2-90b-vision-preview', name: 'Llama 3.2 90B Vision' },
-    { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B (Gratuito)' },
-    { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B' },
-  ],
-  mistral: [
-    { id: 'mistral-large-latest', name: 'Mistral Large' },
-    { id: 'mistral-small-latest', name: 'Mistral Small' },
-    { id: 'codestral-latest', name: 'Codestral (Código)' },
-  ],
-  xai: [
-    { id: 'grok-2-1212', name: 'Grok 2' },
-    { id: 'grok-2-vision-1212', name: 'Grok 2 Vision' },
-  ],
-}
-
 export default function WhatsAppSettingsPage() {
-  const [activeTab, setActiveTab] = useState<'meta' | 'instances' | 'ai'>('meta')
+  const [activeTab, setActiveTab] = useState<'meta' | 'instances'>('meta')
   
   // Meta API State
   const [metaConfig, setMetaConfig] = useState<MetaConfig>({
@@ -96,19 +44,6 @@ export default function WhatsAppSettingsPage() {
   const [showToken, setShowToken] = useState(false)
   const [metaLoading, setMetaLoading] = useState(false)
   const [metaSaved, setMetaSaved] = useState(false)
-
-  // AI State
-  const [aiConfig, setAiConfig] = useState<AIConfig>({
-    provider: 'openai',
-    model: 'gpt-4o-mini',
-    temperature: 0.7,
-    max_tokens: 1000,
-    is_active: true
-  })
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiTesting, setAiTesting] = useState(false)
-  const [aiTestResult, setAiTestResult] = useState<{ success: boolean; message: string } | null>(null)
-  const [showApiKey, setShowApiKey] = useState(false)
 
   // Instances State
   const [instances, setInstances] = useState<Instance[]>([])
@@ -122,7 +57,6 @@ export default function WhatsAppSettingsPage() {
   // Load data
   useEffect(() => {
     loadMetaConfig()
-    loadAIConfig()
     loadInstances()
   }, [])
 
@@ -158,77 +92,6 @@ export default function WhatsAppSettingsPage() {
       console.error('Error saving meta config:', e)
     } finally {
       setMetaLoading(false)
-    }
-  }
-
-  // =============================================
-  // AI CONFIG
-  // =============================================
-  const loadAIConfig = async () => {
-    try {
-      const res = await fetch('/api/whatsapp/ai?organization_id=default')
-      const data = await res.json()
-      if (data.configs?.[0]) {
-        setAiConfig(data.configs[0])
-      }
-    } catch (e) {
-      console.error('Error loading AI config:', e)
-    }
-  }
-
-  const saveAIConfig = async () => {
-    setAiLoading(true)
-    try {
-      const res = await fetch('/api/whatsapp/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'create_config',
-          organization_id: 'default',
-          ...aiConfig,
-          api_key: aiConfig.api_key
-        })
-      })
-      await res.json()
-    } catch (e) {
-      console.error('Error saving AI config:', e)
-    } finally {
-      setAiLoading(false)
-    }
-  }
-
-  const testAI = async () => {
-    if (!aiConfig.api_key) {
-      setAiTestResult({ success: false, message: 'API Key é obrigatória' })
-      return
-    }
-
-    setAiTesting(true)
-    setAiTestResult(null)
-    
-    try {
-      const res = await fetch('/api/whatsapp/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'test',
-          provider: aiConfig.provider,
-          api_key: aiConfig.api_key,
-          model: aiConfig.model,
-          test_message: 'Olá! Este é um teste de conexão.'
-        })
-      })
-      const data = await res.json()
-      
-      if (data.success) {
-        setAiTestResult({ success: true, message: `Conexão OK! Resposta: "${data.response.slice(0, 100)}..."` })
-      } else {
-        setAiTestResult({ success: false, message: data.error || 'Erro ao conectar' })
-      }
-    } catch (e: any) {
-      setAiTestResult({ success: false, message: e.message })
-    } finally {
-      setAiTesting(false)
     }
   }
 
@@ -334,7 +197,6 @@ export default function WhatsAppSettingsPage() {
           {[
             { id: 'meta', label: 'Meta API', icon: Globe },
             { id: 'instances', label: 'QR Code', icon: QrCode },
-            { id: 'ai', label: 'IA Chatbot', icon: Bot },
           ].map(tab => (
             <button
               key={tab.id}
@@ -604,160 +466,6 @@ export default function WhatsAppSettingsPage() {
                   </div>
                 ))
               )}
-            </motion.div>
-          )}
-
-          {/* AI TAB */}
-          {activeTab === 'ai' && (
-            <motion.div
-              key="ai"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="bg-slate-900/50 rounded-2xl border border-slate-800/50 p-6"
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-violet-500/20 rounded-xl">
-                  <Bot className="w-6 h-6 text-violet-400" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Chatbot com IA</h2>
-                  <p className="text-sm text-slate-400">Configure respostas automáticas inteligentes</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Provedor de IA</label>
-                  <select
-                    value={aiConfig.provider}
-                    onChange={e => setAiConfig({ 
-                      ...aiConfig, 
-                      provider: e.target.value as any,
-                      model: AI_MODELS[e.target.value as keyof typeof AI_MODELS]?.[0]?.id || ''
-                    })}
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-violet-500/50"
-                  >
-                    <option value="openai">OpenAI (ChatGPT)</option>
-                    <option value="anthropic">Anthropic (Claude)</option>
-                    <option value="gemini">Google (Gemini)</option>
-                    <option value="deepseek">DeepSeek</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Modelo</label>
-                  <select
-                    value={aiConfig.model}
-                    onChange={e => setAiConfig({ ...aiConfig, model: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-violet-500/50"
-                  >
-                    {AI_MODELS[aiConfig.provider]?.map(model => (
-                      <option key={model.id} value={model.id}>{model.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">API Key</label>
-                  <div className="relative">
-                    <input
-                      type={showApiKey ? 'text' : 'password'}
-                      value={aiConfig.api_key || ''}
-                      onChange={e => setAiConfig({ ...aiConfig, api_key: e.target.value })}
-                      placeholder={`Sua ${aiConfig.provider} API Key`}
-                      className="w-full px-4 py-3 pr-12 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
-                    />
-                    <button
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                    >
-                      {showApiKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Prompt do Sistema</label>
-                  <textarea
-                    value={aiConfig.system_prompt || ''}
-                    onChange={e => setAiConfig({ ...aiConfig, system_prompt: e.target.value })}
-                    placeholder="Ex: Você é um assistente de atendimento amigável..."
-                    rows={4}
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50 resize-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Temperatura: {aiConfig.temperature}
-                    </label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      value={aiConfig.temperature}
-                      onChange={e => setAiConfig({ ...aiConfig, temperature: parseFloat(e.target.value) })}
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Max Tokens</label>
-                    <input
-                      type="number"
-                      value={aiConfig.max_tokens}
-                      onChange={e => setAiConfig({ ...aiConfig, max_tokens: parseInt(e.target.value) })}
-                      className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-violet-500/50"
-                    />
-                  </div>
-                </div>
-
-                {/* Test Result */}
-                {aiTestResult && (
-                  <div className={`p-4 rounded-xl ${aiTestResult.success ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
-                    <div className="flex items-start gap-2">
-                      {aiTestResult.success ? (
-                        <Check className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      ) : (
-                        <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-                      )}
-                      <p className={`text-sm ${aiTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
-                        {aiTestResult.message}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={testAI}
-                    disabled={aiTesting || !aiConfig.api_key}
-                    className="flex-1 py-3 bg-slate-800/50 text-white font-medium rounded-xl hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {aiTesting ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <Zap className="w-5 h-5" />
-                        Testar Conexão
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={saveAIConfig}
-                    disabled={aiLoading}
-                    className="flex-1 py-3 bg-violet-600 text-white font-medium rounded-xl hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {aiLoading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      'Salvar Configuração'
-                    )}
-                  </button>
-                </div>
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
