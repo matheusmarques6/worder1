@@ -416,10 +416,9 @@ export class WhatsAppCloudAPI {
   // MÍDIA
   // =============================================
 
-  async uploadMedia(file: Buffer | Uint8Array, mimeType: string, filename?: string): Promise<{ id: string }> {
+  async uploadMedia(fileData: ArrayBuffer, mimeType: string, filename?: string): Promise<{ id: string }> {
     const formData = new FormData();
-    const uint8Array = file instanceof Uint8Array ? file : new Uint8Array(file);
-    formData.append('file', new Blob([uint8Array], { type: mimeType }), filename || 'file');
+    formData.append('file', new Blob([fileData], { type: mimeType }), filename || 'file');
     formData.append('messaging_product', 'whatsapp');
     formData.append('type', mimeType);
 
