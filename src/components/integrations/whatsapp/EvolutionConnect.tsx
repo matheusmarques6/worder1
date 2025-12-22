@@ -1,13 +1,12 @@
 'use client';
 
 // =============================================
-// Componente: Evolution API Connect
+// Componente: Evolution API Connect (Dark Theme)
 // src/components/integrations/whatsapp/EvolutionConnect.tsx
 // =============================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  MessageSquare, 
   Phone, 
   CheckCircle, 
   AlertCircle,
@@ -18,7 +17,13 @@ import {
   Power,
   PowerOff,
   Wifi,
-  WifiOff
+  WifiOff,
+  Plus,
+  Settings,
+  ChevronDown,
+  ChevronUp,
+  X,
+  AlertTriangle
 } from 'lucide-react';
 
 interface EvolutionInstance {
@@ -249,26 +254,24 @@ export default function EvolutionConnect() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'connected': return 'text-green-600 bg-green-100';
-      case 'connecting':
-      case 'qr_pending': return 'text-yellow-600 bg-yellow-100';
-      default: return 'text-red-600 bg-red-100';
+      case 'connected': return 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30';
+      case 'connecting': return 'text-amber-400 bg-amber-500/20 border-amber-500/30';
+      default: return 'text-dark-400 bg-dark-700 border-dark-600';
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'connected': return <Wifi className="w-4 h-4" />;
-      case 'connecting':
-      case 'qr_pending': return <Loader2 className="w-4 h-4 animate-spin" />;
+      case 'connecting': return <Loader2 className="w-4 h-4 animate-spin" />;
       default: return <WifiOff className="w-4 h-4" />;
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="w-8 h-8 animate-spin text-green-500" />
       </div>
     );
   }
@@ -277,18 +280,18 @@ export default function EvolutionConnect() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-            <QrCode className="w-6 h-6 text-green-600" />
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
+            <QrCode className="w-6 h-6 text-green-400" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold">Evolution API</h2>
-            <p className="text-sm text-gray-500">Conexão via QR Code (não-oficial)</p>
+            <h2 className="text-xl font-semibold text-white">Evolution API</h2>
+            <p className="text-sm text-dark-400">Conexão via QR Code (não-oficial)</p>
           </div>
         </div>
         <button
           onClick={loadInstances}
-          className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+          className="p-2.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-xl transition-colors"
           title="Atualizar"
         >
           <RefreshCw className="w-5 h-5" />
@@ -296,45 +299,49 @@ export default function EvolutionConnect() {
       </div>
 
       {/* Warning */}
-      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-        <strong>⚠️ Atenção:</strong> A Evolution API usa conexão não-oficial (QR Code).
-        Existe risco de banimento do número. Use com cautela e não abuse de envios em massa.
+      <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+        <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-amber-300">
+          <strong>Atenção:</strong> A Evolution API usa conexão não-oficial (QR Code).
+          Existe risco de banimento do número. Use com cautela e não abuse de envios em massa.
+        </div>
       </div>
 
       {/* Alerts */}
       {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          <AlertCircle className="w-5 h-5" />
-          {error}
-          <button onClick={() => setError('')} className="ml-auto">✕</button>
+        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="ml-auto p-1 hover:bg-red-500/20 rounded">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
       {success && (
-        <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
-          <CheckCircle className="w-5 h-5" />
-          {success}
-          <button onClick={() => setSuccess('')} className="ml-auto">✕</button>
+        <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
+          <CheckCircle className="w-5 h-5 flex-shrink-0" />
+          <span>{success}</span>
         </div>
       )}
 
       {/* QR Code Modal */}
       {qrCode && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 text-center">
-            <h3 className="text-xl font-semibold mb-4">Escaneie o QR Code</h3>
-            <p className="text-gray-500 mb-6">
-              Abra o WhatsApp no seu celular, vá em Configurações {">"} Aparelhos Conectados {">"} Conectar
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-dark-800 border border-dark-700 rounded-2xl p-8 max-w-md w-full mx-4 text-center">
+            <h3 className="text-xl font-semibold text-white mb-4">Escaneie o QR Code</h3>
+            <p className="text-dark-400 mb-6">
+              Abra o WhatsApp no seu celular, vá em Configurações → Aparelhos Conectados → Conectar
             </p>
-            <div className="bg-white p-4 rounded-lg inline-block mb-6">
+            <div className="bg-white p-4 rounded-xl inline-block mb-6">
               <img 
                 src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
                 alt="QR Code" 
                 className="w-64 h-64"
               />
             </div>
-            <div className="flex items-center justify-center gap-2 text-sm text-gray-500 mb-4">
-              <Loader2 className="w-4 h-4 animate-spin" />
+            <div className="flex items-center justify-center gap-2 text-sm text-dark-400 mb-6">
+              <Loader2 className="w-4 h-4 animate-spin text-green-500" />
               Aguardando conexão...
             </div>
             <button
@@ -342,7 +349,7 @@ export default function EvolutionConnect() {
                 setQrCode(null);
                 setPolling(false);
               }}
-              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              className="px-5 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
             >
               Cancelar
             </button>
@@ -351,34 +358,39 @@ export default function EvolutionConnect() {
       )}
 
       {/* Create Form */}
-      <form onSubmit={handleCreate} className="p-6 bg-gray-50 rounded-xl space-y-4">
-        <h3 className="font-semibold">Nova Instância</h3>
+      <form onSubmit={handleCreate} className="p-6 bg-dark-800 border border-dark-700 rounded-xl space-y-5">
+        <div className="flex items-center gap-3">
+          <Plus className="w-5 h-5 text-green-400" />
+          <h3 className="font-semibold text-white">Nova Instância</h3>
+        </div>
         
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Nome da Instância (opcional)
+          <label className="block text-sm font-medium text-dark-300 mb-2">
+            Nome da Instância <span className="text-dark-500">(opcional)</span>
           </label>
           <input
             type="text"
             value={instanceName}
             onChange={(e) => setInstanceName(e.target.value)}
             placeholder="Ex: meu-whatsapp"
-            className="w-full px-3 py-2 border rounded-lg"
+            className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
           />
         </div>
 
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="text-sm text-blue-600 hover:text-blue-800"
+          className="flex items-center gap-2 text-sm text-primary-400 hover:text-primary-300"
         >
-          {showAdvanced ? '- Ocultar configurações avançadas' : '+ Configurações avançadas'}
+          <Settings className="w-4 h-4" />
+          Configurações avançadas
+          {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
 
         {showAdvanced && (
-          <div className="space-y-4 pt-4 border-t">
+          <div className="space-y-4 pt-4 border-t border-dark-700">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-dark-300 mb-2">
                 Server URL
               </label>
               <input
@@ -386,12 +398,12 @@ export default function EvolutionConnect() {
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
                 placeholder="https://evolution.seudominio.com"
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-dark-300 mb-2">
                 API Key
               </label>
               <input
@@ -399,7 +411,7 @@ export default function EvolutionConnect() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="Sua API Key"
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
               />
             </div>
           </div>
@@ -408,7 +420,7 @@ export default function EvolutionConnect() {
         <button
           type="submit"
           disabled={creating}
-          className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full flex items-center justify-center gap-2 py-3 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
         >
           {creating && <Loader2 className="w-4 h-4 animate-spin" />}
           Criar Instância
@@ -417,48 +429,48 @@ export default function EvolutionConnect() {
 
       {/* Instances List */}
       <div className="space-y-4">
-        <h3 className="font-semibold">Instâncias</h3>
+        <h3 className="font-semibold text-white">Instâncias</h3>
         
         {instances.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-xl">
-            <Phone className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>Nenhuma instância criada</p>
+          <div className="text-center py-16 bg-dark-800/50 border border-dark-700 rounded-xl">
+            <Phone className="w-12 h-12 mx-auto mb-4 text-dark-600" />
+            <p className="text-dark-400">Nenhuma instância criada</p>
           </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="space-y-4">
             {instances.map((instance) => (
               <div
                 key={instance.id}
-                className="p-4 border rounded-xl hover:shadow-md transition-shadow"
+                className="p-5 bg-dark-800/50 border border-dark-700 rounded-xl hover:border-dark-600 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                      instance.status === 'connected' ? 'bg-green-100' : 'bg-gray-100'
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      instance.status === 'connected' ? 'bg-green-500/20' : 'bg-dark-700'
                     }`}>
                       <Phone className={`w-6 h-6 ${
-                        instance.status === 'connected' ? 'text-green-600' : 'text-gray-400'
+                        instance.status === 'connected' ? 'text-green-400' : 'text-dark-500'
                       }`} />
                     </div>
                     <div>
-                      <h4 className="font-semibold">{instance.instance_name}</h4>
-                      <p className="text-sm text-gray-500">
+                      <h4 className="font-semibold text-white">{instance.instance_name}</h4>
+                      <p className="text-sm text-dark-400">
                         {instance.phone_number || 'Não conectado'}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2 ${getStatusColor(instance.status)}`}>
+                    <span className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 border ${getStatusColor(instance.status)}`}>
                       {getStatusIcon(instance.status)}
-                      {instance.status}
+                      {instance.status === 'connected' ? 'Conectado' : 'Desconectado'}
                     </span>
 
                     <div className="flex gap-1">
                       {instance.status === 'connected' ? (
                         <button
                           onClick={() => handleLogout(instance.id)}
-                          className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg"
+                          className="p-2.5 text-amber-400 hover:bg-amber-500/20 rounded-xl transition-colors"
                           title="Desconectar"
                         >
                           <PowerOff className="w-5 h-5" />
@@ -466,7 +478,7 @@ export default function EvolutionConnect() {
                       ) : (
                         <button
                           onClick={() => handleConnect(instance.id)}
-                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                          className="p-2.5 text-green-400 hover:bg-green-500/20 rounded-xl transition-colors"
                           title="Conectar"
                         >
                           <Power className="w-5 h-5" />
@@ -474,7 +486,7 @@ export default function EvolutionConnect() {
                       )}
                       <button
                         onClick={() => handleDelete(instance.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                        className="p-2.5 text-red-400 hover:bg-red-500/20 rounded-xl transition-colors"
                         title="Deletar"
                       >
                         <Trash2 className="w-5 h-5" />
@@ -484,27 +496,27 @@ export default function EvolutionConnect() {
                 </div>
 
                 {instance.status === 'connected' && (
-                  <div className="mt-4 grid grid-cols-3 gap-4 text-center">
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-2xl font-bold text-gray-800">
+                  <div className="mt-5 grid grid-cols-3 gap-4">
+                    <div className="p-4 bg-dark-900 rounded-xl text-center">
+                      <p className="text-2xl font-bold text-white">
                         {instance.messages_sent_today}
                       </p>
-                      <p className="text-xs text-gray-500">Enviadas hoje</p>
+                      <p className="text-xs text-dark-400 mt-1">Enviadas hoje</p>
                     </div>
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-2xl font-bold text-gray-800">
+                    <div className="p-4 bg-dark-900 rounded-xl text-center">
+                      <p className="text-2xl font-bold text-white">
                         {instance.messages_received_today}
                       </p>
-                      <p className="text-xs text-gray-500">Recebidas hoje</p>
+                      <p className="text-xs text-dark-400 mt-1">Recebidas hoje</p>
                     </div>
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm font-medium text-gray-800">
+                    <div className="p-4 bg-dark-900 rounded-xl text-center">
+                      <p className="text-sm font-medium text-white">
                         {instance.connected_at 
                           ? new Date(instance.connected_at).toLocaleDateString('pt-BR')
                           : '-'
                         }
                       </p>
-                      <p className="text-xs text-gray-500">Conectado em</p>
+                      <p className="text-xs text-dark-400 mt-1">Conectado em</p>
                     </div>
                   </div>
                 )}

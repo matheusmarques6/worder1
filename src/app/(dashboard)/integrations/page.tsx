@@ -302,6 +302,11 @@ export default function IntegrationsPage() {
 
   // Filter integrations
   const filteredIntegrations = integrations.filter((int) => {
+    // Excluir WhatsApp da lista (já tem card nativo na seção Mensagens)
+    if (int.slug === 'whatsapp') {
+      return false
+    }
+
     // Search filter
     if (search) {
       const searchLower = search.toLowerCase()
