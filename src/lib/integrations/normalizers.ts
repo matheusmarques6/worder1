@@ -301,6 +301,12 @@ export function normalizeWhatsAppCloudMessage(payload: WhatsAppCloudMessage): Un
   const phone = message.from;
   const whatsappJid = `${phone}@s.whatsapp.net`;
 
+  // Extrair texto da mensagem (pode estar em text.body ou caption de mídia)
+  const messageText = message.text?.body || 
+                      message.image?.caption || 
+                      message.video?.caption || 
+                      message.document?.caption;
+
   return {
     name: contact.profile.name || undefined,
     phone: phone,
@@ -315,7 +321,7 @@ export function normalizeWhatsAppCloudMessage(payload: WhatsAppCloudMessage): Un
       phone_number_id: value.metadata.phone_number_id,
       first_message_id: message.id,
       first_message_type: message.type,
-      first_message_text: message.text?.body || message.caption,
+      first_message_text: messageText,
       first_message_timestamp: message.timestamp,
     },
     rawPayload: payload,
