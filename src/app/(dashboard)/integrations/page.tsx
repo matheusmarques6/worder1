@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search,
@@ -248,6 +249,7 @@ function IntegrationCard({
 // Main Page Component
 export default function IntegrationsPage() {
   const { user } = useAuthStore()
+  const router = useRouter()
   const [categories, setCategories] = useState<IntegrationCategory[]>([])
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [installedMap, setInstalledMap] = useState<Record<string, InstalledIntegration>>({})
@@ -346,13 +348,13 @@ export default function IntegrationsPage() {
 
   // Handlers
   const handleInstall = async (integration: Integration) => {
-    setSelectedIntegration(integration)
-    setShowInstallModal(true)
+    // Redirecionar para página de configuração específica
+    router.push(`/integrations/${integration.slug}`)
   }
 
   const handleConfigure = (integration: Integration) => {
-    setSelectedIntegration(integration)
-    setShowConfigModal(true)
+    // Redirecionar para página de configuração específica
+    router.push(`/integrations/${integration.slug}`)
   }
 
   const handleUninstall = async (integration: Integration) => {
