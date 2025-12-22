@@ -53,7 +53,7 @@ const providerConfig: Record<string, {
     icon: '🤖',
     docsUrl: 'https://platform.openai.com/docs',
     createKeyUrl: 'https://platform.openai.com/api-keys',
-    description: 'GPT-4, GPT-3.5, O1',
+    description: 'GPT-4.5, GPT-4o, O1, O1-mini',
   },
   anthropic: {
     name: 'Anthropic',
@@ -62,7 +62,7 @@ const providerConfig: Record<string, {
     icon: '🧠',
     docsUrl: 'https://docs.anthropic.com',
     createKeyUrl: 'https://console.anthropic.com/settings/keys',
-    description: 'Claude 3.5, Claude 3',
+    description: 'Claude Sonnet 4, Claude 3.5, Claude 3 Opus',
   },
   google: {
     name: 'Google AI',
@@ -71,7 +71,7 @@ const providerConfig: Record<string, {
     icon: '✨',
     docsUrl: 'https://ai.google.dev/docs',
     createKeyUrl: 'https://aistudio.google.com/app/apikey',
-    description: 'Gemini 1.5, Gemini 2.0',
+    description: 'Gemini 2.0 Flash, Gemini 1.5 Pro',
   },
   groq: {
     name: 'Groq',
@@ -80,7 +80,7 @@ const providerConfig: Record<string, {
     icon: '⚡',
     docsUrl: 'https://console.groq.com/docs',
     createKeyUrl: 'https://console.groq.com/keys',
-    description: 'Llama 3.3, Mixtral (Ultra-rápido)',
+    description: 'Llama 3.3 70B, Llama 3.2 Vision (Ultra-rápido)',
   },
   mistral: {
     name: 'Mistral',
@@ -98,7 +98,16 @@ const providerConfig: Record<string, {
     icon: '🔍',
     docsUrl: 'https://platform.deepseek.com/docs',
     createKeyUrl: 'https://platform.deepseek.com/api_keys',
-    description: 'DeepSeek Chat, Coder (Muito barato)',
+    description: 'DeepSeek V3, DeepSeek R1 (Muito barato)',
+  },
+  xai: {
+    name: 'xAI',
+    color: 'text-gray-400',
+    bgColor: 'bg-gray-500/20',
+    icon: '𝕏',
+    docsUrl: 'https://docs.x.ai',
+    createKeyUrl: 'https://console.x.ai',
+    description: 'Grok 2, Grok 2 Vision',
   },
   cohere: {
     name: 'Cohere',
@@ -135,15 +144,6 @@ const providerConfig: Record<string, {
     docsUrl: 'https://docs.perplexity.ai',
     createKeyUrl: 'https://www.perplexity.ai/settings/api',
     description: 'Pesquisa na web em tempo real',
-  },
-  xai: {
-    name: 'xAI',
-    color: 'text-gray-400',
-    bgColor: 'bg-gray-500/20',
-    icon: '𝕏',
-    docsUrl: 'https://docs.x.ai',
-    createKeyUrl: 'https://console.x.ai',
-    description: 'Grok 2',
   },
   ollama: {
     name: 'Ollama',

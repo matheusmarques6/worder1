@@ -21,7 +21,7 @@ interface MetaConfig {
 
 interface AIConfig {
   id?: string
-  provider: 'openai' | 'anthropic' | 'gemini' | 'deepseek'
+  provider: 'openai' | 'anthropic' | 'gemini' | 'deepseek' | 'groq' | 'mistral' | 'xai'
   model: string
   api_key?: string
   system_prompt?: string
@@ -44,20 +44,42 @@ interface Instance {
 
 const AI_MODELS = {
   openai: [
-    { id: 'gpt-4o', name: 'GPT-4o (Mais capaz)' },
+    { id: 'gpt-4.5-preview', name: 'GPT-4.5 Preview (Mais avançado)' },
+    { id: 'o1', name: 'O1 (Raciocínio avançado)' },
+    { id: 'o1-mini', name: 'O1 Mini (Raciocínio rápido)' },
+    { id: 'gpt-4o', name: 'GPT-4o (Flagship)' },
     { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Rápido)' },
-    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo (Barato)' },
   ],
   anthropic: [
+    { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4 (Mais recente)' },
     { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-    { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku (Rápido)' },
+    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku (Rápido)' },
+    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus (Máxima qualidade)' },
   ],
   gemini: [
-    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Mais recente)' },
+    { id: 'gemini-2.0-flash-thinking', name: 'Gemini 2.0 Thinking (Raciocínio)' },
     { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
   ],
   deepseek: [
-    { id: 'deepseek-chat', name: 'DeepSeek Chat' },
+    { id: 'deepseek-chat', name: 'DeepSeek V3 (Muito barato)' },
+    { id: 'deepseek-reasoner', name: 'DeepSeek R1 (Raciocínio)' },
+  ],
+  groq: [
+    { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (Ultra-rápido)' },
+    { id: 'llama-3.2-90b-vision-preview', name: 'Llama 3.2 90B Vision' },
+    { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B (Gratuito)' },
+    { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B' },
+  ],
+  mistral: [
+    { id: 'mistral-large-latest', name: 'Mistral Large' },
+    { id: 'mistral-small-latest', name: 'Mistral Small' },
+    { id: 'codestral-latest', name: 'Codestral (Código)' },
+  ],
+  xai: [
+    { id: 'grok-2', name: 'Grok 2' },
+    { id: 'grok-2-vision', name: 'Grok 2 Vision' },
   ],
 }
 
