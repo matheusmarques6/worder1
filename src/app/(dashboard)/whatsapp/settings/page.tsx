@@ -44,21 +44,21 @@ interface Instance {
 
 const AI_MODELS = {
   openai: [
-    { id: 'gpt-4.5-preview', name: 'GPT-4.5 Preview (Mais avançado)' },
-    { id: 'o1', name: 'O1 (Raciocínio avançado)' },
-    { id: 'o1-mini', name: 'O1 Mini (Raciocínio rápido)' },
-    { id: 'gpt-4o', name: 'GPT-4o (Flagship)' },
-    { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Rápido)' },
+    { id: 'gpt-5.2', name: 'GPT-5.2 (Mais avançado)' },
+    { id: 'gpt-5.1', name: 'GPT-5.1 (Conversacional)' },
+    { id: 'gpt-5', name: 'GPT-5 (Flagship)' },
+    { id: 'gpt-5-pro', name: 'GPT-5 Pro (Raciocínio estendido)' },
+    { id: 'gpt-5-mini', name: 'GPT-5 Mini (Rápido)' },
+    { id: 'gpt-5-nano', name: 'GPT-5 Nano (Ultra-econômico)' },
   ],
   anthropic: [
-    { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4 (Mais recente)' },
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku (Rápido)' },
-    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus (Máxima qualidade)' },
+    { id: 'claude-opus-4-5-20251124', name: 'Claude Opus 4.5 (Mais inteligente)' },
+    { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5 (Melhor para código)' },
+    { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5 (Rápido)' },
+    { id: 'claude-opus-4-1-20250805', name: 'Claude Opus 4.1 (Revisão de código)' },
   ],
-  gemini: [
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Mais recente)' },
-    { id: 'gemini-2.0-flash-thinking', name: 'Gemini 2.0 Thinking (Raciocínio)' },
+  google: [
+    { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (Mais recente)' },
     { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
     { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
   ],
@@ -78,8 +78,8 @@ const AI_MODELS = {
     { id: 'codestral-latest', name: 'Codestral (Código)' },
   ],
   xai: [
-    { id: 'grok-2', name: 'Grok 2' },
-    { id: 'grok-2-vision', name: 'Grok 2 Vision' },
+    { id: 'grok-2-1212', name: 'Grok 2' },
+    { id: 'grok-2-vision-1212', name: 'Grok 2 Vision' },
   ],
 }
 

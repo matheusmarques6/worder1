@@ -53,7 +53,7 @@ const providerConfig: Record<string, {
     icon: '🤖',
     docsUrl: 'https://platform.openai.com/docs',
     createKeyUrl: 'https://platform.openai.com/api-keys',
-    description: 'GPT-4.5, GPT-4o, O1, O1-mini',
+    description: 'GPT-5.2, GPT-5.1, GPT-5, GPT-5 Pro/Mini/Nano',
   },
   anthropic: {
     name: 'Anthropic',
@@ -62,7 +62,7 @@ const providerConfig: Record<string, {
     icon: '🧠',
     docsUrl: 'https://docs.anthropic.com',
     createKeyUrl: 'https://console.anthropic.com/settings/keys',
-    description: 'Claude Sonnet 4, Claude 3.5, Claude 3 Opus',
+    description: 'Claude Opus 4.5, Sonnet 4.5, Haiku 4.5',
   },
   google: {
     name: 'Google AI',
@@ -71,7 +71,7 @@ const providerConfig: Record<string, {
     icon: '✨',
     docsUrl: 'https://ai.google.dev/docs',
     createKeyUrl: 'https://aistudio.google.com/app/apikey',
-    description: 'Gemini 2.0 Flash, Gemini 1.5 Pro',
+    description: 'Gemini 2.0 Flash, Gemini 1.5 Pro/Flash',
   },
   groq: {
     name: 'Groq',

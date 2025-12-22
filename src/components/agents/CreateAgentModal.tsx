@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import Link from 'next/link'
 import {
   X,
   Bot,
@@ -713,10 +714,13 @@ export default function CreateAgentModal({
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-yellow-400 mt-2 flex items-center gap-1">
+              <Link 
+                href="/whatsapp/settings/api-keys" 
+                className="text-xs text-yellow-400 mt-2 flex items-center gap-1 hover:text-yellow-300 hover:underline"
+              >
                 <AlertCircle className="w-3 h-3" />
                 Configure a API key em Configurações → API Keys
-              </p>
+              </Link>
             </div>
 
             <div>
