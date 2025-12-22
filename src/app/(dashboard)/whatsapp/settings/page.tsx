@@ -21,7 +21,7 @@ interface MetaConfig {
 
 interface AIConfig {
   id?: string
-  provider: 'openai' | 'anthropic' | 'gemini' | 'deepseek' | 'groq' | 'mistral' | 'xai'
+  provider: 'openai' | 'anthropic' | 'google' | 'deepseek' | 'groq' | 'mistral' | 'xai'
   model: string
   api_key?: string
   system_prompt?: string
