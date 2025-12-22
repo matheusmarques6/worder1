@@ -303,7 +303,10 @@ export default function IntegrationsPage() {
   // Filter integrations
   const filteredIntegrations = integrations.filter((int) => {
     // Excluir WhatsApp da lista (já tem card nativo na seção Mensagens)
-    if (int.slug === 'whatsapp') {
+    // Cobrir variações do slug: whatsapp, whatsapp-business, whatsappbusiness
+    const slug = int.slug?.toLowerCase() || '';
+    const name = int.name?.toLowerCase() || '';
+    if (slug.includes('whatsapp') || name.includes('whatsapp')) {
       return false
     }
 
@@ -506,7 +509,7 @@ export default function IntegrationsPage() {
       </div>
 
       {/* Native Integrations - WhatsApp */}
-      {user?.organization_id && !search && !selectedCategory && (
+      {!search && !selectedCategory && (
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-4">
             <MessageSquare className="w-5 h-5 text-green-400" />
@@ -516,7 +519,19 @@ export default function IntegrationsPage() {
             </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <WhatsAppIntegrationCard organizationId={user.organization_id} />
+            {user?.organization_id ? (
+              <WhatsAppIntegrationCard organizationId={user.organization_id} />
+            ) : (
+              <div className="p-6 bg-dark-800 border border-dark-700 rounded-xl animate-pulse">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-dark-700 rounded-xl"></div>
+                  <div className="flex-1">
+                    <div className="h-5 bg-dark-700 rounded w-32 mb-2"></div>
+                    <div className="h-4 bg-dark-700 rounded w-48"></div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

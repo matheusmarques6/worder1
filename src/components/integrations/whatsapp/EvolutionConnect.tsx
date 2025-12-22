@@ -2,10 +2,11 @@
 
 // =============================================
 // Componente: Evolution API Connect (Dark Theme)
-// src/components/integrations/whatsapp/EvolutionConnect.tsx
+// Usa a API existente /api/whatsapp/instances
 // =============================================
 
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '@/stores';
 import { 
   Phone, 
   CheckCircle, 
@@ -28,18 +29,20 @@ import {
 
 interface EvolutionInstance {
   id: string;
+  title: string;
   instance_name: string;
   phone_number: string | null;
   profile_name: string | null;
   status: string;
-  messages_sent_today: number;
-  messages_received_today: number;
+  api_type: string;
+  messages_sent: number;
+  messages_received: number;
   last_message_at: string | null;
-  connected_at: string | null;
   created_at: string;
 }
 
 export default function EvolutionConnect() {
+  const { user } = useAuthStore();
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -56,64 +59,61 @@ export default function EvolutionConnect() {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
-    loadInstances();
-  }, []);
+    if (user?.organization_id) {
+      loadInstances();
+    }
+  }, [user?.organization_id]);
 
-  // Poll for QR code updates
+  // Poll for connection status
   useEffect(() => {
-    if (!polling || !activeInstanceId) return;
+    if (!polling || !activeInstanceId || !user?.organization_id) return;
 
     const interval = setInterval(async () => {
       await checkInstanceStatus(activeInstanceId);
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [polling, activeInstanceId]);
+  }, [polling, activeInstanceId, user?.organization_id]);
 
   const loadInstances = async () => {
+    if (!user?.organization_id) return;
+    
     try {
       setLoading(true);
-      const token = localStorage.getItem('supabase.auth.token');
       
-      const response = await fetch('/api/whatsapp/evolution/instances', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(
+        `/api/whatsapp/instances?organization_id=${user.organization_id}`
+      );
 
       const data = await response.json();
       
       if (response.ok) {
-        setInstances(data.instances || []);
+        // Filtrar apenas instâncias Evolution
+        const evolutionInstances = (data.instances || []).filter(
+          (i: EvolutionInstance) => i.api_type === 'EVOLUTION'
+        );
+        setInstances(evolutionInstances);
       } else {
-        setError(data.error || 'Failed to load instances');
+        setError(data.error || 'Falha ao carregar instâncias');
       }
     } catch (err) {
-      setError('Network error');
+      setError('Erro de conexão');
     } finally {
       setLoading(false);
     }
   };
 
   const checkInstanceStatus = async (instanceId: string) => {
+    if (!user?.organization_id) return;
+    
     try {
-      const token = localStorage.getItem('supabase.auth.token');
-      
-      const response = await fetch('/api/whatsapp/evolution/instances', {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          instanceId,
-          action: 'status',
-        }),
-      });
+      const response = await fetch(
+        `/api/whatsapp/instances?organization_id=${user.organization_id}&id=${instanceId}`
+      );
 
       const data = await response.json();
 
-      if (data.connected) {
+      if (data.instance?.status === 'connected') {
         setPolling(false);
         setQrCode(null);
         setSuccess('WhatsApp conectado com sucesso!');
@@ -126,37 +126,46 @@ export default function EvolutionConnect() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!instanceName.trim()) {
+      setError('Nome da instância é obrigatório');
+      return;
+    }
+    
+    if (!user?.organization_id) {
+      setError('Usuário não autenticado');
+      return;
+    }
+
     setError('');
     setSuccess('');
     setCreating(true);
 
     try {
-      const token = localStorage.getItem('supabase.auth.token');
-
-      const response = await fetch('/api/whatsapp/evolution/instances', {
+      const response = await fetch('/api/whatsapp/instances', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instanceName: instanceName || undefined,
-          serverUrl: serverUrl || undefined,
-          apiKey: apiKey || undefined,
+          action: 'create',
+          organization_id: user.organization_id,
+          title: instanceName,
+          api_type: 'EVOLUTION',
+          api_url: serverUrl || undefined,
+          api_key: apiKey || undefined,
         }),
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        if (data.qrcode) {
-          setQrCode(data.qrcode);
-          setActiveInstanceId(data.instance.id);
+      if (response.ok && data.success) {
+        // Se retornou QR code, mostrar
+        if (data.qrCode || data.qrcode) {
+          setQrCode(data.qrCode || data.qrcode);
+          setActiveInstanceId(data.instance?.id);
           setPolling(true);
         }
         setSuccess('Instância criada! Escaneie o QR Code.');
         loadInstances();
-        // Reset form
         setInstanceName('');
         setServerUrl('');
         setApiKey('');
@@ -164,39 +173,39 @@ export default function EvolutionConnect() {
         setError(data.error || 'Falha ao criar instância');
       }
     } catch (err) {
-      setError('Erro de rede');
+      setError('Erro de conexão');
     } finally {
       setCreating(false);
     }
   };
 
   const handleConnect = async (instanceId: string) => {
+    if (!user?.organization_id) return;
+    
     setError('');
     setActiveInstanceId(instanceId);
 
     try {
-      const token = localStorage.getItem('supabase.auth.token');
-
-      const response = await fetch('/api/whatsapp/evolution/instances', {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch('/api/whatsapp/instances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instanceId,
           action: 'connect',
+          organization_id: user.organization_id,
+          instance_id: instanceId,
         }),
       });
 
       const data = await response.json();
 
-      if (data.qrcode) {
-        setQrCode(data.qrcode);
+      if (data.qrCode || data.qrcode) {
+        setQrCode(data.qrCode || data.qrcode);
         setPolling(true);
-      } else if (data.connected) {
+      } else if (data.connected || data.instance?.status === 'connected') {
         setSuccess('Já conectado!');
         loadInstances();
+      } else {
+        setError(data.error || 'Erro ao gerar QR Code');
       }
     } catch (err) {
       setError('Erro ao conectar');
@@ -205,19 +214,16 @@ export default function EvolutionConnect() {
 
   const handleLogout = async (instanceId: string) => {
     if (!confirm('Tem certeza que deseja desconectar?')) return;
+    if (!user?.organization_id) return;
 
     try {
-      const token = localStorage.getItem('supabase.auth.token');
-
-      const response = await fetch('/api/whatsapp/evolution/instances', {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch('/api/whatsapp/instances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instanceId,
           action: 'logout',
+          organization_id: user.organization_id,
+          instance_id: instanceId,
         }),
       });
 
@@ -231,16 +237,17 @@ export default function EvolutionConnect() {
   };
 
   const handleDelete = async (instanceId: string) => {
-    if (!confirm('Tem certeza que deseja deletar esta instância? Esta ação não pode ser desfeita.')) return;
+    if (!confirm('Tem certeza que deseja deletar esta instância?')) return;
+    if (!user?.organization_id) return;
 
     try {
-      const token = localStorage.getItem('supabase.auth.token');
-
-      const response = await fetch(`/api/whatsapp/evolution/instances?id=${instanceId}`, {
+      const response = await fetch('/api/whatsapp/instances', {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id: user.organization_id,
+          instance_id: instanceId,
+        }),
       });
 
       if (response.ok) {
@@ -366,15 +373,19 @@ export default function EvolutionConnect() {
         
         <div>
           <label className="block text-sm font-medium text-dark-300 mb-2">
-            Nome da Instância <span className="text-dark-500">(opcional)</span>
+            Nome da Instância <span className="text-red-400">*</span>
           </label>
           <input
             type="text"
             value={instanceName}
             onChange={(e) => setInstanceName(e.target.value)}
-            placeholder="Ex: meu-whatsapp"
+            placeholder="Ex: Atendimento, Vendas, Suporte..."
             className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
+            required
           />
+          <p className="text-xs text-dark-500 mt-1.5">
+            Um nome para identificar esta conexão
+          </p>
         </div>
 
         <button
@@ -389,9 +400,12 @@ export default function EvolutionConnect() {
 
         {showAdvanced && (
           <div className="space-y-4 pt-4 border-t border-dark-700">
+            <p className="text-xs text-dark-500">
+              Deixe em branco para usar o servidor Evolution padrão do sistema.
+            </p>
             <div>
               <label className="block text-sm font-medium text-dark-300 mb-2">
-                Server URL
+                Server URL <span className="text-dark-500">(opcional)</span>
               </label>
               <input
                 type="text"
@@ -404,7 +418,7 @@ export default function EvolutionConnect() {
 
             <div>
               <label className="block text-sm font-medium text-dark-300 mb-2">
-                API Key
+                API Key <span className="text-dark-500">(opcional)</span>
               </label>
               <input
                 type="password"
@@ -419,8 +433,8 @@ export default function EvolutionConnect() {
 
         <button
           type="submit"
-          disabled={creating}
-          className="w-full flex items-center justify-center gap-2 py-3 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+          disabled={creating || !instanceName.trim()}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-colors"
         >
           {creating && <Loader2 className="w-4 h-4 animate-spin" />}
           Criar Instância
@@ -453,7 +467,7 @@ export default function EvolutionConnect() {
                       }`} />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-white">{instance.instance_name}</h4>
+                      <h4 className="font-semibold text-white">{instance.title || instance.instance_name}</h4>
                       <p className="text-sm text-dark-400">
                         {instance.phone_number || 'Não conectado'}
                       </p>
@@ -499,24 +513,24 @@ export default function EvolutionConnect() {
                   <div className="mt-5 grid grid-cols-3 gap-4">
                     <div className="p-4 bg-dark-900 rounded-xl text-center">
                       <p className="text-2xl font-bold text-white">
-                        {instance.messages_sent_today}
+                        {instance.messages_sent || 0}
                       </p>
-                      <p className="text-xs text-dark-400 mt-1">Enviadas hoje</p>
+                      <p className="text-xs text-dark-400 mt-1">Enviadas</p>
                     </div>
                     <div className="p-4 bg-dark-900 rounded-xl text-center">
                       <p className="text-2xl font-bold text-white">
-                        {instance.messages_received_today}
+                        {instance.messages_received || 0}
                       </p>
-                      <p className="text-xs text-dark-400 mt-1">Recebidas hoje</p>
+                      <p className="text-xs text-dark-400 mt-1">Recebidas</p>
                     </div>
                     <div className="p-4 bg-dark-900 rounded-xl text-center">
                       <p className="text-sm font-medium text-white">
-                        {instance.connected_at 
-                          ? new Date(instance.connected_at).toLocaleDateString('pt-BR')
+                        {instance.created_at 
+                          ? new Date(instance.created_at).toLocaleDateString('pt-BR')
                           : '-'
                         }
                       </p>
-                      <p className="text-xs text-dark-400 mt-1">Conectado em</p>
+                      <p className="text-xs text-dark-400 mt-1">Criado em</p>
                     </div>
                   </div>
                 )}
