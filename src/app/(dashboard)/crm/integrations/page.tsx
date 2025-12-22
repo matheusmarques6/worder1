@@ -301,6 +301,14 @@ export default function IntegrationsPage() {
 
   // Filter integrations
   const filteredIntegrations = integrations.filter((int) => {
+    // Excluir WhatsApp da lista (já tem card nativo na seção Mensagens da página /integrations)
+    // Ao clicar em qualquer WhatsApp, redireciona para /integrations/whatsapp
+    const slug = int.slug?.toLowerCase() || '';
+    const name = int.name?.toLowerCase() || '';
+    if (slug.includes('whatsapp') || name.includes('whatsapp')) {
+      return false
+    }
+
     // Search filter
     if (search) {
       const searchLower = search.toLowerCase()
