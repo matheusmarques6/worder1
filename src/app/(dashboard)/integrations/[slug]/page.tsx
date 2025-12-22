@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores'
 // Importar componentes de integração específicos
 import WhatsAppCloudConnect from '@/components/integrations/whatsapp/WhatsAppCloudConnect'
 import EvolutionConnect from '@/components/integrations/whatsapp/EvolutionConnect'
+import ShopifyConnect from '@/components/integrations/shopify/ShopifyConnect'
 
 interface Integration {
   id: string
@@ -185,6 +186,12 @@ export default function IntegrationConfigPage() {
 
       // Adicione outros casos conforme necessário
       case 'shopify':
+        return (
+          <div className="bg-dark-800/50 border border-dark-700 rounded-2xl p-6">
+            <ShopifyConnect />
+          </div>
+        )
+
       case 'google-forms':
       case 'google-sheets':
       case 'typeform':
