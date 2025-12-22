@@ -4,6 +4,9 @@
 // Usa estrutura existente do projeto
 // =============================================
 
+// Forçar rota dinâmica
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';

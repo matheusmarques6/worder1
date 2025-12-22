@@ -4,6 +4,9 @@
 // Usa tabela 'shopify_stores' (padrão do projeto)
 // =============================================
 
+// Forçar rota dinâmica (não pode ser gerada estaticamente)
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { 
