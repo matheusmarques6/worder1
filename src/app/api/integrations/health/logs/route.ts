@@ -114,12 +114,19 @@ export async function DELETE(request: NextRequest) {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);
     
-    const { error, count } = await supabase
+    // Primeiro contar quantos serão deletados
+    const { count: toDeleteCount } = await supabase
+      .from('integration_health_logs')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .lt('checked_at', cutoffDate.toISOString());
+    
+    // Depois deletar
+    const { error } = await supabase
       .from('integration_health_logs')
       .delete()
       .eq('organization_id', organizationId)
-      .lt('checked_at', cutoffDate.toISOString())
-      .select('*', { count: 'exact', head: true });
+      .lt('checked_at', cutoffDate.toISOString());
     
     if (error) {
       console.error('Error deleting old logs:', error);
@@ -131,7 +138,7 @@ export async function DELETE(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      deleted: count ?? 0,
+      deleted: toDeleteCount ?? 0,
       message: `Logs anteriores a ${daysOld} dias foram removidos`,
     });
     
