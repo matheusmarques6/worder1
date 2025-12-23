@@ -2,16 +2,17 @@
 
 // =============================================
 // Componente: Shopify Connect
-// Mostra lojas existentes do banco + opção de nova
+// src/components/integrations/shopify/ShopifyConnect.tsx
 // =============================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/stores';
 import { 
   ShoppingBag,
   CheckCircle, 
   AlertCircle,
+  AlertTriangle,
   Loader2,
   Trash2,
   RefreshCw,
@@ -26,10 +27,13 @@ import {
   ExternalLink,
   Info,
   Plus,
-  ChevronDown,
-  ChevronUp,
-  Link2
+  Clock,
+  Activity
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+type ConnectionStatus = 'active' | 'warning' | 'expired' | 'error' | 'reconnect_required' | 'pending';
 
 interface ShopifyStore {
   id: string;
@@ -37,11 +41,69 @@ interface ShopifyStore {
   domain: string;
   email?: string;
   currency?: string;
-  isActive: boolean;
+  status?: string;
+  connectionStatus: ConnectionStatus;
+  statusMessage?: string;
+  healthCheckedAt?: string;
+  consecutiveFailures?: number;
   totalOrders?: number;
   totalRevenue?: number;
   lastSyncAt?: string;
 }
+
+interface StatusConfig {
+  label: string;
+  color: string;
+  bgColor: string;
+  icon: React.ReactNode;
+}
+
+const STATUS_CONFIGS: Record<ConnectionStatus, StatusConfig> = {
+  active: {
+    label: 'Conectado',
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/20 border-emerald-500/30',
+    icon: <CheckCircle className="w-3.5 h-3.5" />,
+  },
+  warning: {
+    label: 'Atenção',
+    color: 'text-amber-400',
+    bgColor: 'bg-amber-500/20 border-amber-500/30',
+    icon: <AlertTriangle className="w-3.5 h-3.5" />,
+  },
+  expired: {
+    label: 'Token Expirado',
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/20 border-red-500/30',
+    icon: <AlertCircle className="w-3.5 h-3.5" />,
+  },
+  error: {
+    label: 'Erro',
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/20 border-red-500/30',
+    icon: <AlertCircle className="w-3.5 h-3.5" />,
+  },
+  reconnect_required: {
+    label: 'Reconectar',
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-500/20 border-orange-500/30',
+    icon: <RefreshCw className="w-3.5 h-3.5" />,
+  },
+  pending: {
+    label: 'Pendente',
+    color: 'text-dark-400',
+    bgColor: 'bg-dark-700 border-dark-600',
+    icon: <Clock className="w-3.5 h-3.5" />,
+  },
+};
+
+const ERROR_MESSAGES: Record<string, string> = {
+  oauth_denied: 'Autorização negada pelo Shopify',
+  missing_params: 'Parâmetros inválidos',
+  invalid_state: 'Sessão inválida - tente novamente',
+  state_expired: 'Sessão expirada - tente novamente',
+  save_failed: 'Erro ao salvar configuração',
+};
 
 export default function ShopifyConnect() {
   const { user } = useAuthStore();
@@ -50,14 +112,12 @@ export default function ShopifyConnect() {
   const [stores, setStores] = useState<ShopifyStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
-  const [reconnecting, setReconnecting] = useState<string | null>(null);
+  const [checkingHealth, setCheckingHealth] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
-  // Mostrar formulário de nova loja
   const [showNewStore, setShowNewStore] = useState(false);
+  const [reconnectingStore, setReconnectingStore] = useState<ShopifyStore | null>(null);
 
-  // Form para nova loja
   const [storeName, setStoreName] = useState('');
   const [shopDomain, setShopDomain] = useState('');
   const [accessToken, setAccessToken] = useState('');
@@ -65,33 +125,7 @@ export default function ShopifyConnect() {
   const [showToken, setShowToken] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
 
-  // Verificar parâmetros da URL
-  useEffect(() => {
-    const successParam = searchParams.get('success');
-    const errorParam = searchParams.get('error');
-
-    if (successParam === 'true') {
-      setSuccess('Loja Shopify conectada com sucesso!');
-      loadStores();
-    } else if (errorParam) {
-      const errorMessages: Record<string, string> = {
-        oauth_denied: 'Autorização negada pelo Shopify',
-        missing_params: 'Parâmetros inválidos',
-        invalid_state: 'Sessão inválida - tente novamente',
-        state_expired: 'Sessão expirada - tente novamente',
-        save_failed: 'Erro ao salvar configuração',
-      };
-      setError(errorMessages[errorParam] || errorParam);
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (user?.organization_id) {
-      loadStores();
-    }
-  }, [user?.organization_id]);
-
-  const loadStores = async () => {
+  const loadStores = useCallback(async () => {
     if (!user?.organization_id) return;
 
     try {
@@ -100,9 +134,24 @@ export default function ShopifyConnect() {
       const data = await response.json();
       
       if (response.ok && data.stores) {
-        setStores(data.stores);
-        // Se não tem lojas, mostrar formulário automaticamente
-        if (data.stores.length === 0) {
+        const formattedStores: ShopifyStore[] = data.stores.map((s: Record<string, unknown>) => ({
+          id: s.id as string,
+          name: s.name as string,
+          domain: s.domain as string,
+          email: s.email as string | undefined,
+          currency: s.currency as string | undefined,
+          connectionStatus: (s.connectionStatus ?? s.connection_status ?? 'active') as ConnectionStatus,
+          statusMessage: (s.statusMessage ?? s.status_message) as string | undefined,
+          healthCheckedAt: (s.healthCheckedAt ?? s.health_checked_at) as string | undefined,
+          consecutiveFailures: (s.consecutiveFailures ?? s.consecutive_failures ?? 0) as number,
+          totalOrders: s.totalOrders as number | undefined,
+          totalRevenue: s.totalRevenue as number | undefined,
+          lastSyncAt: s.lastSyncAt as string | undefined,
+        }));
+        
+        setStores(formattedStores);
+        
+        if (formattedStores.length === 0) {
           setShowNewStore(true);
         }
       }
@@ -111,27 +160,77 @@ export default function ShopifyConnect() {
     } finally {
       setLoading(false);
     }
+  }, [user?.organization_id]);
+
+  useEffect(() => {
+    const successParam = searchParams.get('success');
+    const errorParam = searchParams.get('error');
+
+    if (successParam === 'true') {
+      setSuccess('Loja Shopify conectada com sucesso!');
+      loadStores();
+    } else if (errorParam) {
+      setError(ERROR_MESSAGES[errorParam] ?? errorParam);
+    }
+  }, [searchParams, loadStores]);
+
+  useEffect(() => {
+    if (user?.organization_id) {
+      loadStores();
+    }
+  }, [user?.organization_id, loadStores]);
+
+  const checkHealth = async (store: ShopifyStore) => {
+    setCheckingHealth(store.id);
+    try {
+      const response = await fetch('/api/integrations/health', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'shopify',
+          integrationId: store.id,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(`Conexão com ${store.name} verificada com sucesso!`);
+      } else {
+        setError(`${store.name}: ${data.message}`);
+      }
+      
+      await loadStores();
+      
+    } catch (err) {
+      setError('Erro ao verificar conexão');
+    } finally {
+      setCheckingHealth(null);
+    }
   };
 
-  // Reconectar loja existente (atualizar credenciais)
-  const handleReconnect = async (store: ShopifyStore) => {
-    // Preencher form com dados da loja existente
+  const handleReconnect = (store: ShopifyStore) => {
+    setReconnectingStore(store);
     setStoreName(store.name);
     setShopDomain(store.domain.replace('.myshopify.com', ''));
+    setAccessToken('');
+    setApiSecret('');
     setShowNewStore(true);
-    setReconnecting(store.id);
     
-    // Scroll para o formulário
     setTimeout(() => {
       document.getElementById('new-store-form')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   };
 
-  // Conectar nova loja ou atualizar existente
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!storeName.trim() || !shopDomain.trim() || !accessToken.trim() || !apiSecret.trim()) {
+    const trimmedName = storeName.trim();
+    const trimmedDomain = shopDomain.trim();
+    const trimmedToken = accessToken.trim();
+    const trimmedSecret = apiSecret.trim();
+    
+    if (!trimmedName || !trimmedDomain || !trimmedToken || !trimmedSecret) {
       setError('Preencha todos os campos');
       return;
     }
@@ -149,10 +248,10 @@ export default function ShopifyConnect() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: storeName.trim(),
-          domain: shopDomain.trim(),
-          accessToken: accessToken.trim(),
-          apiSecret: apiSecret.trim(),
+          name: trimmedName,
+          domain: trimmedDomain,
+          accessToken: trimmedToken,
+          apiSecret: trimmedSecret,
           organizationId: user.organization_id,
         }),
       });
@@ -160,17 +259,11 @@ export default function ShopifyConnect() {
       const data = await response.json();
 
       if (response.ok) {
-        setSuccess(data.message || 'Loja conectada com sucesso!');
-        // Limpar form
-        setStoreName('');
-        setShopDomain('');
-        setAccessToken('');
-        setApiSecret('');
-        setShowNewStore(false);
-        setReconnecting(null);
+        setSuccess(data.message ?? 'Loja conectada com sucesso!');
+        resetForm();
         loadStores();
       } else {
-        setError(data.error || 'Erro ao conectar');
+        setError(data.error ?? 'Erro ao conectar');
       }
     } catch (err) {
       setError('Erro de conexão');
@@ -179,25 +272,28 @@ export default function ShopifyConnect() {
     }
   };
 
-  const handleDisconnect = async (storeId: string, storeName: string) => {
-    if (!confirm(`Desconectar a loja "${storeName}"?`)) return;
+  const handleDisconnect = async (store: ShopifyStore) => {
+    if (!confirm(`Desconectar a loja "${store.name}"?`)) return;
 
     try {
-      // TODO: Chamar API de desconexão
-      setStores(stores.filter(s => s.id !== storeId));
+      setStores(prev => prev.filter(s => s.id !== store.id));
       setSuccess('Loja desconectada');
     } catch (err) {
       setError('Erro ao desconectar');
     }
   };
 
-  const cancelNewStore = () => {
+  const resetForm = () => {
     setShowNewStore(false);
-    setReconnecting(null);
+    setReconnectingStore(null);
     setStoreName('');
     setShopDomain('');
     setAccessToken('');
     setApiSecret('');
+  };
+
+  const isErrorStatus = (status: ConnectionStatus): boolean => {
+    return ['expired', 'error', 'reconnect_required'].includes(status);
   };
 
   if (loading) {
@@ -224,6 +320,7 @@ export default function ShopifyConnect() {
         <button
           onClick={loadStores}
           className="p-2.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-xl transition-colors"
+          aria-label="Atualizar"
         >
           <RefreshCw className="w-5 h-5" />
         </button>
@@ -254,71 +351,123 @@ export default function ShopifyConnect() {
       {stores.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-dark-300">Suas Lojas Shopify</h3>
-          {stores.map((store) => (
-            <div key={store.id} className="p-4 bg-dark-800 border border-dark-700 rounded-xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-[#95BF47]/20 rounded-xl flex items-center justify-center">
-                    <Store className="w-6 h-6 text-[#95BF47]" />
+          {stores.map((store) => {
+            const statusConfig = STATUS_CONFIGS[store.connectionStatus] ?? STATUS_CONFIGS.pending;
+            const showAlert = isErrorStatus(store.connectionStatus);
+            
+            return (
+              <div 
+                key={store.id} 
+                className={`p-4 bg-dark-800 border rounded-xl ${
+                  showAlert ? 'border-red-500/50' : 'border-dark-700'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-[#95BF47]/20 rounded-xl flex items-center justify-center">
+                      <Store className="w-6 h-6 text-[#95BF47]" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold text-white">{store.name}</h4>
+                        <span className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium border ${statusConfig.color} ${statusConfig.bgColor}`}>
+                          {statusConfig.icon}
+                          {statusConfig.label}
+                        </span>
+                      </div>
+                      <p className="text-sm text-dark-400">{store.domain}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-white">{store.name}</h4>
-                    <p className="text-sm text-dark-400">{store.domain}</p>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  {store.isActive ? (
-                    <span className="px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-400 bg-emerald-500/20 border border-emerald-500/30">
-                      ✓ Conectada
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => handleReconnect(store)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-amber-400 bg-amber-500/20 border border-amber-500/30 hover:bg-amber-500/30 transition-colors flex items-center gap-1"
-                    >
-                      <Link2 className="w-3 h-3" />
-                      Reconectar
-                    </button>
-                  )}
                   <button
-                    onClick={() => handleDisconnect(store.id, store.name)}
-                    className="p-2 text-dark-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                    onClick={() => checkHealth(store)}
+                    disabled={checkingHealth === store.id}
+                    className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors disabled:opacity-50"
+                    title="Verificar conexão"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {checkingHealth === store.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Activity className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
-              </div>
 
-              {/* Stats */}
-              {store.isActive && (
-                <div className="mt-4 pt-4 border-t border-dark-700 grid grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-xs text-dark-500">Pedidos</p>
-                    <p className="text-lg font-semibold text-white">{store.totalOrders || 0}</p>
+                {showAlert && store.statusMessage && (
+                  <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm text-red-300">{store.statusMessage}</p>
+                        <button
+                          onClick={() => handleReconnect(store)}
+                          className="mt-2 text-xs text-red-400 hover:text-red-300 flex items-center gap-1 font-medium"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Reconectar agora
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-dark-500">Receita</p>
-                    <p className="text-lg font-semibold text-white">
-                      R$ {(store.totalRevenue || 0).toLocaleString('pt-BR')}
-                    </p>
+                )}
+
+                {store.connectionStatus === 'active' && (
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div>
+                      <p className="text-xs text-dark-500">Pedidos</p>
+                      <p className="text-lg font-semibold text-white">{store.totalOrders ?? 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-dark-500">Receita</p>
+                      <p className="text-lg font-semibold text-white">
+                        R$ {(store.totalRevenue ?? 0).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-dark-500">Última Sync</p>
+                      <p className="text-sm text-dark-300">
+                        {store.lastSyncAt 
+                          ? formatDistanceToNow(new Date(store.lastSyncAt), { addSuffix: true, locale: ptBR })
+                          : 'Nunca'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-dark-500">Última Sync</p>
-                    <p className="text-sm text-dark-300">
-                      {store.lastSyncAt 
-                        ? new Date(store.lastSyncAt).toLocaleDateString('pt-BR')
-                        : 'Nunca'}
-                    </p>
+                )}
+
+                <div className="flex items-center justify-between pt-3 border-t border-dark-700">
+                  <div className="text-xs text-dark-500">
+                    {store.healthCheckedAt && (
+                      <span>
+                        Verificado {formatDistanceToNow(new Date(store.healthCheckedAt), { addSuffix: true, locale: ptBR })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {showAlert && (
+                      <button
+                        onClick={() => handleReconnect(store)}
+                        className="p-2 text-amber-400 hover:bg-amber-500/20 rounded-lg transition-colors"
+                        title="Reconectar"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDisconnect(store)}
+                      className="p-2 text-dark-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      title="Desconectar"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Botão para Nova Loja */}
+      {/* Botão Nova Loja */}
       {!showNewStore && (
         <button
           onClick={() => setShowNewStore(true)}
@@ -329,29 +478,28 @@ export default function ShopifyConnect() {
         </button>
       )}
 
-      {/* Formulário Nova Loja / Reconectar */}
+      {/* Formulário */}
       {showNewStore && (
         <div id="new-store-form" className="p-5 bg-dark-800 border border-dark-700 rounded-xl space-y-5">
           <div className="flex items-center justify-between">
             <h3 className="font-medium text-white">
-              {reconnecting ? 'Atualizar Credenciais' : 'Conectar Nova Loja'}
+              {reconnectingStore ? `Reconectar: ${reconnectingStore.name}` : 'Conectar Nova Loja'}
             </h3>
             <button
-              onClick={cancelNewStore}
+              onClick={resetForm}
               className="p-1.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Instruções */}
           <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
             <div className="flex items-start gap-3">
               <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-blue-300">
                 <p className="font-medium mb-2">Como obter as credenciais:</p>
                 <ol className="list-decimal list-inside space-y-1 text-blue-300/80">
-                  <li>No Shopify, vá em <strong>Configurações → Apps e canais</strong></li>
+                  <li>No Shopify, vá em <strong>Configurações → Apps</strong></li>
                   <li>Clique em <strong>Desenvolver apps</strong></li>
                   <li>Crie ou selecione um app</li>
                   <li>Copie o <strong>Access Token</strong> e <strong>API Secret</strong></li>
@@ -369,7 +517,6 @@ export default function ShopifyConnect() {
             </div>
           </div>
 
-          {/* Formulário */}
           <form onSubmit={handleConnect} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -454,7 +601,7 @@ export default function ShopifyConnect() {
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={cancelNewStore}
+                onClick={resetForm}
                 className="flex-1 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
               >
                 Cancelar
@@ -472,7 +619,7 @@ export default function ShopifyConnect() {
                 ) : (
                   <>
                     <Store className="w-5 h-5" />
-                    {reconnecting ? 'Atualizar' : 'Conectar'}
+                    {reconnectingStore ? 'Reconectar' : 'Conectar'}
                   </>
                 )}
               </button>
