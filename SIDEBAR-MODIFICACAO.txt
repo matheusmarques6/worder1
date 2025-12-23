@@ -1,0 +1,30 @@
+// =============================================
+// MODIFICAÇÃO DO SIDEBAR
+// Adicionar esta linha ao mainNavItems em Sidebar.tsx
+// =============================================
+
+// ANTES (linha ~79-84):
+const mainNavItems: NavItem[] = [
+  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'CRM', href: '/crm', icon: Users },
+  { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
+  { title: 'Automações', href: '/automations', icon: Zap },
+]
+
+// DEPOIS (adicionar Integrações):
+const mainNavItems: NavItem[] = [
+  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'CRM', href: '/crm', icon: Users },
+  { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
+  { title: 'Automações', href: '/automations', icon: Zap },
+  { title: 'Integrações', href: '/integrations/hub', icon: Puzzle },  // ← ADICIONAR ESTA LINHA
+]
+
+// TAMBÉM ADICIONAR O IMPORT (linha ~30):
+// import { ..., Puzzle } from 'lucide-react'
+
+// =============================================
+// ALTERNATIVA: Se preferir não modificar o Sidebar,
+// o Hub pode ser acessado via /integrations/hub diretamente
+// ou através do card de Integrações em /integrations
+// =============================================

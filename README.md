@@ -1,196 +1,157 @@
-# 🤖 Sistema de AI Agents - Estilo Kommo
+# WhatsApp Health Checker + Hub de Integrações
 
 ## 📦 Conteúdo do Pacote
 
-Este pacote contém o sistema completo de AI Agents com:
-- Knowledge Base (RAG com embeddings)
-- Ações Condicionais (detecção de intenção/sentimento)
-- Integrações E-commerce (Shopify, WooCommerce, Nuvemshop)
-- Persona Configurável (tom, idioma, diretrizes)
-- Configurações Avançadas (horários, canais, pipelines)
-
----
-
-## 🗂️ Estrutura do Pacote
-
 ```
-ai-agents-completo/
-├── sql/
-│   ├── ai-agents-complete-migration.sql  # Tabelas principais
-│   ├── ai-agents-functions.sql           # Funções SQL
-│   └── ai-agents-stored-procedures.sql   # Stored procedures
-│
-├── src/
-│   ├── app/
-│   │   ├── api/ai/
-│   │   │   ├── agents/                   # CRUD de agentes
-│   │   │   │   ├── route.ts
-│   │   │   │   └── [id]/
-│   │   │   │       ├── route.ts
-│   │   │   │       ├── sources/          # Fontes de conhecimento
-│   │   │   │       ├── actions/          # Regras condicionais
-│   │   │   │       ├── integrations/     # E-commerce
-│   │   │   │       └── test/             # Testar agente
-│   │   │   └── process/document/         # Processar documentos
-│   │   │
-│   │   └── (dashboard)/whatsapp/ai-agents/
-│   │       └── page.tsx                  # Página principal
-│   │
-│   ├── components/agents/
-│   │   ├── AIAgentList.tsx               # Lista de agentes
-│   │   ├── AIAgentEditor.tsx             # Editor (drawer lateral)
-│   │   ├── CreateAgentModal.tsx          # Modal de criação
-│   │   ├── AgentPreview.tsx              # Preview de teste
-│   │   ├── ModelSelector.tsx             # Seletor de modelo
-│   │   └── tabs/
-│   │       ├── SourcesTab.tsx            # Tab de fontes
-│   │       ├── ActionsTab.tsx            # Tab de ações
-│   │       ├── IntegrationsTab.tsx       # Tab de integrações
-│   │       ├── PersonaTab.tsx            # Tab de persona
-│   │       └── SettingsTab.tsx           # Tab de configurações
-│   │
-│   └── lib/ai/
-│       ├── engine.ts                     # Motor principal
-│       ├── rag.ts                        # Busca semântica
-│       ├── intent-detector.ts            # Detecção de intenção
-│       ├── sentiment-analyzer.ts         # Análise de sentimento
-│       ├── actions-engine.ts             # Executor de ações
-│       ├── embeddings.ts                 # Gerador de embeddings
-│       ├── prompt-builder.ts             # Construtor de prompts
-│       └── types.ts                      # Tipos TypeScript
+src/
+├── app/
+│   ├── (dashboard)/integrations/hub/
+│   │   └── page.tsx                    ← Hub de Integrações (UI)
+│   └── api/integrations/
+│       ├── health/
+│       │   ├── route.ts                ← API de health check
+│       │   └── logs/route.ts           ← API de histórico
+│       └── status/route.ts             ← API de status geral (CORRIGIDO)
+└── lib/services/integration-health/
+    ├── checkers/
+    │   ├── base.ts
+    │   ├── shopify.ts
+    │   └── whatsapp.ts                 ← NOVO: Checker do WhatsApp
+    ├── health-checker.ts               ← ATUALIZADO: inclui WhatsApp
+    ├── index.ts                        ← ATUALIZADO: exporta WhatsApp
+    ├── notifier.ts
+    └── types.ts
 ```
 
----
+## ⚡ Instalação
 
-## 🚀 Instalação Passo a Passo
+### 1. Extrair arquivos
+```bash
+unzip -o WHATSAPP-HEALTH-CHECKER.zip -d .
+```
 
-### PASSO 1: Executar SQL no Supabase
-
-Acesse o Supabase SQL Editor e execute na ordem:
+### 2. Verificar que as tabelas existem no Supabase
+Execute no SQL Editor se ainda não executou:
 
 ```sql
--- 1. Primeiro, habilitar pgvector (se não estiver)
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Se já executou PASSO-A e PASSO-B, pule esta etapa
 
--- 2. Executar ai-agents-complete-migration.sql
--- (copia todo o conteúdo do arquivo e executa)
+-- Adicionar colunas à whatsapp_configs (se faltarem)
+ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS connection_status TEXT DEFAULT 'pending';
+ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS status_message TEXT;
+ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS status_code INTEGER;
+ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS health_checked_at TIMESTAMPTZ;
+ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS consecutive_failures INTEGER DEFAULT 0;
+ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS last_notification_at TIMESTAMPTZ;
 
--- 3. Executar ai-agents-functions.sql
+-- Criar tabela de logs (se não existir)
+CREATE TABLE IF NOT EXISTS integration_health_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL,
+  integration_type TEXT NOT NULL,
+  integration_id UUID NOT NULL,
+  integration_name TEXT,
+  status TEXT NOT NULL CHECK (status IN ('success', 'warning', 'error')),
+  status_code TEXT,
+  message TEXT,
+  response_time_ms INTEGER,
+  details JSONB DEFAULT '{}',
+  checked_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- 4. Executar ai-agents-stored-procedures.sql
+CREATE INDEX IF NOT EXISTS idx_health_logs_org ON integration_health_logs(organization_id);
+CREATE INDEX IF NOT EXISTS idx_health_logs_checked ON integration_health_logs(checked_at DESC);
 ```
 
-### PASSO 2: Copiar Arquivos para o Projeto
+### 3. (Opcional) Adicionar ao menu lateral
+
+Edite `src/components/layout/Sidebar.tsx`:
+
+```typescript
+// Adicionar import
+import { ..., Puzzle } from 'lucide-react'
+
+// Adicionar ao mainNavItems (linha ~83)
+{ title: 'Integrações', href: '/integrations/hub', icon: Puzzle },
+```
+
+## 🧪 Testar
+
+### Via Browser
+Acesse: `http://localhost:3000/integrations/hub`
+
+### Via API
 
 ```bash
-# Na raiz do projeto Worder
-# Copiar lib/ai (backend)
-cp -r ai-agents-completo/src/lib/ai/ src/lib/
+# Status de todas integrações
+curl "http://localhost:3000/api/integrations/status"
 
-# Copiar API routes
-cp -r ai-agents-completo/src/app/api/ai/* src/app/api/ai/
+# Health check manual do WhatsApp
+curl -X POST http://localhost:3000/api/integrations/health \
+  -H "Content-Type: application/json" \
+  -d '{"type":"whatsapp","integrationId":"SEU_WHATSAPP_ID"}'
 
-# Copiar componentes
-cp -r ai-agents-completo/src/components/agents/* src/components/agents/
+# Verificar todas integrações de uma organização
+curl -X POST http://localhost:3000/api/integrations/health \
+  -H "Content-Type: application/json" \
+  -d '{"checkAll":true,"organizationId":"SEU_ORG_ID"}'
 
-# Copiar página
-mkdir -p src/app/\(dashboard\)/whatsapp/ai-agents
-cp ai-agents-completo/src/app/\(dashboard\)/whatsapp/ai-agents/page.tsx src/app/\(dashboard\)/whatsapp/ai-agents/
+# Ver histórico de verificações
+curl "http://localhost:3000/api/integrations/health/logs?organizationId=SEU_ORG_ID"
 ```
 
-### PASSO 3: Adicionar Link no Menu/Sidebar
-
-Edite o arquivo do Sidebar para adicionar link para `/whatsapp/ai-agents`.
-
-### PASSO 4: Reiniciar o Servidor
-
+### Via Cron Job
 ```bash
-npm run dev
+# Executar verificação automática
+curl http://localhost:3000/api/cron/check-integrations
 ```
 
----
+## 🔍 Verificações do WhatsApp
 
-## 🔧 Configuração de API Keys
+| Código | Status | Descrição |
+|--------|--------|-----------|
+| 200 | ✅ active | API funcionando normalmente |
+| 200 + RED | ⚠️ warning | Qualidade do número baixa |
+| 200 + YELLOW | ⚠️ warning | Qualidade média |
+| 190 | 🔴 expired | Token expirado |
+| 100 | 🔴 error | Phone Number ID inválido |
+| 10/200 | 🔴 error | Permissões insuficientes |
+| 368 | 🔴 error | Conta bloqueada |
+| 4/17/613 | ⚠️ warning | Rate limit |
 
-O sistema precisa de API keys para funcionar:
+## 📊 Hub de Integrações
 
-1. **OpenAI** - Para embeddings e respostas
-2. **Anthropic** (opcional) - Claude como alternativa
-3. **Google** (opcional) - Gemini
-4. **Groq** (opcional) - Llama, Mixtral
+O Hub mostra:
+- Cards com status de cada integração (Shopify, WhatsApp)
+- Indicadores visuais: 🟢 Saudável / 🟡 Atenção / 🔴 Problema
+- Botão para verificar manualmente cada integração
+- Botão para verificar todas de uma vez
+- Histórico das últimas 10 verificações
+- Auto-refresh a cada 60 segundos
 
-Configure em Settings → API Keys.
+## 🔄 Fluxo de Dados
 
----
-
-## 📱 Como Usar
-
-### 1. Criar Agente
-- Vá para WhatsApp → AI Agents
-- Clique em "Novo Agente"
-- Configure nome, modelo e sistema prompt básico
-
-### 2. Adicionar Fontes de Conhecimento
-- Tab "Fontes"
-- Adicione URLs, arquivos ou texto
-- Aguarde processamento
-
-### 3. Configurar Ações
-- Tab "Ações"
-- Crie regras: QUANDO X acontecer, FAZER Y
-- Exemplos:
-  - Quando cliente frustrado → Transferir para humano
-  - Quando perguntar preço → Usar fonte "Tabela de Preços"
-  - Quando quiser comprar → Pedir email
-
-### 4. Personalizar Persona
-- Tab "Persona"
-- Configure tom de voz
-- Adicione diretrizes
-
-### 5. Testar
-- Clique em "Preview"
-- Envie mensagens de teste
-- Verifique se está respondendo corretamente
-
----
-
-## ⚠️ Troubleshooting
-
-### Erro: pgvector not found
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
+```
+Cron Job (6h) ou Manual
+        ↓
+health-checker.ts
+        ↓
+WhatsAppHealthChecker / ShopifyHealthChecker
+        ↓
+Atualiza connection_status no banco
+        ↓
+Cria notificação se necessário
+        ↓
+Hub de Integrações exibe status
 ```
 
-### Erro: Tabela não existe
-Execute o SQL migration completo novamente.
+## 📁 Arquivos Modificados vs Novos
 
-### Erro: API key inválida
-Verifique se a API key está configurada em Settings → API Keys.
-
-### Erro: CORS
-Verifique se o domínio está liberado no Supabase.
-
----
-
-## 🔄 Diferenças do Sistema Antigo
-
-| Feature | Sistema Antigo | Sistema Novo |
-|---------|---------------|--------------|
-| Knowledge Base | ❌ | ✅ RAG com pgvector |
-| Intent Detection | ❌ | ✅ Detecta intenção |
-| Sentiment Analysis | ❌ | ✅ Detecta sentimento |
-| Conditional Actions | ❌ | ✅ Regras when/do |
-| E-commerce | ❌ | ✅ Shopify, etc |
-| Persona | Básico | ✅ Completo |
-| Horários | ❌ | ✅ Agendamento |
-| Preview | ❌ | ✅ Testar em tempo real |
-
----
-
-## 📞 Suporte
-
-Se tiver problemas, verifique:
-1. Logs do console (F12)
-2. Logs do Supabase
-3. Status das API keys
+| Arquivo | Tipo |
+|---------|------|
+| `checkers/whatsapp.ts` | **NOVO** |
+| `health-checker.ts` | MODIFICADO |
+| `index.ts` | MODIFICADO |
+| `api/integrations/status/route.ts` | MODIFICADO |
+| `api/integrations/health/logs/route.ts` | **NOVO** |
+| `integrations/hub/page.tsx` | **NOVO** |

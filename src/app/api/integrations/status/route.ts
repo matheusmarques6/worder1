@@ -2,6 +2,53 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 
+// Interfaces para tipos
+interface ShopifyStoreRow {
+  id: string;
+  shop_name: string | null;
+  shop_domain: string;
+  status: string | null;
+  connection_status: string | null;
+  status_message: string | null;
+  health_checked_at: string | null;
+  total_orders: number | null;
+  total_customers: number | null;
+  total_products: number | null;
+  total_revenue: number | null;
+  last_sync_at: string | null;
+  created_at: string;
+}
+
+interface WhatsAppConfigRow {
+  id: string;
+  phone_number: string;
+  phone_number_id: string | null;
+  business_name: string | null;
+  is_active: boolean;
+  connection_status: string | null;
+  status_message: string | null;
+  health_checked_at: string | null;
+  created_at: string;
+}
+
+interface KlaviyoAccountRow {
+  id: string;
+  account_name: string | null;
+  is_active: boolean;
+  last_sync_at: string | null;
+  total_profiles: number | null;
+  total_campaigns: number | null;
+  total_flows: number | null;
+}
+
+interface AdAccountRow {
+  id: string;
+  account_name?: string;
+  advertiser_name?: string;
+  is_active: boolean;
+  last_sync_at: string | null;
+}
+
 let _supabase: SupabaseClient | null = null;
 function getDb(): SupabaseClient {
   if (!_supabase) {
@@ -12,6 +59,7 @@ function getDb(): SupabaseClient {
 }
 
 const supabase = new Proxy({} as SupabaseClient, {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   get(_, prop) { return (getDb() as any)[prop]; }
 });
 
@@ -39,7 +87,7 @@ function getHealthStatus(connectionStatus: string | null): string {
 export async function GET(request: NextRequest) {
   try {
     // Check Shopify stores - CORRIGIDO: usa 'status' em vez de 'is_active'
-    const { data: shopifyStores, error: shopifyError } = await supabase
+    const { data: shopifyStores } = await supabase
       .from('shopify_stores')
       .select(`
         id, 
@@ -56,22 +104,20 @@ export async function GET(request: NextRequest) {
         last_sync_at, 
         created_at
       `)
-      .or('status.eq.active,status.is.null');
+      .or('status.eq.active,status.is.null') as { data: ShopifyStoreRow[] | null };
 
     // Check Klaviyo
-    let klaviyoAccount = null;
+    let klaviyoAccount: KlaviyoAccountRow | null = null;
     try {
-      const { data: klaviyoAccounts, error: klaviyoError } = await supabase
+      const { data: klaviyoAccounts } = await supabase
         .from('klaviyo_accounts')
         .select('*')
         .eq('is_active', true)
-        .limit(1);
+        .limit(1) as { data: KlaviyoAccountRow[] | null };
       
-      if (!klaviyoError) {
-        klaviyoAccount = klaviyoAccounts && klaviyoAccounts.length > 0 ? klaviyoAccounts[0] : null;
-      }
-    } catch (e: any) {
-      console.error('[Integration Status] Klaviyo error:', e.message);
+      klaviyoAccount = klaviyoAccounts && klaviyoAccounts.length > 0 ? klaviyoAccounts[0] : null;
+    } catch (e) {
+      console.error('[Integration Status] Klaviyo error:', e);
     }
 
     // Check Meta (Facebook)
@@ -79,7 +125,7 @@ export async function GET(request: NextRequest) {
       .from('meta_ad_accounts')
       .select('id, account_name, is_active, last_sync_at')
       .eq('is_active', true)
-      .limit(1);
+      .limit(1) as { data: AdAccountRow[] | null };
     
     const metaAccount = metaAccounts && metaAccounts.length > 0 ? metaAccounts[0] : null;
 
@@ -88,7 +134,7 @@ export async function GET(request: NextRequest) {
       .from('google_ad_accounts')
       .select('id, account_name, is_active, last_sync_at')
       .eq('is_active', true)
-      .limit(1);
+      .limit(1) as { data: AdAccountRow[] | null };
     
     const googleAccount = googleAccounts && googleAccounts.length > 0 ? googleAccounts[0] : null;
 
@@ -97,12 +143,12 @@ export async function GET(request: NextRequest) {
       .from('tiktok_ad_accounts')
       .select('id, advertiser_name, is_active, last_sync_at')
       .eq('is_active', true)
-      .limit(1);
+      .limit(1) as { data: AdAccountRow[] | null };
     
     const tiktokAccount = tiktokAccounts && tiktokAccounts.length > 0 ? tiktokAccounts[0] : null;
 
     // Check WhatsApp - CORRIGIDO: inclui connection_status
-    let whatsappConfig: any = null;
+    let whatsappConfig: WhatsAppConfigRow | null = null;
     try {
       const { data: whatsappConfigs } = await supabase
         .from('whatsapp_configs')
@@ -118,7 +164,7 @@ export async function GET(request: NextRequest) {
           created_at
         `)
         .eq('is_active', true)
-        .limit(1);
+        .limit(1) as { data: WhatsAppConfigRow[] | null };
       
       whatsappConfig = whatsappConfigs && whatsappConfigs.length > 0 ? whatsappConfigs[0] : null;
     } catch (e) {
@@ -127,13 +173,13 @@ export async function GET(request: NextRequest) {
         .from('whatsapp_accounts')
         .select('id, phone_number, is_active, created_at')
         .eq('is_active', true)
-        .limit(1);
+        .limit(1) as { data: WhatsAppConfigRow[] | null };
       
       whatsappConfig = whatsappAccounts && whatsappAccounts.length > 0 ? whatsappAccounts[0] : null;
     }
 
     // Format last sync time
-    const formatLastSync = (dateStr: string | null) => {
+    const formatLastSync = (dateStr: string | null): string | null => {
       if (!dateStr) return null;
       const date = new Date(dateStr);
       const now = new Date();
@@ -148,11 +194,11 @@ export async function GET(request: NextRequest) {
       return `${diffDays} dia${diffDays > 1 ? 's' : ''} atrás`;
     };
 
-    // Calculate Shopify stats
+    // Calculate Shopify stats - CORRIGIDO: tipos explícitos
     const shopifyStats = shopifyStores && shopifyStores.length > 0 ? {
-      Orders: shopifyStores.reduce((sum, s) => sum + (s.total_orders || 0), 0).toLocaleString(),
-      Customers: shopifyStores.reduce((sum, s) => sum + (s.total_customers || 0), 0).toLocaleString(),
-      Products: shopifyStores.reduce((sum, s) => sum + (s.total_products || 0), 0).toLocaleString(),
+      Orders: shopifyStores.reduce((sum: number, s: ShopifyStoreRow) => sum + (s.total_orders || 0), 0).toLocaleString(),
+      Customers: shopifyStores.reduce((sum: number, s: ShopifyStoreRow) => sum + (s.total_customers || 0), 0).toLocaleString(),
+      Products: shopifyStores.reduce((sum: number, s: ShopifyStoreRow) => sum + (s.total_products || 0), 0).toLocaleString(),
     } : null;
 
     // Calculate Klaviyo stats
@@ -181,7 +227,7 @@ export async function GET(request: NextRequest) {
         lastHealthCheck: shopifyStore?.health_checked_at ? formatLastSync(shopifyStore.health_checked_at) : null,
         lastSync: shopifyStore?.last_sync_at ? formatLastSync(shopifyStore.last_sync_at) : null,
         stats: shopifyStats,
-        stores: shopifyStores?.map(s => ({
+        stores: shopifyStores?.map((s: ShopifyStoreRow) => ({
           id: s.id,
           name: s.shop_name,
           domain: s.shop_domain,
@@ -231,10 +277,11 @@ export async function GET(request: NextRequest) {
     };
 
     return NextResponse.json({ integrations });
-  } catch (error: any) {
-    console.error('Integration status error:', error);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Integration status error:', message);
     return NextResponse.json({ 
-      error: error.message,
+      error: message,
       integrations: {
         shopify: { connected: false, status: 'disconnected' },
         klaviyo: { connected: false, status: 'disconnected' },
