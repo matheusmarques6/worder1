@@ -227,7 +227,7 @@ function IntegrationCard({
         ) : (
           <button
             onClick={onInstall}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 rounded-xl text-sm font-medium text-white transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-transparent border-2 border-primary-500 text-primary-500 hover:bg-primary-500 hover:text-white rounded-xl text-sm font-medium transition-all duration-200"
           >
             <Plus className="w-4 h-4" />
             Instalar
