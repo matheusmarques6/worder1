@@ -1,13 +1,13 @@
 'use client'
 
 import * as React from 'react'
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { useUIStore, useStoreStore } from '@/stores'
+import { useUIStore, useStoreStore, useAuthStore } from '@/stores'
 import {
   LayoutDashboard,
   Users,
@@ -25,13 +25,26 @@ import {
   Bell,
   ChevronDown,
   Check,
+  CheckCheck,
   Plus,
   ShoppingBag,
   Bot,
   Key,
+  Trash2,
+  AlertCircle,
+  AlertTriangle,
+  Info,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
+import { formatDistanceToNow } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+
+// ============================================
+// Types
+// ============================================
 
 interface NavItem {
   title: string
@@ -39,6 +52,29 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>
   badge?: number
 }
+
+interface NotificationData {
+  integration_type?: string
+}
+
+interface Notification {
+  id: string
+  type: string
+  category: string
+  priority: string
+  title: string
+  message: string
+  data: NotificationData
+  action_url?: string
+  action_label?: string
+  read: boolean
+  read_at?: string
+  created_at: string
+}
+
+// ============================================
+// Navigation Items
+// ============================================
 
 const mainNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -61,6 +97,10 @@ const settingsNavItems: NavItem[] = [
   { title: 'API Keys', href: '/settings?tab=api', icon: Key },
   { title: 'Ajuda', href: '/help', icon: HelpCircle },
 ]
+
+// ============================================
+// Sidebar Component
+// ============================================
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -359,9 +399,154 @@ export function Sidebar() {
   )
 }
 
+// ============================================
+// Header Component (com Notificações Reais)
+// ============================================
+
+const POLLING_INTERVAL = 30000 // 30 segundos
+
 export function Header() {
   const { sidebarCollapsed } = useUIStore()
   const { currentStore } = useStoreStore()
+  const { user } = useAuthStore()
+  
+  // Notifications state
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [loadingNotifications, setLoadingNotifications] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // User data
+  const userName = user?.name || user?.email?.split('@')[0] || 'Usuário'
+  const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+  const userRole = user?.role || 'Admin'
+
+  // ============================================
+  // Load notifications from API
+  // ============================================
+  const loadNotifications = useCallback(async () => {
+    if (!user?.organization_id) return
+    
+    try {
+      const res = await fetch(
+        `/api/notifications?organizationId=${user.organization_id}&limit=15`
+      )
+      
+      if (res.ok) {
+        const data = await res.json()
+        setNotifications(data.notifications ?? [])
+        setUnreadCount(data.unreadCount ?? 0)
+      }
+    } catch (err) {
+      console.error('Error loading notifications:', err)
+    }
+  }, [user?.organization_id])
+
+  // Initial load + polling
+  useEffect(() => {
+    if (user?.organization_id) {
+      setLoadingNotifications(true)
+      loadNotifications().finally(() => setLoadingNotifications(false))
+      
+      const interval = setInterval(loadNotifications, POLLING_INTERVAL)
+      return () => clearInterval(interval)
+    }
+  }, [user?.organization_id, loadNotifications])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // ============================================
+  // Notification actions
+  // ============================================
+  const markAsRead = async (ids: string[]) => {
+    if (!user?.organization_id || ids.length === 0) return
+    
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: user.organization_id,
+          notificationIds: ids,
+        }),
+      })
+      
+      setNotifications(prev => 
+        prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n)
+      )
+      setUnreadCount(prev => Math.max(0, prev - ids.length))
+    } catch (err) {
+      console.error('Error marking as read:', err)
+    }
+  }
+
+  const markAllAsRead = async () => {
+    if (!user?.organization_id) return
+    
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: user.organization_id,
+          markAllRead: true,
+        }),
+      })
+      
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      setUnreadCount(0)
+    } catch (err) {
+      console.error('Error marking all as read:', err)
+    }
+  }
+
+  const deleteNotification = async (id: string) => {
+    try {
+      await fetch(`/api/notifications?id=${id}`, { method: 'DELETE' })
+      setNotifications(prev => {
+        const notification = prev.find(n => n.id === id)
+        if (notification && !notification.read) {
+          setUnreadCount(c => Math.max(0, c - 1))
+        }
+        return prev.filter(n => n.id !== id)
+      })
+    } catch (err) {
+      console.error('Error deleting notification:', err)
+    }
+  }
+
+  // ============================================
+  // Helper functions
+  // ============================================
+  const getNotificationIcon = (notification: Notification) => {
+    const type = notification.data?.integration_type
+    
+    if (type === 'shopify') {
+      return <ShoppingBag className="w-4 h-4 text-[#95BF47]" />
+    }
+    if (type === 'whatsapp') {
+      return <MessageSquare className="w-4 h-4 text-[#25D366]" />
+    }
+    
+    switch (notification.priority) {
+      case 'urgent':
+        return <AlertCircle className="w-4 h-4 text-red-500" />
+      case 'high':
+        return <AlertTriangle className="w-4 h-4 text-amber-500" />
+      default:
+        return <Info className="w-4 h-4 text-blue-500" />
+    }
+  }
 
   return (
     <header
@@ -400,19 +585,176 @@ export function Header() {
       {/* Actions */}
       <div className="flex items-center gap-4">
         {/* Notifications */}
-        <button className="relative p-2 rounded-xl hover:bg-dark-800 text-dark-400 hover:text-dark-100 transition-colors">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-primary-500 rounded-full" />
-        </button>
+        <div className="relative" ref={dropdownRef}>
+          <button 
+            onClick={() => setNotificationsOpen(!notificationsOpen)}
+            className="relative p-2 rounded-xl hover:bg-dark-800 text-dark-400 hover:text-dark-100 transition-colors"
+          >
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-primary-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {/* Notifications Dropdown */}
+          <AnimatePresence>
+            {notificationsOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute right-0 top-full mt-2 w-96 bg-dark-900 border border-dark-700 rounded-xl shadow-2xl z-50 overflow-hidden"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-dark-700">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-white">Notificações</h3>
+                    {unreadCount > 0 && (
+                      <span className="px-2 py-0.5 bg-primary-500/20 text-primary-400 text-xs font-medium rounded-full">
+                        {unreadCount} nova{unreadCount > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  {unreadCount > 0 && (
+                    <button 
+                      onClick={markAllAsRead}
+                      className="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
+                    >
+                      <CheckCheck className="w-3.5 h-3.5" />
+                      Marcar todas
+                    </button>
+                  )}
+                </div>
+
+                {/* Notifications List */}
+                <div className="max-h-96 overflow-y-auto">
+                  {loadingNotifications ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="px-4 py-12 text-center">
+                      <div className="w-12 h-12 bg-dark-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Bell className="w-6 h-6 text-dark-500" />
+                      </div>
+                      <p className="text-sm text-dark-400">Nenhuma notificação</p>
+                      <p className="text-xs text-dark-500 mt-1">
+                        Você será notificado sobre eventos importantes
+                      </p>
+                    </div>
+                  ) : (
+                    notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        className={cn(
+                          'px-4 py-3 border-b border-dark-700/50 hover:bg-dark-800/50 transition-colors',
+                          !notification.read && 'bg-primary-500/5'
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          {/* Icon */}
+                          <div className="flex-shrink-0 mt-0.5">
+                            {getNotificationIcon(notification)}
+                          </div>
+                          
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className={cn(
+                                "text-sm font-medium line-clamp-1",
+                                notification.read ? 'text-dark-300' : 'text-white'
+                              )}>
+                                {notification.title}
+                              </p>
+                              
+                              {/* Actions */}
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                {!notification.read && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      markAsRead([notification.id])
+                                    }}
+                                    className="p-1 text-dark-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
+                                    title="Marcar como lida"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    deleteNotification(notification.id)
+                                  }}
+                                  className="p-1 text-dark-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                  title="Excluir"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            
+                            <p className="text-xs text-dark-400 mt-0.5 line-clamp-2">
+                              {notification.message}
+                            </p>
+                            
+                            <div className="flex items-center justify-between mt-2">
+                              <p className="text-xs text-dark-500">
+                                {formatDistanceToNow(new Date(notification.created_at), {
+                                  addSuffix: true,
+                                  locale: ptBR,
+                                })}
+                              </p>
+                              
+                              {notification.action_url && (
+                                <a
+                                  href={notification.action_url}
+                                  onClick={() => {
+                                    markAsRead([notification.id])
+                                    setNotificationsOpen(false)
+                                  }}
+                                  className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1 transition-colors"
+                                >
+                                  {notification.action_label ?? 'Ver mais'}
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Footer */}
+                {notifications.length > 0 && (
+                  <div className="px-4 py-3 border-t border-dark-700">
+                    <a 
+                      href="/notifications"
+                      onClick={() => setNotificationsOpen(false)}
+                      className="w-full text-center text-sm text-primary-400 hover:text-primary-300 transition-colors flex items-center justify-center gap-1"
+                    >
+                      Ver todas as notificações
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* User Avatar */}
         <div className="flex items-center gap-3 pl-4 border-l border-dark-700">
           <div className="text-right">
-            <p className="text-sm font-medium text-white">João Demo</p>
-            <p className="text-xs text-dark-400">Admin</p>
+            <p className="text-sm font-medium text-white">{userName}</p>
+            <p className="text-xs text-dark-400">{userRole}</p>
           </div>
           <Avatar
-            fallback="JD"
+            fallback={userInitials}
             size="sm"
             status="online"
           />
