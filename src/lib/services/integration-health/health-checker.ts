@@ -5,6 +5,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { ShopifyHealthChecker } from './checkers/shopify';
+import { WhatsAppHealthChecker } from './checkers/whatsapp';
 import { NotificationService } from './notifier';
 import { 
   IntegrationType, 
@@ -40,6 +41,7 @@ interface WhatsAppConfigRecord {
   phone_number: string;
   access_token: string;
   phone_number_id: string;
+  is_active?: boolean;
   connection_status?: string;
   consecutive_failures?: number;
   last_notification_at?: string;
@@ -222,7 +224,7 @@ export class IntegrationHealthService {
       id: record.id,
       organizationId: record.organization_id,
       type: 'whatsapp',
-      name: record.business_name ?? 'WhatsApp',
+      name: record.business_name ?? 'WhatsApp Business',
       identifier: record.phone_number,
       credentials: {
         accessToken: record.access_token,
@@ -236,10 +238,15 @@ export class IntegrationHealthService {
     };
   }
   
+  // =============================================
+  // ATUALIZADO: Agora inclui WhatsApp
+  // =============================================
   private createChecker(type: IntegrationType, config: IntegrationConfig) {
     switch (type) {
       case 'shopify':
         return new ShopifyHealthChecker(config);
+      case 'whatsapp':
+        return new WhatsAppHealthChecker(config);
       default:
         throw new Error(`Checker não implementado para: ${type}`);
     }
@@ -291,10 +298,12 @@ export class IntegrationHealthService {
         organization_id: config.organizationId,
         integration_type: config.type,
         integration_id: config.id,
+        integration_name: config.name,
         status: logStatus,
         status_code: result.statusCode,
         response_time_ms: result.responseTimeMs,
         message: result.message,
+        details: result.rawResponse ?? {},
       });
     
     if (error) {
@@ -302,9 +311,13 @@ export class IntegrationHealthService {
     }
   }
   
+  // =============================================
+  // ATUALIZADO: Agora busca WhatsApp também
+  // =============================================
   private async getAllActiveIntegrations(): Promise<IntegrationRecord[]> {
     const integrations: IntegrationRecord[] = [];
     
+    // Buscar Shopify stores
     const { data: shopifyStores } = await this.supabase
       .from('shopify_stores')
       .select('id, shop_name, status')
@@ -320,14 +333,34 @@ export class IntegrationHealthService {
       }
     }
     
+    // Buscar WhatsApp configs
+    const { data: whatsappConfigs } = await this.supabase
+      .from('whatsapp_configs')
+      .select('id, business_name, phone_number, is_active')
+      .eq('is_active', true);
+    
+    if (whatsappConfigs) {
+      for (const config of whatsappConfigs) {
+        integrations.push({ 
+          type: 'whatsapp', 
+          id: config.id, 
+          name: config.business_name ?? `WhatsApp ${config.phone_number}`
+        });
+      }
+    }
+    
     return integrations;
   }
   
+  // =============================================
+  // ATUALIZADO: Agora busca WhatsApp também
+  // =============================================
   private async getOrganizationIntegrations(
     organizationId: string
   ): Promise<IntegrationRecord[]> {
     const integrations: IntegrationRecord[] = [];
     
+    // Buscar Shopify stores da organização
     const { data: shopifyStores } = await this.supabase
       .from('shopify_stores')
       .select('id, shop_name')
@@ -340,6 +373,23 @@ export class IntegrationHealthService {
           type: 'shopify', 
           id: store.id, 
           name: store.shop_name ?? 'Loja Shopify'
+        });
+      }
+    }
+    
+    // Buscar WhatsApp configs da organização
+    const { data: whatsappConfigs } = await this.supabase
+      .from('whatsapp_configs')
+      .select('id, business_name, phone_number')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true);
+    
+    if (whatsappConfigs) {
+      for (const config of whatsappConfigs) {
+        integrations.push({ 
+          type: 'whatsapp', 
+          id: config.id, 
+          name: config.business_name ?? `WhatsApp ${config.phone_number}`
         });
       }
     }

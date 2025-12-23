@@ -15,34 +15,66 @@ const supabase = new Proxy({} as SupabaseClient, {
   get(_, prop) { return (getDb() as any)[prop]; }
 });
 
+// Helper para converter connection_status em health status
+function getHealthStatus(connectionStatus: string | null): string {
+  if (!connectionStatus) return 'unknown';
+  
+  switch (connectionStatus) {
+    case 'active':
+      return 'healthy';
+    case 'warning':
+      return 'degraded';
+    case 'error':
+    case 'expired':
+    case 'reconnect_required':
+      return 'unhealthy';
+    case 'disconnected':
+    case 'pending':
+      return 'disconnected';
+    default:
+      return 'unknown';
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
-    // Check Shopify stores
+    // Check Shopify stores - CORRIGIDO: usa 'status' em vez de 'is_active'
     const { data: shopifyStores, error: shopifyError } = await supabase
       .from('shopify_stores')
-      .select('id, shop_name, shop_domain, is_active, total_orders, total_customers, total_products, total_revenue, last_sync_at, created_at')
-      .eq('is_active', true);
+      .select(`
+        id, 
+        shop_name, 
+        shop_domain, 
+        status,
+        connection_status,
+        status_message,
+        health_checked_at,
+        total_orders, 
+        total_customers, 
+        total_products, 
+        total_revenue, 
+        last_sync_at, 
+        created_at
+      `)
+      .or('status.eq.active,status.is.null');
 
-    // Check Klaviyo - query simples primeiro para ver se a tabela existe
+    // Check Klaviyo
     let klaviyoAccount = null;
     try {
       const { data: klaviyoAccounts, error: klaviyoError } = await supabase
         .from('klaviyo_accounts')
-        .select('*')  // Select all to avoid column errors
+        .select('*')
         .eq('is_active', true)
         .limit(1);
       
-      if (klaviyoError) {
-        console.error('[Integration Status] Klaviyo query error:', klaviyoError.message);
-      } else {
+      if (!klaviyoError) {
         klaviyoAccount = klaviyoAccounts && klaviyoAccounts.length > 0 ? klaviyoAccounts[0] : null;
-        console.log('[Integration Status] Klaviyo account found:', !!klaviyoAccount);
       }
     } catch (e: any) {
       console.error('[Integration Status] Klaviyo error:', e.message);
     }
 
-    // Check Meta (Facebook) - using array query to avoid error
+    // Check Meta (Facebook)
     const { data: metaAccounts } = await supabase
       .from('meta_ad_accounts')
       .select('id, account_name, is_active, last_sync_at')
@@ -51,7 +83,7 @@ export async function GET(request: NextRequest) {
     
     const metaAccount = metaAccounts && metaAccounts.length > 0 ? metaAccounts[0] : null;
 
-    // Check Google - using array query to avoid error
+    // Check Google
     const { data: googleAccounts } = await supabase
       .from('google_ad_accounts')
       .select('id, account_name, is_active, last_sync_at')
@@ -60,7 +92,7 @@ export async function GET(request: NextRequest) {
     
     const googleAccount = googleAccounts && googleAccounts.length > 0 ? googleAccounts[0] : null;
 
-    // Check TikTok - using array query to avoid error
+    // Check TikTok
     const { data: tiktokAccounts } = await supabase
       .from('tiktok_ad_accounts')
       .select('id, advertiser_name, is_active, last_sync_at')
@@ -69,12 +101,22 @@ export async function GET(request: NextRequest) {
     
     const tiktokAccount = tiktokAccounts && tiktokAccounts.length > 0 ? tiktokAccounts[0] : null;
 
-    // Check WhatsApp - verificar tanto whatsapp_configs quanto whatsapp_accounts
-    let whatsappConfig: { id: any; phone_number: any; phone_number_id?: any; business_name?: any; is_active: any; created_at: any } | null = null;
+    // Check WhatsApp - CORRIGIDO: inclui connection_status
+    let whatsappConfig: any = null;
     try {
       const { data: whatsappConfigs } = await supabase
         .from('whatsapp_configs')
-        .select('id, phone_number, phone_number_id, business_name, is_active, created_at')
+        .select(`
+          id, 
+          phone_number, 
+          phone_number_id, 
+          business_name, 
+          is_active, 
+          connection_status,
+          status_message,
+          health_checked_at,
+          created_at
+        `)
         .eq('is_active', true)
         .limit(1);
       
@@ -120,16 +162,31 @@ export async function GET(request: NextRequest) {
       Flows: (klaviyoAccount.total_flows || 0).toString(),
     } : null;
 
+    // CORRIGIDO: Usa connection_status do health check
+    const shopifyStore = shopifyStores?.[0];
+    const shopifyHealthStatus = shopifyStore 
+      ? getHealthStatus(shopifyStore.connection_status)
+      : 'disconnected';
+
+    const whatsappHealthStatus = whatsappConfig 
+      ? getHealthStatus(whatsappConfig.connection_status)
+      : 'disconnected';
+
     const integrations = {
       shopify: {
         connected: shopifyStores && shopifyStores.length > 0,
-        status: shopifyStores && shopifyStores.length > 0 ? 'healthy' : 'disconnected',
-        lastSync: shopifyStores?.[0]?.last_sync_at ? formatLastSync(shopifyStores[0].last_sync_at) : null,
+        status: shopifyHealthStatus,
+        connectionStatus: shopifyStore?.connection_status || null,
+        statusMessage: shopifyStore?.status_message || null,
+        lastHealthCheck: shopifyStore?.health_checked_at ? formatLastSync(shopifyStore.health_checked_at) : null,
+        lastSync: shopifyStore?.last_sync_at ? formatLastSync(shopifyStore.last_sync_at) : null,
         stats: shopifyStats,
         stores: shopifyStores?.map(s => ({
           id: s.id,
           name: s.shop_name,
           domain: s.shop_domain,
+          connectionStatus: s.connection_status,
+          statusMessage: s.status_message,
           orders: s.total_orders,
           customers: s.total_customers,
           products: s.total_products,
@@ -163,7 +220,10 @@ export async function GET(request: NextRequest) {
       },
       whatsapp: {
         connected: !!whatsappConfig,
-        status: whatsappConfig ? 'healthy' : 'disconnected',
+        status: whatsappHealthStatus,
+        connectionStatus: whatsappConfig?.connection_status || null,
+        statusMessage: whatsappConfig?.status_message || null,
+        lastHealthCheck: whatsappConfig?.health_checked_at ? formatLastSync(whatsappConfig.health_checked_at) : null,
         lastSync: whatsappConfig?.created_at ? formatLastSync(whatsappConfig.created_at) : null,
         phoneNumber: whatsappConfig?.phone_number || null,
         businessName: whatsappConfig?.business_name || null,

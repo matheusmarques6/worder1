@@ -23,6 +23,19 @@ interface ShopifyStoreRow {
   created_at: string;
 }
 
+interface WhatsAppConfigRow {
+  id: string;
+  organization_id: string;
+  business_name: string | null;
+  phone_number: string;
+  is_active: boolean;
+  connection_status: string | null;
+  status_message: string | null;
+  health_checked_at: string | null;
+  consecutive_failures: number | null;
+  created_at: string;
+}
+
 interface FormattedIntegration {
   integration_type: string;
   integration_id: string;
@@ -78,7 +91,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ integrations });
     }
     
-    // Fallback: buscar direto da tabela
+    // Fallback: buscar direto das tabelas
+    const formattedIntegrations: FormattedIntegration[] = [];
+    
+    // Buscar Shopify stores
     const { data: shopifyStores } = await supabase
       .from('shopify_stores')
       .select(`
@@ -97,20 +113,61 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId)
       .or('status.eq.active,status.is.null');
     
-    const formattedIntegrations: FormattedIntegration[] = (shopifyStores ?? []).map((s: ShopifyStoreRow) => ({
-      integration_type: 'shopify',
-      integration_id: s.id,
-      organization_id: s.organization_id,
-      name: s.shop_name,
-      identifier: s.shop_domain,
-      is_active: s.status === 'active' || !s.status,
-      connection_status: s.connection_status ?? 'active',
-      status_message: s.status_message,
-      health_checked_at: s.health_checked_at,
-      consecutive_failures: s.consecutive_failures ?? 0,
-      last_sync_at: s.last_sync_at,
-      health_status: getHealthStatus(s.connection_status, s.consecutive_failures),
-    }));
+    if (shopifyStores) {
+      for (const s of shopifyStores as ShopifyStoreRow[]) {
+        formattedIntegrations.push({
+          integration_type: 'shopify',
+          integration_id: s.id,
+          organization_id: s.organization_id,
+          name: s.shop_name,
+          identifier: s.shop_domain,
+          is_active: s.status === 'active' || !s.status,
+          connection_status: s.connection_status ?? 'active',
+          status_message: s.status_message,
+          health_checked_at: s.health_checked_at,
+          consecutive_failures: s.consecutive_failures ?? 0,
+          last_sync_at: s.last_sync_at,
+          health_status: getHealthStatus(s.connection_status, s.consecutive_failures),
+        });
+      }
+    }
+    
+    // Buscar WhatsApp configs
+    const { data: whatsappConfigs } = await supabase
+      .from('whatsapp_configs')
+      .select(`
+        id,
+        organization_id,
+        business_name,
+        phone_number,
+        is_active,
+        connection_status,
+        status_message,
+        health_checked_at,
+        consecutive_failures,
+        created_at
+      `)
+      .eq('organization_id', organizationId)
+      .eq('is_active', true);
+    
+    if (whatsappConfigs) {
+      for (const w of whatsappConfigs as WhatsAppConfigRow[]) {
+        formattedIntegrations.push({
+          integration_type: 'whatsapp',
+          integration_id: w.id,
+          organization_id: w.organization_id,
+          name: w.business_name ?? 'WhatsApp Business',
+          identifier: w.phone_number,
+          is_active: w.is_active,
+          connection_status: w.connection_status ?? 'active',
+          status_message: w.status_message,
+          health_checked_at: w.health_checked_at,
+          consecutive_failures: w.consecutive_failures ?? 0,
+          last_sync_at: null,
+          health_status: getHealthStatus(w.connection_status, w.consecutive_failures),
+        });
+      }
+    }
     
     return NextResponse.json({ integrations: formattedIntegrations });
     
@@ -142,6 +199,14 @@ export async function POST(request: NextRequest) {
     if (!type || !integrationId) {
       return NextResponse.json(
         { error: 'type and integrationId required' },
+        { status: 400 }
+      );
+    }
+    
+    // Validar tipo
+    if (type !== 'shopify' && type !== 'whatsapp') {
+      return NextResponse.json(
+        { error: 'Invalid integration type. Supported: shopify, whatsapp' },
         { status: 400 }
       );
     }
