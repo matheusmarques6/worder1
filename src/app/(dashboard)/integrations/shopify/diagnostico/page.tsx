@@ -407,7 +407,7 @@ export default function ShopifyDiagnosticoPage() {
                   {webhook.address.includes('/api/webhooks/shopify') ? (
                     <CheckCircle className="w-5 h-5 text-emerald-500" />
                   ) : (
-                    <XCircle className="w-5 h-5 text-red-500" title="URL incorreta" />
+                    <XCircle className="w-5 h-5 text-red-500" />
                   )}
                 </div>
               ))}
