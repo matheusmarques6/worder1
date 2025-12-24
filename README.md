@@ -1,157 +1,135 @@
-# WhatsApp Health Checker + Hub de Integrações
+# 📦 Shopify Backend - Arquivos Criados/Modificados
 
-## 📦 Conteúdo do Pacote
+## 📁 Estrutura de Arquivos
 
 ```
 src/
-├── app/
-│   ├── (dashboard)/integrations/hub/
-│   │   └── page.tsx                    ← Hub de Integrações (UI)
-│   └── api/integrations/
-│       ├── health/
-│       │   ├── route.ts                ← API de health check
-│       │   └── logs/route.ts           ← API de histórico
-│       └── status/route.ts             ← API de status geral (CORRIGIDO)
-└── lib/services/integration-health/
-    ├── checkers/
-    │   ├── base.ts
-    │   ├── shopify.ts
-    │   └── whatsapp.ts                 ← NOVO: Checker do WhatsApp
-    ├── health-checker.ts               ← ATUALIZADO: inclui WhatsApp
-    ├── index.ts                        ← ATUALIZADO: exporta WhatsApp
-    ├── notifier.ts
-    └── types.ts
+├── lib/
+│   ├── queue.ts                              ← MODIFICADO (adicionado enqueueShopifyWebhook)
+│   │
+│   └── services/
+│       └── shopify/
+│           ├── index.ts                      ← CRIADO (exportações)
+│           ├── types.ts                      ← CRIADO (tipos TypeScript)
+│           ├── contact-sync.ts               ← CRIADO (sincronização de contatos)
+│           ├── deal-sync.ts                  ← CRIADO (sincronização de deals)
+│           ├── webhook-processor.ts          ← CRIADO (processador de webhooks)
+│           │
+│           └── jobs/
+│               ├── abandoned-cart.ts         ← CRIADO (detecção de carrinhos abandonados)
+│               └── reconciliation.ts         ← CRIADO (reconciliação de dados)
+│
+└── app/
+    └── api/
+        ├── integrations/
+        │   └── shopify/
+        │       └── webhook/
+        │           └── route.ts              ← MODIFICADO (agora enfileira)
+        │
+        ├── workers/
+        │   └── shopify-webhook/
+        │       └── route.ts                  ← CRIADO (processa fila)
+        │
+        └── cron/
+            └── shopify/
+                └── route.ts                  ← CRIADO (jobs agendados)
 ```
 
-## ⚡ Instalação
+## 📋 Descrição de Cada Arquivo
 
-### 1. Extrair arquivos
-```bash
-unzip -o WHATSAPP-HEALTH-CHECKER.zip -d .
+### 1. `src/lib/queue.ts` (MODIFICADO)
+- **O que mudou:** Adicionada função `enqueueShopifyWebhook()` e tipo `ShopifyWebhookJob`
+- **Função:** Enfileira webhooks do Shopify para processamento assíncrono via QStash
+
+### 2. `src/lib/services/shopify/types.ts` (CRIADO)
+- **Função:** Define todos os tipos TypeScript para a integração
+- **Conteúdo:** `ShopifyStoreConfig`, `ShopifyCustomer`, `ShopifyOrder`, `ShopifyCheckout`, etc.
+
+### 3. `src/lib/services/shopify/contact-sync.ts` (CRIADO)
+- **Função:** Sincroniza clientes do Shopify com contatos do CRM
+- **Features:**
+  - Cria ou atualiza contatos por email/telefone
+  - Determina tipo (lead/customer) baseado na configuração
+  - Converte lead → customer quando compra
+  - Normaliza telefones para formato brasileiro
+
+### 4. `src/lib/services/shopify/deal-sync.ts` (CRIADO)
+- **Função:** Cria e gerencia deals no pipeline
+- **Features:**
+  - Cria deals para novos pedidos
+  - Move deals entre estágios baseado em eventos
+  - Marca deals como ganhos/perdidos
+  - Cria deals para carrinhos abandonados
+
+### 5. `src/lib/services/shopify/webhook-processor.ts` (CRIADO)
+- **Função:** Processa webhooks recebidos da fila
+- **Eventos tratados:**
+  - `customers/create`, `customers/update`
+  - `orders/create`, `orders/paid`, `orders/fulfilled`, `orders/cancelled`
+  - `checkouts/create`, `checkouts/update`
+  - `app/uninstalled`
+
+### 6. `src/lib/services/shopify/index.ts` (CRIADO)
+- **Função:** Arquivo de exportação central
+
+### 7. `src/lib/services/shopify/jobs/abandoned-cart.ts` (CRIADO)
+- **Função:** Job que detecta carrinhos abandonados
+- **Lógica:** Checkouts pendentes há mais de 1 hora sem pedido = abandonado
+- **Frequência recomendada:** A cada 30 minutos
+
+### 8. `src/lib/services/shopify/jobs/reconciliation.ts` (CRIADO)
+- **Função:** Sincroniza dados que podem ter sido perdidos
+- **Features:**
+  - Busca clientes/pedidos atualizados desde última sync
+  - Verifica saúde dos webhooks
+  - Re-registra webhooks deletados
+- **Frequência recomendada:** A cada 1 hora
+
+### 9. `src/app/api/integrations/shopify/webhook/route.ts` (MODIFICADO)
+- **O que mudou:** Agora enfileira no QStash em vez de processar direto
+- **Função:** Recebe webhooks do Shopify e responde em < 1 segundo
+- **Segurança:** Valida HMAC, verifica duplicatas (idempotência)
+
+### 10. `src/app/api/workers/shopify-webhook/route.ts` (CRIADO)
+- **Função:** Worker que processa webhooks da fila
+- **Chamado por:** QStash (assíncrono)
+- **Timeout:** 60 segundos (tempo suficiente para processar)
+
+### 11. `src/app/api/cron/shopify/route.ts` (CRIADO)
+- **Função:** Endpoint para jobs agendados
+- **Jobs disponíveis:**
+  - `?job=abandoned` - Detectar carrinhos abandonados
+  - `?job=reconcile` - Reconciliar dados
+  - `?job=health` - Verificar webhooks
+  - `?job=cleanup` - Limpar eventos antigos
+
+## 🚀 Como Instalar
+
+1. Extraia o ZIP na raiz do seu projeto
+2. Os arquivos vão para as pastas corretas automaticamente
+3. Reinicie o servidor
+
+## ⚙️ Configuração Vercel Cron (vercel.json)
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/shopify?job=abandoned",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/shopify?job=reconcile", 
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/shopify?job=health",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/shopify?job=cleanup",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}
 ```
-
-### 2. Verificar que as tabelas existem no Supabase
-Execute no SQL Editor se ainda não executou:
-
-```sql
--- Se já executou PASSO-A e PASSO-B, pule esta etapa
-
--- Adicionar colunas à whatsapp_configs (se faltarem)
-ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS connection_status TEXT DEFAULT 'pending';
-ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS status_message TEXT;
-ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS status_code INTEGER;
-ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS health_checked_at TIMESTAMPTZ;
-ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS consecutive_failures INTEGER DEFAULT 0;
-ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS last_notification_at TIMESTAMPTZ;
-
--- Criar tabela de logs (se não existir)
-CREATE TABLE IF NOT EXISTS integration_health_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID NOT NULL,
-  integration_type TEXT NOT NULL,
-  integration_id UUID NOT NULL,
-  integration_name TEXT,
-  status TEXT NOT NULL CHECK (status IN ('success', 'warning', 'error')),
-  status_code TEXT,
-  message TEXT,
-  response_time_ms INTEGER,
-  details JSONB DEFAULT '{}',
-  checked_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_health_logs_org ON integration_health_logs(organization_id);
-CREATE INDEX IF NOT EXISTS idx_health_logs_checked ON integration_health_logs(checked_at DESC);
-```
-
-### 3. (Opcional) Adicionar ao menu lateral
-
-Edite `src/components/layout/Sidebar.tsx`:
-
-```typescript
-// Adicionar import
-import { ..., Puzzle } from 'lucide-react'
-
-// Adicionar ao mainNavItems (linha ~83)
-{ title: 'Integrações', href: '/integrations/hub', icon: Puzzle },
-```
-
-## 🧪 Testar
-
-### Via Browser
-Acesse: `http://localhost:3000/integrations/hub`
-
-### Via API
-
-```bash
-# Status de todas integrações
-curl "http://localhost:3000/api/integrations/status"
-
-# Health check manual do WhatsApp
-curl -X POST http://localhost:3000/api/integrations/health \
-  -H "Content-Type: application/json" \
-  -d '{"type":"whatsapp","integrationId":"SEU_WHATSAPP_ID"}'
-
-# Verificar todas integrações de uma organização
-curl -X POST http://localhost:3000/api/integrations/health \
-  -H "Content-Type: application/json" \
-  -d '{"checkAll":true,"organizationId":"SEU_ORG_ID"}'
-
-# Ver histórico de verificações
-curl "http://localhost:3000/api/integrations/health/logs?organizationId=SEU_ORG_ID"
-```
-
-### Via Cron Job
-```bash
-# Executar verificação automática
-curl http://localhost:3000/api/cron/check-integrations
-```
-
-## 🔍 Verificações do WhatsApp
-
-| Código | Status | Descrição |
-|--------|--------|-----------|
-| 200 | ✅ active | API funcionando normalmente |
-| 200 + RED | ⚠️ warning | Qualidade do número baixa |
-| 200 + YELLOW | ⚠️ warning | Qualidade média |
-| 190 | 🔴 expired | Token expirado |
-| 100 | 🔴 error | Phone Number ID inválido |
-| 10/200 | 🔴 error | Permissões insuficientes |
-| 368 | 🔴 error | Conta bloqueada |
-| 4/17/613 | ⚠️ warning | Rate limit |
-
-## 📊 Hub de Integrações
-
-O Hub mostra:
-- Cards com status de cada integração (Shopify, WhatsApp)
-- Indicadores visuais: 🟢 Saudável / 🟡 Atenção / 🔴 Problema
-- Botão para verificar manualmente cada integração
-- Botão para verificar todas de uma vez
-- Histórico das últimas 10 verificações
-- Auto-refresh a cada 60 segundos
-
-## 🔄 Fluxo de Dados
-
-```
-Cron Job (6h) ou Manual
-        ↓
-health-checker.ts
-        ↓
-WhatsAppHealthChecker / ShopifyHealthChecker
-        ↓
-Atualiza connection_status no banco
-        ↓
-Cria notificação se necessário
-        ↓
-Hub de Integrações exibe status
-```
-
-## 📁 Arquivos Modificados vs Novos
-
-| Arquivo | Tipo |
-|---------|------|
-| `checkers/whatsapp.ts` | **NOVO** |
-| `health-checker.ts` | MODIFICADO |
-| `index.ts` | MODIFICADO |
-| `api/integrations/status/route.ts` | MODIFICADO |
-| `api/integrations/health/logs/route.ts` | **NOVO** |
-| `integrations/hub/page.tsx` | **NOVO** |

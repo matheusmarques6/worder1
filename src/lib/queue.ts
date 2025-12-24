@@ -383,12 +383,63 @@ export async function scheduleAutomationRun(
   return enqueueAutomationRun(runId, { delay: delaySeconds });
 }
 
+// ============================================
+// SHOPIFY WEBHOOKS
+// ============================================
+
+export interface ShopifyWebhookJob {
+  eventId: string;
+  topic: string;
+  shopDomain: string;
+  payload: any;
+  storeId: string;
+  organizationId: string;
+}
+
+/**
+ * Enfileira webhook do Shopify para processamento assíncrono
+ * Isso permite responder rapidamente ao Shopify (< 5 segundos)
+ */
+export async function enqueueShopifyWebhook(
+  job: ShopifyWebhookJob
+): Promise<string | null> {
+  const client = getQStashClient();
+  if (!client) {
+    console.warn('[Queue] QStash not configured for Shopify webhook');
+    return null;
+  }
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  if (!baseUrl) {
+    console.warn('[Queue] APP_URL not configured');
+    return null;
+  }
+
+  try {
+    const response = await client.publishJSON({
+      url: `${baseUrl}/api/workers/shopify-webhook`,
+      body: {
+        type: 'shopify_webhook',
+        data: job,
+      },
+      retries: 3,
+    });
+
+    console.log(`[Queue] Shopify webhook ${job.topic} queued, messageId: ${response.messageId}`);
+    return response.messageId;
+  } catch (error) {
+    console.error('[Queue] Failed to enqueue Shopify webhook:', error);
+    return null;
+  }
+}
+
 export default {
   isQStashConfigured,
   enqueueAutomationRun,
   enqueueAutomationStep,
   enqueueEmailSend,
   enqueueWhatsAppSend,
+  enqueueShopifyWebhook,
   verifyQStashSignature,
   calculateDelaySeconds,
   scheduleAutomationRun,

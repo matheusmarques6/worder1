@@ -1,0 +1,637 @@
+// =============================================
+// Shopify Webhook Processor
+// src/lib/services/shopify/webhook-processor.ts
+// =============================================
+
+import { createClient } from '@supabase/supabase-js';
+import type { 
+  ShopifyStoreConfig, 
+  ShopifyCustomer,
+  ShopifyOrder,
+  ShopifyCheckout,
+  WebhookProcessResult,
+  ShopifyWebhookJob
+} from './types';
+import { 
+  syncContactFromShopify, 
+  updateContactOrderStats,
+  addAbandonedCartTag 
+} from './contact-sync';
+import { 
+  createOrUpdateDealForContact, 
+  moveDealToStage,
+  markDealAsWon 
+} from './deal-sync';
+
+// Supabase client com service role
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+/**
+ * Processa webhook do Shopify que veio da fila
+ */
+export async function processShopifyWebhook(
+  job: ShopifyWebhookJob
+): Promise<WebhookProcessResult> {
+  
+  const { topic, payload, storeId, eventId } = job;
+  
+  console.log(`🔄 Processing Shopify webhook: ${topic} (event: ${eventId})`);
+  
+  try {
+    // Buscar configuração da loja
+    const store = await getStoreConfig(storeId);
+    
+    if (!store) {
+      throw new Error(`Store not found: ${storeId}`);
+    }
+    
+    if (!store.is_configured) {
+      return { success: true, action: 'skipped_not_configured' };
+    }
+    
+    // Processar baseado no tópico
+    let result: WebhookProcessResult;
+    
+    switch (topic) {
+      // Customer events
+      case 'customers/create':
+      case 'customers/update':
+        result = await handleCustomerEvent(payload, store, topic);
+        break;
+      
+      // Order events
+      case 'orders/create':
+        result = await handleOrderCreate(payload, store);
+        break;
+      
+      case 'orders/paid':
+        result = await handleOrderPaid(payload, store);
+        break;
+      
+      case 'orders/fulfilled':
+        result = await handleOrderFulfilled(payload, store);
+        break;
+      
+      case 'orders/cancelled':
+        result = await handleOrderCancelled(payload, store);
+        break;
+      
+      // Checkout events
+      case 'checkouts/create':
+      case 'checkouts/update':
+        result = await handleCheckoutEvent(payload, store, topic);
+        break;
+      
+      // App events
+      case 'app/uninstalled':
+        result = await handleAppUninstalled(store);
+        break;
+      
+      default:
+        result = { success: true, action: `ignored_unknown_topic: ${topic}` };
+    }
+    
+    // Marcar evento como processado
+    await markEventProcessed(eventId);
+    
+    return result;
+    
+  } catch (error: any) {
+    console.error(`❌ Error processing webhook ${topic}:`, error);
+    
+    // Marcar evento como falho
+    await markEventFailed(eventId, error.message);
+    
+    return {
+      success: false,
+      action: 'error',
+      error: error.message,
+    };
+  }
+}
+
+// =============================================
+// Event Handlers
+// =============================================
+
+/**
+ * Processa evento de cliente (create/update)
+ */
+async function handleCustomerEvent(
+  customer: ShopifyCustomer,
+  store: ShopifyStoreConfig,
+  topic: string
+): Promise<WebhookProcessResult> {
+  
+  if (!store.sync_customers) {
+    return { success: true, action: 'skipped_customers_disabled' };
+  }
+  
+  // Sincronizar contato
+  const contact = await syncContactFromShopify(customer, store, 'customer');
+  
+  // Criar deal se é novo cliente e tem pipeline configurado
+  if (contact.isNew && store.default_pipeline_id) {
+    const deal = await createOrUpdateDealForContact(
+      contact.id,
+      store,
+      'new_customer',
+      0,
+      { shopify_customer_id: customer.id }
+    );
+    
+    return {
+      success: true,
+      action: topic === 'customers/create' ? 'customer_created' : 'customer_updated',
+      contactId: contact.id,
+      dealId: deal.id || undefined,
+    };
+  }
+  
+  return {
+    success: true,
+    action: topic === 'customers/create' ? 'customer_created' : 'customer_updated',
+    contactId: contact.id,
+  };
+}
+
+/**
+ * Processa criação de pedido
+ */
+async function handleOrderCreate(
+  order: ShopifyOrder,
+  store: ShopifyStoreConfig
+): Promise<WebhookProcessResult> {
+  
+  if (!store.sync_orders) {
+    return { success: true, action: 'skipped_orders_disabled' };
+  }
+  
+  // Extrair dados do cliente do pedido
+  const customerData = order.customer || {
+    id: null as any,
+    email: order.email,
+    phone: order.phone,
+    first_name: order.billing_address?.first_name || '',
+    last_name: order.billing_address?.last_name || '',
+    orders_count: 1,
+  };
+  
+  // Sincronizar contato (como customer, pois comprou)
+  const contact = await syncContactFromShopify(
+    customerData as ShopifyCustomer, 
+    store, 
+    'order'
+  );
+  
+  // Atualizar estatísticas do contato
+  const orderValue = parseFloat(order.total_price || '0');
+  await updateContactOrderStats(contact.id, orderValue);
+  
+  // Marcar checkout como convertido (se existir)
+  if (order.checkout_id) {
+    await markCheckoutConverted(store.id, order.checkout_id);
+  }
+  
+  // Salvar pedido no banco
+  const savedOrder = await saveOrder(order, store, contact.id);
+  
+  // Criar/atualizar deal
+  const deal = await createOrUpdateDealForContact(
+    contact.id,
+    store,
+    'new_order',
+    orderValue,
+    {
+      shopify_order_id: order.id,
+      order_number: order.order_number,
+      financial_status: order.financial_status,
+    }
+  );
+  
+  // Criar notificação
+  await createNotification(store, 'new_order', {
+    title: `Novo pedido: R$ ${orderValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+    message: `${contact.name} fez um pedido`,
+    order_id: savedOrder?.id,
+    contact_id: contact.id,
+    value: orderValue,
+  });
+  
+  return {
+    success: true,
+    action: 'order_created',
+    contactId: contact.id,
+    dealId: deal.id || undefined,
+    orderId: savedOrder?.id,
+  };
+}
+
+/**
+ * Processa pedido pago
+ */
+async function handleOrderPaid(
+  order: ShopifyOrder,
+  store: ShopifyStoreConfig
+): Promise<WebhookProcessResult> {
+  
+  if (!store.sync_orders) {
+    return { success: true, action: 'skipped_orders_disabled' };
+  }
+  
+  // Atualizar status do pedido
+  await supabase
+    .from('shopify_orders')
+    .update({ 
+      financial_status: 'paid',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('shopify_order_id', String(order.id))
+    .eq('store_id', store.id);
+  
+  // Buscar contato pelo pedido
+  const { data: orderRecord } = await supabase
+    .from('shopify_orders')
+    .select('contact_id')
+    .eq('shopify_order_id', String(order.id))
+    .eq('store_id', store.id)
+    .maybeSingle();
+  
+  if (orderRecord?.contact_id) {
+    // Marcar deal como ganho
+    await markDealAsWon(orderRecord.contact_id, store, {
+      paid_at: new Date().toISOString(),
+      financial_status: 'paid',
+    });
+  }
+  
+  return {
+    success: true,
+    action: 'order_paid',
+    contactId: orderRecord?.contact_id,
+  };
+}
+
+/**
+ * Processa pedido enviado
+ */
+async function handleOrderFulfilled(
+  order: ShopifyOrder,
+  store: ShopifyStoreConfig
+): Promise<WebhookProcessResult> {
+  
+  // Atualizar status do pedido
+  await supabase
+    .from('shopify_orders')
+    .update({ 
+      fulfillment_status: order.fulfillment_status || 'fulfilled',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('shopify_order_id', String(order.id))
+    .eq('store_id', store.id);
+  
+  // Mover deal para estágio de "enviado" se configurado
+  const { data: orderRecord } = await supabase
+    .from('shopify_orders')
+    .select('contact_id')
+    .eq('shopify_order_id', String(order.id))
+    .eq('store_id', store.id)
+    .maybeSingle();
+  
+  if (orderRecord?.contact_id) {
+    await moveDealToStage(orderRecord.contact_id, store, 'fulfilled');
+  }
+  
+  return {
+    success: true,
+    action: 'order_fulfilled',
+  };
+}
+
+/**
+ * Processa pedido cancelado
+ */
+async function handleOrderCancelled(
+  order: ShopifyOrder,
+  store: ShopifyStoreConfig
+): Promise<WebhookProcessResult> {
+  
+  // Atualizar status do pedido
+  await supabase
+    .from('shopify_orders')
+    .update({ 
+      financial_status: 'cancelled',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('shopify_order_id', String(order.id))
+    .eq('store_id', store.id);
+  
+  // Buscar deal e marcar como perdido
+  const { data: orderRecord } = await supabase
+    .from('shopify_orders')
+    .select('contact_id')
+    .eq('shopify_order_id', String(order.id))
+    .eq('store_id', store.id)
+    .maybeSingle();
+  
+  if (orderRecord?.contact_id) {
+    // Buscar deal aberto
+    const { data: deal } = await supabase
+      .from('deals')
+      .select('id')
+      .eq('contact_id', orderRecord.contact_id)
+      .eq('pipeline_id', store.default_pipeline_id)
+      .eq('status', 'open')
+      .maybeSingle();
+    
+    if (deal) {
+      await supabase
+        .from('deals')
+        .update({ 
+          status: 'lost',
+          lost_reason: 'Pedido cancelado',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', deal.id);
+    }
+  }
+  
+  return {
+    success: true,
+    action: 'order_cancelled',
+  };
+}
+
+/**
+ * Processa evento de checkout (create/update)
+ */
+async function handleCheckoutEvent(
+  checkout: ShopifyCheckout,
+  store: ShopifyStoreConfig,
+  topic: string
+): Promise<WebhookProcessResult> {
+  
+  if (!store.sync_checkouts) {
+    return { success: true, action: 'skipped_checkouts_disabled' };
+  }
+  
+  // Ignorar se não tem email nem telefone
+  if (!checkout.email && !checkout.phone) {
+    return { success: true, action: 'skipped_no_contact_info' };
+  }
+  
+  // Ignorar se já foi completado (virou pedido)
+  if (checkout.completed_at) {
+    return { success: true, action: 'skipped_already_completed' };
+  }
+  
+  // Salvar checkout
+  const savedCheckout = await saveCheckout(checkout, store);
+  
+  // Criar contato como lead
+  const customerData: Partial<ShopifyCustomer> = {
+    id: checkout.customer?.id,
+    email: checkout.email,
+    phone: checkout.phone,
+    first_name: checkout.billing_address?.first_name || checkout.customer?.first_name || '',
+    last_name: checkout.billing_address?.last_name || checkout.customer?.last_name || '',
+    orders_count: 0,
+  };
+  
+  const contact = await syncContactFromShopify(customerData as ShopifyCustomer, store, 'checkout');
+  
+  // Atualizar checkout com contact_id
+  if (savedCheckout?.id) {
+    await supabase
+      .from('shopify_checkouts')
+      .update({ contact_id: contact.id })
+      .eq('id', savedCheckout.id);
+  }
+  
+  return {
+    success: true,
+    action: 'checkout_saved',
+    contactId: contact.id,
+    checkoutId: savedCheckout?.id,
+  };
+}
+
+/**
+ * Processa desinstalação do app
+ */
+async function handleAppUninstalled(
+  store: ShopifyStoreConfig
+): Promise<WebhookProcessResult> {
+  
+  await supabase
+    .from('shopify_stores')
+    .update({ 
+      is_active: false,
+      connection_status: 'disconnected',
+      status_message: 'App desinstalado pelo usuário',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', store.id);
+  
+  console.log(`📦 App uninstalled for store: ${store.shop_domain}`);
+  
+  return {
+    success: true,
+    action: 'app_uninstalled',
+  };
+}
+
+// =============================================
+// Database Operations
+// =============================================
+
+/**
+ * Busca configuração da loja
+ */
+async function getStoreConfig(storeId: string): Promise<ShopifyStoreConfig | null> {
+  const { data, error } = await supabase
+    .from('shopify_stores')
+    .select('*')
+    .eq('id', storeId)
+    .single();
+  
+  if (error || !data) return null;
+  
+  return {
+    id: data.id,
+    organization_id: data.organization_id,
+    shop_domain: data.shop_domain,
+    shop_name: data.shop_name,
+    access_token: data.access_token,
+    api_secret: data.api_secret,
+    default_pipeline_id: data.default_pipeline_id,
+    default_stage_id: data.default_stage_id,
+    contact_type: data.contact_type || 'auto',
+    auto_tags: data.auto_tags || ['shopify'],
+    sync_orders: data.sync_orders ?? true,
+    sync_customers: data.sync_customers ?? true,
+    sync_checkouts: data.sync_checkouts ?? true,
+    sync_refunds: data.sync_refunds ?? false,
+    stage_mapping: data.stage_mapping || {},
+    is_configured: data.is_configured ?? false,
+    is_active: data.is_active ?? true,
+    connection_status: data.connection_status || 'active',
+  };
+}
+
+/**
+ * Salva pedido no banco
+ */
+async function saveOrder(
+  order: ShopifyOrder,
+  store: ShopifyStoreConfig,
+  contactId: string
+): Promise<{ id: string } | null> {
+  
+  const { data, error } = await supabase
+    .from('shopify_orders')
+    .upsert({
+      store_id: store.id,
+      organization_id: store.organization_id,
+      shopify_order_id: String(order.id),
+      shopify_order_number: String(order.order_number),
+      contact_id: contactId,
+      customer_shopify_id: order.customer?.id ? String(order.customer.id) : null,
+      email: order.email,
+      phone: order.phone,
+      total_price: parseFloat(order.total_price || '0'),
+      subtotal_price: parseFloat(order.subtotal_price || '0'),
+      total_tax: parseFloat(order.total_tax || '0'),
+      total_discounts: parseFloat(order.total_discounts || '0'),
+      currency: order.currency,
+      financial_status: order.financial_status,
+      fulfillment_status: order.fulfillment_status,
+      line_items: order.line_items,
+      shopify_created_at: order.created_at,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'store_id,shopify_order_id',
+    })
+    .select('id')
+    .single();
+  
+  if (error) {
+    console.error('Failed to save order:', error);
+    return null;
+  }
+  
+  return data;
+}
+
+/**
+ * Salva checkout no banco
+ */
+async function saveCheckout(
+  checkout: ShopifyCheckout,
+  store: ShopifyStoreConfig
+): Promise<{ id: string } | null> {
+  
+  const { data, error } = await supabase
+    .from('shopify_checkouts')
+    .upsert({
+      store_id: store.id,
+      organization_id: store.organization_id,
+      shopify_checkout_id: String(checkout.id),
+      shopify_checkout_token: checkout.token,
+      email: checkout.email,
+      phone: checkout.phone,
+      customer_shopify_id: checkout.customer?.id ? String(checkout.customer.id) : null,
+      total_price: parseFloat(checkout.total_price || '0'),
+      subtotal_price: parseFloat(checkout.subtotal_price || '0'),
+      currency: checkout.currency,
+      line_items: checkout.line_items,
+      recovery_url: checkout.abandoned_checkout_url,
+      status: 'pending',
+      shopify_created_at: checkout.created_at,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'store_id,shopify_checkout_id',
+    })
+    .select('id')
+    .single();
+  
+  if (error) {
+    console.error('Failed to save checkout:', error);
+    return null;
+  }
+  
+  return data;
+}
+
+/**
+ * Marca checkout como convertido
+ */
+async function markCheckoutConverted(
+  storeId: string,
+  checkoutId: number
+): Promise<void> {
+  await supabase
+    .from('shopify_checkouts')
+    .update({ 
+      status: 'converted',
+      converted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('store_id', storeId)
+    .eq('shopify_checkout_id', String(checkoutId));
+}
+
+/**
+ * Marca evento como processado
+ */
+async function markEventProcessed(eventId: string): Promise<void> {
+  await supabase
+    .from('shopify_webhook_events')
+    .update({ 
+      status: 'processed',
+      processed_at: new Date().toISOString(),
+    })
+    .eq('event_id', eventId);
+}
+
+/**
+ * Marca evento como falho
+ */
+async function markEventFailed(eventId: string, errorMessage: string): Promise<void> {
+  await supabase
+    .from('shopify_webhook_events')
+    .update({ 
+      status: 'failed',
+      error_message: errorMessage,
+      processed_at: new Date().toISOString(),
+    })
+    .eq('event_id', eventId);
+}
+
+/**
+ * Cria notificação para o usuário
+ */
+async function createNotification(
+  store: ShopifyStoreConfig,
+  type: string,
+  data: Record<string, any>
+): Promise<void> {
+  try {
+    await supabase
+      .from('notifications')
+      .insert({
+        organization_id: store.organization_id,
+        type: `shopify_${type}`,
+        title: data.title,
+        message: data.message,
+        data: data,
+        is_read: false,
+      });
+  } catch (error) {
+    // Não falhar se notificação não funcionar
+    console.error('Failed to create notification:', error);
+  }
+}

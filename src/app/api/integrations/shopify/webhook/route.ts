@@ -1,15 +1,18 @@
 // =============================================
 // API: Shopify Webhook Receiver
 // src/app/api/integrations/shopify/webhook/route.ts
-// Usa estrutura existente do projeto
+// 
+// IMPORTANTE: Este endpoint precisa responder em < 5 segundos
+// Por isso, ele apenas valida e enfileira o webhook para processamento
+// O processamento real acontece no worker: /api/workers/shopify-webhook
 // =============================================
 
-// Forçar rota dinâmica
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { enqueueShopifyWebhook, isQStashConfigured } from '@/lib/queue';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,10 +20,10 @@ const supabase = createClient(
 );
 
 // =============================================
-// Verificação HMAC do Shopify
+// Verificação HMAC do Shopify (timing-safe)
 // =============================================
 function verifyShopifyWebhook(rawBody: string, hmacHeader: string, secret: string): boolean {
-  if (!secret || !hmacHeader) return true; // Se não tem secret, aceita (dev mode)
+  if (!secret || !hmacHeader) return true; // Dev mode
   
   try {
     const hash = crypto
@@ -28,303 +31,199 @@ function verifyShopifyWebhook(rawBody: string, hmacHeader: string, secret: strin
       .update(rawBody, 'utf8')
       .digest('base64');
     
-    return hash === hmacHeader;
+    // Timing-safe comparison
+    if (hash.length !== hmacHeader.length) {
+      return false;
+    }
+    
+    return crypto.timingSafeEqual(
+      Buffer.from(hash),
+      Buffer.from(hmacHeader)
+    );
   } catch {
     return false;
   }
 }
 
 // =============================================
-// POST - Receber Webhook
+// POST - Receber e Enfileirar Webhook
 // =============================================
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
   try {
-    // Headers do Shopify
+    // 1. Capturar headers do Shopify
     const hmacHeader = request.headers.get('x-shopify-hmac-sha256') || '';
     const topic = request.headers.get('x-shopify-topic');
     const shopDomain = request.headers.get('x-shopify-shop-domain');
+    const eventId = request.headers.get('x-shopify-event-id');
+    const apiVersion = request.headers.get('x-shopify-api-version');
 
+    // 2. Validar headers obrigatórios
     if (!topic || !shopDomain) {
-      return NextResponse.json({ error: 'Missing headers' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Missing required headers' },
+        { status: 400 }
+      );
     }
 
-    // Ler body
+    // 3. Ler body como texto (necessário para validação HMAC)
     const rawBody = await request.text();
     let payload: any;
     
     try {
       payload = JSON.parse(rawBody);
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Invalid JSON payload' },
+        { status: 400 }
+      );
     }
 
-    console.log(`📦 Shopify webhook: ${topic} from ${shopDomain}`);
+    console.log(`📦 Shopify webhook received: ${topic} from ${shopDomain} (event: ${eventId || 'unknown'})`);
 
-    // Buscar loja conectada
-    const { data: store } = await supabase
+    // 4. Buscar configuração da loja
+    const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
-      .select('id, organization_id, api_secret')
+      .select('id, organization_id, api_secret, is_active, is_configured, sync_orders, sync_customers, sync_checkouts')
       .eq('shop_domain', shopDomain)
-      .eq('is_active', true)
       .maybeSingle();
 
-    if (!store) {
-      console.log(`No active store for ${shopDomain}`);
-      return NextResponse.json({ received: true });
+    if (storeError) {
+      console.error('Database error:', storeError);
+      // Retornar 200 para não causar retries desnecessários
+      return NextResponse.json({ received: true, error: 'Database error' });
     }
 
-    // Verificar HMAC se tiver secret
+    if (!store) {
+      console.log(`No store found for ${shopDomain}`);
+      return NextResponse.json({ received: true, skipped: true, reason: 'store_not_found' });
+    }
+
+    if (!store.is_active) {
+      console.log(`Store ${shopDomain} is not active`);
+      return NextResponse.json({ received: true, skipped: true, reason: 'store_inactive' });
+    }
+
+    // 5. Verificar HMAC (segurança)
     if (store.api_secret && hmacHeader) {
       const isValid = verifyShopifyWebhook(rawBody, hmacHeader, store.api_secret);
       if (!isValid) {
-        console.error('Invalid HMAC signature');
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+        console.error(`Invalid HMAC signature for ${shopDomain}`);
+        return NextResponse.json(
+          { error: 'Invalid signature' },
+          { status: 401 }
+        );
       }
     }
 
-    const organizationId = store.organization_id;
-
-    // Processar baseado no tópico
-    switch (topic) {
-      case 'customers/create':
-      case 'customers/update':
-        await processCustomer(organizationId, payload, topic);
-        break;
-
-      case 'orders/create':
-      case 'orders/paid':
-      case 'orders/updated':
-        await processOrder(organizationId, payload, topic);
-        break;
-
-      case 'checkouts/create':
-      case 'checkouts/update':
-        await processCheckout(organizationId, payload, topic);
-        break;
-
-      case 'app/uninstalled':
-        await supabase
-          .from('shopify_stores')
-          .update({ is_active: false })
-          .eq('shop_domain', shopDomain);
-        console.log(`App uninstalled for ${shopDomain}`);
-        break;
-
-      default:
-        console.log(`Unhandled topic: ${topic}`);
+    // 6. Verificar se evento está habilitado
+    const eventEnabled = checkEventEnabled(topic, store);
+    if (!eventEnabled) {
+      console.log(`Event ${topic} is disabled for ${shopDomain}`);
+      return NextResponse.json({ received: true, skipped: true, reason: 'event_disabled' });
     }
 
-    return NextResponse.json({ received: true });
+    // 7. Verificar idempotência (evitar duplicatas)
+    if (eventId) {
+      const { data: existingEvent } = await supabase
+        .from('shopify_webhook_events')
+        .select('id')
+        .eq('event_id', eventId)
+        .maybeSingle();
+
+      if (existingEvent) {
+        console.log(`Duplicate event ignored: ${eventId}`);
+        return NextResponse.json({ received: true, skipped: true, reason: 'duplicate' });
+      }
+
+      // Registrar evento (para idempotência)
+      await supabase
+        .from('shopify_webhook_events')
+        .insert({
+          event_id: eventId,
+          store_id: store.id,
+          topic: topic,
+          status: 'queued',
+        });
+    }
+
+    // 8. Enfileirar para processamento assíncrono
+    const job = {
+      eventId: eventId || `manual-${Date.now()}`,
+      topic,
+      shopDomain,
+      payload,
+      storeId: store.id,
+      organizationId: store.organization_id,
+    };
+
+    // Tentar enfileirar no QStash
+    if (isQStashConfigured()) {
+      const messageId = await enqueueShopifyWebhook(job);
+      
+      if (messageId) {
+        const duration = Date.now() - startTime;
+        console.log(`✅ Webhook ${topic} queued in ${duration}ms (messageId: ${messageId})`);
+        
+        return NextResponse.json({
+          received: true,
+          queued: true,
+          messageId,
+          duration,
+        });
+      }
+    }
+
+    // 9. Fallback: processar de forma síncrona se QStash não está configurado
+    console.log(`⚠️ QStash not available, processing synchronously`);
+    
+    // Importar e processar diretamente
+    const { processShopifyWebhook } = await import('@/lib/services/shopify');
+    const result = await processShopifyWebhook(job);
+    
+    const duration = Date.now() - startTime;
+    console.log(`✅ Webhook ${topic} processed in ${duration}ms (sync mode)`);
+    
+    return NextResponse.json({
+      received: true,
+      processed: true,
+      result: result.action,
+      duration,
+    });
+
   } catch (error: any) {
     console.error('Webhook error:', error);
-    return NextResponse.json({ received: true, error: error.message });
+    
+    // Sempre retornar 200 para evitar retries infinitos do Shopify
+    // O erro é logado para investigação
+    return NextResponse.json({
+      received: true,
+      error: error.message,
+    });
   }
 }
 
 // =============================================
-// Processar Cliente
+// Helper: Verificar se evento está habilitado
 // =============================================
-async function processCustomer(organizationId: string, customer: any, topic: string) {
-  const name = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Cliente Shopify';
-  const email = customer.email;
-  const phone = customer.phone;
-
-  if (!email && !phone) return;
-
-  // Verificar se já existe
-  let existingContact = null;
+function checkEventEnabled(topic: string, store: any): boolean {
+  // Eventos de app sempre habilitados
+  if (topic === 'app/uninstalled') return true;
   
-  if (email) {
-    const { data } = await supabase
-      .from('contacts')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .ilike('email', email)
-      .maybeSingle();
-    existingContact = data;
+  // Verificar configuração de sync
+  if (topic.startsWith('customers/')) {
+    return store.sync_customers ?? true;
   }
-
-  if (!existingContact && phone) {
-    const { data } = await supabase
-      .from('contacts')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('phone', phone)
-      .maybeSingle();
-    existingContact = data;
-  }
-
-  if (existingContact) {
-    await supabase
-      .from('contacts')
-      .update({
-        name,
-        email,
-        phone,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', existingContact.id);
-    console.log(`✅ Customer updated: ${email || phone}`);
-  } else {
-    await supabase
-      .from('contacts')
-      .insert({
-        organization_id: organizationId,
-        name,
-        email,
-        phone,
-        source: 'shopify',
-        tags: ['shopify', 'customer'],
-      });
-    console.log(`✅ Customer created: ${email || phone}`);
-  }
-}
-
-// =============================================
-// Processar Pedido
-// =============================================
-async function processOrder(organizationId: string, order: any, topic: string) {
-  const customer = order.customer || {};
-  const name = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Cliente Shopify';
-  const email = order.email || customer.email;
-  const phone = order.phone || customer.phone;
-  const value = parseFloat(order.total_price || '0');
-
-  if (!email && !phone) return;
-
-  // Buscar ou criar contato
-  let contactId: string | null = null;
   
-  if (email) {
-    const { data } = await supabase
-      .from('contacts')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .ilike('email', email)
-      .maybeSingle();
-    contactId = data?.id;
+  if (topic.startsWith('orders/')) {
+    return store.sync_orders ?? true;
   }
-
-  if (!contactId && phone) {
-    const { data } = await supabase
-      .from('contacts')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('phone', phone)
-      .maybeSingle();
-    contactId = data?.id;
-  }
-
-  if (!contactId) {
-    const { data: newContact } = await supabase
-      .from('contacts')
-      .insert({
-        organization_id: organizationId,
-        name,
-        email,
-        phone,
-        source: 'shopify_order',
-        tags: ['shopify', 'order'],
-      })
-      .select('id')
-      .single();
-    contactId = newContact?.id;
-    console.log(`✅ Contact created from order: ${email || phone}`);
-  }
-
-  // Criar deal se tem valor
-  if (contactId && value > 0) {
-    // Buscar pipeline padrão
-    const { data: pipeline } = await supabase
-      .from('pipelines')
-      .select('id, stages(id, sort_order)')
-      .eq('organization_id', organizationId)
-      .eq('is_default', true)
-      .maybeSingle();
-
-    if (pipeline) {
-      const stages = (pipeline.stages as any[]) || [];
-      const firstStage = stages.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))[0];
-
-      if (firstStage) {
-        // Verificar se deal do pedido já existe
-        const { data: existingDeal } = await supabase
-          .from('deals')
-          .select('id')
-          .eq('organization_id', organizationId)
-          .eq('contact_id', contactId)
-          .contains('metadata', { shopify_order_id: order.id })
-          .maybeSingle();
-
-        if (!existingDeal) {
-          await supabase.from('deals').insert({
-            organization_id: organizationId,
-            pipeline_id: pipeline.id,
-            stage_id: firstStage.id,
-            contact_id: contactId,
-            title: `Pedido #${order.order_number || order.id}`,
-            value,
-            status: topic === 'orders/paid' ? 'won' : 'open',
-            source: 'shopify',
-            metadata: {
-              shopify_order_id: order.id,
-              order_number: order.order_number,
-              financial_status: order.financial_status,
-            },
-          });
-          console.log(`✅ Deal created: Pedido #${order.order_number} - R$ ${value}`);
-        } else if (topic === 'orders/paid') {
-          await supabase
-            .from('deals')
-            .update({ status: 'won' })
-            .eq('id', existingDeal.id);
-          console.log(`✅ Deal marked as won: Pedido #${order.order_number}`);
-        }
-      }
-    }
-  }
-}
-
-// =============================================
-// Processar Carrinho Abandonado
-// =============================================
-async function processCheckout(organizationId: string, checkout: any, topic: string) {
-  const customer = checkout.customer || {};
-  const name = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Cliente Shopify';
-  const email = checkout.email || customer.email;
-  const phone = checkout.phone || customer.phone;
-  const value = parseFloat(checkout.total_price || '0');
-
-  if (!email && !phone) return;
-
-  // Verificar se já existe
-  let existingContact = null;
   
-  if (email) {
-    const { data } = await supabase
-      .from('contacts')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .ilike('email', email)
-      .maybeSingle();
-    existingContact = data;
+  if (topic.startsWith('checkouts/')) {
+    return store.sync_checkouts ?? true;
   }
-
-  if (!existingContact) {
-    await supabase
-      .from('contacts')
-      .insert({
-        organization_id: organizationId,
-        name,
-        email,
-        phone,
-        source: 'shopify_abandoned',
-        tags: ['shopify', 'abandoned_cart'],
-        custom_fields: {
-          abandoned_checkout_url: checkout.abandoned_checkout_url,
-          cart_value: value,
-        },
-      });
-    console.log(`✅ Abandoned cart contact created: ${email || phone}`);
-  }
+  
+  // Outros eventos: permitir por padrão
+  return true;
 }
