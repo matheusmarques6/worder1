@@ -270,29 +270,51 @@ export async function checkWebhookHealth(): Promise<{
   webhooksFixed: number;
   webhooksCreated: number;
   errors: number;
+  details: any[];
 }> {
-  console.log('🔍 Checking webhook health...');
+  console.log('========================================');
+  console.log('🔍 VERIFICANDO WEBHOOKS...');
+  console.log('========================================');
   
   const result = {
     storesChecked: 0,
     webhooksFixed: 0,
     webhooksCreated: 0,
     errors: 0,
+    details: [] as any[],
   };
   
-  const { data: stores } = await supabase
+  const { data: stores, error: storesError } = await supabase
     .from('shopify_stores')
     .select('*')
     .eq('is_active', true);
   
-  if (!stores?.length) {
-    console.log('No active stores to check');
+  if (storesError) {
+    console.error('❌ Erro ao buscar lojas:', storesError);
+    result.details.push({ error: 'Failed to fetch stores', message: storesError.message });
     return result;
   }
   
+  if (!stores?.length) {
+    console.log('⚠️ Nenhuma loja ativa encontrada');
+    result.details.push({ warning: 'No active stores found' });
+    return result;
+  }
+  
+  console.log(`📦 ${stores.length} loja(s) encontrada(s)`);
+  
   // URL correta para webhooks
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || '';
   const correctWebhookUrl = `${baseUrl}/api/webhooks/shopify`;
+  
+  console.log(`🔗 URL dos webhooks: ${correctWebhookUrl}`);
+  
+  if (!baseUrl) {
+    console.error('❌ NEXT_PUBLIC_APP_URL não configurado!');
+    result.details.push({ error: 'NEXT_PUBLIC_APP_URL not configured' });
+    result.errors++;
+    return result;
+  }
   
   // Webhooks necessários
   const requiredTopics = [
@@ -307,118 +329,168 @@ export async function checkWebhookHealth(): Promise<{
   ];
   
   for (const store of stores) {
-    try {
-      result.storesChecked++;
-      
-      if (!store.access_token) {
-        console.warn(`Store ${store.shop_domain} has no access token`);
-        continue;
-      }
-      
-      const client = new ShopifyClient({
-        shopDomain: store.shop_domain,
-        accessToken: store.access_token,
-      });
-      
-      // Buscar webhooks registrados
-      let existingWebhooks: any[] = [];
-      try {
-        const response = await client.getWebhooks();
-        existingWebhooks = response.webhooks || [];
-      } catch (e) {
-        console.error(`Failed to fetch webhooks for ${store.shop_domain}:`, e);
-        result.errors++;
-        continue;
-      }
-      
-      console.log(`[${store.shop_domain}] Found ${existingWebhooks.length} webhooks`);
-      
-      // 1. Deletar webhooks com URL errada
-      for (const webhook of existingWebhooks) {
-        const hasCorrectUrl = webhook.address === correctWebhookUrl;
-        
-        if (!hasCorrectUrl) {
-          console.log(`[${store.shop_domain}] Deleting webhook with wrong URL: ${webhook.address}`);
-          try {
-            await client.deleteWebhook(webhook.id);
-            result.webhooksFixed++;
-          } catch (e) {
-            console.error(`Failed to delete webhook ${webhook.id}:`, e);
-          }
-        }
-      }
-      
-      // 2. Verificar quais webhooks estão faltando
-      const correctWebhooks = existingWebhooks.filter(w => w.address === correctWebhookUrl);
-      const registeredTopics = correctWebhooks.map((w: any) => w.topic);
-      const missingTopics = requiredTopics.filter(t => !registeredTopics.includes(t));
-      
-      // 3. Registrar webhooks faltantes
-      if (missingTopics.length > 0) {
-        console.log(`[${store.shop_domain}] Creating ${missingTopics.length} missing webhooks:`, missingTopics);
-        
-        for (const topic of missingTopics) {
-          try {
-            await client.createWebhook({
-              topic,
-              address: correctWebhookUrl,
-              format: 'json',
-            });
-            result.webhooksCreated++;
-            console.log(`[${store.shop_domain}] Created webhook: ${topic}`);
-          } catch (error: any) {
-            // Pode dar erro se webhook já existe (race condition)
-            if (!error.message?.includes('already exists')) {
-              console.error(`Failed to create webhook ${topic}:`, error);
-              result.errors++;
-            }
-          }
-        }
-      }
-      
-      // 4. Atualizar status da loja
-      await supabase
-        .from('shopify_stores')
-        .update({
-          connection_status: 'active',
-          health_checked_at: new Date().toISOString(),
-          consecutive_failures: 0,
-          status_message: null,
-        })
-        .eq('id', store.id);
-      
-      // 5. Criar notificação se teve correções
-      if (result.webhooksFixed > 0 || result.webhooksCreated > 0) {
-        await supabase.from('notifications').insert({
-          organization_id: store.organization_id,
-          type: 'integration',
-          title: 'Webhooks do Shopify corrigidos',
-          message: `Webhooks da loja ${store.shop_name || store.shop_domain} foram verificados e corrigidos automaticamente.`,
-          data: {
-            store_id: store.id,
-            webhooks_fixed: result.webhooksFixed,
-            webhooks_created: result.webhooksCreated,
-          },
-          is_read: false,
-        });
-      }
-        
-    } catch (error: any) {
-      console.error(`Webhook health check failed for ${store.shop_domain}:`, error);
-      result.errors++;
-      
-      // Incrementar falhas consecutivas
-      await supabase
-        .from('shopify_stores')
-        .update({
-          consecutive_failures: (store.consecutive_failures || 0) + 1,
-          health_checked_at: new Date().toISOString(),
-          status_message: error.message,
-        })
-        .eq('id', store.id);
+    console.log('----------------------------------------');
+    console.log(`🏪 Processando: ${store.shop_domain}`);
+    
+    const storeDetail: any = {
+      shop_domain: store.shop_domain,
+      webhooks_before: 0,
+      webhooks_created: [],
+      webhooks_deleted: [],
+      errors: [],
+    };
+    
+    result.storesChecked++;
+    
+    if (!store.access_token) {
+      console.error(`❌ Loja sem access_token: ${store.shop_domain}`);
+      storeDetail.errors.push('No access token');
+      result.details.push(storeDetail);
+      continue;
     }
+    
+    // 1. Buscar webhooks existentes usando fetch direto
+    let existingWebhooks: any[] = [];
+    try {
+      console.log(`   Buscando webhooks existentes...`);
+      const listResponse = await fetch(
+        `https://${store.shop_domain}/admin/api/2024-01/webhooks.json`,
+        {
+          headers: {
+            'X-Shopify-Access-Token': store.access_token,
+          },
+        }
+      );
+      
+      if (!listResponse.ok) {
+        const errorText = await listResponse.text();
+        console.error(`   ❌ Erro ao listar webhooks (${listResponse.status}):`, errorText);
+        storeDetail.errors.push(`List webhooks failed: ${listResponse.status} - ${errorText}`);
+        result.errors++;
+        result.details.push(storeDetail);
+        continue;
+      }
+      
+      const listData = await listResponse.json();
+      existingWebhooks = listData.webhooks || [];
+      storeDetail.webhooks_before = existingWebhooks.length;
+      console.log(`   ✓ ${existingWebhooks.length} webhooks encontrados`);
+      
+    } catch (e: any) {
+      console.error(`   ❌ Exceção ao listar webhooks:`, e.message);
+      storeDetail.errors.push(`Exception listing webhooks: ${e.message}`);
+      result.errors++;
+      result.details.push(storeDetail);
+      continue;
+    }
+    
+    // 2. Deletar webhooks com URL errada
+    for (const webhook of existingWebhooks) {
+      if (webhook.address !== correctWebhookUrl) {
+        console.log(`   🗑️ Deletando webhook com URL errada: ${webhook.topic} -> ${webhook.address}`);
+        try {
+          const deleteResponse = await fetch(
+            `https://${store.shop_domain}/admin/api/2024-01/webhooks/${webhook.id}.json`,
+            {
+              method: 'DELETE',
+              headers: {
+                'X-Shopify-Access-Token': store.access_token,
+              },
+            }
+          );
+          
+          if (deleteResponse.ok || deleteResponse.status === 404) {
+            storeDetail.webhooks_deleted.push(webhook.topic);
+            result.webhooksFixed++;
+            console.log(`   ✓ Deletado: ${webhook.topic}`);
+          } else {
+            const errText = await deleteResponse.text();
+            console.error(`   ❌ Falha ao deletar: ${errText}`);
+            storeDetail.errors.push(`Delete ${webhook.topic} failed: ${errText}`);
+          }
+        } catch (e: any) {
+          console.error(`   ❌ Exceção ao deletar:`, e.message);
+          storeDetail.errors.push(`Delete exception: ${e.message}`);
+        }
+      }
+    }
+    
+    // 3. Verificar quais webhooks estão faltando
+    const correctWebhooks = existingWebhooks.filter(w => w.address === correctWebhookUrl);
+    const registeredTopics = correctWebhooks.map(w => w.topic);
+    const missingTopics = requiredTopics.filter(t => !registeredTopics.includes(t));
+    
+    console.log(`   📋 Webhooks OK: ${registeredTopics.length}, Faltando: ${missingTopics.length}`);
+    
+    // 4. Criar webhooks faltantes
+    for (const topic of missingTopics) {
+      console.log(`   ➕ Criando webhook: ${topic}`);
+      try {
+        const createResponse = await fetch(
+          `https://${store.shop_domain}/admin/api/2024-01/webhooks.json`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': store.access_token,
+            },
+            body: JSON.stringify({
+              webhook: {
+                topic,
+                address: correctWebhookUrl,
+                format: 'json',
+              },
+            }),
+          }
+        );
+        
+        const createData = await createResponse.json();
+        
+        if (createResponse.ok) {
+          storeDetail.webhooks_created.push(topic);
+          result.webhooksCreated++;
+          console.log(`   ✓ Criado: ${topic}`);
+        } else {
+          const errorMsg = JSON.stringify(createData.errors || createData);
+          // Já existe não é erro
+          if (errorMsg.includes('already') || errorMsg.includes('taken')) {
+            console.log(`   ⚠️ Já existe: ${topic}`);
+          } else {
+            console.error(`   ❌ Falha ao criar ${topic}:`, errorMsg);
+            storeDetail.errors.push(`Create ${topic} failed: ${errorMsg}`);
+            result.errors++;
+          }
+        }
+      } catch (e: any) {
+        console.error(`   ❌ Exceção ao criar ${topic}:`, e.message);
+        storeDetail.errors.push(`Create ${topic} exception: ${e.message}`);
+        result.errors++;
+      }
+    }
+    
+    // 5. Atualizar status da loja
+    await supabase
+      .from('shopify_stores')
+      .update({
+        connection_status: storeDetail.errors.length === 0 ? 'active' : 'error',
+        health_checked_at: new Date().toISOString(),
+        consecutive_failures: storeDetail.errors.length,
+        status_message: storeDetail.errors.length > 0 ? storeDetail.errors.join('; ') : null,
+      })
+      .eq('id', store.id);
+    
+    result.details.push(storeDetail);
+    
+    console.log(`   📊 Resultado: ${storeDetail.webhooks_created.length} criados, ${storeDetail.webhooks_deleted.length} deletados, ${storeDetail.errors.length} erros`);
   }
   
-  console.log('🔍 Webhook health check completed:', result);
+  console.log('========================================');
+  console.log('🔍 VERIFICAÇÃO CONCLUÍDA');
+  console.log(`   Lojas: ${result.storesChecked}`);
+  console.log(`   Webhooks criados: ${result.webhooksCreated}`);
+  console.log(`   Webhooks corrigidos: ${result.webhooksFixed}`);
+  console.log(`   Erros: ${result.errors}`);
+  console.log('========================================');
+  
   return result;
 }

@@ -156,31 +156,85 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Configurar webhooks
-    const webhookBaseUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/shopify`;
+    // Configurar webhooks - CRÍTICO: não ignorar erros
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${request.headers.get('host')}`;
+    const webhookUrl = `${appUrl}/api/webhooks/shopify`;
+    
+    console.log('========================================');
+    console.log('[SHOPIFY CALLBACK] Registrando webhooks...');
+    console.log('[SHOPIFY CALLBACK] URL base:', appUrl);
+    console.log('[SHOPIFY CALLBACK] Webhook URL:', webhookUrl);
+    console.log('[SHOPIFY CALLBACK] Shop:', shop);
+    console.log('========================================');
+    
     const webhookTopics = [
-      SHOPIFY_WEBHOOK_TOPICS.CUSTOMERS_CREATE,
-      SHOPIFY_WEBHOOK_TOPICS.ORDERS_CREATE,
-      SHOPIFY_WEBHOOK_TOPICS.ORDERS_PAID,
-      SHOPIFY_WEBHOOK_TOPICS.CHECKOUTS_CREATE,
+      'customers/create',
+      'customers/update', 
+      'orders/create',
+      'orders/paid',
+      'orders/fulfilled',
+      'orders/cancelled',
+      'checkouts/create',
+      'checkouts/update',
     ];
-
+    
+    const webhookResults: { topic: string; success: boolean; error?: string }[] = [];
+    
     for (const topic of webhookTopics) {
       try {
-        await client.createWebhook({
-          topic,
-          address: webhookBaseUrl,
-          format: 'json',
-        });
+        console.log(`[SHOPIFY CALLBACK] Criando webhook: ${topic}`);
+        
+        const response = await fetch(
+          `https://${shop}/admin/api/2024-01/webhooks.json`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': tokenData.access_token,
+            },
+            body: JSON.stringify({
+              webhook: {
+                topic,
+                address: webhookUrl,
+                format: 'json',
+              },
+            }),
+          }
+        );
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+          console.log(`[SHOPIFY CALLBACK] ✅ Webhook criado: ${topic}`);
+          webhookResults.push({ topic, success: true });
+        } else {
+          // Se webhook já existe, tudo bem
+          const errorMsg = JSON.stringify(result.errors || result);
+          if (errorMsg.includes('already exists') || errorMsg.includes('for this topic has already been taken')) {
+            console.log(`[SHOPIFY CALLBACK] ⚠️ Webhook já existe: ${topic}`);
+            webhookResults.push({ topic, success: true, error: 'already_exists' });
+          } else {
+            console.error(`[SHOPIFY CALLBACK] ❌ Erro webhook ${topic}:`, errorMsg);
+            webhookResults.push({ topic, success: false, error: errorMsg });
+          }
+        }
       } catch (webhookError: any) {
-        // Webhook pode já existir, ignorar
-        console.warn(`Webhook ${topic} error:`, webhookError.message);
+        console.error(`[SHOPIFY CALLBACK] ❌ Exceção webhook ${topic}:`, webhookError.message);
+        webhookResults.push({ topic, success: false, error: webhookError.message });
       }
     }
+    
+    // Log resultado final
+    const successCount = webhookResults.filter(r => r.success).length;
+    const failCount = webhookResults.filter(r => !r.success).length;
+    console.log('========================================');
+    console.log(`[SHOPIFY CALLBACK] Webhooks: ${successCount} OK, ${failCount} falhas`);
+    console.log('[SHOPIFY CALLBACK] Resultados:', JSON.stringify(webhookResults));
+    console.log('========================================');
 
     // Redirecionar para página de sucesso
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/integrations/shopify?success=true`
+      `${appUrl}/integrations/shopify?success=true&webhooks=${successCount}`
     );
   } catch (error: any) {
     console.error('Shopify callback error:', error);
