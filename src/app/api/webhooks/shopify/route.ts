@@ -318,13 +318,7 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
   
   if (contact && store.default_pipeline_id) {
     // Mover deal para estágio "pago" ou marcar como ganho
-    const paidStageId = store.stage_mapping?.paid;
-    if (paidStageId) {
-      await moveDealToStage(contact.id, store, paidStageId);
-    } else {
-      // Se não tem estágio específico, marcar como ganho
-      await markDealAsWon(contact.id, store);
-    }
+    await moveDealToStage(contact.id, store, 'paid');
   }
 
   // Emitir evento
@@ -366,10 +360,7 @@ async function processOrderFulfilled(store: ShopifyStoreConfig, order: any) {
   
   if (contact && store.default_pipeline_id) {
     // Mover deal para estágio "enviado"
-    const fulfilledStageId = store.stage_mapping?.fulfilled;
-    if (fulfilledStageId) {
-      await moveDealToStage(contact.id, store, fulfilledStageId);
-    }
+    await moveDealToStage(contact.id, store, 'fulfilled');
   }
 
   // Emitir evento
