@@ -261,74 +261,151 @@ async function processReconciliationOrder(
 
 /**
  * Verifica saúde dos webhooks e re-registra se necessário
+ * - Verifica se todos os webhooks estão registrados
+ * - Verifica se as URLs estão corretas
+ * - Re-registra webhooks faltantes ou com URL errada
  */
-export async function checkWebhookHealth(): Promise<void> {
+export async function checkWebhookHealth(): Promise<{
+  storesChecked: number;
+  webhooksFixed: number;
+  webhooksCreated: number;
+  errors: number;
+}> {
   console.log('🔍 Checking webhook health...');
+  
+  const result = {
+    storesChecked: 0,
+    webhooksFixed: 0,
+    webhooksCreated: 0,
+    errors: 0,
+  };
   
   const { data: stores } = await supabase
     .from('shopify_stores')
     .select('*')
-    .eq('is_active', true)
-    .eq('is_configured', true);
+    .eq('is_active', true);
   
-  if (!stores?.length) return;
+  if (!stores?.length) {
+    console.log('No active stores to check');
+    return result;
+  }
+  
+  // URL correta para webhooks
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const correctWebhookUrl = `${baseUrl}/api/webhooks/shopify`;
+  
+  // Webhooks necessários
+  const requiredTopics = [
+    'customers/create',
+    'customers/update',
+    'orders/create',
+    'orders/paid',
+    'orders/fulfilled',
+    'orders/cancelled',
+    'checkouts/create',
+    'checkouts/update',
+  ];
   
   for (const store of stores) {
     try {
+      result.storesChecked++;
+      
+      if (!store.access_token) {
+        console.warn(`Store ${store.shop_domain} has no access token`);
+        continue;
+      }
+      
       const client = new ShopifyClient({
         shopDomain: store.shop_domain,
         accessToken: store.access_token,
       });
       
       // Buscar webhooks registrados
-      const { webhooks } = await client.getWebhooks();
+      let existingWebhooks: any[] = [];
+      try {
+        const response = await client.getWebhooks();
+        existingWebhooks = response.webhooks || [];
+      } catch (e) {
+        console.error(`Failed to fetch webhooks for ${store.shop_domain}:`, e);
+        result.errors++;
+        continue;
+      }
       
-      // Verificar se todos os webhooks necessários estão registrados
-      const requiredTopics = [
-        'customers/create',
-        'customers/update',
-        'orders/create',
-        'orders/paid',
-        'checkouts/create',
-        'checkouts/update',
-      ];
+      console.log(`[${store.shop_domain}] Found ${existingWebhooks.length} webhooks`);
       
-      const registeredTopics = webhooks.map((w: any) => w.topic);
+      // 1. Deletar webhooks com URL errada
+      for (const webhook of existingWebhooks) {
+        const hasCorrectUrl = webhook.address === correctWebhookUrl;
+        
+        if (!hasCorrectUrl) {
+          console.log(`[${store.shop_domain}] Deleting webhook with wrong URL: ${webhook.address}`);
+          try {
+            await client.deleteWebhook(webhook.id);
+            result.webhooksFixed++;
+          } catch (e) {
+            console.error(`Failed to delete webhook ${webhook.id}:`, e);
+          }
+        }
+      }
+      
+      // 2. Verificar quais webhooks estão faltando
+      const correctWebhooks = existingWebhooks.filter(w => w.address === correctWebhookUrl);
+      const registeredTopics = correctWebhooks.map((w: any) => w.topic);
       const missingTopics = requiredTopics.filter(t => !registeredTopics.includes(t));
       
+      // 3. Registrar webhooks faltantes
       if (missingTopics.length > 0) {
-        console.log(`Missing webhooks for ${store.shop_domain}:`, missingTopics);
+        console.log(`[${store.shop_domain}] Creating ${missingTopics.length} missing webhooks:`, missingTopics);
         
-        // Re-registrar webhooks faltantes
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
-        if (baseUrl) {
-          for (const topic of missingTopics) {
-            try {
-              await client.createWebhook({
-                topic,
-                address: `${baseUrl}/api/integrations/shopify/webhook`,
-                format: 'json',
-              });
-              console.log(`Registered webhook: ${topic}`);
-            } catch (error) {
-              console.error(`Failed to register webhook ${topic}:`, error);
+        for (const topic of missingTopics) {
+          try {
+            await client.createWebhook({
+              topic,
+              address: correctWebhookUrl,
+              format: 'json',
+            });
+            result.webhooksCreated++;
+            console.log(`[${store.shop_domain}] Created webhook: ${topic}`);
+          } catch (error: any) {
+            // Pode dar erro se webhook já existe (race condition)
+            if (!error.message?.includes('already exists')) {
+              console.error(`Failed to create webhook ${topic}:`, error);
+              result.errors++;
             }
           }
         }
       }
       
-      // Atualizar status
+      // 4. Atualizar status da loja
       await supabase
         .from('shopify_stores')
         .update({
           connection_status: 'active',
           health_checked_at: new Date().toISOString(),
           consecutive_failures: 0,
+          status_message: null,
         })
         .eq('id', store.id);
+      
+      // 5. Criar notificação se teve correções
+      if (result.webhooksFixed > 0 || result.webhooksCreated > 0) {
+        await supabase.from('notifications').insert({
+          organization_id: store.organization_id,
+          type: 'integration',
+          title: 'Webhooks do Shopify corrigidos',
+          message: `Webhooks da loja ${store.shop_name || store.shop_domain} foram verificados e corrigidos automaticamente.`,
+          data: {
+            store_id: store.id,
+            webhooks_fixed: result.webhooksFixed,
+            webhooks_created: result.webhooksCreated,
+          },
+          is_read: false,
+        });
+      }
         
     } catch (error: any) {
       console.error(`Webhook health check failed for ${store.shop_domain}:`, error);
+      result.errors++;
       
       // Incrementar falhas consecutivas
       await supabase
@@ -342,5 +419,6 @@ export async function checkWebhookHealth(): Promise<void> {
     }
   }
   
-  console.log('🔍 Webhook health check completed');
+  console.log('🔍 Webhook health check completed:', result);
+  return result;
 }

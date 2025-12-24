@@ -74,8 +74,7 @@ export async function GET(request: NextRequest) {
         
       case 'health':
         // Verificar saúde dos webhooks (recomendado: cada 6 horas)
-        await checkWebhookHealth();
-        result = { status: 'completed' };
+        result = await checkWebhookHealth();
         break;
         
       case 'cleanup':
@@ -88,11 +87,12 @@ export async function GET(request: NextRequest) {
         // Executar todos os jobs (para teste)
         const abandonedResult = await detectAbandonedCarts();
         const reconcileResult = await runReconciliation();
-        await checkWebhookHealth();
+        const healthResult = await checkWebhookHealth();
         const cleanupResult = await cleanupOldWebhookEvents();
         result = {
           abandoned: abandonedResult,
           reconcile: reconcileResult,
+          health: healthResult,
           cleanup: { eventsDeleted: cleanupResult },
         };
         break;

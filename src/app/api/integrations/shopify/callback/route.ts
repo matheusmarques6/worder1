@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Configurar webhooks
-    const webhookBaseUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/shopify/webhooks`;
+    const webhookBaseUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/shopify`;
     const webhookTopics = [
       SHOPIFY_WEBHOOK_TOPICS.CUSTOMERS_CREATE,
       SHOPIFY_WEBHOOK_TOPICS.ORDERS_CREATE,
