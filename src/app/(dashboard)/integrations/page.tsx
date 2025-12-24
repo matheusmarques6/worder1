@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
 import WhatsAppIntegrationCard from '@/components/whatsapp/WhatsAppIntegrationCard'
+import ActiveIntegrationsSection from '@/components/integrations/active/ActiveIntegrationsSection'
 
 // Types
 interface IntegrationCategory {
@@ -410,22 +411,6 @@ export default function IntegrationsPage() {
             Conecte suas ferramentas favoritas para capturar leads automaticamente
           </p>
         </div>
-
-        {/* Stats */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-4 py-2 bg-dark-800/50 rounded-xl">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-sm text-dark-300">
-              <span className="font-semibold text-white">{activeCount}</span> ativas
-            </span>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-dark-800/50 rounded-xl">
-            <Puzzle className="w-4 h-4 text-dark-400" />
-            <span className="text-sm text-dark-300">
-              <span className="font-semibold text-white">{installedCount}</span> instaladas
-            </span>
-          </div>
-        </div>
       </div>
 
       {/* Filters */}
@@ -508,32 +493,9 @@ export default function IntegrationsPage() {
         </div>
       </div>
 
-      {/* Native Integrations - WhatsApp */}
-      {!search && !selectedCategory && (
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-4">
-            <MessageSquare className="w-5 h-5 text-green-400" />
-            <h2 className="text-lg font-semibold text-white">Mensagens</h2>
-            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded-full">
-              Nativo
-            </span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {user?.organization_id ? (
-              <WhatsAppIntegrationCard organizationId={user.organization_id} />
-            ) : (
-              <div className="p-6 bg-dark-800 border border-dark-700 rounded-xl animate-pulse">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-dark-700 rounded-xl"></div>
-                  <div className="flex-1">
-                    <div className="h-5 bg-dark-700 rounded w-32 mb-2"></div>
-                    <div className="h-4 bg-dark-700 rounded w-48"></div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+      {/* ====== SUAS INTEGRAÇÕES ATIVAS ====== */}
+      {!search && !selectedCategory && user?.organization_id && (
+        <ActiveIntegrationsSection organizationId={user.organization_id} />
       )}
 
       {/* Other Integrations */}
