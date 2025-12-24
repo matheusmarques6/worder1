@@ -187,6 +187,7 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     orders_count: order.customer?.orders_count || 1,
     total_spent: order.customer?.total_spent || order.total_price,
     tags: order.customer?.tags || '',
+    accepts_marketing: order.customer?.accepts_marketing ?? false,
     created_at: order.customer?.created_at || order.created_at,
     updated_at: order.customer?.updated_at || order.created_at,
   };
@@ -489,6 +490,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       orders_count: 0,
       total_spent: '0',
       tags: '',
+      accepts_marketing: false,
       created_at: checkout.created_at,
       updated_at: checkout.created_at,
     };
