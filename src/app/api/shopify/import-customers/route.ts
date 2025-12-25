@@ -216,18 +216,6 @@ function normalizePhone(phone: string | null | undefined): string | null {
 }
 
 // =============================================
-// Helper: Construir nome do cliente
-// =============================================
-function buildCustomerName(customer: any): string {
-  const parts = [
-    customer.first_name,
-    customer.last_name,
-  ].filter(Boolean);
-  
-  return parts.join(' ').trim() || 'Cliente Shopify';
-}
-
-// =============================================
 // GET: Buscar contagem de clientes e tags disponíveis
 // =============================================
 export async function GET(request: NextRequest) {
@@ -423,6 +411,7 @@ export async function POST(request: NextRequest) {
       skipped: 0,
       errors: 0,
       dealsCreated: 0,
+      errorDetails: [] as string[],
     };
 
     // Tags para os contatos
@@ -437,7 +426,8 @@ export async function POST(request: NextRequest) {
       try {
         const email = customer.email?.toLowerCase().trim() || null;
         const phone = normalizePhone(customer.phone);
-        const name = buildCustomerName(customer);
+        const firstName = customer.first_name?.trim() || null;
+        const lastName = customer.last_name?.trim() || null;
 
         if (!email && !phone) {
           stats.skipped++;
@@ -485,8 +475,12 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           };
           
-          if (!existingContact.name || existingContact.name === 'Cliente Shopify') {
-            updateData.name = name;
+          if (!existingContact.first_name && firstName) {
+            updateData.first_name = firstName;
+          }
+          
+          if (!existingContact.last_name && lastName) {
+            updateData.last_name = lastName;
           }
           
           if (!existingContact.phone && phone) {
@@ -497,26 +491,26 @@ export async function POST(request: NextRequest) {
             updateData.email = email;
           }
 
-          if (existingContact.type === 'lead' && finalContactType === 'customer') {
-            updateData.type = 'customer';
-          }
+          // Atualizar campos do Shopify
+          updateData.shopify_customer_id = String(customer.id);
+          updateData.total_orders = customer.orders_count || 0;
+          updateData.total_spent = parseFloat(customer.total_spent || '0');
 
+          // Merge tags
           const existingTags = existingContact.tags || [];
           updateData.tags = Array.from(new Set([...existingTags, ...contactTags]));
 
-          updateData.metadata = {
-            ...(existingContact.metadata || {}),
-            shopify_id: String(customer.id),
-            shopify_store: store.shop_domain,
-            orders_count: customer.orders_count || 0,
-            total_spent: customer.total_spent || '0',
-            last_shopify_import: new Date().toISOString(),
-          };
-
-          await supabase
+          const { error: updateError } = await supabase
             .from('contacts')
             .update(updateData)
             .eq('id', existingContact.id);
+
+          if (updateError) {
+            console.error('Error updating contact:', updateError);
+            stats.errors++;
+            stats.errorDetails.push(`Update: ${updateError.message}`);
+            continue;
+          }
 
           contactId = existingContact.id;
           stats.updated++;
@@ -527,17 +521,17 @@ export async function POST(request: NextRequest) {
             .from('contacts')
             .insert({
               organization_id: store.organization_id,
-              name,
+              first_name: firstName,
+              last_name: lastName,
               email,
               phone,
-              type: finalContactType,
               source: 'shopify',
+              shopify_customer_id: String(customer.id),
+              total_orders: customer.orders_count || 0,
+              total_spent: parseFloat(customer.total_spent || '0'),
               tags: contactTags,
-              metadata: {
-                shopify_id: String(customer.id),
+              custom_fields: {
                 shopify_store: store.shop_domain,
-                orders_count: customer.orders_count || 0,
-                total_spent: customer.total_spent || '0',
                 created_from_import: true,
                 imported_at: new Date().toISOString(),
               },
@@ -546,8 +540,16 @@ export async function POST(request: NextRequest) {
             .single();
 
           if (insertError) {
-            console.error('Error creating contact:', insertError);
+            console.error('Error creating contact:', {
+              message: insertError.message,
+              details: insertError.details,
+              hint: insertError.hint,
+              code: insertError.code,
+              customer_email: email,
+              customer_phone: phone,
+            });
             stats.errors++;
+            stats.errorDetails.push(`Insert: ${insertError.message}`);
             continue;
           }
 
@@ -558,6 +560,7 @@ export async function POST(request: NextRequest) {
         // Criar deal se solicitado
         if (createDeals && pipelineId && stageId && contactId) {
           const dealValue = parseFloat(customer.total_spent || '0');
+          const dealName = [firstName, lastName].filter(Boolean).join(' ') || 'Cliente Shopify';
           
           const { error: dealError } = await supabase
             .from('deals')
@@ -566,15 +569,10 @@ export async function POST(request: NextRequest) {
               contact_id: contactId,
               pipeline_id: pipelineId,
               stage_id: stageId,
-              title: `${name} - Shopify`,
+              title: `${dealName} - Shopify`,
               value: dealValue,
               currency: 'BRL',
-              source: 'shopify_import',
-              metadata: {
-                shopify_customer_id: String(customer.id),
-                orders_count: customer.orders_count || 0,
-                imported_at: new Date().toISOString(),
-              },
+              tags: ['shopify-import'],
             });
           
           if (!dealError) {
@@ -582,9 +580,10 @@ export async function POST(request: NextRequest) {
           }
         }
 
-      } catch (err) {
-        console.error('Error processing customer:', customer.id, err);
+      } catch (err: any) {
+        console.error('Error processing customer:', customer.id, err.message);
         stats.errors++;
+        stats.errorDetails.push(`Customer ${customer.id}: ${err.message}`);
       }
     }
 

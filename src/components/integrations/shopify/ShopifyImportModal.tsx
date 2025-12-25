@@ -40,6 +40,7 @@ interface ImportStats {
   skipped: number
   errors: number
   dealsCreated: number
+  errorDetails?: string[]
 }
 
 type ImportStatus = 'idle' | 'loading' | 'importing' | 'completed' | 'error'
@@ -751,6 +752,25 @@ export default function ShopifyImportModal({
                     <span className="text-sm text-purple-300">
                       {stats.dealsCreated} deals criados no pipeline
                     </span>
+                  </div>
+                )}
+
+                {/* Error Details */}
+                {stats.errors > 0 && stats.errorDetails && stats.errorDetails.length > 0 && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                    <p className="text-sm font-medium text-red-400 mb-2">Detalhes dos erros:</p>
+                    <div className="max-h-24 overflow-y-auto space-y-1">
+                      {stats.errorDetails.slice(0, 5).map((detail, idx) => (
+                        <p key={idx} className="text-xs text-red-300/80">
+                          • {detail}
+                        </p>
+                      ))}
+                      {stats.errorDetails.length > 5 && (
+                        <p className="text-xs text-red-300/60">
+                          ... e mais {stats.errorDetails.length - 5} erros
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
               </motion.div>
