@@ -75,6 +75,11 @@ export default function ShopifyImportModal({
   // Tags do Shopify
   const [availableTags, setAvailableTags] = useState<{ tag: string; count: number }[]>([])
   const [selectedShopifyTags, setSelectedShopifyTags] = useState<string[]>([])
+  
+  // Status de Email Marketing
+  const [emailStatusOptions, setEmailStatusOptions] = useState<{ status: string; label: string; count: number }[]>([])
+  const [selectedEmailStatus, setSelectedEmailStatus] = useState<string[]>([])
+  
   const [loadingTags, setLoadingTags] = useState(false)
 
   // Form states
@@ -136,16 +141,21 @@ export default function ShopifyImportModal({
       
       const contentType = res.headers.get('content-type')
       if (!contentType || !contentType.includes('application/json')) {
-        console.error('Invalid response for tags')
+        console.error('Invalid response for filters')
         return
       }
       
       const data = await res.json()
-      if (data.success && data.availableTags) {
-        setAvailableTags(data.availableTags)
+      if (data.success) {
+        if (data.availableTags) {
+          setAvailableTags(data.availableTags)
+        }
+        if (data.emailStatusOptions) {
+          setEmailStatusOptions(data.emailStatusOptions)
+        }
       }
     } catch (err) {
-      console.error('Error loading tags:', err)
+      console.error('Error loading filters:', err)
     } finally {
       setLoadingTags(false)
     }
@@ -167,13 +177,42 @@ export default function ShopifyImportModal({
     setSelectedShopifyTags([])
   }
 
-  // Calcular total estimado baseado nas tags selecionadas
-  // Nota: É uma estimativa porque clientes podem ter múltiplas tags
-  const estimatedCount = selectedShopifyTags.length === 0 
-    ? customerCount 
-    : availableTags
-        .filter(t => selectedShopifyTags.includes(t.tag))
-        .reduce((sum, t) => sum + t.count, 0)
+  const toggleEmailStatus = (status: string) => {
+    setSelectedEmailStatus(prev => 
+      prev.includes(status) 
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    )
+  }
+
+  const selectAllEmailStatus = () => {
+    setSelectedEmailStatus(emailStatusOptions.map(e => e.status))
+  }
+
+  const clearAllEmailStatus = () => {
+    setSelectedEmailStatus([])
+  }
+
+  // Calcular total estimado baseado nos filtros selecionados
+  const hasTagFilter = selectedShopifyTags.length > 0
+  const hasEmailFilter = selectedEmailStatus.length > 0
+  
+  const tagEstimate = hasTagFilter 
+    ? availableTags.filter(t => selectedShopifyTags.includes(t.tag)).reduce((sum, t) => sum + t.count, 0)
+    : customerCount
+    
+  const emailEstimate = hasEmailFilter
+    ? emailStatusOptions.filter(e => selectedEmailStatus.includes(e.status)).reduce((sum, e) => sum + e.count, 0)
+    : customerCount
+
+  // Se ambos filtros estão ativos, pegamos o menor (interseção aproximada)
+  const estimatedCount = hasTagFilter && hasEmailFilter
+    ? Math.min(tagEstimate, emailEstimate)
+    : hasTagFilter
+      ? tagEstimate
+      : hasEmailFilter
+        ? emailEstimate
+        : customerCount
 
   // Obter contagem de uma tag específica
   const getTagCount = (tag: string): number => {
@@ -209,7 +248,8 @@ export default function ShopifyImportModal({
           stageId: selectedStage || null,
           contactType,
           createDeals: createDeals && !!selectedPipeline && !!selectedStage,
-          filterByTags: selectedShopifyTags, // Tags do Shopify para filtrar
+          filterByTags: selectedShopifyTags,
+          filterByEmailStatus: selectedEmailStatus,
         }),
       })
 
@@ -331,7 +371,7 @@ export default function ShopifyImportModal({
                   <div className="text-center">
                     <div className="flex items-center gap-2">
                       <span className="text-lg font-semibold text-white">
-                        {selectedShopifyTags.length > 0 ? (
+                        {(hasTagFilter || hasEmailFilter) ? (
                           <>
                             ~{estimatedCount.toLocaleString('pt-BR')}
                             <span className="text-sm font-normal text-dark-400 ml-1">
@@ -344,9 +384,9 @@ export default function ShopifyImportModal({
                       </span>
                       <span className="text-dark-400">clientes</span>
                     </div>
-                    {selectedShopifyTags.length > 0 && (
+                    {(hasTagFilter || hasEmailFilter) && (
                       <p className="text-xs text-amber-400 mt-1">
-                        ≈ estimativa (clientes podem ter múltiplas tags)
+                        ≈ estimativa baseada nos filtros
                       </p>
                     )}
                   </div>
@@ -425,6 +465,91 @@ export default function ShopifyImportModal({
                   {selectedShopifyTags.length > 0 && (
                     <p className="text-xs text-amber-400 mt-2">
                       ⚠️ Apenas clientes com estas tags serão importados
+                    </p>
+                  )}
+                </div>
+
+                {/* Filtrar por Status de Email Marketing */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="flex items-center gap-2 text-sm font-medium text-dark-300">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <polyline points="22,6 12,13 2,6"/>
+                      </svg>
+                      Filtrar por assinatura de e-mail (opcional)
+                    </label>
+                  </div>
+                  
+                  {emailStatusOptions.length > 0 ? (
+                    <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-dark-400">
+                          {selectedEmailStatus.length === 0 
+                            ? 'Nenhum filtro (importar todos)' 
+                            : `${selectedEmailStatus.length} status selecionado(s)`}
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={selectAllEmailStatus}
+                            className="text-xs text-primary-400 hover:text-primary-300"
+                          >
+                            Selecionar todos
+                          </button>
+                          <span className="text-dark-600">|</span>
+                          <button
+                            onClick={clearAllEmailStatus}
+                            className="text-xs text-dark-400 hover:text-dark-300"
+                          >
+                            Limpar
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {emailStatusOptions.map(({ status, label, count }) => (
+                          <button
+                            key={status}
+                            onClick={() => toggleEmailStatus(status)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                              selectedEmailStatus.includes(status)
+                                ? status === 'subscribed' 
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : status === 'unsubscribed'
+                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                    : 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                : 'bg-dark-700 text-dark-300 border border-dark-600 hover:border-dark-500'
+                            }`}
+                          >
+                            {selectedEmailStatus.includes(status) && (
+                              <Check className="w-3 h-3" />
+                            )}
+                            <span>{label}</span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              selectedEmailStatus.includes(status)
+                                ? status === 'subscribed'
+                                  ? 'bg-emerald-500/30 text-emerald-300'
+                                  : status === 'unsubscribed'
+                                    ? 'bg-amber-500/30 text-amber-300'
+                                    : 'bg-primary-500/30 text-primary-300'
+                                : 'bg-dark-600 text-dark-400'
+                            }`}>
+                              {count.toLocaleString('pt-BR')}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : !loadingTags ? (
+                    <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+                      <p className="text-sm text-dark-400">
+                        Carregando opções de email...
+                      </p>
+                    </div>
+                  ) : null}
+                  
+                  {selectedEmailStatus.length > 0 && (
+                    <p className="text-xs text-amber-400 mt-2">
+                      ⚠️ Apenas clientes com estes status de email serão importados
                     </p>
                   )}
                 </div>

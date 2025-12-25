@@ -86,18 +86,26 @@ async function fetchAllCustomers(
 }
 
 // =============================================
-// Helper: Buscar todas as tags únicas dos clientes COM CONTAGEM
+// Helper: Buscar todas as tags E status de email marketing
 // =============================================
-async function fetchAllCustomerTags(
+async function fetchCustomerFilters(
   shopDomain: string,
   accessToken: string
-): Promise<{ tag: string; count: number }[]> {
+): Promise<{
+  tags: { tag: string; count: number }[];
+  emailStatus: { status: string; label: string; count: number }[];
+}> {
   const tagCounts = new Map<string, number>();
+  const emailStatusCounts = new Map<string, number>();
+  
   let nextPageUrl: string | null = 
-    `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250&fields=id,tags`;
+    `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250&fields=id,tags,email_marketing_consent`;
   
   let pageCount = 0;
-  const maxPages = 20;
+  const maxPages = 100;
+  let customersChecked = 0;
+  
+  console.log(`[Filters] Starting filter fetch for ${shopDomain}`);
   
   while (nextPageUrl && pageCount < maxPages) {
     const currentUrl: string = nextPageUrl;
@@ -110,18 +118,36 @@ async function fetchAllCustomerTags(
     });
 
     if (!response.ok) {
+      console.error(`[Filters] API error on page ${pageCount}: ${response.status}`);
       break;
     }
 
     const data = await response.json();
+    const customers = data.customers || [];
+    customersChecked += customers.length;
     
-    for (const customer of (data.customers || [])) {
-      if (customer.tags && typeof customer.tags === 'string') {
+    for (const customer of customers) {
+      // Processar tags
+      if (customer.tags && typeof customer.tags === 'string' && customer.tags.trim()) {
         const tags = customer.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
         tags.forEach((tag: string) => {
           tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
         });
       }
+      
+      // Processar status de email marketing
+      const emailConsent = customer.email_marketing_consent;
+      let emailStatus = 'not_subscribed';
+      
+      if (emailConsent && emailConsent.state) {
+        emailStatus = emailConsent.state;
+      } else if (customer.accepts_marketing === true) {
+        emailStatus = 'subscribed';
+      } else if (customer.accepts_marketing === false) {
+        emailStatus = 'not_subscribed';
+      }
+      
+      emailStatusCounts.set(emailStatus, (emailStatusCounts.get(emailStatus) || 0) + 1);
     }
     
     const linkHeader: string | null = response.headers.get('Link');
@@ -135,13 +161,37 @@ async function fetchAllCustomerTags(
     }
     
     pageCount++;
-    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    if (pageCount % 10 === 0) {
+      console.log(`[Filters] Checked ${customersChecked} customers, found ${tagCounts.size} tags, ${emailStatusCounts.size} email statuses`);
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 250));
   }
   
-  // Converter Map para array e ordenar por contagem (maior primeiro)
-  return Array.from(tagCounts.entries())
-    .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count);
+  console.log(`[Filters] Completed: ${customersChecked} customers, ${tagCounts.size} tags, ${emailStatusCounts.size} email statuses`);
+  
+  // Labels em português para status de email
+  const emailStatusLabels: Record<string, string> = {
+    'subscribed': 'Inscrito',
+    'not_subscribed': 'Não inscrito',
+    'unsubscribed': 'Inscrição cancelada',
+    'pending': 'Pendente',
+    'invalid': 'Inválido',
+  };
+  
+  return {
+    tags: Array.from(tagCounts.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count),
+    emailStatus: Array.from(emailStatusCounts.entries())
+      .map(([status, count]) => ({ 
+        status, 
+        label: emailStatusLabels[status] || status,
+        count 
+      }))
+      .sort((a, b) => b.count - a.count),
+  };
 }
 
 // =============================================
@@ -232,14 +282,17 @@ export async function GET(request: NextRequest) {
 
     const countData = await countResponse.json();
     
-    // Se solicitado, buscar tags também
+    // Se solicitado, buscar filtros (tags e email status)
     let availableTags: { tag: string; count: number }[] = [];
+    let emailStatusOptions: { status: string; label: string; count: number }[] = [];
+    
     if (includeTags) {
       try {
-        availableTags = await fetchAllCustomerTags(store.shop_domain, store.access_token);
-      } catch (tagError) {
-        console.error('Error fetching tags:', tagError);
-        // Não falha se não conseguir buscar tags
+        const filters = await fetchCustomerFilters(store.shop_domain, store.access_token);
+        availableTags = filters.tags;
+        emailStatusOptions = filters.emailStatus;
+      } catch (filterError) {
+        console.error('Error fetching filters:', filterError);
       }
     }
     
@@ -248,6 +301,7 @@ export async function GET(request: NextRequest) {
       count: countData.count || 0,
       storeName: store.shop_name || store.shop_domain,
       availableTags,
+      emailStatusOptions,
     });
 
   } catch (error: any) {
@@ -285,7 +339,8 @@ export async function POST(request: NextRequest) {
       contactType = 'auto',
       createDeals = false,
       tags = [],
-      filterByTags = []
+      filterByTags = [],
+      filterByEmailStatus = []  // Status de email marketing para filtrar
     } = body;
 
     if (!storeId) {
@@ -312,6 +367,9 @@ export async function POST(request: NextRequest) {
     if (filterByTags.length > 0) {
       console.log(`[Import] Filtering by tags: ${filterByTags.join(', ')}`);
     }
+    if (filterByEmailStatus.length > 0) {
+      console.log(`[Import] Filtering by email status: ${filterByEmailStatus.join(', ')}`);
+    }
 
     // Buscar todos os clientes do Shopify
     let allCustomers: any[];
@@ -328,7 +386,7 @@ export async function POST(request: NextRequest) {
     // Filtrar por tags se especificado
     let customers = allCustomers;
     if (filterByTags.length > 0) {
-      customers = allCustomers.filter(customer => {
+      customers = customers.filter(customer => {
         if (!customer.tags || typeof customer.tags !== 'string') return false;
         const customerTags = customer.tags.split(',').map((t: string) => t.trim().toLowerCase());
         return filterByTags.some((tag: string) => 
@@ -337,7 +395,25 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    console.log(`[Import] Found ${allCustomers.length} total customers, ${customers.length} after filter`);
+    // Filtrar por status de email se especificado
+    if (filterByEmailStatus.length > 0) {
+      customers = customers.filter(customer => {
+        const emailConsent = customer.email_marketing_consent;
+        let emailStatus = 'not_subscribed';
+        
+        if (emailConsent && emailConsent.state) {
+          emailStatus = emailConsent.state;
+        } else if (customer.accepts_marketing === true) {
+          emailStatus = 'subscribed';
+        } else if (customer.accepts_marketing === false) {
+          emailStatus = 'not_subscribed';
+        }
+        
+        return filterByEmailStatus.includes(emailStatus);
+      });
+    }
+    
+    console.log(`[Import] Found ${allCustomers.length} total customers, ${customers.length} after filters`);
 
     const stats = {
       total: customers.length,
