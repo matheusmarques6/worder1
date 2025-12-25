@@ -26,7 +26,8 @@ async function fetchAllCustomers(
   const maxPages = 40; // Safety limit - 10.000 clientes max
   
   while (nextPageUrl && pageCount < maxPages) {
-    const response = await fetch(nextPageUrl, {
+    const currentUrl = nextPageUrl;
+    const response: Response = await fetch(currentUrl, {
       headers: {
         'X-Shopify-Access-Token': accessToken,
         'Content-Type': 'application/json',
