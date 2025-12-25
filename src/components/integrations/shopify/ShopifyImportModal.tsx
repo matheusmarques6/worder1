@@ -18,6 +18,8 @@ import {
   Package,
   RefreshCw,
   ExternalLink,
+  Tag,
+  Check,
 } from 'lucide-react'
 
 // =============================================
@@ -32,6 +34,7 @@ interface Pipeline {
 
 interface ImportStats {
   total: number
+  totalInShopify?: number
   created: number
   updated: number
   skipped: number
@@ -68,6 +71,11 @@ export default function ShopifyImportModal({
   const [duration, setDuration] = useState<number>(0)
   const [error, setError] = useState<string>('')
   const [progress, setProgress] = useState<number>(0)
+  
+  // Tags do Shopify
+  const [availableTags, setAvailableTags] = useState<{ tag: string; count: number }[]>([])
+  const [selectedShopifyTags, setSelectedShopifyTags] = useState<string[]>([])
+  const [loadingTags, setLoadingTags] = useState(false)
 
   // Form states
   const [selectedPipeline, setSelectedPipeline] = useState<string>('')
@@ -85,8 +93,16 @@ export default function ShopifyImportModal({
   const loadInitialData = async () => {
     setStatus('loading')
     try {
-      // Fetch customer count
+      // Fetch customer count (sem tags inicialmente, mais rápido)
       const countRes = await fetch(`/api/shopify/import-customers?storeId=${storeId}`)
+      
+      // Verificar se a resposta é JSON válido
+      const contentType = countRes.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await countRes.text()
+        throw new Error(`Resposta inválida do servidor: ${text.substring(0, 100)}`)
+      }
+      
       const countData = await countRes.json()
       
       if (countData.success) {
@@ -97,15 +113,71 @@ export default function ShopifyImportModal({
 
       // Fetch pipelines
       const pipelinesRes = await fetch(`/api/deals?type=pipelines&organizationId=${organizationId}`)
-      const pipelinesData = await pipelinesRes.json()
-      setPipelines(pipelinesData.pipelines || [])
+      if (pipelinesRes.ok) {
+        const pipelinesData = await pipelinesRes.json()
+        setPipelines(pipelinesData.pipelines || [])
+      }
 
       setStatus('idle')
+      
+      // Buscar tags em background (não bloqueia a UI)
+      loadAvailableTags()
     } catch (err: any) {
       console.error('Error loading data:', err)
       setError(err.message || 'Erro ao carregar dados')
       setStatus('error')
     }
+  }
+
+  const loadAvailableTags = async () => {
+    setLoadingTags(true)
+    try {
+      const res = await fetch(`/api/shopify/import-customers?storeId=${storeId}&includeTags=true`)
+      
+      const contentType = res.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('Invalid response for tags')
+        return
+      }
+      
+      const data = await res.json()
+      if (data.success && data.availableTags) {
+        setAvailableTags(data.availableTags)
+      }
+    } catch (err) {
+      console.error('Error loading tags:', err)
+    } finally {
+      setLoadingTags(false)
+    }
+  }
+
+  const toggleShopifyTag = (tag: string) => {
+    setSelectedShopifyTags(prev => 
+      prev.includes(tag) 
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    )
+  }
+
+  const selectAllTags = () => {
+    setSelectedShopifyTags(availableTags.map(t => t.tag))
+  }
+
+  const clearAllTags = () => {
+    setSelectedShopifyTags([])
+  }
+
+  // Calcular total estimado baseado nas tags selecionadas
+  // Nota: É uma estimativa porque clientes podem ter múltiplas tags
+  const estimatedCount = selectedShopifyTags.length === 0 
+    ? customerCount 
+    : availableTags
+        .filter(t => selectedShopifyTags.includes(t.tag))
+        .reduce((sum, t) => sum + t.count, 0)
+
+  // Obter contagem de uma tag específica
+  const getTagCount = (tag: string): number => {
+    return availableTags.find(t => t.tag === tag)?.count || 0
   }
 
   // =============================================
@@ -137,11 +209,20 @@ export default function ShopifyImportModal({
           stageId: selectedStage || null,
           contactType,
           createDeals: createDeals && !!selectedPipeline && !!selectedStage,
+          filterByTags: selectedShopifyTags, // Tags do Shopify para filtrar
         }),
       })
 
       clearInterval(progressInterval)
       setProgress(100)
+
+      // Verificar se a resposta é JSON válido
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        console.error('Non-JSON response:', text)
+        throw new Error('O servidor retornou uma resposta inválida. Tente novamente.')
+      }
 
       const data = await response.json()
 
@@ -247,10 +328,105 @@ export default function ShopifyImportModal({
                 {/* Customer Count */}
                 <div className="flex items-center justify-center p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-xl">
                   <Users className="w-6 h-6 text-blue-400 mr-3" />
-                  <span className="text-lg font-semibold text-white">
-                    {customerCount.toLocaleString('pt-BR')}
-                  </span>
-                  <span className="text-dark-400 ml-2">clientes disponíveis</span>
+                  <div className="text-center">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-semibold text-white">
+                        {selectedShopifyTags.length > 0 ? (
+                          <>
+                            ~{estimatedCount.toLocaleString('pt-BR')}
+                            <span className="text-sm font-normal text-dark-400 ml-1">
+                              de {customerCount.toLocaleString('pt-BR')}
+                            </span>
+                          </>
+                        ) : (
+                          customerCount.toLocaleString('pt-BR')
+                        )}
+                      </span>
+                      <span className="text-dark-400">clientes</span>
+                    </div>
+                    {selectedShopifyTags.length > 0 && (
+                      <p className="text-xs text-amber-400 mt-1">
+                        ≈ estimativa (clientes podem ter múltiplas tags)
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Filtrar por Tags do Shopify */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="flex items-center gap-2 text-sm font-medium text-dark-300">
+                      <Tag className="w-4 h-4" />
+                      Filtrar por tags do Shopify (opcional)
+                    </label>
+                    {loadingTags && (
+                      <Loader2 className="w-4 h-4 text-dark-400 animate-spin" />
+                    )}
+                  </div>
+                  
+                  {availableTags.length > 0 ? (
+                    <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-dark-400">
+                          {selectedShopifyTags.length === 0 
+                            ? 'Nenhum filtro (importar todos)' 
+                            : `${selectedShopifyTags.length} tag(s) selecionada(s)`}
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={selectAllTags}
+                            className="text-xs text-primary-400 hover:text-primary-300"
+                          >
+                            Selecionar todas
+                          </button>
+                          <span className="text-dark-600">|</span>
+                          <button
+                            onClick={clearAllTags}
+                            className="text-xs text-dark-400 hover:text-dark-300"
+                          >
+                            Limpar
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                        {availableTags.map(({ tag, count }) => (
+                          <button
+                            key={tag}
+                            onClick={() => toggleShopifyTag(tag)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm transition-all ${
+                              selectedShopifyTags.includes(tag)
+                                ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                : 'bg-dark-700 text-dark-300 border border-dark-600 hover:border-dark-500'
+                            }`}
+                          >
+                            {selectedShopifyTags.includes(tag) && (
+                              <Check className="w-3 h-3" />
+                            )}
+                            <span>{tag}</span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              selectedShopifyTags.includes(tag)
+                                ? 'bg-primary-500/30 text-primary-300'
+                                : 'bg-dark-600 text-dark-400'
+                            }`}>
+                              {count}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : !loadingTags ? (
+                    <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+                      <p className="text-sm text-dark-400">
+                        Nenhuma tag encontrada nos clientes do Shopify
+                      </p>
+                    </div>
+                  ) : null}
+                  
+                  {selectedShopifyTags.length > 0 && (
+                    <p className="text-xs text-amber-400 mt-2">
+                      ⚠️ Apenas clientes com estas tags serão importados
+                    </p>
+                  )}
                 </div>
 
                 {/* Pipeline Selection */}
@@ -415,6 +591,11 @@ export default function ShopifyImportModal({
                   </h3>
                   <p className="text-sm text-dark-400">
                     em {formatDuration(duration)}
+                    {stats.totalInShopify && stats.totalInShopify !== stats.total && (
+                      <span className="ml-1">
+                        (filtrado de {stats.totalInShopify.toLocaleString('pt-BR')} total)
+                      </span>
+                    )}
                   </p>
                 </div>
 

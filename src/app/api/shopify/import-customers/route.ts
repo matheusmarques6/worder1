@@ -4,12 +4,36 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300; // 5 minutos para Vercel Pro
+export const maxDuration = 300;
 
 const SHOPIFY_API_VERSION = '2024-10';
+
+// =============================================
+// Helper: Create Supabase client
+// =============================================
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  
+  if (!url || !key) {
+    return null;
+  }
+  
+  return createClient(url, key);
+}
+
+// =============================================
+// Helper: JSON Response
+// =============================================
+function jsonResponse(data: any, status = 200) {
+  return new NextResponse(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 // =============================================
 // Helper: Buscar TODOS os clientes com paginação
@@ -23,10 +47,11 @@ async function fetchAllCustomers(
     `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250`;
   
   let pageCount = 0;
-  const maxPages = 40; // Safety limit - 10.000 clientes max
+  const maxPages = 40;
   
   while (nextPageUrl && pageCount < maxPages) {
-    const currentUrl = nextPageUrl;
+    const currentUrl: string = nextPageUrl;
+    
     const response: Response = await fetch(currentUrl, {
       headers: {
         'X-Shopify-Access-Token': accessToken,
@@ -43,24 +68,80 @@ async function fetchAllCustomers(
     const data = await response.json();
     allCustomers.push(...(data.customers || []));
     
-    // Verificar próxima página via Link header
-    const linkHeader = response.headers.get('Link');
+    const linkHeader: string | null = response.headers.get('Link');
     nextPageUrl = null;
     
     if (linkHeader) {
-      const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+      const nextMatch: RegExpMatchArray | null = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
       if (nextMatch) {
         nextPageUrl = nextMatch[1];
       }
     }
     
     pageCount++;
-    
-    // Rate limiting - Shopify permite 2 req/seg
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   
   return allCustomers;
+}
+
+// =============================================
+// Helper: Buscar todas as tags únicas dos clientes COM CONTAGEM
+// =============================================
+async function fetchAllCustomerTags(
+  shopDomain: string,
+  accessToken: string
+): Promise<{ tag: string; count: number }[]> {
+  const tagCounts = new Map<string, number>();
+  let nextPageUrl: string | null = 
+    `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250&fields=id,tags`;
+  
+  let pageCount = 0;
+  const maxPages = 20;
+  
+  while (nextPageUrl && pageCount < maxPages) {
+    const currentUrl: string = nextPageUrl;
+    
+    const response: Response = await fetch(currentUrl, {
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      break;
+    }
+
+    const data = await response.json();
+    
+    for (const customer of (data.customers || [])) {
+      if (customer.tags && typeof customer.tags === 'string') {
+        const tags = customer.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+        tags.forEach((tag: string) => {
+          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+        });
+      }
+    }
+    
+    const linkHeader: string | null = response.headers.get('Link');
+    nextPageUrl = null;
+    
+    if (linkHeader) {
+      const nextMatch: RegExpMatchArray | null = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+      if (nextMatch) {
+        nextPageUrl = nextMatch[1];
+      }
+    }
+    
+    pageCount++;
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+  
+  // Converter Map para array e ordenar por contagem (maior primeiro)
+  return Array.from(tagCounts.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count);
 }
 
 // =============================================
@@ -97,29 +178,118 @@ function buildCustomerName(customer: any): string {
 }
 
 // =============================================
+// GET: Buscar contagem de clientes e tags disponíveis
+// =============================================
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const storeId = searchParams.get('storeId');
+    const includeTags = searchParams.get('includeTags') === 'true';
+
+    if (!storeId) {
+      return jsonResponse({ success: false, error: 'storeId required' }, 400);
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      return jsonResponse({ success: false, error: 'Database not configured' }, 503);
+    }
+
+    const { data: store, error } = await supabase
+      .from('shopify_stores')
+      .select('shop_domain, access_token, shop_name')
+      .eq('id', storeId)
+      .single();
+
+    if (error || !store) {
+      console.error('Store lookup error:', error);
+      return jsonResponse({ success: false, error: 'Store not found' }, 404);
+    }
+
+    if (!store.access_token) {
+      return jsonResponse({ success: false, error: 'Store not configured' }, 400);
+    }
+
+    // Buscar contagem de clientes no Shopify
+    const countResponse = await fetch(
+      `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/customers/count.json`,
+      {
+        headers: {
+          'X-Shopify-Access-Token': store.access_token,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!countResponse.ok) {
+      const errorText = await countResponse.text();
+      console.error('Shopify count error:', countResponse.status, errorText);
+      return jsonResponse({ 
+        success: false, 
+        error: `Erro ao conectar com Shopify: ${countResponse.status}` 
+      }, 500);
+    }
+
+    const countData = await countResponse.json();
+    
+    // Se solicitado, buscar tags também
+    let availableTags: { tag: string; count: number }[] = [];
+    if (includeTags) {
+      try {
+        availableTags = await fetchAllCustomerTags(store.shop_domain, store.access_token);
+      } catch (tagError) {
+        console.error('Error fetching tags:', tagError);
+        // Não falha se não conseguir buscar tags
+      }
+    }
+    
+    return jsonResponse({
+      success: true,
+      count: countData.count || 0,
+      storeName: store.shop_name || store.shop_domain,
+      availableTags,
+    });
+
+  } catch (error: any) {
+    console.error('GET error:', error);
+    return jsonResponse({ 
+      success: false,
+      error: error.message || 'Erro interno do servidor'
+    }, 500);
+  }
+}
+
+// =============================================
 // POST: Executar importação de clientes
 // =============================================
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    const supabase = getSupabaseClient();
+    const supabase = getSupabase();
     if (!supabase) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+      return jsonResponse({ success: false, error: 'Database not configured' }, 503);
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (e) {
+      return jsonResponse({ success: false, error: 'Invalid request body' }, 400);
+    }
+
     const { 
       storeId, 
       pipelineId, 
       stageId, 
       contactType = 'auto',
       createDeals = false,
-      tags = []
+      tags = [],
+      filterByTags = []
     } = body;
 
     if (!storeId) {
-      return NextResponse.json({ error: 'storeId required' }, { status: 400 });
+      return jsonResponse({ success: false, error: 'storeId required' }, 400);
     }
 
     // Buscar configuração da loja
@@ -130,18 +300,48 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (storeError || !store) {
-      return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+      console.error('Store not found:', storeError);
+      return jsonResponse({ success: false, error: 'Store not found' }, 404);
+    }
+
+    if (!store.access_token) {
+      return jsonResponse({ success: false, error: 'Store access token not configured' }, 400);
     }
 
     console.log(`[Import] Starting import for store: ${store.shop_domain}`);
+    if (filterByTags.length > 0) {
+      console.log(`[Import] Filtering by tags: ${filterByTags.join(', ')}`);
+    }
 
     // Buscar todos os clientes do Shopify
-    const customers = await fetchAllCustomers(store.shop_domain, store.access_token);
+    let allCustomers: any[];
+    try {
+      allCustomers = await fetchAllCustomers(store.shop_domain, store.access_token);
+    } catch (shopifyError: any) {
+      console.error('Shopify fetch error:', shopifyError);
+      return jsonResponse({ 
+        success: false, 
+        error: `Erro ao buscar clientes do Shopify: ${shopifyError.message}` 
+      }, 500);
+    }
     
-    console.log(`[Import] Found ${customers.length} customers in Shopify`);
+    // Filtrar por tags se especificado
+    let customers = allCustomers;
+    if (filterByTags.length > 0) {
+      customers = allCustomers.filter(customer => {
+        if (!customer.tags || typeof customer.tags !== 'string') return false;
+        const customerTags = customer.tags.split(',').map((t: string) => t.trim().toLowerCase());
+        return filterByTags.some((tag: string) => 
+          customerTags.includes(tag.toLowerCase())
+        );
+      });
+    }
+    
+    console.log(`[Import] Found ${allCustomers.length} total customers, ${customers.length} after filter`);
 
     const stats = {
       total: customers.length,
+      totalInShopify: allCustomers.length,
       created: 0,
       updated: 0,
       skipped: 0,
@@ -154,7 +354,7 @@ export async function POST(request: NextRequest) {
       ...(store.auto_tags || ['shopify']),
       ...tags,
       'shopify-import'
-    ])); // Remover duplicatas
+    ]));
 
     // Processar cada cliente
     for (const customer of customers) {
@@ -163,7 +363,6 @@ export async function POST(request: NextRequest) {
         const phone = normalizePhone(customer.phone);
         const name = buildCustomerName(customer);
 
-        // Verificar se tem email ou telefone
         if (!email && !phone) {
           stats.skipped++;
           continue;
@@ -210,31 +409,25 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           };
           
-          // Atualizar nome se estava vazio
           if (!existingContact.name || existingContact.name === 'Cliente Shopify') {
             updateData.name = name;
           }
           
-          // Atualizar telefone se estava vazio
           if (!existingContact.phone && phone) {
             updateData.phone = phone;
           }
           
-          // Atualizar email se estava vazio
           if (!existingContact.email && email) {
             updateData.email = email;
           }
 
-          // Converter lead -> customer se aplicável
           if (existingContact.type === 'lead' && finalContactType === 'customer') {
             updateData.type = 'customer';
           }
 
-          // Merge tags
           const existingTags = existingContact.tags || [];
           updateData.tags = Array.from(new Set([...existingTags, ...contactTags]));
 
-          // Atualizar metadata
           updateData.metadata = {
             ...(existingContact.metadata || {}),
             shopify_id: String(customer.id),
@@ -320,19 +513,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Atualizar estatísticas da loja
-    await supabase
-      .from('shopify_stores')
-      .update({
-        total_customers_imported: (store.total_customers_imported || 0) + stats.created,
-        last_import_at: new Date().toISOString(),
-      })
-      .eq('id', storeId);
+    try {
+      await supabase
+        .from('shopify_stores')
+        .update({
+          total_customers_imported: (store.total_customers_imported || 0) + stats.created,
+          last_import_at: new Date().toISOString(),
+        })
+        .eq('id', storeId);
+    } catch (updateErr) {
+      console.error('Error updating store stats:', updateErr);
+    }
 
     const duration = Math.round((Date.now() - startTime) / 1000);
 
     console.log(`[Import] Completed in ${duration}s:`, stats);
 
-    return NextResponse.json({
+    return jsonResponse({
       success: true,
       stats,
       duration,
@@ -340,69 +537,10 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Import error:', error);
-    return NextResponse.json({ 
+    console.error('POST error:', error);
+    return jsonResponse({ 
       success: false, 
-      error: error.message 
-    }, { status: 500 });
-  }
-}
-
-// =============================================
-// GET: Buscar contagem de clientes disponíveis
-// =============================================
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const storeId = searchParams.get('storeId');
-
-  if (!storeId) {
-    return NextResponse.json({ error: 'storeId required' }, { status: 400 });
-  }
-
-  try {
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-    }
-
-    const { data: store, error } = await supabase
-      .from('shopify_stores')
-      .select('shop_domain, access_token, shop_name')
-      .eq('id', storeId)
-      .single();
-
-    if (error || !store) {
-      return NextResponse.json({ error: 'Store not found' }, { status: 404 });
-    }
-
-    // Buscar contagem de clientes no Shopify
-    const response = await fetch(
-      `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/customers/count.json`,
-      {
-        headers: {
-          'X-Shopify-Access-Token': store.access_token,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Shopify API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    return NextResponse.json({
-      success: true,
-      count: data.count || 0,
-      storeName: store.shop_name || store.shop_domain,
-    });
-
-  } catch (error: any) {
-    console.error('Error fetching customer count:', error);
-    return NextResponse.json({ 
-      success: false,
-      error: error.message 
-    }, { status: 500 });
+      error: error.message || 'Erro interno do servidor'
+    }, 500);
   }
 }
