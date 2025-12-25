@@ -21,7 +21,11 @@ import {
   Users,
   ShoppingBag,
   AlertTriangle,
+  Download,
 } from 'lucide-react'
+
+// Import do modal de importação
+import ShopifyImportModal from '@/components/integrations/shopify/ShopifyImportModal'
 
 // =============================================
 // Types
@@ -427,6 +431,7 @@ function ShopifyConfigModal({
 }) {
   const [loading, setLoading] = useState(false)
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
+  const [showImportModal, setShowImportModal] = useState(false)
   
   // Form state
   const [selectedPipeline, setSelectedPipeline] = useState(store.default_pipeline_id || '')
@@ -678,6 +683,26 @@ function ShopifyConfigModal({
             </p>
           </div>
 
+          {/* Importar Clientes Existentes */}
+          <div className="p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-xl">
+            <div className="flex items-start gap-3">
+              <Download className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="font-medium text-white">Importar Clientes Existentes</h4>
+                <p className="text-sm text-dark-400 mt-1">
+                  Importe todos os clientes já cadastrados no Shopify para o CRM
+                </p>
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white text-sm font-medium transition-colors"
+                >
+                  <Users className="w-4 h-4" />
+                  Importar Clientes
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Webhook URL */}
           <div className="p-4 bg-dark-800/50 rounded-xl">
             <label className="block text-sm font-medium text-dark-300 mb-2">
@@ -725,6 +750,22 @@ function ShopifyConfigModal({
           </button>
         </div>
       </motion.div>
+
+      {/* Modal de Importação */}
+      <AnimatePresence>
+        {showImportModal && (
+          <ShopifyImportModal
+            storeId={store.id}
+            storeName={store.shop_name || store.shop_domain}
+            organizationId={organizationId}
+            onClose={() => setShowImportModal(false)}
+            onSuccess={() => {
+              setShowImportModal(false)
+              onSave()
+            }}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
