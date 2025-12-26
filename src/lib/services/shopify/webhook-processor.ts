@@ -179,7 +179,6 @@ async function handleCustomerEvent(
         action: 'customer_created',
         contactId: contact.id,
         dealId: createdDeal.deal_id,
-        automationResults,
       };
     }
   }
@@ -329,7 +328,6 @@ async function handleOrderCreate(
     contactId: contact.id,
     dealId,
     orderId: savedOrder?.id,
-    automationResults,
   };
 }
 
@@ -417,7 +415,6 @@ async function handleOrderPaid(
     success: true,
     action: 'order_paid',
     contactId,
-    automationResults: [...creationResults, ...transitionResults],
   };
 }
 
@@ -484,7 +481,6 @@ async function handleOrderFulfilled(
     success: true,
     action: 'order_fulfilled',
     contactId,
-    automationResults: transitionResults,
   };
 }
 
@@ -569,7 +565,6 @@ async function handleOrderCancelled(
     success: true,
     action: 'order_cancelled',
     contactId,
-    automationResults: transitionResults,
   };
 }
 
@@ -680,7 +675,6 @@ export async function handleAbandonedCheckout(
     action: 'checkout_abandoned',
     contactId: checkout.contact_id,
     dealId: createdDeal?.deal_id,
-    automationResults,
   };
 }
 
