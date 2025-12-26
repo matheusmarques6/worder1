@@ -315,14 +315,14 @@ function ContactRow({ contact, onEdit, onDelete, onClick }: ContactRowProps) {
       {/* Stats */}
       <div className="flex items-center gap-6 text-sm">
         <div className="text-center">
-          <p className="text-dark-500 text-xs">Deals</p>
-          <p className="text-white font-medium">{contact.deals?.length || 0}</p>
+          <p className="text-dark-500 text-xs">Pedidos</p>
+          <p className="text-white font-medium">{contact.total_orders || 0}</p>
         </div>
         <div className="text-center">
           <p className="text-dark-500 text-xs">Valor</p>
           <p className="text-success-400 font-medium">
             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(
-              contact.deals?.reduce((sum: number, d: any) => sum + (d.value || 0), 0) || 0
+              contact.total_spent || 0
             )}
           </p>
         </div>
@@ -556,7 +556,7 @@ export default function ContactsPage() {
   }).length
   
   const totalValue = contacts.reduce((sum, c) => 
-    sum + (c.deals?.reduce((s: number, d: any) => s + (d.value || 0), 0) || 0), 0
+    sum + (parseFloat(c.total_spent) || 0), 0
   )
 
   return (
