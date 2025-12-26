@@ -1,20 +1,30 @@
 // =============================================
 // Shopify Deal Sync Service
 // src/lib/services/shopify/deal-sync.ts
+//
+// CORRIGIDO: Usa campos corretos da tabela deals
+// - custom_fields (não 'metadata')
+// - full_name do contato (não 'name')
 // =============================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { 
   ShopifyStoreConfig, 
   DealSyncResult,
   StageEventType 
 } from './types';
 
-// Supabase client com service role para operações de backend
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Supabase client getter
+function getSupabase(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!url || !key) {
+    throw new Error('Supabase not configured');
+  }
+  
+  return createClient(url, key);
+}
 
 /**
  * Cria ou atualiza deal para um contato baseado em evento do Shopify
@@ -27,9 +37,11 @@ export async function createOrUpdateDealForContact(
   metadata?: Record<string, any>
 ): Promise<DealSyncResult> {
   
+  const supabase = getSupabase();
+  
   // Se não tem pipeline configurado, não criar deal
   if (!store.default_pipeline_id) {
-    console.log('No default pipeline configured, skipping deal creation');
+    console.log('[DealSync] No default pipeline configured, skipping deal creation');
     return { id: '', isNew: false, action: 'skipped' };
   }
   
@@ -37,13 +49,13 @@ export async function createOrUpdateDealForContact(
   const stageId = getStageForEvent(store, eventType);
   
   if (!stageId) {
-    console.log(`No stage configured for event ${eventType}, using default`);
+    console.log(`[DealSync] No stage configured for event ${eventType}, using default`);
   }
   
   const targetStageId = stageId || store.default_stage_id;
   
   if (!targetStageId) {
-    console.log('No stage available, skipping deal creation');
+    console.log('[DealSync] No stage available, skipping deal creation');
     return { id: '', isNew: false, action: 'skipped' };
   }
   
@@ -60,10 +72,11 @@ export async function createOrUpdateDealForContact(
   
   if (existingDeal) {
     // 3a. Atualizar deal existente
-    return await updateExistingDeal(existingDeal, targetStageId, orderValue, metadata);
+    return await updateExistingDeal(supabase, existingDeal, targetStageId, orderValue, metadata);
   } else {
     // 3b. Criar novo deal
     return await createNewDeal(
+      supabase,
       contactId,
       store,
       targetStageId,
@@ -78,6 +91,7 @@ export async function createOrUpdateDealForContact(
  * Atualiza deal existente
  */
 async function updateExistingDeal(
+  supabase: SupabaseClient,
   deal: any,
   stageId: string,
   orderValue?: number,
@@ -96,13 +110,13 @@ async function updateExistingDeal(
   
   // Somar valor do pedido se houver
   if (orderValue && orderValue > 0) {
-    updateData.value = (deal.value || 0) + orderValue;
+    updateData.value = (parseFloat(deal.value) || 0) + orderValue;
   }
   
-  // Merge metadata
+  // Merge custom_fields (não metadata!)
   if (metadata) {
-    updateData.metadata = {
-      ...(deal.metadata || {}),
+    updateData.custom_fields = {
+      ...(deal.custom_fields || {}),
       ...metadata,
       last_updated_from_shopify: new Date().toISOString(),
     };
@@ -114,11 +128,11 @@ async function updateExistingDeal(
     .eq('id', deal.id);
   
   if (error) {
-    console.error('Failed to update deal:', error);
+    console.error('[DealSync] Failed to update deal:', error);
     throw error;
   }
   
-  console.log(`✅ Deal updated: ${deal.title}${stageMoved ? ' (stage moved)' : ''}`);
+  console.log(`[DealSync] ✅ Deal updated: ${deal.title}${stageMoved ? ' (stage moved)' : ''}`);
   
   return {
     id: deal.id,
@@ -132,6 +146,7 @@ async function updateExistingDeal(
  * Cria novo deal
  */
 async function createNewDeal(
+  supabase: SupabaseClient,
   contactId: string,
   store: ShopifyStoreConfig,
   stageId: string,
@@ -141,13 +156,18 @@ async function createNewDeal(
 ): Promise<DealSyncResult> {
   
   // Buscar nome do contato para título do deal
+  // CORRIGIDO: Usa first_name, last_name, full_name
   const { data: contact } = await supabase
     .from('contacts')
-    .select('name')
+    .select('first_name, last_name, full_name, email')
     .eq('id', contactId)
     .single();
   
-  const contactName = contact?.name || 'Cliente';
+  const contactName = contact?.full_name?.trim() || 
+                      [contact?.first_name, contact?.last_name].filter(Boolean).join(' ') ||
+                      contact?.email ||
+                      'Cliente';
+  
   const title = buildDealTitle(contactName, eventType, metadata);
   
   const { data: newDeal, error } = await supabase
@@ -159,9 +179,11 @@ async function createNewDeal(
       stage_id: stageId,
       title,
       value: orderValue || 0,
+      currency: 'BRL',
       status: 'open',
-      source: 'shopify',
-      metadata: {
+      probability: 50,
+      tags: ['shopify'],
+      custom_fields: {
         ...metadata,
         shopify_store: store.shop_domain,
         created_from_event: eventType,
@@ -172,11 +194,11 @@ async function createNewDeal(
     .single();
   
   if (error) {
-    console.error('Failed to create deal:', error);
+    console.error('[DealSync] Failed to create deal:', error);
     throw error;
   }
   
-  console.log(`✅ Deal created: ${title} - R$ ${orderValue || 0}`);
+  console.log(`[DealSync] ✅ Deal created: ${title} - R$ ${orderValue || 0}`);
   
   return {
     id: newDeal.id,
@@ -194,6 +216,8 @@ export async function moveDealToStage(
   store: ShopifyStoreConfig,
   eventType: StageEventType
 ): Promise<void> {
+  
+  const supabase = getSupabase();
   
   const stageId = getStageForEvent(store, eventType);
   if (!stageId) return;
@@ -224,9 +248,9 @@ export async function moveDealToStage(
     .eq('id', deal.id);
   
   if (error) {
-    console.error('Failed to move deal:', error);
+    console.error('[DealSync] Failed to move deal:', error);
   } else {
-    console.log(`✅ Deal moved to stage for event: ${eventType}`);
+    console.log(`[DealSync] ✅ Deal moved to stage for event: ${eventType}`);
   }
 }
 
@@ -239,10 +263,12 @@ export async function markDealAsWon(
   metadata?: Record<string, any>
 ): Promise<void> {
   
+  const supabase = getSupabase();
+  
   // Buscar deal aberto do contato
   const { data: deal } = await supabase
     .from('deals')
-    .select('id')
+    .select('id, custom_fields')
     .eq('contact_id', contactId)
     .eq('pipeline_id', store.default_pipeline_id)
     .eq('status', 'open')
@@ -257,6 +283,7 @@ export async function markDealAsWon(
   
   const updateData: Record<string, any> = {
     status: 'won',
+    probability: 100,
     won_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -266,15 +293,10 @@ export async function markDealAsWon(
   }
   
   if (metadata) {
-    const { data: currentDeal } = await supabase
-      .from('deals')
-      .select('metadata')
-      .eq('id', deal.id)
-      .single();
-    
-    updateData.metadata = {
-      ...(currentDeal?.metadata || {}),
+    updateData.custom_fields = {
+      ...(deal.custom_fields || {}),
       ...metadata,
+      won_at: new Date().toISOString(),
     };
   }
   
@@ -284,9 +306,9 @@ export async function markDealAsWon(
     .eq('id', deal.id);
   
   if (error) {
-    console.error('Failed to mark deal as won:', error);
+    console.error('[DealSync] Failed to mark deal as won:', error);
   } else {
-    console.log(`✅ Deal marked as won`);
+    console.log(`[DealSync] ✅ Deal marked as won`);
   }
 }
 

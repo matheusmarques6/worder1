@@ -1,127 +1,228 @@
-# 🛒 Shopify Integration - COMPLETO
+# Shopify Integration - Pacote Completo de Correções
 
-## ✅ O que está implementado:
+## 📦 O que está incluído
 
-### 1. Registro automático de webhooks
-Quando o cliente conecta a loja, os webhooks são registrados automaticamente.
+Este pacote contém **TODAS as correções** para a integração Shopify, incluindo:
 
-### 2. Criação automática de contatos
-Quando um cliente é criado ou faz um pedido no Shopify:
-- ✅ Contato é criado/atualizado no CRM
-- ✅ Tags automáticas são adicionadas
-- ✅ Estatísticas são atualizadas (pedidos, valor total)
+### 1. Correções de Schema (campos corretos)
+- `contact-sync.ts` → usa `first_name`, `last_name`, `shopify_customer_id`, `custom_fields`
+- `deal-sync.ts` → usa `custom_fields` (não `metadata`), `full_name` do contato
+- Compatível com a tabela `contacts` do seu schema
 
-### 3. Criação automática de deals na pipeline
-Quando um pedido é feito:
-- ✅ Deal é criado na pipeline configurada
-- ✅ Deal é movido entre estágios conforme status do pedido
-- ✅ Deal é marcado como ganho quando pago
-- ✅ Deal é marcado como perdido quando cancelado
+### 2. Correção de URL do Webhook
+- `connect/route.ts` → webhook agora aponta para `/api/webhooks/shopify` (URL correta)
 
-### 4. Monitoramento de webhooks
-A cada 6 horas:
-- ✅ Verifica se webhooks existem
-- ✅ Corrige URLs erradas
-- ✅ Recria webhooks deletados
-- ✅ Notifica se teve correções
+### 3. Enriquecimento de Dados do Cliente
+- Novos campos: RFM scores, produtos favoritos, última compra
+- Tracking automático de atividades
+- Timeline completa do cliente
 
-## 📁 Arquivos
+---
+
+## 📁 Estrutura de Arquivos
 
 ```
-src/
-├── app/api/
-│   ├── integrations/shopify/callback/route.ts  ← OAuth + registro webhooks
-│   ├── webhooks/shopify/route.ts               ← Handler principal (NOVO!)
-│   ├── cron/shopify/route.ts                   ← Jobs agendados
-│   └── shopify/
-│       ├── debug/route.ts                      ← Diagnóstico
-│       └── webhooks/register/route.ts          ← Registro manual
+deploy-complete/
+├── src/
+│   ├── lib/services/shopify/
+│   │   ├── contact-sync.ts      ← CORRIGIDO: campos corretos
+│   │   ├── deal-sync.ts         ← CORRIGIDO: campos corretos
+│   │   ├── activity-tracker.ts  ← NOVO: tracking de atividades
+│   │   └── index.ts             ← ATUALIZADO: exporta activity-tracker
+│   │
+│   ├── app/api/
+│   │   ├── shopify/
+│   │   │   ├── connect/route.ts           ← CORRIGIDO: URL webhook
+│   │   │   └── webhooks/register/route.ts ← OK (já estava correto)
+│   │   │
+│   │   ├── webhooks/shopify/route.ts      ← ATUALIZADO: tracking
+│   │   │
+│   │   └── contacts/[id]/timeline/route.ts ← NOVO: API timeline
+│   │
+│   ├── components/crm/
+│   │   └── ContactDrawer.tsx    ← ATUALIZADO: mostra dados enriquecidos
+│   │
+│   └── types/
+│       └── index.ts             ← ATUALIZADO: novos campos Contact
 │
-└── lib/services/shopify/jobs/
-    └── reconciliation.ts                       ← Health check + auto-fix
+└── supabase/migrations/
+    └── shopify-enrichment.sql   ← NOVO: campos e tabelas
 ```
 
-## 🔄 Fluxo Completo
+---
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      CLIENTE FAZ PEDIDO                              │
-└─────────────────────────────────────────────────────────────────────┘
-                                ↓
-┌─────────────────────────────────────────────────────────────────────┐
-│  Shopify envia webhook → /api/webhooks/shopify                       │
-└─────────────────────────────────────────────────────────────────────┘
-                                ↓
-┌─────────────────────────────────────────────────────────────────────┐
-│  1. Valida assinatura HMAC                                           │
-│  2. Verifica idempotência (não processar duplicado)                  │
-│  3. Cria/atualiza CONTATO                                            │
-│  4. Cria/atualiza DEAL na pipeline                                   │
-│  5. Emite evento para AUTOMAÇÕES                                     │
-│  6. Cria NOTIFICAÇÃO                                                 │
-└─────────────────────────────────────────────────────────────────────┘
+## 🔧 Correções Detalhadas
+
+### contact-sync.ts (CRÍTICO)
+
+**Antes (ERRADO):**
+```typescript
+.insert({
+  name: data.name,           // ❌ Campo não existe
+  type: data.contactType,    // ❌ Campo não existe
+  metadata: {...},           // ❌ Campo não existe
+})
 ```
 
-## 🚀 Como instalar
-
-### 1. Extraia o ZIP na raiz do projeto
-
-### 2. Configure a pipeline na interface
-Vá em `/integrations` → Shopify → Configurar:
-- Selecione o **Pipeline padrão**
-- Selecione o **Estágio inicial**
-- Habilite os eventos desejados
-
-### 3. Corrija os webhooks existentes (única vez)
-```
-/api/cron/shopify?job=health
+**Depois (CORRETO):**
+```typescript
+.insert({
+  first_name: data.firstName,        // ✅
+  last_name: data.lastName,          // ✅
+  shopify_customer_id: customer.id,  // ✅
+  total_orders: customer.orders_count, // ✅
+  total_spent: customer.total_spent,   // ✅
+  custom_fields: {...},              // ✅
+})
 ```
 
-### 4. Configure o cron (vercel.json)
-```json
-{
-  "crons": [
-    {
-      "path": "/api/cron/shopify?job=health",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/cron/shopify?job=abandoned",
-      "schedule": "*/30 * * * *"
-    }
-  ]
-}
+### deal-sync.ts
+
+**Antes:**
+```typescript
+.select('name')  // ❌ Campo não existe
+metadata: {...}  // ❌ Campo não existe
 ```
 
-## 📊 Eventos processados
-
-| Evento | O que faz |
-|--------|-----------|
-| `customers/create` | Cria contato + deal (se pipeline configurado) |
-| `customers/update` | Atualiza contato |
-| `orders/create` | Cria contato + deal + salva pedido + notificação |
-| `orders/paid` | Move deal para estágio "pago" ou marca como ganho |
-| `orders/fulfilled` | Move deal para estágio "enviado" |
-| `orders/cancelled` | Marca deal como perdido |
-| `checkouts/create` | Salva checkout (para detectar abandono) |
-| `app/uninstalled` | Desativa integração |
-
-## 🔍 Diagnóstico
-
-Para ver o status completo:
-```
-/api/shopify/debug?organizationId=SEU_ORG_ID
+**Depois:**
+```typescript
+.select('first_name, last_name, full_name')  // ✅
+custom_fields: {...}  // ✅
 ```
 
-## ⚠️ Requisitos
+### connect/route.ts
 
-1. **Pipeline configurado** - Sem pipeline, deals não são criados
-2. **NEXT_PUBLIC_APP_URL** - URL pública para webhooks
-3. **Em localhost** - Use ngrok ou similar
+**Antes:**
+```typescript
+address: `${appUrl}/api/shopify/webhooks`  // ❌ URL errada
+```
 
-## 📝 Notas
+**Depois:**
+```typescript
+address: `${appUrl}/api/webhooks/shopify`  // ✅ URL correta
+```
 
-- Webhooks são registrados automaticamente na conexão
-- Se alguém deletar um webhook, ele é recriado em até 6 horas
-- Notificações são criadas para novos clientes e pedidos
-- O sistema é idempotente (não processa eventos duplicados)
+---
+
+## 🚀 Passos para Deploy
+
+### 1. Executar Migration no Supabase
+
+```sql
+-- Execute o arquivo: supabase/migrations/shopify-enrichment.sql
+-- Pode rodar diretamente no SQL Editor do Supabase
+```
+
+### 2. Copiar arquivos para o projeto
+
+```bash
+# Copiar toda a pasta src/ para seu projeto
+cp -r deploy-complete/src/* /seu-projeto/src/
+
+# Ou copiar arquivo por arquivo:
+cp deploy-complete/src/lib/services/shopify/*.ts /seu-projeto/src/lib/services/shopify/
+cp deploy-complete/src/app/api/shopify/connect/route.ts /seu-projeto/src/app/api/shopify/connect/
+cp deploy-complete/src/app/api/webhooks/shopify/route.ts /seu-projeto/src/app/api/webhooks/shopify/
+# ... etc
+```
+
+### 3. Deploy
+
+```bash
+git add .
+git commit -m "fix: Shopify integration complete fix + enrichment"
+git push
+```
+
+### 4. Re-registrar Webhooks (IMPORTANTE!)
+
+Após o deploy, chame a API para corrigir webhooks existentes:
+
+```bash
+curl -X POST https://seudominio.com/api/shopify/webhooks/register \
+  -H "Content-Type: application/json" \
+  -d '{"organizationId": "seu-org-id"}'
+```
+
+Ou via interface, se tiver um botão para isso.
+
+### 5. Calcular RFM (Opcional)
+
+```sql
+-- No Supabase SQL Editor:
+SELECT calculate_contact_rfm('seu-organization-id');
+```
+
+---
+
+## ✅ Checklist Pós-Deploy
+
+- [ ] Migration executada no Supabase
+- [ ] Arquivos copiados para o projeto
+- [ ] Deploy realizado
+- [ ] Webhooks re-registrados
+- [ ] Testado criando um pedido de teste no Shopify
+- [ ] Verificado se contato foi criado com campos corretos
+- [ ] Verificado se atividades estão sendo registradas
+
+---
+
+## 🆕 Novas Funcionalidades
+
+### UI do ContactDrawer
+
+Agora mostra:
+
+```
+┌─────────────────────────────────────┐
+│  👤 João Silva                      │
+├─────────────────────────────────────┤
+│  🏆 CAMPEÃO   [R:5] [F:4] [M:5]    │  ← Badge RFM
+│  Última compra: 3 dias atrás        │
+├─────────────────────────────────────┤
+│  📦 Última Compra #1234  R$ 450    │
+│  ├ Camiseta Vintage (2x)           │
+│  └ Calça Jeans (1x)                │
+├─────────────────────────────────────┤
+│  ❤️ Produtos Favoritos (5)         │
+│  #1 Camiseta Básica - 8x           │
+│  #2 Tênis Runner - 3x              │
+├─────────────────────────────────────┤
+│  📋 Atividades                      │
+│  📦 Fez pedido #1234     [Shopify] │
+│  💳 Pagamento confirmado [Shopify] │
+│  📝 Nota adicionada                 │
+└─────────────────────────────────────┘
+```
+
+### Segmentos RFM
+
+| Segmento | Descrição |
+|----------|-----------|
+| champion | VIP - compra frequente, alto valor |
+| loyal | Cliente frequente |
+| potential_loyal | Recente com potencial |
+| new_customer | Primeira compra recente |
+| promising | Recente, valor médio |
+| need_attention | Era bom, esfriando |
+| about_to_sleep | Cada vez menos ativo |
+| at_risk | Era bom, sumiu |
+| hibernating | Inativo há muito tempo |
+| lost | Sem atividade significativa |
+
+---
+
+## ⚠️ Problemas Conhecidos
+
+1. **Contatos existentes com dados errados**: Se você já tem contatos criados com o código antigo, eles podem ter campos vazios. Recomendo rodar um script de correção ou re-sincronizar do Shopify.
+
+2. **Webhooks antigos**: A API de register vai deletar webhooks com URL errada e criar novos com URL correta.
+
+---
+
+## 📞 Suporte
+
+Se tiver problemas:
+1. Verificar logs do Vercel/servidor
+2. Verificar se a migration rodou corretamente
+3. Testar webhook manualmente com `curl`

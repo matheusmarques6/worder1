@@ -200,6 +200,36 @@ export interface Contact {
   updated_at: string;
   // Computed
   total_revenue?: number;
+  // Enriched data (Shopify)
+  last_order_id?: string;
+  last_order_value?: number;
+  last_order_number?: string;
+  last_order_products?: Array<{
+    product_id: string;
+    title: string;
+    quantity: number;
+    price: number;
+    image_url?: string;
+  }>;
+  first_order_at?: string;
+  days_since_last_order?: number;
+  order_frequency_days?: number;
+  favorite_products?: Array<{
+    product_id: string;
+    title: string;
+    count: number;
+  }>;
+  last_seen_at?: string;
+  total_page_views?: number;
+  last_viewed_products?: Array<{
+    product_id: string;
+    title: string;
+    viewed_at: string;
+  }>;
+  rfm_recency_score?: number;
+  rfm_frequency_score?: number;
+  rfm_monetary_score?: number;
+  rfm_segment?: string;
 }
 
 export interface Deal {

@@ -7,6 +7,7 @@
 // 2. Cria deals na pipeline configurada
 // 3. Move deals entre estágios
 // 4. Emite eventos para automações
+// 5. Registra atividades e enriquece dados
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,6 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 import { EventBus, EventType } from '@/lib/events';
 import { syncContactFromShopify, updateContactOrderStats } from '@/lib/services/shopify/contact-sync';
 import { createOrUpdateDealForContact, moveDealToStage, markDealAsWon } from '@/lib/services/shopify/deal-sync';
+import { trackActivity, trackPurchase, enrichContactFromOrder } from '@/lib/services/shopify/activity-tracker';
 import type { ShopifyStoreConfig, ShopifyCustomer } from '@/lib/services/shopify/types';
 
 // ============================================
@@ -260,6 +262,66 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     );
   }
 
+  // ======================================
+  // TRACKING: Registrar atividade e enriquecer contato
+  // ======================================
+  try {
+    // Registrar atividade de pedido
+    await trackActivity({
+      organizationId: store.organization_id,
+      contactId: contact.id,
+      type: 'order_placed',
+      title: `Fez pedido #${order.order_number}`,
+      metadata: {
+        order_id: order.id,
+        order_number: order.order_number,
+        total_price: orderValue,
+        currency: order.currency,
+        financial_status: order.financial_status,
+        items_count: order.line_items?.length || 0,
+      },
+      source: 'shopify',
+      sourceId: String(order.id),
+    });
+    
+    // Salvar produtos comprados individualmente
+    for (const item of (order.line_items || [])) {
+      await trackPurchase({
+        organizationId: store.organization_id,
+        contactId: contact.id,
+        orderId: String(order.id),
+        orderNumber: String(order.order_number),
+        orderDate: new Date(order.created_at),
+        productId: item.product_id?.toString(),
+        productTitle: item.title || item.name,
+        productSku: item.sku,
+        productVendor: item.vendor,
+        productType: item.product_type,
+        productImageUrl: item.image?.src,
+        variantId: item.variant_id?.toString(),
+        variantTitle: item.variant_title,
+        quantity: item.quantity || 1,
+        unitPrice: parseFloat(item.price || '0'),
+        totalPrice: parseFloat(item.price || '0') * (item.quantity || 1),
+        currency: order.currency,
+      });
+    }
+    
+    // Enriquecer contato com dados do pedido
+    await enrichContactFromOrder(contact.id, {
+      id: String(order.id),
+      orderNumber: String(order.order_number),
+      totalPrice: orderValue,
+      lineItems: order.line_items || [],
+      createdAt: new Date(order.created_at),
+    });
+    
+    console.log(`[Shopify] ✅ Contact enriched with order data`);
+  } catch (enrichError) {
+    console.error('[Shopify] Failed to track/enrich:', enrichError);
+    // Não falhar o webhook por causa do tracking
+  }
+
   // Emitir evento para automações
   await EventBus.emit(EventType.ORDER_CREATED, {
     organization_id: store.organization_id,
@@ -316,9 +378,26 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
     .eq('email', order.email)
     .maybeSingle();
   
-  if (contact && store.default_pipeline_id) {
-    // Mover deal para estágio "pago" ou marcar como ganho
-    await moveDealToStage(contact.id, store, 'paid');
+  if (contact) {
+    // Tracking: Registrar atividade
+    await trackActivity({
+      organizationId: store.organization_id,
+      contactId: contact.id,
+      type: 'order_paid',
+      title: `Pagamento confirmado - Pedido #${order.order_number}`,
+      metadata: {
+        order_id: order.id,
+        order_number: order.order_number,
+        total_price: parseFloat(order.total_price || '0'),
+      },
+      source: 'shopify',
+      sourceId: String(order.id),
+    });
+    
+    if (store.default_pipeline_id) {
+      // Mover deal para estágio "pago" ou marcar como ganho
+      await moveDealToStage(contact.id, store, 'paid');
+    }
   }
 
   // Emitir evento
@@ -358,9 +437,28 @@ async function processOrderFulfilled(store: ShopifyStoreConfig, order: any) {
     .eq('email', order.email)
     .maybeSingle();
   
-  if (contact && store.default_pipeline_id) {
-    // Mover deal para estágio "enviado"
-    await moveDealToStage(contact.id, store, 'fulfilled');
+  if (contact) {
+    // Tracking: Registrar atividade
+    await trackActivity({
+      organizationId: store.organization_id,
+      contactId: contact.id,
+      type: 'order_fulfilled',
+      title: `Pedido enviado #${order.order_number}`,
+      metadata: {
+        order_id: order.id,
+        order_number: order.order_number,
+        tracking_number: order.fulfillments?.[0]?.tracking_number,
+        tracking_url: order.fulfillments?.[0]?.tracking_url,
+        tracking_company: order.fulfillments?.[0]?.tracking_company,
+      },
+      source: 'shopify',
+      sourceId: String(order.id),
+    });
+    
+    if (store.default_pipeline_id) {
+      // Mover deal para estágio "enviado"
+      await moveDealToStage(contact.id, store, 'fulfilled');
+    }
   }
 
   // Emitir evento

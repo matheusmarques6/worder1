@@ -250,7 +250,7 @@ async function registerWebhooks(shopDomain: string, accessToken: string) {
         body: JSON.stringify({
           webhook: {
             topic,
-            address: `${appUrl}/api/shopify/webhooks`,
+            address: `${appUrl}/api/webhooks/shopify`,
             format: 'json',
           },
         }),

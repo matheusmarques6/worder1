@@ -21,6 +21,13 @@ export {
   createAbandonedCartDeal,
 } from './deal-sync';
 
+// Activity Tracker
+export {
+  trackActivity,
+  trackPurchase,
+  enrichContactFromOrder,
+} from './activity-tracker';
+
 // Webhook Processor
 export { processShopifyWebhook } from './webhook-processor';
 

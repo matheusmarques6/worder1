@@ -21,9 +21,32 @@ import {
   Send,
   Briefcase,
   ChevronDown,
+  Heart,
+  TrendingUp,
+  Award,
+  AlertTriangle,
+  Zap,
+  Star,
+  Truck,
+  CreditCard,
+  ExternalLink,
 } from 'lucide-react'
 import type { Contact, Pipeline, PipelineStage } from '@/types'
 import { useAuthStore } from '@/stores'
+
+// RFM Segment badges
+const RFM_SEGMENTS: Record<string, { label: string; color: string; icon: any }> = {
+  champion: { label: 'Campeão', color: 'bg-amber-500/20 text-amber-400 border-amber-500/50', icon: Award },
+  loyal: { label: 'Leal', color: 'bg-purple-500/20 text-purple-400 border-purple-500/50', icon: Heart },
+  potential_loyal: { label: 'Potencial Leal', color: 'bg-blue-500/20 text-blue-400 border-blue-500/50', icon: TrendingUp },
+  new_customer: { label: 'Novo Cliente', color: 'bg-green-500/20 text-green-400 border-green-500/50', icon: Zap },
+  promising: { label: 'Promissor', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50', icon: Star },
+  need_attention: { label: 'Precisa Atenção', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50', icon: AlertTriangle },
+  about_to_sleep: { label: 'Adormecendo', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50', icon: Clock },
+  at_risk: { label: 'Em Risco', color: 'bg-red-500/20 text-red-400 border-red-500/50', icon: AlertTriangle },
+  hibernating: { label: 'Hibernando', color: 'bg-gray-500/20 text-gray-400 border-gray-500/50', icon: Clock },
+  lost: { label: 'Perdido', color: 'bg-dark-600/50 text-dark-400 border-dark-500/50', icon: X },
+}
 
 // Predefined tag colors
 const TAG_COLORS: Record<string, string> = {
@@ -43,11 +66,20 @@ const SUGGESTED_TAGS = ['cliente', 'vip', 'lead', 'prospect', 'novo', 'recorrent
 // Activity types with icons and colors
 const ACTIVITY_TYPES = [
   { type: 'order', label: 'Pedido', icon: ShoppingCart, color: 'text-cyan-400 bg-cyan-500/20' },
+  { type: 'order_placed', label: 'Pedido', icon: ShoppingCart, color: 'text-cyan-400 bg-cyan-500/20' },
+  { type: 'order_paid', label: 'Pago', icon: CreditCard, color: 'text-green-400 bg-green-500/20' },
+  { type: 'order_fulfilled', label: 'Enviado', icon: Truck, color: 'text-blue-400 bg-blue-500/20' },
+  { type: 'order_cancelled', label: 'Cancelado', icon: X, color: 'text-red-400 bg-red-500/20' },
   { type: 'email', label: 'E-mail', icon: Mail, color: 'text-blue-400 bg-blue-500/20' },
   { type: 'call', label: 'Ligação', icon: PhoneCall, color: 'text-green-400 bg-green-500/20' },
   { type: 'meeting', label: 'Reunião', icon: Calendar, color: 'text-purple-400 bg-purple-500/20' },
   { type: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-400 bg-emerald-500/20' },
+  { type: 'whatsapp_sent', label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-400 bg-emerald-500/20' },
+  { type: 'whatsapp_received', label: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-400 bg-emerald-500/20' },
   { type: 'visit', label: 'Visita', icon: Eye, color: 'text-amber-400 bg-amber-500/20' },
+  { type: 'page_view', label: 'Visita', icon: Eye, color: 'text-amber-400 bg-amber-500/20' },
+  { type: 'product_view', label: 'Produto', icon: Package, color: 'text-purple-400 bg-purple-500/20' },
+  { type: 'add_to_cart', label: 'Carrinho', icon: ShoppingCart, color: 'text-orange-400 bg-orange-500/20' },
   { type: 'note', label: 'Nota', icon: FileText, color: 'text-gray-400 bg-gray-500/20' },
   { type: 'proposal', label: 'Proposta', icon: Send, color: 'text-pink-400 bg-pink-500/20' },
 ]
@@ -58,6 +90,33 @@ interface Activity {
   title: string
   description?: string
   created_at: string
+  occurred_at?: string
+  source?: string
+  metadata?: Record<string, any>
+}
+
+interface EnrichedData {
+  last_order_products?: Array<{
+    product_id: string
+    title: string
+    quantity: number
+    price: number
+    image_url?: string
+  }>
+  favorite_products?: Array<{
+    product_id: string
+    title: string
+    count: number
+  }>
+  rfm_segment?: string
+  rfm_recency_score?: number
+  rfm_frequency_score?: number
+  rfm_monetary_score?: number
+  last_order_value?: number
+  last_order_number?: string
+  days_since_last_order?: number
+  order_frequency_days?: number
+  first_order_at?: string
 }
 
 interface ContactDrawerProps {
@@ -115,6 +174,12 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
   const [dealTitle, setDealTitle] = useState('')
   const [dealValue, setDealValue] = useState('')
   const [creatingDeal, setCreatingDeal] = useState(false)
+
+  // Enriched data state (Shopify)
+  const [enrichedData, setEnrichedData] = useState<EnrichedData | null>(null)
+  const [loadingEnriched, setLoadingEnriched] = useState(false)
+  const [showLastOrder, setShowLastOrder] = useState(true)
+  const [showFavorites, setShowFavorites] = useState(false)
 
   // Fetch activities when contact changes
   useEffect(() => {
@@ -240,18 +305,63 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
     if (!orgId) return
     
     setLoadingActivities(true)
+    setLoadingEnriched(true)
+    
     try {
-      const response = await fetch(
-        `/api/contact-activities?contactId=${contact.id}&organizationId=${orgId}`
+      // Tentar buscar da nova API de timeline (inclui dados enriquecidos)
+      const timelineResponse = await fetch(
+        `/api/contacts/${contact.id}/timeline?limit=30`
       )
-      if (response.ok) {
-        const data = await response.json()
-        setActivities(data.activities || [])
+      
+      if (timelineResponse.ok) {
+        const timelineData = await timelineResponse.json()
+        
+        // Usar atividades da timeline
+        setActivities(timelineData.activities || [])
+        
+        // Extrair dados enriquecidos do contato
+        if (timelineData.contact) {
+          setEnrichedData({
+            last_order_products: timelineData.contact.last_order_products || [],
+            favorite_products: timelineData.contact.favorite_products || [],
+            rfm_segment: timelineData.contact.rfm_segment,
+            rfm_recency_score: timelineData.contact.rfm_recency_score,
+            rfm_frequency_score: timelineData.contact.rfm_frequency_score,
+            rfm_monetary_score: timelineData.contact.rfm_monetary_score,
+            last_order_value: timelineData.contact.last_order_value,
+            last_order_number: timelineData.contact.last_order_number,
+            days_since_last_order: timelineData.contact.days_since_last_order,
+            order_frequency_days: timelineData.contact.order_frequency_days,
+            first_order_at: timelineData.contact.first_order_at,
+          })
+        }
+      } else {
+        // Fallback para API antiga
+        const response = await fetch(
+          `/api/contact-activities?contactId=${contact.id}&organizationId=${orgId}`
+        )
+        if (response.ok) {
+          const data = await response.json()
+          setActivities(data.activities || [])
+        }
       }
     } catch (error) {
       console.error('Error fetching activities:', error)
+      // Fallback
+      try {
+        const response = await fetch(
+          `/api/contact-activities?contactId=${contact.id}&organizationId=${orgId}`
+        )
+        if (response.ok) {
+          const data = await response.json()
+          setActivities(data.activities || [])
+        }
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError)
+      }
     } finally {
       setLoadingActivities(false)
+      setLoadingEnriched(false)
     }
   }
 
@@ -683,6 +793,155 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
               </div>
             </div>
 
+            {/* RFM Segment Badge */}
+            {enrichedData?.rfm_segment && RFM_SEGMENTS[enrichedData.rfm_segment] && (
+              <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {(() => {
+                      const segment = RFM_SEGMENTS[enrichedData.rfm_segment!]
+                      const SegmentIcon = segment.icon
+                      return (
+                        <>
+                          <div className={`p-2 rounded-lg ${segment.color}`}>
+                            <SegmentIcon className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-white font-medium">{segment.label}</p>
+                            <p className="text-dark-400 text-xs">Segmento RFM</p>
+                          </div>
+                        </>
+                      )
+                    })()}
+                  </div>
+                  <div className="flex gap-1">
+                    <div className="text-center px-2">
+                      <p className="text-xs text-dark-500">R</p>
+                      <p className="text-white font-bold">{enrichedData.rfm_recency_score || '-'}</p>
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="text-xs text-dark-500">F</p>
+                      <p className="text-white font-bold">{enrichedData.rfm_frequency_score || '-'}</p>
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="text-xs text-dark-500">M</p>
+                      <p className="text-white font-bold">{enrichedData.rfm_monetary_score || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+                {enrichedData.days_since_last_order !== undefined && (
+                  <div className="mt-3 pt-3 border-t border-dark-700/50 flex items-center gap-4 text-xs text-dark-400">
+                    <span>Última compra: <span className="text-white">{enrichedData.days_since_last_order} dias atrás</span></span>
+                    {enrichedData.order_frequency_days && (
+                      <span>Frequência: <span className="text-white">~{Math.round(enrichedData.order_frequency_days)} dias</span></span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Última Compra */}
+            {enrichedData?.last_order_products && enrichedData.last_order_products.length > 0 && (
+              <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setShowLastOrder(!showLastOrder)}
+                  className="w-full p-4 bg-dark-800/50 flex items-center justify-between hover:bg-dark-800 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-cyan-400" />
+                    <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+                      Última Compra {enrichedData.last_order_number && `#${enrichedData.last_order_number}`}
+                    </span>
+                    {enrichedData.last_order_value && (
+                      <span className="text-success-400 text-sm font-medium">
+                        {formatCurrency(enrichedData.last_order_value)}
+                      </span>
+                    )}
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showLastOrder ? 'rotate-180' : ''}`} />
+                </button>
+                <AnimatePresence>
+                  {showLastOrder && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-3 space-y-2 bg-dark-900/30">
+                        {enrichedData.last_order_products.slice(0, 5).map((product, idx) => (
+                          <div key={idx} className="flex items-center gap-3 p-2 rounded-lg bg-dark-800/50">
+                            {product.image_url ? (
+                              <img
+                                src={product.image_url}
+                                alt={product.title}
+                                className="w-10 h-10 rounded-lg object-cover"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center">
+                                <Package className="w-5 h-5 text-dark-500" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm truncate">{product.title}</p>
+                              <p className="text-dark-400 text-xs">
+                                {product.quantity}x {formatCurrency(product.price)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Produtos Favoritos */}
+            {enrichedData?.favorite_products && enrichedData.favorite_products.length > 0 && (
+              <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setShowFavorites(!showFavorites)}
+                  className="w-full p-4 bg-dark-800/50 flex items-center justify-between hover:bg-dark-800 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 text-pink-400" />
+                    <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+                      Produtos Favoritos
+                    </span>
+                    <span className="text-dark-500 text-xs">
+                      ({enrichedData.favorite_products.length})
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showFavorites ? 'rotate-180' : ''}`} />
+                </button>
+                <AnimatePresence>
+                  {showFavorites && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-3 space-y-2 bg-dark-900/30">
+                        {enrichedData.favorite_products.slice(0, 5).map((product, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-dark-800/50">
+                            <div className="flex items-center gap-2">
+                              <span className="text-dark-500 text-xs font-bold w-5">#{idx + 1}</span>
+                              <span className="text-white text-sm truncate">{product.title}</span>
+                            </div>
+                            <span className="text-primary-400 text-xs font-medium">
+                              {product.count}x comprado
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
             {/* Activity Timeline */}
             <div>
               <div className="flex items-center justify-between mb-4">
@@ -771,6 +1030,8 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                   {activities.map((activity) => {
                     const actType = getActivityIcon(activity.type)
                     const Icon = actType.icon
+                    const isAutomatic = activity.source && activity.source !== 'manual'
+                    const activityDate = activity.occurred_at || activity.created_at
                     return (
                       <div
                         key={activity.id}
@@ -780,15 +1041,24 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                           <Icon className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm">{activity.title}</p>
-                          <p className="text-dark-500 text-xs">{formatDate(activity.created_at)}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-white text-sm">{activity.title}</p>
+                            {isAutomatic && (
+                              <span className="px-1.5 py-0.5 text-[10px] rounded bg-dark-700 text-dark-400">
+                                {activity.source === 'shopify' ? 'Shopify' : activity.source}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-dark-500 text-xs">{formatDate(activityDate)}</p>
                         </div>
-                        <button
-                          onClick={() => openDeleteActivityConfirm(activity.id)}
-                          className="p-1 rounded text-dark-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {!isAutomatic && (
+                          <button
+                            onClick={() => openDeleteActivityConfirm(activity.id)}
+                            className="p-1 rounded text-dark-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     )
                   })}
