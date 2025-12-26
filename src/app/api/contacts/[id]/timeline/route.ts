@@ -125,7 +125,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return acc;
     }, []) || [];
     
-    // 5. Formatar resposta
+    // 5. Buscar sessões de navegação (histórico de visitas)
+    const { data: sessions } = await supabase
+      .from('contact_sessions')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('started_at', { ascending: false })
+      .limit(10);
+    
+    // 6. Formatar resposta
     return NextResponse.json({
       contact: {
         ...contact,
@@ -140,6 +148,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       hasMoreActivities: (offset + limit) < (activitiesCount || 0),
       purchases: purchases || [],
       orders: uniqueOrders.slice(0, 10),
+      sessions: sessions || [],
       meta: {
         limit,
         offset,

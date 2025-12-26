@@ -117,6 +117,51 @@ interface EnrichedData {
   days_since_last_order?: number
   order_frequency_days?: number
   first_order_at?: string
+  last_viewed_products?: Array<{
+    product_id: string
+    title: string
+    price?: number
+    url?: string
+    viewed_at: string
+  }>
+}
+
+interface OrderHistory {
+  order_id: string
+  order_number: string
+  order_date: string
+  total: number
+  items: Array<{
+    product_title: string
+    product_sku?: string
+    product_image_url?: string
+    quantity: number
+    unit_price: number
+    total_price: number
+  }>
+}
+
+interface BrowsingSession {
+  id: string
+  session_id: string
+  started_at: string
+  ended_at?: string
+  page_views: number
+  pages_visited: Array<{
+    url: string
+    title: string
+    type: string
+    timestamp: string
+  }>
+  products_viewed: Array<{
+    product_id: string
+    product_title: string
+    product_price?: number
+    viewed_at: string
+  }>
+  utm_source?: string
+  utm_medium?: string
+  utm_campaign?: string
 }
 
 interface ContactDrawerProps {
@@ -180,6 +225,12 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
   const [loadingEnriched, setLoadingEnriched] = useState(false)
   const [showLastOrder, setShowLastOrder] = useState(true)
   const [showFavorites, setShowFavorites] = useState(false)
+  
+  // Orders and Sessions state (Shopify)
+  const [orderHistory, setOrderHistory] = useState<OrderHistory[]>([])
+  const [browsingSessions, setBrowsingSessions] = useState<BrowsingSession[]>([])
+  const [showOrderHistory, setShowOrderHistory] = useState(false)
+  const [showBrowsingHistory, setShowBrowsingHistory] = useState(false)
 
   // Fetch activities when contact changes
   useEffect(() => {
@@ -333,7 +384,18 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
             days_since_last_order: timelineData.contact.days_since_last_order,
             order_frequency_days: timelineData.contact.order_frequency_days,
             first_order_at: timelineData.contact.first_order_at,
+            last_viewed_products: timelineData.contact.last_viewed_products || [],
           })
+        }
+        
+        // Salvar histórico de pedidos
+        if (timelineData.orders) {
+          setOrderHistory(timelineData.orders)
+        }
+        
+        // Salvar sessões de navegação
+        if (timelineData.sessions) {
+          setBrowsingSessions(timelineData.sessions)
         }
       } else {
         // Fallback para API antiga
@@ -935,6 +997,191 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                             </span>
                           </div>
                         ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Histórico de Compras */}
+            {orderHistory && orderHistory.length > 0 && (
+              <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setShowOrderHistory(!showOrderHistory)}
+                  className="w-full p-4 bg-dark-800/50 flex items-center justify-between hover:bg-dark-800 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4 text-cyan-400" />
+                    <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+                      Histórico de Compras
+                    </span>
+                    <span className="text-dark-500 text-xs">
+                      ({orderHistory.length} pedidos)
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showOrderHistory ? 'rotate-180' : ''}`} />
+                </button>
+                <AnimatePresence>
+                  {showOrderHistory && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-3 space-y-3 bg-dark-900/30 max-h-80 overflow-y-auto">
+                        {orderHistory.map((order, orderIdx) => (
+                          <div key={orderIdx} className="border border-dark-700/30 rounded-lg overflow-hidden">
+                            <div className="p-2 bg-dark-800/50 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-white text-sm font-medium">
+                                  Pedido #{order.order_number}
+                                </span>
+                                <span className="text-dark-500 text-xs">
+                                  {new Date(order.order_date).toLocaleDateString('pt-BR')}
+                                </span>
+                              </div>
+                              <span className="text-success-400 text-sm font-medium">
+                                {formatCurrency(order.total)}
+                              </span>
+                            </div>
+                            <div className="p-2 space-y-1">
+                              {order.items.slice(0, 5).map((item, itemIdx) => (
+                                <div key={itemIdx} className="flex items-center gap-2 p-1.5 rounded bg-dark-800/30">
+                                  {item.product_image_url ? (
+                                    <img
+                                      src={item.product_image_url}
+                                      alt={item.product_title}
+                                      className="w-8 h-8 rounded object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center">
+                                      <Package className="w-4 h-4 text-dark-500" />
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-white text-xs truncate">{item.product_title}</p>
+                                    <p className="text-dark-500 text-xs">
+                                      {item.quantity}x {formatCurrency(item.unit_price)}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                              {order.items.length > 5 && (
+                                <p className="text-dark-500 text-xs text-center py-1">
+                                  +{order.items.length - 5} outros itens
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Histórico de Navegação */}
+            {((enrichedData?.last_viewed_products && enrichedData.last_viewed_products.length > 0) || 
+              (browsingSessions && browsingSessions.length > 0)) && (
+              <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setShowBrowsingHistory(!showBrowsingHistory)}
+                  className="w-full p-4 bg-dark-800/50 flex items-center justify-between hover:bg-dark-800 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+                      Navegação no Site
+                    </span>
+                    {contact.total_page_views && (
+                      <span className="text-dark-500 text-xs">
+                        ({contact.total_page_views} páginas)
+                      </span>
+                    )}
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showBrowsingHistory ? 'rotate-180' : ''}`} />
+                </button>
+                <AnimatePresence>
+                  {showBrowsingHistory && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-3 space-y-3 bg-dark-900/30 max-h-80 overflow-y-auto">
+                        {/* Produtos Visualizados Recentemente */}
+                        {enrichedData?.last_viewed_products && enrichedData.last_viewed_products.length > 0 && (
+                          <div>
+                            <p className="text-dark-400 text-xs font-medium mb-2 flex items-center gap-1">
+                              <Package className="w-3 h-3" />
+                              Produtos Visualizados
+                            </p>
+                            <div className="space-y-1">
+                              {enrichedData.last_viewed_products.slice(0, 5).map((product, idx) => (
+                                <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-dark-800/50">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-white text-xs truncate">{product.title}</p>
+                                    <p className="text-dark-500 text-[10px]">
+                                      {new Date(product.viewed_at).toLocaleString('pt-BR', { 
+                                        day: '2-digit', 
+                                        month: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </p>
+                                  </div>
+                                  {product.price && (
+                                    <span className="text-success-400 text-xs">
+                                      {formatCurrency(product.price)}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Sessões de Navegação */}
+                        {browsingSessions && browsingSessions.length > 0 && (
+                          <div>
+                            <p className="text-dark-400 text-xs font-medium mb-2 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Sessões Recentes
+                            </p>
+                            <div className="space-y-2">
+                              {browsingSessions.slice(0, 3).map((session, idx) => (
+                                <div key={idx} className="p-2 rounded-lg bg-dark-800/50">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-white text-xs">
+                                      {new Date(session.started_at).toLocaleDateString('pt-BR')} às {new Date(session.started_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    <span className="text-dark-400 text-xs">
+                                      {session.page_views} páginas
+                                    </span>
+                                  </div>
+                                  {session.utm_source && (
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-dark-700 text-dark-300">
+                                        {session.utm_source}
+                                        {session.utm_medium && ` / ${session.utm_medium}`}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {session.products_viewed && session.products_viewed.length > 0 && (
+                                    <div className="text-dark-500 text-[10px]">
+                                      Viu: {session.products_viewed.slice(0, 2).map(p => p.product_title).join(', ')}
+                                      {session.products_viewed.length > 2 && ` +${session.products_viewed.length - 2}`}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   )}
