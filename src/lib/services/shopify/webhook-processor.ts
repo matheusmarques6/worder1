@@ -36,6 +36,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// =============================================
+// Helper: Converte null para undefined
+// =============================================
+function nullToUndefined<T>(value: T | null): T | undefined {
+  return value === null ? undefined : value;
+}
+
 /**
  * Processa webhook do Shopify que veio da fila
  */
@@ -106,16 +113,17 @@ export async function processShopifyWebhook(
     
     return result;
     
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error(`❌ Error processing webhook ${topic}:`, error);
     
     // Marcar evento como falho
-    await markEventFailed(eventId, error.message);
+    await markEventFailed(eventId, errorMessage);
     
     return {
       success: false,
       action: 'error',
-      error: error.message,
+      error: errorMessage,
     };
   }
 }
@@ -146,9 +154,9 @@ async function handleCustomerEvent(
   if (topic === 'customers/create') {
     const eventData: EventData = {
       contact_id: contact.id,
-      contact_name: contact.name,
-      contact_email: customer.email,
-      contact_phone: customer.phone,
+      contact_name: contact.name || undefined,
+      contact_email: nullToUndefined(customer.email),
+      contact_phone: nullToUndefined(customer.phone),
       customer_tags: customer.tags?.split(',').map(t => t.trim()) || [],
       source_id: String(customer.id),
     };
@@ -223,7 +231,7 @@ async function handleOrderCreate(
   
   // Extrair dados do cliente do pedido
   const customerData = order.customer || {
-    id: null as any,
+    id: null as unknown as number,
     email: order.email,
     phone: order.phone,
     first_name: order.billing_address?.first_name || '',
@@ -255,9 +263,9 @@ async function handleOrderCreate(
   // ============================================
   const eventData: EventData = {
     contact_id: contact.id,
-    contact_name: contact.name,
-    contact_email: order.email,
-    contact_phone: order.phone,
+    contact_name: contact.name || undefined,
+    contact_email: nullToUndefined(order.email),
+    contact_phone: nullToUndefined(order.phone),
     order_id: String(order.id),
     order_number: String(order.order_number),
     order_value: orderValue,
@@ -300,7 +308,7 @@ async function handleOrderCreate(
           financial_status: order.financial_status,
         }
       );
-      dealId = deal.id;
+      dealId = deal.id || undefined;
     }
   } else {
     dealId = createdDeal.deal_id;
@@ -309,7 +317,7 @@ async function handleOrderCreate(
   // Criar notificação
   await createNotification(store, 'new_order', {
     title: `Novo pedido: R$ ${orderValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-    message: `${contact.name} fez um pedido`,
+    message: `${contact.name || 'Cliente'} fez um pedido`,
     order_id: savedOrder?.id,
     contact_id: contact.id,
     value: orderValue,
@@ -355,7 +363,7 @@ async function handleOrderPaid(
     .eq('store_id', store.id)
     .maybeSingle();
   
-  const contactId = orderRecord?.contact_id;
+  const contactId = orderRecord?.contact_id as string | undefined;
   const orderValue = parseFloat(order.total_price || '0');
   
   // ============================================
@@ -363,8 +371,8 @@ async function handleOrderPaid(
   // ============================================
   const eventData: EventData = {
     contact_id: contactId,
-    contact_email: order.email,
-    contact_phone: order.phone,
+    contact_email: nullToUndefined(order.email),
+    contact_phone: nullToUndefined(order.phone),
     order_id: String(order.id),
     order_number: String(order.order_number),
     order_value: orderValue,
@@ -395,7 +403,6 @@ async function handleOrderPaid(
   // ============================================
   // FALLBACK: Lógica anterior
   // ============================================
-  const hasCreationRules = await hasAutomationRules(store.organization_id, 'shopify', 'order_paid');
   const hasTransitions = await hasTransitionRulesCheck(store.organization_id, 'shopify', 'order_paid');
   
   // Se não há regras de transição, usar lógica legada
@@ -440,14 +447,14 @@ async function handleOrderFulfilled(
     .eq('store_id', store.id)
     .maybeSingle();
   
-  const contactId = orderRecord?.contact_id;
+  const contactId = orderRecord?.contact_id as string | undefined;
   
   // ============================================
   // NOVO: Processar regras de automação
   // ============================================
   const eventData: EventData = {
     contact_id: contactId,
-    contact_email: order.email,
+    contact_email: nullToUndefined(order.email),
     order_id: String(order.id),
     order_number: String(order.order_number),
     order_value: parseFloat(order.total_price || '0'),
@@ -507,14 +514,14 @@ async function handleOrderCancelled(
     .eq('store_id', store.id)
     .maybeSingle();
   
-  const contactId = orderRecord?.contact_id;
+  const contactId = orderRecord?.contact_id as string | undefined;
   
   // ============================================
   // NOVO: Processar regras de automação
   // ============================================
   const eventData: EventData = {
     contact_id: contactId,
-    contact_email: order.email,
+    contact_email: nullToUndefined(order.email),
     order_id: String(order.id),
     order_number: String(order.order_number),
     order_value: parseFloat(order.total_price || '0'),
@@ -536,7 +543,7 @@ async function handleOrderCancelled(
   // ============================================
   const hasRules = await hasTransitionRulesCheck(store.organization_id, 'shopify', 'order_cancelled');
   
-  if (!hasRules && contactId) {
+  if (!hasRules && contactId && store.default_pipeline_id) {
     // Buscar deal aberto
     const { data: deal } = await supabase
       .from('deals')
@@ -636,8 +643,8 @@ export async function handleAbandonedCheckout(
   // ============================================
   const eventData: EventData = {
     contact_id: checkout.contact_id,
-    contact_email: checkout.email,
-    contact_phone: checkout.phone,
+    contact_email: nullToUndefined(checkout.email),
+    contact_phone: nullToUndefined(checkout.phone),
     checkout_id: String(checkout.id),
     order_value: checkoutValue,
     product_ids: checkout.line_items?.map(li => String(li.product_id)) || [],
@@ -723,7 +730,7 @@ async function hasAutomationRules(
       .maybeSingle();
     
     return !!data;
-  } catch (e) {
+  } catch {
     // Tabela pode não existir ainda
     return false;
   }
@@ -746,7 +753,7 @@ async function hasTransitionRulesCheck(
       .maybeSingle();
     
     return !!data;
-  } catch (e) {
+  } catch {
     // Tabela pode não existir ainda
     return false;
   }
@@ -925,7 +932,7 @@ async function markEventFailed(eventId: string, errorMessage: string): Promise<v
 async function createNotification(
   store: ShopifyStoreConfig,
   type: string,
-  data: Record<string, any>
+  data: Record<string, unknown>
 ): Promise<void> {
   try {
     await supabase
