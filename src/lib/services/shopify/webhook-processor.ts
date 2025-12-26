@@ -39,7 +39,7 @@ const supabase = createClient(
 // =============================================
 // Helper: Converte null para undefined
 // =============================================
-function nullToUndefined<T>(value: T | null): T | undefined {
+function toUndefined<T>(value: T | null | undefined): T | undefined {
   return value === null ? undefined : value;
 }
 
@@ -70,13 +70,11 @@ export async function processShopifyWebhook(
     let result: WebhookProcessResult;
     
     switch (topic) {
-      // Customer events
       case 'customers/create':
       case 'customers/update':
         result = await handleCustomerEvent(payload, store, topic);
         break;
       
-      // Order events
       case 'orders/create':
         result = await handleOrderCreate(payload, store);
         break;
@@ -93,13 +91,11 @@ export async function processShopifyWebhook(
         result = await handleOrderCancelled(payload, store);
         break;
       
-      // Checkout events
       case 'checkouts/create':
       case 'checkouts/update':
-        result = await handleCheckoutEvent(payload, store, topic);
+        result = await handleCheckoutEvent(payload, store);
         break;
       
-      // App events
       case 'app/uninstalled':
         result = await handleAppUninstalled(store);
         break;
@@ -108,23 +104,14 @@ export async function processShopifyWebhook(
         result = { success: true, action: `ignored_unknown_topic: ${topic}` };
     }
     
-    // Marcar evento como processado
     await markEventProcessed(eventId);
-    
     return result;
     
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`❌ Error processing webhook ${topic}:`, error);
-    
-    // Marcar evento como falho
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`❌ Error processing webhook ${topic}:`, err);
     await markEventFailed(eventId, errorMessage);
-    
-    return {
-      success: false,
-      action: 'error',
-      error: errorMessage,
-    };
+    return { success: false, action: 'error', error: errorMessage };
   }
 }
 
@@ -132,9 +119,6 @@ export async function processShopifyWebhook(
 // Event Handlers
 // =============================================
 
-/**
- * Processa evento de cliente (create/update)
- */
 async function handleCustomerEvent(
   customer: ShopifyCustomer,
   store: ShopifyStoreConfig,
@@ -145,34 +129,29 @@ async function handleCustomerEvent(
     return { success: true, action: 'skipped_customers_disabled' };
   }
   
-  // Sincronizar contato
   const contact = await syncContactFromShopify(customer, store, 'customer');
   
-  // ============================================
-  // NOVO: Processar regras de automação
-  // ============================================
+  // Processar regras de automação para customers/create
   if (topic === 'customers/create') {
     const eventData: EventData = {
       contact_id: contact.id,
-      contact_name: contact.name || undefined,
-      contact_email: nullToUndefined(customer.email),
-      contact_phone: nullToUndefined(customer.phone),
+      contact_name: contact.name,
+      contact_email: toUndefined(customer.email),
+      contact_phone: toUndefined(customer.phone),
       customer_tags: customer.tags?.split(',').map(t => t.trim()) || [],
       source_id: String(customer.id),
     };
     
-    // Processar regras para 'customer_created'
-    const automationResults = await RuleEngine.processCreationRules(
+    const results = await RuleEngine.processCreationRules(
       store.organization_id,
       'shopify',
       'customer_created',
       eventData
     );
     
-    console.log(`[Webhook] Automation results for customer_created:`, automationResults);
+    console.log(`[Webhook] Automation results for customer_created:`, results);
     
-    // Se alguma regra criou deal, retornar
-    const createdDeal = automationResults.find(r => r.action === 'deal_created');
+    const createdDeal = results.find(r => r.action === 'deal_created');
     if (createdDeal) {
       return {
         success: true,
@@ -183,15 +162,11 @@ async function handleCustomerEvent(
     }
   }
   
-  // ============================================
-  // FALLBACK: Lógica anterior (se não houver regras)
-  // ============================================
+  // Fallback: lógica anterior
   if (contact.isNew && store.default_pipeline_id) {
-    // Verificar se há regras configuradas
     const hasRules = await hasAutomationRules(store.organization_id, 'shopify', 'customer_created');
     
     if (!hasRules) {
-      // Comportamento legado: criar deal na pipeline padrão
       const deal = await createOrUpdateDealForContact(
         contact.id,
         store,
@@ -204,7 +179,7 @@ async function handleCustomerEvent(
         success: true,
         action: topic === 'customers/create' ? 'customer_created' : 'customer_updated',
         contactId: contact.id,
-        dealId: deal.id || undefined,
+        dealId: toUndefined(deal.id),
       };
     }
   }
@@ -216,9 +191,6 @@ async function handleCustomerEvent(
   };
 }
 
-/**
- * Processa criação de pedido
- */
 async function handleOrderCreate(
   order: ShopifyOrder,
   store: ShopifyStoreConfig
@@ -228,43 +200,37 @@ async function handleOrderCreate(
     return { success: true, action: 'skipped_orders_disabled' };
   }
   
-  // Extrair dados do cliente do pedido
   const customerData = order.customer || {
-    id: null as unknown as number,
+    id: 0,
     email: order.email,
     phone: order.phone,
     first_name: order.billing_address?.first_name || '',
     last_name: order.billing_address?.last_name || '',
     orders_count: 1,
+    tags: '',
+    total_spent: '0',
+    accepts_marketing: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
   
-  // Sincronizar contato (como customer, pois comprou)
-  const contact = await syncContactFromShopify(
-    customerData as ShopifyCustomer, 
-    store, 
-    'order'
-  );
-  
-  // Atualizar estatísticas do contato
+  const contact = await syncContactFromShopify(customerData, store, 'order');
   const orderValue = parseFloat(order.total_price || '0');
+  
   await updateContactOrderStats(contact.id, orderValue);
   
-  // Marcar checkout como convertido (se existir)
   if (order.checkout_id) {
     await markCheckoutConverted(store.id, order.checkout_id);
   }
   
-  // Salvar pedido no banco
   const savedOrder = await saveOrder(order, store, contact.id);
   
-  // ============================================
-  // NOVO: Processar regras de automação
-  // ============================================
+  // Processar regras de automação
   const eventData: EventData = {
     contact_id: contact.id,
-    contact_name: contact.name || undefined,
-    contact_email: nullToUndefined(order.email),
-    contact_phone: nullToUndefined(order.phone),
+    contact_name: contact.name,
+    contact_email: toUndefined(order.email),
+    contact_phone: toUndefined(order.phone),
     order_id: String(order.id),
     order_number: String(order.order_number),
     order_value: orderValue,
@@ -273,29 +239,24 @@ async function handleOrderCreate(
     source_id: String(order.id),
   };
   
-  // Processar regras para 'order_created'
-  const automationResults = await RuleEngine.processCreationRules(
+  const results = await RuleEngine.processCreationRules(
     store.organization_id,
     'shopify',
     'order_created',
     eventData
   );
   
-  console.log(`[Webhook] Automation results for order_created:`, automationResults);
+  console.log(`[Webhook] Automation results for order_created:`, results);
   
-  // Se alguma regra criou deal, não usar lógica legada
-  const createdDeal = automationResults.find(r => r.action === 'deal_created');
-  
-  // ============================================
-  // FALLBACK: Lógica anterior (se não houver regras)
-  // ============================================
+  const createdDeal = results.find(r => r.action === 'deal_created');
   let dealId: string | undefined;
   
-  if (!createdDeal) {
+  if (createdDeal) {
+    dealId = createdDeal.deal_id;
+  } else {
     const hasRules = await hasAutomationRules(store.organization_id, 'shopify', 'order_created');
     
     if (!hasRules && store.default_pipeline_id) {
-      // Comportamento legado
       const deal = await createOrUpdateDealForContact(
         contact.id,
         store,
@@ -307,15 +268,12 @@ async function handleOrderCreate(
           financial_status: order.financial_status,
         }
       );
-      dealId = deal.id || undefined;
+      dealId = toUndefined(deal.id);
     }
-  } else {
-    dealId = createdDeal.deal_id;
   }
   
-  // Criar notificação
   await createNotification(store, 'new_order', {
-    title: `Novo pedido: R$ ${orderValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+    title: `Novo pedido: R$ ${orderValue.toFixed(2)}`,
     message: `${contact.name || 'Cliente'} fez um pedido`,
     order_id: savedOrder?.id,
     contact_id: contact.id,
@@ -327,13 +285,10 @@ async function handleOrderCreate(
     action: 'order_created',
     contactId: contact.id,
     dealId,
-    orderId: savedOrder?.id,
+    orderId: toUndefined(savedOrder?.id),
   };
 }
 
-/**
- * Processa pedido pago
- */
 async function handleOrderPaid(
   order: ShopifyOrder,
   store: ShopifyStoreConfig
@@ -343,7 +298,6 @@ async function handleOrderPaid(
     return { success: true, action: 'skipped_orders_disabled' };
   }
   
-  // Atualizar status do pedido
   await supabase
     .from('shopify_orders')
     .update({ 
@@ -353,7 +307,6 @@ async function handleOrderPaid(
     .eq('shopify_order_id', String(order.id))
     .eq('store_id', store.id);
   
-  // Buscar contato pelo pedido
   const { data: orderRecord } = await supabase
     .from('shopify_orders')
     .select('contact_id')
@@ -364,13 +317,11 @@ async function handleOrderPaid(
   const contactId = orderRecord?.contact_id as string | undefined;
   const orderValue = parseFloat(order.total_price || '0');
   
-  // ============================================
-  // NOVO: Processar regras de automação
-  // ============================================
+  // Processar regras de automação
   const eventData: EventData = {
     contact_id: contactId,
-    contact_email: nullToUndefined(order.email),
-    contact_phone: nullToUndefined(order.phone),
+    contact_email: toUndefined(order.email),
+    contact_phone: toUndefined(order.phone),
     order_id: String(order.id),
     order_number: String(order.order_number),
     order_value: orderValue,
@@ -379,32 +330,24 @@ async function handleOrderPaid(
     source_id: String(order.id),
   };
   
-  // Processar regras de CRIAÇÃO para 'order_paid'
-  const creationResults = await RuleEngine.processCreationRules(
+  await RuleEngine.processCreationRules(
     store.organization_id,
     'shopify',
     'order_paid',
     eventData
   );
   
-  // Processar regras de TRANSIÇÃO para 'order_paid'
-  const transitionResults = await RuleEngine.processStageTransitions(
+  await RuleEngine.processStageTransitions(
     store.organization_id,
     'shopify',
     'order_paid',
     eventData
   );
   
-  console.log(`[Webhook] Automation results for order_paid - Creation:`, creationResults);
-  console.log(`[Webhook] Automation results for order_paid - Transitions:`, transitionResults);
+  // Fallback
+  const hasRules = await hasTransitionRules(store.organization_id, 'shopify', 'order_paid');
   
-  // ============================================
-  // FALLBACK: Lógica anterior
-  // ============================================
-  const hasTransitions = await hasTransitionRulesCheck(store.organization_id, 'shopify', 'order_paid');
-  
-  // Se não há regras de transição, usar lógica legada
-  if (!hasTransitions && contactId) {
+  if (!hasRules && contactId) {
     await markDealAsWon(contactId, store, {
       paid_at: new Date().toISOString(),
       financial_status: 'paid',
@@ -418,15 +361,11 @@ async function handleOrderPaid(
   };
 }
 
-/**
- * Processa pedido enviado
- */
 async function handleOrderFulfilled(
   order: ShopifyOrder,
   store: ShopifyStoreConfig
 ): Promise<WebhookProcessResult> {
   
-  // Atualizar status do pedido
   await supabase
     .from('shopify_orders')
     .update({ 
@@ -436,7 +375,6 @@ async function handleOrderFulfilled(
     .eq('shopify_order_id', String(order.id))
     .eq('store_id', store.id);
   
-  // Buscar contato pelo pedido
   const { data: orderRecord } = await supabase
     .from('shopify_orders')
     .select('contact_id')
@@ -446,32 +384,23 @@ async function handleOrderFulfilled(
   
   const contactId = orderRecord?.contact_id as string | undefined;
   
-  // ============================================
-  // NOVO: Processar regras de automação
-  // ============================================
   const eventData: EventData = {
     contact_id: contactId,
-    contact_email: nullToUndefined(order.email),
+    contact_email: toUndefined(order.email),
     order_id: String(order.id),
     order_number: String(order.order_number),
     order_value: parseFloat(order.total_price || '0'),
     source_id: String(order.id),
   };
   
-  // Processar transições para 'order_fulfilled'
-  const transitionResults = await RuleEngine.processStageTransitions(
+  await RuleEngine.processStageTransitions(
     store.organization_id,
     'shopify',
     'order_fulfilled',
     eventData
   );
   
-  console.log(`[Webhook] Automation results for order_fulfilled:`, transitionResults);
-  
-  // ============================================
-  // FALLBACK: Lógica anterior
-  // ============================================
-  const hasRules = await hasTransitionRulesCheck(store.organization_id, 'shopify', 'order_fulfilled');
+  const hasRules = await hasTransitionRules(store.organization_id, 'shopify', 'order_fulfilled');
   
   if (!hasRules && contactId) {
     await moveDealToStage(contactId, store, 'fulfilled');
@@ -484,15 +413,11 @@ async function handleOrderFulfilled(
   };
 }
 
-/**
- * Processa pedido cancelado
- */
 async function handleOrderCancelled(
   order: ShopifyOrder,
   store: ShopifyStoreConfig
 ): Promise<WebhookProcessResult> {
   
-  // Atualizar status do pedido
   await supabase
     .from('shopify_orders')
     .update({ 
@@ -502,7 +427,6 @@ async function handleOrderCancelled(
     .eq('shopify_order_id', String(order.id))
     .eq('store_id', store.id);
   
-  // Buscar contato pelo pedido
   const { data: orderRecord } = await supabase
     .from('shopify_orders')
     .select('contact_id')
@@ -512,35 +436,25 @@ async function handleOrderCancelled(
   
   const contactId = orderRecord?.contact_id as string | undefined;
   
-  // ============================================
-  // NOVO: Processar regras de automação
-  // ============================================
   const eventData: EventData = {
     contact_id: contactId,
-    contact_email: nullToUndefined(order.email),
+    contact_email: toUndefined(order.email),
     order_id: String(order.id),
     order_number: String(order.order_number),
     order_value: parseFloat(order.total_price || '0'),
     source_id: String(order.id),
   };
   
-  // Processar transições para 'order_cancelled'
-  const transitionResults = await RuleEngine.processStageTransitions(
+  await RuleEngine.processStageTransitions(
     store.organization_id,
     'shopify',
     'order_cancelled',
     eventData
   );
   
-  console.log(`[Webhook] Automation results for order_cancelled:`, transitionResults);
-  
-  // ============================================
-  // FALLBACK: Lógica anterior
-  // ============================================
-  const hasRules = await hasTransitionRulesCheck(store.organization_id, 'shopify', 'order_cancelled');
+  const hasRules = await hasTransitionRules(store.organization_id, 'shopify', 'order_cancelled');
   
   if (!hasRules && contactId && store.default_pipeline_id) {
-    // Buscar deal aberto
     const { data: deal } = await supabase
       .from('deals')
       .select('id')
@@ -568,46 +482,41 @@ async function handleOrderCancelled(
   };
 }
 
-/**
- * Processa evento de checkout (create/update)
- * Usado para detectar carrinhos abandonados
- */
 async function handleCheckoutEvent(
   checkout: ShopifyCheckout,
-  store: ShopifyStoreConfig,
-  topic: string
+  store: ShopifyStoreConfig
 ): Promise<WebhookProcessResult> {
   
   if (!store.sync_checkouts) {
     return { success: true, action: 'skipped_checkouts_disabled' };
   }
   
-  // Ignorar se não tem email nem telefone
   if (!checkout.email && !checkout.phone) {
     return { success: true, action: 'skipped_no_contact_info' };
   }
   
-  // Ignorar se já foi completado (virou pedido)
   if (checkout.completed_at) {
     return { success: true, action: 'skipped_already_completed' };
   }
   
-  // Salvar checkout
   const savedCheckout = await saveCheckout(checkout, store);
   
-  // Criar contato como lead
-  const customerData: Partial<ShopifyCustomer> = {
-    id: checkout.customer?.id,
+  const customerData: ShopifyCustomer = {
+    id: checkout.customer?.id || 0,
     email: checkout.email,
     phone: checkout.phone,
     first_name: checkout.billing_address?.first_name || checkout.customer?.first_name || '',
     last_name: checkout.billing_address?.last_name || checkout.customer?.last_name || '',
     orders_count: 0,
+    tags: '',
+    total_spent: '0',
+    accepts_marketing: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
   
-  const contact = await syncContactFromShopify(customerData as ShopifyCustomer, store, 'checkout');
+  const contact = await syncContactFromShopify(customerData, store, 'checkout');
   
-  // Atualizar checkout com contact_id
   if (savedCheckout?.id) {
     await supabase
       .from('shopify_checkouts')
@@ -619,7 +528,7 @@ async function handleCheckoutEvent(
     success: true,
     action: 'checkout_saved',
     contactId: contact.id,
-    checkoutId: savedCheckout?.id,
+    checkoutId: toUndefined(savedCheckout?.id),
   };
 }
 
@@ -633,40 +542,33 @@ export async function handleAbandonedCheckout(
   
   const checkoutValue = parseFloat(checkout.total_price || '0');
   
-  // ============================================
-  // NOVO: Processar regras de automação
-  // ============================================
   const eventData: EventData = {
     contact_id: checkout.contact_id,
-    contact_email: nullToUndefined(checkout.email),
-    contact_phone: nullToUndefined(checkout.phone),
+    contact_email: toUndefined(checkout.email),
+    contact_phone: toUndefined(checkout.phone),
     checkout_id: String(checkout.id),
     order_value: checkoutValue,
     product_ids: checkout.line_items?.map(li => String(li.product_id)) || [],
     source_id: `checkout_${checkout.id}`,
   };
   
-  // Processar regras para 'checkout_abandoned'
-  const automationResults = await RuleEngine.processCreationRules(
+  const results = await RuleEngine.processCreationRules(
     store.organization_id,
     'shopify',
     'checkout_abandoned',
     eventData
   );
   
-  console.log(`[Webhook] Automation results for checkout_abandoned:`, automationResults);
+  console.log(`[Webhook] Automation results for checkout_abandoned:`, results);
   
-  const createdDeal = automationResults.find(r => r.action === 'deal_created');
+  const createdDeal = results.find(r => r.action === 'deal_created');
   
-  // ============================================
-  // FALLBACK: Lógica anterior
-  // ============================================
   if (!createdDeal) {
     const hasRules = await hasAutomationRules(store.organization_id, 'shopify', 'checkout_abandoned');
     
     if (!hasRules) {
-      // Comportamento legado: adicionar tag de carrinho abandonado
-      await addAbandonedCartTag(checkout.contact_id, checkoutValue);
+      // Função aceita apenas 1 argumento
+      await addAbandonedCartTag(checkout.contact_id);
     }
   }
   
@@ -678,9 +580,6 @@ export async function handleAbandonedCheckout(
   };
 }
 
-/**
- * Processa desinstalação do app
- */
 async function handleAppUninstalled(
   store: ShopifyStoreConfig
 ): Promise<WebhookProcessResult> {
@@ -704,7 +603,7 @@ async function handleAppUninstalled(
 }
 
 // =============================================
-// Helper: Verificar se há regras configuradas
+// Helper: Verificar regras
 // =============================================
 
 async function hasAutomationRules(
@@ -725,12 +624,11 @@ async function hasAutomationRules(
     
     return !!data;
   } catch {
-    // Tabela pode não existir ainda
     return false;
   }
 }
 
-async function hasTransitionRulesCheck(
+async function hasTransitionRules(
   organizationId: string,
   sourceType: string,
   triggerEvent: string
@@ -748,7 +646,6 @@ async function hasTransitionRulesCheck(
     
     return !!data;
   } catch {
-    // Tabela pode não existir ainda
     return false;
   }
 }
@@ -757,9 +654,6 @@ async function hasTransitionRulesCheck(
 // Database Operations
 // =============================================
 
-/**
- * Busca configuração da loja
- */
 async function getStoreConfig(storeId: string): Promise<ShopifyStoreConfig | null> {
   const { data, error } = await supabase
     .from('shopify_stores')
@@ -791,9 +685,6 @@ async function getStoreConfig(storeId: string): Promise<ShopifyStoreConfig | nul
   };
 }
 
-/**
- * Salva pedido no banco
- */
 async function saveOrder(
   order: ShopifyOrder,
   store: ShopifyStoreConfig,
@@ -835,9 +726,6 @@ async function saveOrder(
   return data;
 }
 
-/**
- * Salva checkout no banco
- */
 async function saveCheckout(
   checkout: ShopifyCheckout,
   store: ShopifyStoreConfig
@@ -875,9 +763,6 @@ async function saveCheckout(
   return data;
 }
 
-/**
- * Marca checkout como convertido
- */
 async function markCheckoutConverted(
   storeId: string,
   checkoutId: number
@@ -893,9 +778,6 @@ async function markCheckoutConverted(
     .eq('shopify_checkout_id', String(checkoutId));
 }
 
-/**
- * Marca evento como processado
- */
 async function markEventProcessed(eventId: string): Promise<void> {
   await supabase
     .from('shopify_webhook_events')
@@ -906,9 +788,6 @@ async function markEventProcessed(eventId: string): Promise<void> {
     .eq('event_id', eventId);
 }
 
-/**
- * Marca evento como falho
- */
 async function markEventFailed(eventId: string, errorMessage: string): Promise<void> {
   await supabase
     .from('shopify_webhook_events')
@@ -920,9 +799,6 @@ async function markEventFailed(eventId: string, errorMessage: string): Promise<v
     .eq('event_id', eventId);
 }
 
-/**
- * Cria notificação para o usuário
- */
 async function createNotification(
   store: ShopifyStoreConfig,
   type: string,
@@ -940,7 +816,6 @@ async function createNotification(
         is_read: false,
       });
   } catch (error) {
-    // Não falhar se notificação não funcionar
     console.error('Failed to create notification:', error);
   }
 }
