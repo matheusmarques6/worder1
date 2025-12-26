@@ -1,6 +1,9 @@
 // =============================================
 // API: WhatsApp Cloud - Webhook
 // src/app/api/whatsapp/cloud/webhook/route.ts
+//
+// Atualizado para usar o sistema de automações
+// por pipeline (RuleEngine)
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,6 +15,10 @@ import {
   normalizePhone,
   type WebhookMessage 
 } from '@/lib/whatsapp/cloud-api';
+import { 
+  RuleEngine, 
+  type EventData 
+} from '@/lib/services/automation/rule-engine';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -148,9 +155,11 @@ async function processMessage(
 
     // 1. Buscar ou criar contato
     let contact = await getOrCreateContact(account, phoneNumber, contactName);
+    const isNewContact = contact?.isNew || false;
 
     // 2. Buscar ou criar conversa
     let conversation = await getOrCreateConversation(account, contact, phoneNumber);
+    const isNewConversation = conversation?.isNew || false;
 
     // 3. Verificar duplicata
     const { data: existingMsg } = await supabase
@@ -213,6 +222,85 @@ async function processMessage(
       })
       .eq('id', account.id);
 
+    // ============================================
+    // NOVO: Processar regras de automação
+    // ============================================
+    
+    // Buscar contact_id do CRM (se existir vínculo)
+    let crmContactId: string | undefined;
+    if (contact?.crm_contact_id) {
+      crmContactId = contact.crm_contact_id;
+    } else {
+      // Tentar encontrar contato no CRM pelo telefone
+      const { data: crmContact } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', account.organization_id)
+        .or(`whatsapp.eq.${phoneNumber},phone.eq.${phoneNumber}`)
+        .limit(1)
+        .maybeSingle();
+      
+      if (crmContact) {
+        crmContactId = crmContact.id;
+        // Atualizar vínculo
+        await supabase
+          .from('whatsapp_contacts')
+          .update({ crm_contact_id: crmContact.id })
+          .eq('id', contact.id);
+      }
+    }
+
+    const eventData: EventData = {
+      contact_id: crmContactId,
+      contact_name: contactName,
+      contact_phone: phoneNumber,
+      conversation_id: conversation.id,
+      message_text: textBody,
+      message_timestamp: message.timestamp,
+      source_id: `whatsapp_${conversation.id}`,
+    };
+
+    // Processar eventos baseado no contexto
+    if (isNewConversation) {
+      // Nova conversa iniciada
+      console.log('[WhatsApp Cloud] Processing automation for conversation_started');
+      
+      const automationResults = await RuleEngine.processCreationRules(
+        account.organization_id,
+        'whatsapp',
+        'conversation_started',
+        eventData
+      );
+      
+      console.log('[WhatsApp Cloud] Automation results (conversation_started):', automationResults);
+    }
+
+    // Sempre processar message_received também
+    console.log('[WhatsApp Cloud] Processing automation for message_received');
+    
+    const messageAutomationResults = await RuleEngine.processCreationRules(
+      account.organization_id,
+      'whatsapp',
+      'message_received',
+      eventData
+    );
+    
+    console.log('[WhatsApp Cloud] Automation results (message_received):', messageAutomationResults);
+
+    // Se contato foi criado agora, processar contact_created
+    if (isNewContact && crmContactId) {
+      console.log('[WhatsApp Cloud] Processing automation for contact_created');
+      
+      const contactAutomationResults = await RuleEngine.processCreationRules(
+        account.organization_id,
+        'whatsapp',
+        'contact_created',
+        eventData
+      );
+      
+      console.log('[WhatsApp Cloud] Automation results (contact_created):', contactAutomationResults);
+    }
+
     console.log('[WhatsApp Cloud] Message saved successfully');
   } catch (error) {
     console.error('[WhatsApp Cloud] Error processing message:', error);
@@ -272,7 +360,7 @@ async function getOrCreateContact(account: any, phoneNumber: string, name: strin
         .eq('id', contact.id);
     }
     
-    return contact;
+    return { ...contact, isNew: false };
   }
 
   // Criar novo contato
@@ -288,7 +376,48 @@ async function getOrCreateContact(account: any, phoneNumber: string, name: strin
     .select()
     .single();
 
-  return newContact;
+  // Também criar/vincular no CRM
+  let crmContactId: string | undefined;
+  
+  // Verificar se já existe contato no CRM com este telefone
+  const { data: existingCrmContact } = await supabase
+    .from('contacts')
+    .select('id')
+    .eq('organization_id', account.organization_id)
+    .or(`whatsapp.eq.${phoneNumber},phone.eq.${phoneNumber}`)
+    .limit(1)
+    .maybeSingle();
+  
+  if (existingCrmContact) {
+    crmContactId = existingCrmContact.id;
+  } else {
+    // Criar contato no CRM
+    const { data: newCrmContact } = await supabase
+      .from('contacts')
+      .insert({
+        organization_id: account.organization_id,
+        name: name !== phoneNumber ? name : 'Contato WhatsApp',
+        whatsapp: phoneNumber,
+        phone: phoneNumber,
+        source: 'whatsapp',
+        type: 'lead',
+        tags: ['whatsapp'],
+      })
+      .select('id')
+      .single();
+    
+    crmContactId = newCrmContact?.id;
+  }
+  
+  // Vincular ao contato WhatsApp
+  if (crmContactId && newContact) {
+    await supabase
+      .from('whatsapp_contacts')
+      .update({ crm_contact_id: crmContactId })
+      .eq('id', newContact.id);
+  }
+
+  return { ...newContact, isNew: true, crm_contact_id: crmContactId };
 }
 
 async function getOrCreateConversation(account: any, contact: any, phoneNumber: string) {
@@ -312,7 +441,7 @@ async function getOrCreateConversation(account: any, contact: any, phoneNumber: 
         .eq('id', conv.id);
     }
     
-    return conv;
+    return { ...conv, isNew: false };
   }
 
   // Criar nova conversa
@@ -333,7 +462,7 @@ async function getOrCreateConversation(account: any, contact: any, phoneNumber: 
     .select()
     .single();
 
-  return newConv;
+  return { ...newConv, isNew: true };
 }
 
 function buildMessageContent(message: WebhookMessage): any {
