@@ -27,7 +27,8 @@ import {
   ChevronRight,
   Zap,
 } from 'lucide-react'
-import { useDeals, usePipelines, useOrganization } from '@/hooks'
+import { useDeals, usePipelines } from '@/hooks'
+import { useAuthStore } from '@/stores'
 import { PipelineModal } from '@/components/crm'
 import { PipelineAutomationBadges, PipelineAutomationConfig } from '@/components/crm/automation'
 
@@ -77,7 +78,7 @@ function SortableStage({ stage, index }: { stage: any; index: number }) {
 export default function PipelinesPage() {
   const { pipelines, loading, refetchPipelines } = useDeals()
   const { createPipeline, updatePipeline, deletePipeline, updateStage } = usePipelines()
-  const { currentOrganization } = useOrganization()
+  const { user } = useAuthStore()
   const [showModal, setShowModal] = useState(false)
   const [editingPipeline, setEditingPipeline] = useState<any>(null)
   const [expandedPipeline, setExpandedPipeline] = useState<string | null>(null)
@@ -97,14 +98,14 @@ export default function PipelinesPage() {
   // Fetch automation rules for all pipelines
   useEffect(() => {
     const fetchAllRules = async () => {
-      if (!currentOrganization?.id || pipelines.length === 0) return
+      if (!user?.organization_id || pipelines.length === 0) return
       
       const rulesMap: Record<string, any[]> = {}
       
       for (const pipeline of pipelines) {
         try {
           const res = await fetch(
-            `/api/pipelines/${pipeline.id}/automations?organizationId=${currentOrganization.id}`
+            `/api/pipelines/${pipeline.id}/automations?organizationId=${user.organization_id}`
           )
           const data = await res.json()
           if (data.rules) {
@@ -119,7 +120,7 @@ export default function PipelinesPage() {
     }
     
     fetchAllRules()
-  }, [currentOrganization?.id, pipelines])
+  }, [user?.organization_id, pipelines])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -358,10 +359,10 @@ export default function PipelinesPage() {
         pipeline={automationPipeline}
         onSave={async () => {
           // Refetch rules for this pipeline
-          if (automationPipeline && currentOrganization?.id) {
+          if (automationPipeline && user?.organization_id) {
             try {
               const res = await fetch(
-                `/api/pipelines/${automationPipeline.id}/automations?organizationId=${currentOrganization.id}`
+                `/api/pipelines/${automationPipeline.id}/automations?organizationId=${user.organization_id}`
               )
               const data = await res.json()
               if (data.rules) {

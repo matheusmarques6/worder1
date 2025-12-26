@@ -29,7 +29,7 @@ import {
   ToggleLeft,
   ToggleRight,
 } from 'lucide-react'
-import { useOrganization } from '@/hooks'
+import { useAuthStore } from '@/stores'
 
 // =============================================
 // TYPES
@@ -123,8 +123,8 @@ export function PipelineAutomationConfig({
   pipeline,
   onSave,
 }: PipelineAutomationConfigProps) {
-  const { currentOrganization } = useOrganization()
-  const organizationId = currentOrganization?.id
+  const { user } = useAuthStore()
+  const organizationId = user?.organization_id
 
   // State
   const [activeTab, setActiveTab] = useState<'automations' | 'transitions'>('automations')
