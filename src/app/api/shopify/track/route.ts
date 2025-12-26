@@ -431,7 +431,7 @@ export async function POST(request: NextRequest) {
     // 4. Atualizar ou criar sessão
     const { data: existingSession } = await supabase
       .from('contact_sessions')
-      .select('id, page_views, pages_visited, products_viewed')
+      .select('id, contact_id, page_views, pages_visited, products_viewed')
       .eq('session_id', session_id)
       .eq('organization_id', store.organization_id)
       .maybeSingle();
