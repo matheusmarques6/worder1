@@ -1,28 +1,50 @@
 // =============================================
 // API: Import Existing Customers from Shopify
-// src/app/api/shopify/import-customers/route.ts
+// VERSÃO OTIMIZADA - Baseada em pesquisa de melhores práticas
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+export const maxDuration = 300; // 5 minutos - Vercel Pro
 
 const SHOPIFY_API_VERSION = '2024-10';
 
 // =============================================
+// Configurações de Performance
+// =============================================
+const CONFIG = {
+  // Shopify permite 2 req/s (40 requests por 20 segundos)
+  // Usamos 150ms para ficar seguro e maximizar throughput
+  SHOPIFY_DELAY_MS: 150,
+  
+  // Batch sizes otimizados para Supabase REST API (limite 5MB payload)
+  BATCH_INSERT_SIZE: 500,    // Bulk insert de novos contatos
+  BATCH_UPDATE_SIZE: 50,     // Updates paralelos
+  BATCH_DEAL_SIZE: 100,      // Bulk insert de deals
+  
+  // Limites de paginação
+  MAX_SHOPIFY_PAGES: 100,    // ~25.000 clientes
+  MAX_FILTER_PAGES: 15,      // ~3.750 clientes para amostragem de filtros
+  
+  // Concorrência para operações paralelas
+  PARALLEL_UPDATES: 50,
+};
+
+// =============================================
 // Helper: Create Supabase client
 // =============================================
-function getSupabase() {
+function getSupabase(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
-  if (!url || !key) {
-    return null;
-  }
+  if (!url || !key) return null;
   
-  return createClient(url, key);
+  return createClient(url, key, {
+    auth: { persistSession: false },
+    db: { schema: 'public' }
+  });
 }
 
 // =============================================
@@ -36,23 +58,79 @@ function jsonResponse(data: any, status = 200) {
 }
 
 // =============================================
-// Helper: Buscar TODOS os clientes com paginação
+// Helper: Sanitizar strings (prevenir XSS)
 // =============================================
-async function fetchAllCustomers(
+function sanitizeString(value: string | null | undefined): string | null {
+  if (!value) return null;
+  
+  // Remove tags HTML e caracteres perigosos
+  return value
+    .replace(/<[^>]*>/g, '')           // Remove HTML tags
+    .replace(/[<>"'&]/g, '')           // Remove caracteres perigosos
+    .trim()
+    .substring(0, 255);                // Limita tamanho
+}
+
+// =============================================
+// Helper: Normalizar telefone (formato E.164)
+// =============================================
+function normalizePhone(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  
+  const digits = phone.replace(/\D/g, '');
+  
+  if (digits.length < 8) return null;
+  
+  // Brasil: adiciona +55 se necessário
+  if (digits.startsWith('55') && digits.length >= 12) {
+    return `+${digits}`;
+  }
+  
+  if (digits.length >= 10 && digits.length <= 11) {
+    return `+55${digits}`;
+  }
+  
+  return `+${digits}`;
+}
+
+// =============================================
+// Helper: Normalizar email
+// =============================================
+function normalizeEmail(email: string | null | undefined): string | null {
+  if (!email) return null;
+  
+  const normalized = email.toLowerCase().trim();
+  
+  // Validação básica de email
+  if (!normalized.includes('@') || normalized.length > 255) {
+    return null;
+  }
+  
+  return normalized;
+}
+
+// =============================================
+// Helper: Buscar clientes do Shopify com paginação otimizada
+// =============================================
+async function fetchShopifyCustomers(
   shopDomain: string, 
-  accessToken: string
+  accessToken: string,
+  options: {
+    maxPages?: number;
+    fields?: string;
+  } = {}
 ): Promise<any[]> {
+  const { maxPages = CONFIG.MAX_SHOPIFY_PAGES, fields } = options;
   const allCustomers: any[] = [];
-  let nextPageUrl: string | null = 
-    `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250`;
+  
+  let nextPageUrl: string | null = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250${fields ? `&fields=${fields}` : ''}`;
   
   let pageCount = 0;
-  const maxPages = 40;
+  
+  console.log(`[Shopify] Starting fetch from ${shopDomain}`);
   
   while (nextPageUrl && pageCount < maxPages) {
-    const currentUrl: string = nextPageUrl;
-    
-    const response: Response = await fetch(currentUrl, {
+    const response: Response = await fetch(nextPageUrl, {
       headers: {
         'X-Shopify-Access-Token': accessToken,
         'Content-Type': 'application/json',
@@ -60,14 +138,21 @@ async function fetchAllCustomers(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Shopify API error:', response.status, errorText);
+      // Verificar se é rate limit
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After') || '2';
+        console.warn(`[Shopify] Rate limited, waiting ${retryAfter}s`);
+        await new Promise(r => setTimeout(r, parseInt(retryAfter) * 1000));
+        continue; // Retry same page
+      }
+      
       throw new Error(`Shopify API error: ${response.status}`);
     }
 
     const data = await response.json();
     allCustomers.push(...(data.customers || []));
     
+    // Parse Link header para próxima página
     const linkHeader: string | null = response.headers.get('Link');
     nextPageUrl = null;
     
@@ -79,14 +164,23 @@ async function fetchAllCustomers(
     }
     
     pageCount++;
-    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Log progresso a cada 10 páginas
+    if (pageCount % 10 === 0) {
+      console.log(`[Shopify] Fetched ${allCustomers.length} customers (${pageCount} pages)`);
+    }
+    
+    // Delay para respeitar rate limit
+    await new Promise(r => setTimeout(r, CONFIG.SHOPIFY_DELAY_MS));
   }
+  
+  console.log(`[Shopify] Completed: ${allCustomers.length} customers in ${pageCount} pages`);
   
   return allCustomers;
 }
 
 // =============================================
-// Helper: Buscar todas as tags E status de email marketing
+// Helper: Buscar filtros disponíveis (tags + email status)
 // =============================================
 async function fetchCustomerFilters(
   shopDomain: string,
@@ -98,86 +192,39 @@ async function fetchCustomerFilters(
   const tagCounts = new Map<string, number>();
   const emailStatusCounts = new Map<string, number>();
   
-  let nextPageUrl: string | null = 
-    `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250&fields=id,tags,email_marketing_consent`;
+  // Busca otimizada - apenas campos necessários
+  const customers = await fetchShopifyCustomers(shopDomain, accessToken, {
+    maxPages: CONFIG.MAX_FILTER_PAGES,
+    fields: 'id,tags,email_marketing_consent,accepts_marketing'
+  });
   
-  let pageCount = 0;
-  const maxPages = 100;
-  let customersChecked = 0;
-  
-  console.log(`[Filters] Starting filter fetch for ${shopDomain}`);
-  
-  while (nextPageUrl && pageCount < maxPages) {
-    const currentUrl: string = nextPageUrl;
-    
-    const response: Response = await fetch(currentUrl, {
-      headers: {
-        'X-Shopify-Access-Token': accessToken,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      console.error(`[Filters] API error on page ${pageCount}: ${response.status}`);
-      break;
-    }
-
-    const data = await response.json();
-    const customers = data.customers || [];
-    customersChecked += customers.length;
-    
-    for (const customer of customers) {
-      // Processar tags
-      if (customer.tags && typeof customer.tags === 'string' && customer.tags.trim()) {
-        const tags = customer.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
-        tags.forEach((tag: string) => {
-          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
-        });
-      }
-      
-      // Processar status de email marketing
-      const emailConsent = customer.email_marketing_consent;
-      let emailStatus = 'not_subscribed';
-      
-      if (emailConsent && emailConsent.state) {
-        emailStatus = emailConsent.state;
-      } else if (customer.accepts_marketing === true) {
-        emailStatus = 'subscribed';
-      } else if (customer.accepts_marketing === false) {
-        emailStatus = 'not_subscribed';
-      }
-      
-      emailStatusCounts.set(emailStatus, (emailStatusCounts.get(emailStatus) || 0) + 1);
+  for (const customer of customers) {
+    // Processar tags
+    if (customer.tags && typeof customer.tags === 'string') {
+      const tags = customer.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+      tags.forEach((tag: string) => {
+        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      });
     }
     
-    const linkHeader: string | null = response.headers.get('Link');
-    nextPageUrl = null;
+    // Processar status de email
+    let emailStatus = 'not_subscribed';
+    const consent = customer.email_marketing_consent;
     
-    if (linkHeader) {
-      const nextMatch: RegExpMatchArray | null = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
-      if (nextMatch) {
-        nextPageUrl = nextMatch[1];
-      }
+    if (consent?.state) {
+      emailStatus = consent.state;
+    } else if (customer.accepts_marketing === true) {
+      emailStatus = 'subscribed';
     }
     
-    pageCount++;
-    
-    if (pageCount % 10 === 0) {
-      console.log(`[Filters] Checked ${customersChecked} customers, found ${tagCounts.size} tags, ${emailStatusCounts.size} email statuses`);
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, 250));
+    emailStatusCounts.set(emailStatus, (emailStatusCounts.get(emailStatus) || 0) + 1);
   }
   
-  console.log(`[Filters] Completed: ${customersChecked} customers, ${tagCounts.size} tags, ${emailStatusCounts.size} email statuses`);
-  
-  // Labels em português para status de email
   const emailStatusLabels: Record<string, string> = {
     'subscribed': 'Inscrito',
     'not_subscribed': 'Não inscrito',
     'unsubscribed': 'Inscrição cancelada',
     'pending': 'Pendente',
-    'invalid': 'Inválido',
   };
   
   return {
@@ -195,28 +242,157 @@ async function fetchCustomerFilters(
 }
 
 // =============================================
-// Helper: Normalizar telefone
+// Helper: Pré-carregar contatos existentes (1 query vs N)
 // =============================================
-function normalizePhone(phone: string | null | undefined): string | null {
-  if (!phone) return null;
+async function loadExistingContacts(
+  supabase: SupabaseClient,
+  organizationId: string
+): Promise<{
+  byEmail: Map<string, any>;
+  byPhone: Map<string, any>;
+  byShopifyId: Map<string, any>;
+}> {
+  console.log(`[DB] Loading existing contacts for org ${organizationId}`);
   
-  const digits = phone.replace(/\D/g, '');
+  const { data: contacts, error } = await supabase
+    .from('contacts')
+    .select('id, email, phone, first_name, last_name, tags, shopify_customer_id')
+    .eq('organization_id', organizationId);
   
-  if (digits.length < 8) return null;
-  
-  if (digits.startsWith('55') && digits.length >= 12) {
-    return `+${digits}`;
+  if (error) {
+    console.error('[DB] Error loading contacts:', error);
+    throw error;
   }
   
-  if (digits.length >= 10 && digits.length <= 11) {
-    return `+55${digits}`;
+  // Criar Maps para lookup O(1)
+  const byEmail = new Map<string, any>();
+  const byPhone = new Map<string, any>();
+  const byShopifyId = new Map<string, any>();
+  
+  for (const contact of (contacts || [])) {
+    if (contact.email) {
+      byEmail.set(contact.email.toLowerCase(), contact);
+    }
+    if (contact.phone) {
+      byPhone.set(contact.phone, contact);
+    }
+    if (contact.shopify_customer_id) {
+      byShopifyId.set(contact.shopify_customer_id, contact);
+    }
   }
   
-  return `+${digits}`;
+  console.log(`[DB] Loaded ${contacts?.length || 0} existing contacts`);
+  
+  return { byEmail, byPhone, byShopifyId };
 }
 
 // =============================================
-// GET: Buscar contagem de clientes e tags disponíveis
+// Helper: Bulk insert com retry
+// =============================================
+async function bulkInsertContacts(
+  supabase: SupabaseClient,
+  contacts: any[],
+  batchSize: number = CONFIG.BATCH_INSERT_SIZE
+): Promise<{ inserted: any[]; errors: string[] }> {
+  const inserted: any[] = [];
+  const errors: string[] = [];
+  
+  for (let i = 0; i < contacts.length; i += batchSize) {
+    const batch = contacts.slice(i, i + batchSize);
+    
+    try {
+      const { data, error } = await supabase
+        .from('contacts')
+        .insert(batch)
+        .select('id, shopify_customer_id');
+      
+      if (error) {
+        console.error(`[DB] Batch insert error (${i}-${i + batchSize}):`, error.message);
+        errors.push(`Batch ${i / batchSize}: ${error.message}`);
+      } else {
+        inserted.push(...(data || []));
+      }
+    } catch (err: any) {
+      errors.push(`Batch ${i / batchSize}: ${err.message}`);
+    }
+    
+    // Log progresso
+    if ((i + batchSize) % 1000 === 0 || i + batchSize >= contacts.length) {
+      console.log(`[DB] Inserted ${Math.min(i + batchSize, contacts.length)}/${contacts.length}`);
+    }
+  }
+  
+  return { inserted, errors };
+}
+
+// =============================================
+// Helper: Parallel updates
+// =============================================
+async function parallelUpdateContacts(
+  supabase: SupabaseClient,
+  updates: { id: string; data: any }[],
+  concurrency: number = CONFIG.PARALLEL_UPDATES
+): Promise<{ updated: number; errors: string[] }> {
+  let updated = 0;
+  const errors: string[] = [];
+  
+  for (let i = 0; i < updates.length; i += concurrency) {
+    const batch = updates.slice(i, i + concurrency);
+    
+    const promises = batch.map(({ id, data }) =>
+      supabase.from('contacts').update(data).eq('id', id)
+    );
+    
+    const results = await Promise.allSettled(promises);
+    
+    for (const result of results) {
+      if (result.status === 'fulfilled' && !result.value.error) {
+        updated++;
+      } else {
+        const errMsg = result.status === 'rejected' 
+          ? result.reason?.message 
+          : result.value?.error?.message;
+        if (errMsg) errors.push(errMsg);
+      }
+    }
+    
+    // Log progresso
+    if ((i + concurrency) % 500 === 0 || i + concurrency >= updates.length) {
+      console.log(`[DB] Updated ${Math.min(i + concurrency, updates.length)}/${updates.length}`);
+    }
+  }
+  
+  return { updated, errors };
+}
+
+// =============================================
+// Helper: Bulk insert deals
+// =============================================
+async function bulkInsertDeals(
+  supabase: SupabaseClient,
+  deals: any[],
+  batchSize: number = CONFIG.BATCH_DEAL_SIZE
+): Promise<number> {
+  let inserted = 0;
+  
+  for (let i = 0; i < deals.length; i += batchSize) {
+    const batch = deals.slice(i, i + batchSize);
+    
+    const { data, error } = await supabase
+      .from('deals')
+      .insert(batch)
+      .select('id');
+    
+    if (!error) {
+      inserted += data?.length || 0;
+    }
+  }
+  
+  return inserted;
+}
+
+// =============================================
+// GET: Buscar contagem e filtros disponíveis
 // =============================================
 export async function GET(request: NextRequest) {
   try {
@@ -239,16 +415,11 @@ export async function GET(request: NextRequest) {
       .eq('id', storeId)
       .single();
 
-    if (error || !store) {
-      console.error('Store lookup error:', error);
-      return jsonResponse({ success: false, error: 'Store not found' }, 404);
+    if (error || !store?.access_token) {
+      return jsonResponse({ success: false, error: 'Store not found or not configured' }, 404);
     }
 
-    if (!store.access_token) {
-      return jsonResponse({ success: false, error: 'Store not configured' }, 400);
-    }
-
-    // Buscar contagem de clientes no Shopify
+    // Buscar contagem total
     const countResponse = await fetch(
       `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/customers/count.json`,
       {
@@ -260,17 +431,15 @@ export async function GET(request: NextRequest) {
     );
 
     if (!countResponse.ok) {
-      const errorText = await countResponse.text();
-      console.error('Shopify count error:', countResponse.status, errorText);
       return jsonResponse({ 
         success: false, 
-        error: `Erro ao conectar com Shopify: ${countResponse.status}` 
+        error: `Shopify error: ${countResponse.status}` 
       }, 500);
     }
 
     const countData = await countResponse.json();
     
-    // Se solicitado, buscar filtros (tags e email status)
+    // Buscar filtros se solicitado
     let availableTags: { tag: string; count: number }[] = [];
     let emailStatusOptions: { status: string; label: string; count: number }[] = [];
     
@@ -279,8 +448,8 @@ export async function GET(request: NextRequest) {
         const filters = await fetchCustomerFilters(store.shop_domain, store.access_token);
         availableTags = filters.tags;
         emailStatusOptions = filters.emailStatus;
-      } catch (filterError) {
-        console.error('Error fetching filters:', filterError);
+      } catch (err) {
+        console.error('[Filters] Error:', err);
       }
     }
     
@@ -294,15 +463,12 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('GET error:', error);
-    return jsonResponse({ 
-      success: false,
-      error: error.message || 'Erro interno do servidor'
-    }, 500);
+    return jsonResponse({ success: false, error: error.message }, 500);
   }
 }
 
 // =============================================
-// POST: Executar importação de clientes
+// POST: Executar importação otimizada
 // =============================================
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -313,10 +479,11 @@ export async function POST(request: NextRequest) {
       return jsonResponse({ success: false, error: 'Database not configured' }, 503);
     }
 
+    // Parse body com validação
     let body;
     try {
       body = await request.json();
-    } catch (e) {
+    } catch {
       return jsonResponse({ success: false, error: 'Invalid request body' }, 400);
     }
 
@@ -328,81 +495,58 @@ export async function POST(request: NextRequest) {
       createDeals = false,
       tags = [],
       filterByTags = [],
-      filterByEmailStatus = []  // Status de email marketing para filtrar
+      filterByEmailStatus = []
     } = body;
 
     if (!storeId) {
       return jsonResponse({ success: false, error: 'storeId required' }, 400);
     }
 
-    // Buscar configuração da loja
+    // Buscar loja
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
       .select('*')
       .eq('id', storeId)
       .single();
 
-    if (storeError || !store) {
-      console.error('Store not found:', storeError);
+    if (storeError || !store?.access_token) {
       return jsonResponse({ success: false, error: 'Store not found' }, 404);
     }
 
-    if (!store.access_token) {
-      return jsonResponse({ success: false, error: 'Store access token not configured' }, 400);
-    }
+    console.log(`[Import] Starting for ${store.shop_domain}`);
+    console.log(`[Import] Filters - Tags: ${filterByTags.length}, Email: ${filterByEmailStatus.length}`);
 
-    console.log(`[Import] Starting import for store: ${store.shop_domain}`);
-    if (filterByTags.length > 0) {
-      console.log(`[Import] Filtering by tags: ${filterByTags.join(', ')}`);
-    }
-    if (filterByEmailStatus.length > 0) {
-      console.log(`[Import] Filtering by email status: ${filterByEmailStatus.join(', ')}`);
-    }
-
-    // Buscar todos os clientes do Shopify
-    let allCustomers: any[];
-    try {
-      allCustomers = await fetchAllCustomers(store.shop_domain, store.access_token);
-    } catch (shopifyError: any) {
-      console.error('Shopify fetch error:', shopifyError);
-      return jsonResponse({ 
-        success: false, 
-        error: `Erro ao buscar clientes do Shopify: ${shopifyError.message}` 
-      }, 500);
-    }
+    // =============================================
+    // FASE 1: Buscar clientes do Shopify
+    // =============================================
+    const allCustomers = await fetchShopifyCustomers(store.shop_domain, store.access_token);
     
-    // Filtrar por tags se especificado
+    // Aplicar filtros
     let customers = allCustomers;
+    
     if (filterByTags.length > 0) {
-      customers = customers.filter(customer => {
-        if (!customer.tags || typeof customer.tags !== 'string') return false;
-        const customerTags = customer.tags.split(',').map((t: string) => t.trim().toLowerCase());
-        return filterByTags.some((tag: string) => 
-          customerTags.includes(tag.toLowerCase())
-        );
+      customers = customers.filter(c => {
+        if (!c.tags) return false;
+        const cTags = c.tags.split(',').map((t: string) => t.trim().toLowerCase());
+        return filterByTags.some((tag: string) => cTags.includes(tag.toLowerCase()));
       });
     }
     
-    // Filtrar por status de email se especificado
     if (filterByEmailStatus.length > 0) {
-      customers = customers.filter(customer => {
-        const emailConsent = customer.email_marketing_consent;
-        let emailStatus = 'not_subscribed';
-        
-        if (emailConsent && emailConsent.state) {
-          emailStatus = emailConsent.state;
-        } else if (customer.accepts_marketing === true) {
-          emailStatus = 'subscribed';
-        } else if (customer.accepts_marketing === false) {
-          emailStatus = 'not_subscribed';
+      customers = customers.filter(c => {
+        let status = 'not_subscribed';
+        if (c.email_marketing_consent?.state) {
+          status = c.email_marketing_consent.state;
+        } else if (c.accepts_marketing === true) {
+          status = 'subscribed';
         }
-        
-        return filterByEmailStatus.includes(emailStatus);
+        return filterByEmailStatus.includes(status);
       });
     }
-    
-    console.log(`[Import] Found ${allCustomers.length} total customers, ${customers.length} after filters`);
 
+    console.log(`[Import] ${allCustomers.length} total -> ${customers.length} after filters`);
+
+    // Stats
     const stats = {
       total: customers.length,
       totalInShopify: allCustomers.length,
@@ -414,195 +558,177 @@ export async function POST(request: NextRequest) {
       errorDetails: [] as string[],
     };
 
-    // Tags para os contatos
+    if (customers.length === 0) {
+      return jsonResponse({
+        success: true,
+        stats,
+        duration: Math.round((Date.now() - startTime) / 1000),
+        message: 'Nenhum cliente encontrado com os filtros selecionados'
+      });
+    }
+
+    // =============================================
+    // FASE 2: Pré-carregar contatos existentes (1 query!)
+    // =============================================
+    const existingContacts = await loadExistingContacts(supabase, store.organization_id);
+
+    // =============================================
+    // FASE 3: Separar novos vs existentes
+    // =============================================
     const contactTags = Array.from(new Set([
       ...(store.auto_tags || ['shopify']),
       ...tags,
       'shopify-import'
     ]));
 
-    // Processar cada cliente
+    const toCreate: any[] = [];
+    const toUpdate: { id: string; data: any }[] = [];
+    const shopifyIdToContactId = new Map<string, string>();
+
     for (const customer of customers) {
-      try {
-        const email = customer.email?.toLowerCase().trim() || null;
-        const phone = normalizePhone(customer.phone);
-        const firstName = customer.first_name?.trim() || null;
-        const lastName = customer.last_name?.trim() || null;
+      // Sanitizar dados
+      const email = normalizeEmail(customer.email);
+      const phone = normalizePhone(customer.phone);
+      const firstName = sanitizeString(customer.first_name);
+      const lastName = sanitizeString(customer.last_name);
+      const shopifyId = String(customer.id);
 
-        if (!email && !phone) {
-          stats.skipped++;
-          continue;
-        }
+      // Pular se não tem email nem telefone
+      if (!email && !phone) {
+        stats.skipped++;
+        continue;
+      }
 
-        // Determinar tipo de contato
-        let finalContactType: 'lead' | 'customer' = 'lead';
-        if (contactType === 'customer') {
-          finalContactType = 'customer';
-        } else if (contactType === 'auto') {
-          finalContactType = (customer.orders_count || 0) > 0 ? 'customer' : 'lead';
-        }
+      // Lookup O(1) - muito mais rápido que query individual
+      const existing = 
+        existingContacts.byShopifyId.get(shopifyId) ||
+        (email ? existingContacts.byEmail.get(email) : null) ||
+        (phone ? existingContacts.byPhone.get(phone) : null);
 
-        // Verificar se contato já existe
-        let existingContact = null;
+      if (existing) {
+        // Preparar update
+        const updateData: Record<string, any> = {
+          updated_at: new Date().toISOString(),
+          shopify_customer_id: shopifyId,
+          total_orders: customer.orders_count || 0,
+          total_spent: parseFloat(customer.total_spent || '0'),
+        };
         
-        if (email) {
-          const { data } = await supabase
-            .from('contacts')
-            .select('*')
-            .eq('organization_id', store.organization_id)
-            .ilike('email', email)
-            .maybeSingle();
-          
-          if (data) existingContact = data;
-        }
+        if (!existing.first_name && firstName) updateData.first_name = firstName;
+        if (!existing.last_name && lastName) updateData.last_name = lastName;
+        if (!existing.phone && phone) updateData.phone = phone;
+        if (!existing.email && email) updateData.email = email;
+
+        // Merge tags
+        const existingTags = existing.tags || [];
+        updateData.tags = Array.from(new Set([...existingTags, ...contactTags]));
+
+        toUpdate.push({ id: existing.id, data: updateData });
+        shopifyIdToContactId.set(shopifyId, existing.id);
         
-        if (!existingContact && phone) {
-          const { data } = await supabase
-            .from('contacts')
-            .select('*')
-            .eq('organization_id', store.organization_id)
-            .eq('phone', phone)
-            .maybeSingle();
-          
-          if (data) existingContact = data;
-        }
-
-        let contactId: string;
-
-        if (existingContact) {
-          // Atualizar contato existente
-          const updateData: Record<string, any> = {
-            updated_at: new Date().toISOString(),
-          };
-          
-          if (!existingContact.first_name && firstName) {
-            updateData.first_name = firstName;
-          }
-          
-          if (!existingContact.last_name && lastName) {
-            updateData.last_name = lastName;
-          }
-          
-          if (!existingContact.phone && phone) {
-            updateData.phone = phone;
-          }
-          
-          if (!existingContact.email && email) {
-            updateData.email = email;
-          }
-
-          // Atualizar campos do Shopify
-          updateData.shopify_customer_id = String(customer.id);
-          updateData.total_orders = customer.orders_count || 0;
-          updateData.total_spent = parseFloat(customer.total_spent || '0');
-
-          // Merge tags
-          const existingTags = existingContact.tags || [];
-          updateData.tags = Array.from(new Set([...existingTags, ...contactTags]));
-
-          const { error: updateError } = await supabase
-            .from('contacts')
-            .update(updateData)
-            .eq('id', existingContact.id);
-
-          if (updateError) {
-            console.error('Error updating contact:', updateError);
-            stats.errors++;
-            stats.errorDetails.push(`Update: ${updateError.message}`);
-            continue;
-          }
-
-          contactId = existingContact.id;
-          stats.updated++;
-
-        } else {
-          // Criar novo contato
-          const { data: newContact, error: insertError } = await supabase
-            .from('contacts')
-            .insert({
-              organization_id: store.organization_id,
-              first_name: firstName,
-              last_name: lastName,
-              email,
-              phone,
-              source: 'shopify',
-              shopify_customer_id: String(customer.id),
-              total_orders: customer.orders_count || 0,
-              total_spent: parseFloat(customer.total_spent || '0'),
-              tags: contactTags,
-              custom_fields: {
-                shopify_store: store.shop_domain,
-                created_from_import: true,
-                imported_at: new Date().toISOString(),
-              },
-            })
-            .select('id')
-            .single();
-
-          if (insertError) {
-            console.error('Error creating contact:', {
-              message: insertError.message,
-              details: insertError.details,
-              hint: insertError.hint,
-              code: insertError.code,
-              customer_email: email,
-              customer_phone: phone,
-            });
-            stats.errors++;
-            stats.errorDetails.push(`Insert: ${insertError.message}`);
-            continue;
-          }
-
-          contactId = newContact.id;
-          stats.created++;
-        }
-
-        // Criar deal se solicitado
-        if (createDeals && pipelineId && stageId && contactId) {
-          const dealValue = parseFloat(customer.total_spent || '0');
-          const dealName = [firstName, lastName].filter(Boolean).join(' ') || 'Cliente Shopify';
-          
-          const { error: dealError } = await supabase
-            .from('deals')
-            .insert({
-              organization_id: store.organization_id,
-              contact_id: contactId,
-              pipeline_id: pipelineId,
-              stage_id: stageId,
-              title: `${dealName} - Shopify`,
-              value: dealValue,
-              currency: 'BRL',
-              tags: ['shopify-import'],
-            });
-          
-          if (!dealError) {
-            stats.dealsCreated++;
-          }
-        }
-
-      } catch (err: any) {
-        console.error('Error processing customer:', customer.id, err.message);
-        stats.errors++;
-        stats.errorDetails.push(`Customer ${customer.id}: ${err.message}`);
+      } else {
+        // Preparar insert
+        toCreate.push({
+          organization_id: store.organization_id,
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          phone,
+          source: 'shopify',
+          shopify_customer_id: shopifyId,
+          total_orders: customer.orders_count || 0,
+          total_spent: parseFloat(customer.total_spent || '0'),
+          tags: contactTags,
+          custom_fields: {
+            shopify_store: store.shop_domain,
+            imported_at: new Date().toISOString(),
+          },
+        });
       }
     }
 
-    // Atualizar estatísticas da loja
-    try {
-      await supabase
-        .from('shopify_stores')
-        .update({
-          total_customers_imported: (store.total_customers_imported || 0) + stats.created,
-          last_import_at: new Date().toISOString(),
-        })
-        .eq('id', storeId);
-    } catch (updateErr) {
-      console.error('Error updating store stats:', updateErr);
+    console.log(`[Import] To create: ${toCreate.length}, To update: ${toUpdate.length}`);
+
+    // =============================================
+    // FASE 4: Bulk insert novos contatos
+    // =============================================
+    if (toCreate.length > 0) {
+      const { inserted, errors } = await bulkInsertContacts(supabase, toCreate);
+      stats.created = inserted.length;
+      stats.errorDetails.push(...errors);
+      stats.errors += errors.length;
+      
+      // Mapear IDs criados para deals
+      for (const contact of inserted) {
+        if (contact.shopify_customer_id) {
+          shopifyIdToContactId.set(contact.shopify_customer_id, contact.id);
+        }
+      }
     }
+
+    // =============================================
+    // FASE 5: Parallel updates
+    // =============================================
+    if (toUpdate.length > 0) {
+      const { updated, errors } = await parallelUpdateContacts(supabase, toUpdate);
+      stats.updated = updated;
+      stats.errorDetails.push(...errors);
+      stats.errors += errors.length;
+    }
+
+    // =============================================
+    // FASE 6: Bulk insert deals
+    // =============================================
+    if (createDeals && pipelineId && stageId) {
+      const dealsToCreate: any[] = [];
+      
+      for (const customer of customers) {
+        const shopifyId = String(customer.id);
+        const contactId = shopifyIdToContactId.get(shopifyId);
+        
+        if (contactId) {
+          const firstName = sanitizeString(customer.first_name) || '';
+          const lastName = sanitizeString(customer.last_name) || '';
+          const dealName = [firstName, lastName].filter(Boolean).join(' ') || 'Cliente Shopify';
+          
+          dealsToCreate.push({
+            organization_id: store.organization_id,
+            contact_id: contactId,
+            pipeline_id: pipelineId,
+            stage_id: stageId,
+            title: `${dealName} - Shopify`,
+            value: parseFloat(customer.total_spent || '0'),
+            currency: 'BRL',
+            tags: ['shopify-import'],
+          });
+        }
+      }
+      
+      if (dealsToCreate.length > 0) {
+        stats.dealsCreated = await bulkInsertDeals(supabase, dealsToCreate);
+        console.log(`[Import] Created ${stats.dealsCreated} deals`);
+      }
+    }
+
+    // =============================================
+    // FASE 7: Atualizar estatísticas da loja
+    // =============================================
+    await supabase
+      .from('shopify_stores')
+      .update({
+        total_customers_imported: (store.total_customers_imported || 0) + stats.created,
+        last_import_at: new Date().toISOString(),
+      })
+      .eq('id', storeId);
 
     const duration = Math.round((Date.now() - startTime) / 1000);
 
-    console.log(`[Import] Completed in ${duration}s:`, stats);
+    console.log(`[Import] Completed in ${duration}s:`, {
+      created: stats.created,
+      updated: stats.updated,
+      skipped: stats.skipped,
+      errors: stats.errors
+    });
 
     return jsonResponse({
       success: true,
