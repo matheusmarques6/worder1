@@ -163,7 +163,7 @@ export function useContacts(options: {
         },
         async (payload) => {
           console.log('🆕 [Realtime] New contact:', payload.new);
-          const newContact = { ...payload.new, deals_count: 0 };
+          const newContact = { ...(payload.new as any), deals_count: 0 };
           setContacts(prev => {
             if (prev.some(c => c.id === newContact.id)) return prev;
             return [newContact, ...prev];
@@ -182,8 +182,9 @@ export function useContacts(options: {
         },
         (payload) => {
           console.log('✏️ [Realtime] Contact updated:', payload.new);
+          const updated = payload.new as any;
           setContacts(prev => prev.map(c => 
-            c.id === payload.new.id ? { ...c, ...payload.new } : c
+            c.id === updated.id ? { ...c, ...updated } : c
           ));
         }
       )
@@ -197,7 +198,8 @@ export function useContacts(options: {
         },
         (payload) => {
           console.log('🗑️ [Realtime] Contact deleted:', payload.old);
-          setContacts(prev => prev.filter(c => c.id !== payload.old.id));
+          const deleted = payload.old as any;
+          setContacts(prev => prev.filter(c => c.id !== deleted.id));
           // Atualizar paginação
           setPagination((prev: any) => prev ? { ...prev, total: Math.max(0, (prev.total || 0) - 1) } : prev);
         }
@@ -358,6 +360,7 @@ export function useDeals(pipelineId?: string) {
         },
         async (payload) => {
           console.log('🆕 [Realtime] New deal:', payload.new);
+          const newDeal = payload.new as any;
           // Buscar deal completo com relações
           const { data: fullDeal } = await supabaseRealtime
             .from('deals')
@@ -366,7 +369,7 @@ export function useDeals(pipelineId?: string) {
               contact:contacts(id, email, first_name, last_name, avatar_url, company),
               stage:pipeline_stages(id, name, color)
             `)
-            .eq('id', payload.new.id)
+            .eq('id', newDeal.id)
             .single();
           
           if (fullDeal) {
@@ -387,6 +390,7 @@ export function useDeals(pipelineId?: string) {
         },
         async (payload) => {
           console.log('✏️ [Realtime] Deal updated:', payload.new);
+          const updatedDeal = payload.new as any;
           // Buscar deal completo
           const { data: fullDeal } = await supabaseRealtime
             .from('deals')
@@ -395,7 +399,7 @@ export function useDeals(pipelineId?: string) {
               contact:contacts(id, email, first_name, last_name, avatar_url, company),
               stage:pipeline_stages(id, name, color)
             `)
-            .eq('id', payload.new.id)
+            .eq('id', updatedDeal.id)
             .single();
           
           if (fullDeal) {
@@ -415,7 +419,8 @@ export function useDeals(pipelineId?: string) {
         },
         (payload) => {
           console.log('🗑️ [Realtime] Deal deleted:', payload.old);
-          setDeals(prev => prev.filter(d => d.id !== payload.old.id));
+          const deletedDeal = payload.old as any;
+          setDeals(prev => prev.filter(d => d.id !== deletedDeal.id));
         }
       )
       .subscribe((status) => {
