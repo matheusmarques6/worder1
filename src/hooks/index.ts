@@ -1,10 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '@/stores';
+import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 
 // Re-export usePipelines
 export { usePipelines } from './usePipelines';
+
+// Re-export CRM Realtime
+export { useCRMRealtime, useDealsRealtime, useContactsRealtime } from './useCRMRealtime';
 
 // Re-export useWhatsAppConnection
 export { useWhatsAppConnection } from './useWhatsAppConnection';
@@ -93,7 +97,7 @@ export function useAnalytics(type: string = 'overview', period: string = '30d') 
   return { data, loading, error, refetch: fetchAnalytics };
 }
 
-// Contacts hook
+// Contacts hook com realtime
 export function useContacts(options: {
   search?: string;
   tags?: string[];
@@ -105,12 +109,13 @@ export function useContacts(options: {
   const [pagination, setPagination] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
-  const fetchContacts = useCallback(async () => {
+  const fetchContacts = useCallback(async (showLoading = true) => {
     if (!user?.organization_id) return;
 
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const params = new URLSearchParams({
         organizationId: user.organization_id,
         page: String(options.page || 1),
@@ -135,6 +140,80 @@ export function useContacts(options: {
     fetchContacts();
   }, [fetchContacts]);
 
+  // =============================================
+  // REALTIME - Escutar mudanças em contatos
+  // =============================================
+  useEffect(() => {
+    if (!user?.organization_id) return;
+
+    // Cleanup anterior
+    if (channelRef.current) {
+      channelRef.current.unsubscribe();
+    }
+
+    const channel = supabaseRealtime
+      .channel(`contacts-realtime:${user.organization_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'contacts',
+          filter: `organization_id=eq.${user.organization_id}`,
+        },
+        async (payload) => {
+          console.log('🆕 [Realtime] New contact:', payload.new);
+          const newContact = { ...payload.new, deals_count: 0 };
+          setContacts(prev => {
+            if (prev.some(c => c.id === newContact.id)) return prev;
+            return [newContact, ...prev];
+          });
+          // Atualizar paginação
+          setPagination((prev: any) => prev ? { ...prev, total: (prev.total || 0) + 1 } : prev);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'contacts',
+          filter: `organization_id=eq.${user.organization_id}`,
+        },
+        (payload) => {
+          console.log('✏️ [Realtime] Contact updated:', payload.new);
+          setContacts(prev => prev.map(c => 
+            c.id === payload.new.id ? { ...c, ...payload.new } : c
+          ));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'contacts',
+          filter: `organization_id=eq.${user.organization_id}`,
+        },
+        (payload) => {
+          console.log('🗑️ [Realtime] Contact deleted:', payload.old);
+          setContacts(prev => prev.filter(c => c.id !== payload.old.id));
+          // Atualizar paginação
+          setPagination((prev: any) => prev ? { ...prev, total: Math.max(0, (prev.total || 0) - 1) } : prev);
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔌 Contacts realtime:', status);
+      });
+
+    channelRef.current = channel;
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [user?.organization_id]);
+
+  // Operações - não precisam mais chamar fetchContacts() pois realtime atualiza
   const createContact = async (data: any) => {
     const response = await fetch('/api/contacts', {
       method: 'POST',
@@ -143,29 +222,41 @@ export function useContacts(options: {
     });
     if (!response.ok) throw new Error('Failed to create contact');
     const result = await response.json();
-    await fetchContacts();
+    // Realtime vai atualizar automaticamente
     return result.contact;
   };
 
   const updateContact = async (id: string, data: any) => {
+    // Atualização otimista
+    setContacts(prev => prev.map(c => 
+      c.id === id ? { ...c, ...data } : c
+    ));
+    
     const response = await fetch('/api/contacts', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, organizationId: user?.organization_id, ...data }),
     });
-    if (!response.ok) throw new Error('Failed to update contact');
+    if (!response.ok) {
+      await fetchContacts(false);
+      throw new Error('Failed to update contact');
+    }
     const result = await response.json();
-    await fetchContacts();
     return result.contact;
   };
 
   const deleteContact = async (id: string) => {
+    // Remoção otimista
+    setContacts(prev => prev.filter(c => c.id !== id));
+    
     const response = await fetch(
       `/api/contacts?id=${id}&organizationId=${user?.organization_id}`,
       { method: 'DELETE' }
     );
-    if (!response.ok) throw new Error('Failed to delete contact');
-    await fetchContacts();
+    if (!response.ok) {
+      await fetchContacts(false);
+      throw new Error('Failed to delete contact');
+    }
   };
 
   return {
@@ -173,20 +264,28 @@ export function useContacts(options: {
     pagination,
     loading,
     error,
-    refetch: fetchContacts,
+    refetch: () => fetchContacts(true),
     createContact,
     updateContact,
     deleteContact,
+    setContacts,
   };
 }
 
-// Deals hook
+// Supabase client para realtime
+const supabaseRealtime = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// Deals hook com realtime
 export function useDeals(pipelineId?: string) {
   const { user } = useAuthStore();
   const [deals, setDeals] = useState<any[]>([]);
   const [pipelines, setPipelines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   const fetchPipelines = useCallback(async () => {
     if (!user?.organization_id) {
@@ -207,14 +306,14 @@ export function useDeals(pipelineId?: string) {
     }
   }, [user?.organization_id]);
 
-  const fetchDeals = useCallback(async () => {
+  const fetchDeals = useCallback(async (showLoading = true) => {
     if (!user?.organization_id) {
       setLoading(false);
       return;
     }
 
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const params = new URLSearchParams({ organizationId: user.organization_id });
       if (pipelineId) params.set('pipelineId', pipelineId);
 
@@ -230,11 +329,107 @@ export function useDeals(pipelineId?: string) {
     }
   }, [user?.organization_id, pipelineId]);
 
+  // Fetch inicial
   useEffect(() => {
     fetchPipelines();
     fetchDeals();
   }, [fetchPipelines, fetchDeals]);
 
+  // =============================================
+  // REALTIME - Escutar mudanças em deals
+  // =============================================
+  useEffect(() => {
+    if (!user?.organization_id) return;
+
+    // Cleanup anterior
+    if (channelRef.current) {
+      channelRef.current.unsubscribe();
+    }
+
+    const channel = supabaseRealtime
+      .channel(`deals-realtime:${user.organization_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'deals',
+          filter: `organization_id=eq.${user.organization_id}`,
+        },
+        async (payload) => {
+          console.log('🆕 [Realtime] New deal:', payload.new);
+          // Buscar deal completo com relações
+          const { data: fullDeal } = await supabaseRealtime
+            .from('deals')
+            .select(`
+              *,
+              contact:contacts(id, email, first_name, last_name, avatar_url, company),
+              stage:pipeline_stages(id, name, color)
+            `)
+            .eq('id', payload.new.id)
+            .single();
+          
+          if (fullDeal) {
+            setDeals(prev => {
+              if (prev.some(d => d.id === fullDeal.id)) return prev;
+              return [fullDeal, ...prev];
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'deals',
+          filter: `organization_id=eq.${user.organization_id}`,
+        },
+        async (payload) => {
+          console.log('✏️ [Realtime] Deal updated:', payload.new);
+          // Buscar deal completo
+          const { data: fullDeal } = await supabaseRealtime
+            .from('deals')
+            .select(`
+              *,
+              contact:contacts(id, email, first_name, last_name, avatar_url, company),
+              stage:pipeline_stages(id, name, color)
+            `)
+            .eq('id', payload.new.id)
+            .single();
+          
+          if (fullDeal) {
+            setDeals(prev => prev.map(d => 
+              d.id === fullDeal.id ? fullDeal : d
+            ));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'deals',
+          filter: `organization_id=eq.${user.organization_id}`,
+        },
+        (payload) => {
+          console.log('🗑️ [Realtime] Deal deleted:', payload.old);
+          setDeals(prev => prev.filter(d => d.id !== payload.old.id));
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔌 Deals realtime:', status);
+      });
+
+    channelRef.current = channel;
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [user?.organization_id]);
+
+  // Operações - não precisam mais chamar fetchDeals() pois realtime atualiza
   const createDeal = async (data: any) => {
     const response = await fetch('/api/deals', {
       method: 'POST',
@@ -243,29 +438,45 @@ export function useDeals(pipelineId?: string) {
     });
     if (!response.ok) throw new Error('Failed to create deal');
     const result = await response.json();
-    await fetchDeals();
+    // Realtime vai atualizar automaticamente
     return result.deal;
   };
 
   const updateDeal = async (id: string, data: any) => {
+    // Atualização otimista local primeiro
+    setDeals(prev => prev.map(d => 
+      d.id === id ? { ...d, ...data } : d
+    ));
+    
     const response = await fetch('/api/deals', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, organizationId: user?.organization_id, ...data }),
     });
-    if (!response.ok) throw new Error('Failed to update deal');
+    if (!response.ok) {
+      // Reverter em caso de erro
+      await fetchDeals(false);
+      throw new Error('Failed to update deal');
+    }
     const result = await response.json();
-    await fetchDeals();
+    // Realtime vai sincronizar com dados completos
     return result.deal;
   };
 
   const deleteDeal = async (id: string) => {
+    // Remoção otimista local primeiro
+    setDeals(prev => prev.filter(d => d.id !== id));
+    
     const response = await fetch(
       `/api/deals?id=${id}&organizationId=${user?.organization_id}`,
       { method: 'DELETE' }
     );
-    if (!response.ok) throw new Error('Failed to delete deal');
-    await fetchDeals();
+    if (!response.ok) {
+      // Reverter em caso de erro
+      await fetchDeals(false);
+      throw new Error('Failed to delete deal');
+    }
+    // Realtime confirma a remoção
   };
 
   const moveDeal = async (dealId: string, stageId: string, position?: number) => {
@@ -277,12 +488,13 @@ export function useDeals(pipelineId?: string) {
     pipelines,
     loading,
     error,
-    refetch: fetchDeals,
+    refetch: () => fetchDeals(true),
     refetchPipelines: fetchPipelines,
     createDeal,
     updateDeal,
     deleteDeal,
     moveDeal,
+    setDeals, // Expor para uso externo se necessário
   };
 }
 

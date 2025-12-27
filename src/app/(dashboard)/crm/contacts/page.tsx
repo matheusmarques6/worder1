@@ -315,8 +315,8 @@ function ContactRow({ contact, onEdit, onDelete, onClick }: ContactRowProps) {
       {/* Stats */}
       <div className="flex items-center gap-6 text-sm">
         <div className="text-center">
-          <p className="text-dark-500 text-xs">Pedidos</p>
-          <p className="text-white font-medium">{contact.total_orders || 0}</p>
+          <p className="text-dark-500 text-xs">Deals</p>
+          <p className="text-white font-medium">{contact.deals_count || 0}</p>
         </div>
         <div className="text-center">
           <p className="text-dark-500 text-xs">Valor</p>

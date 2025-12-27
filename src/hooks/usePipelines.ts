@@ -48,6 +48,7 @@ export function usePipelines() {
   const updatePipeline = useCallback(async (id: string, data: {
     name?: string;
     description?: string;
+    color?: string;
   }) => {
     if (!user?.organization_id) throw new Error('Organization not found');
 

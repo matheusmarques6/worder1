@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('contacts')
-      .select('*', { count: 'exact' })
+      .select('*, deals(id)', { count: 'exact' })
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
@@ -63,8 +63,15 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
+    // Adicionar contagem de deals
+    const contactsWithDealsCount = data?.map(contact => ({
+      ...contact,
+      deals_count: contact.deals?.length || 0,
+      deals: undefined, // Remover array de deals para não poluir resposta
+    })) || [];
+
     return NextResponse.json({
-      contacts: data,
+      contacts: contactsWithDealsCount,
       pagination: {
         page,
         limit,

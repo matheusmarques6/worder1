@@ -485,7 +485,12 @@ export default function CRMPage() {
 
   const handleCreatePipeline = async (data: { name: string; description?: string; color?: string; stages: { name: string; color: string; position: number }[] }) => {
     if (editingPipeline) {
-      await updatePipeline(editingPipeline.id, data)
+      // Ao editar, não podemos enviar stages diretamente - stages é uma tabela separada
+      const { stages, ...pipelineData } = data
+      await updatePipeline(editingPipeline.id, pipelineData)
+      
+      // Se precisar atualizar stages, fazer separadamente
+      // Por enquanto, stages só são gerenciados na criação
     } else {
       await createPipelineHook(data)
     }
@@ -561,11 +566,13 @@ export default function CRMPage() {
     await refetch()
   }
 
-  // Calculate pipeline stats
-  const uniqueContacts = new Set(deals.filter(d => d.contact_id).map(d => d.contact_id)).size
+  // Calculate pipeline stats - FILTRAR PELA PIPELINE ATIVA
+  const pipelineStageIds = new Set(stages.map(s => s.id))
+  const pipelineDeals = deals.filter(d => pipelineStageIds.has(d.stage_id))
+  const uniqueContacts = new Set(pipelineDeals.filter(d => d.contact_id).map(d => d.contact_id)).size
   const pipelineStats = {
-    weightedValue: deals.reduce((sum, d) => sum + (d.value * d.probability / 100), 0),
-    totalDeals: deals.length,
+    weightedValue: pipelineDeals.reduce((sum, d) => sum + (d.value * d.probability / 100), 0),
+    totalDeals: pipelineDeals.length,
     totalContacts: uniqueContacts,
   }
 
