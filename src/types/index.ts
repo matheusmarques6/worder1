@@ -196,6 +196,7 @@ export interface Contact {
   is_subscribed_sms: boolean;
   is_subscribed_whatsapp: boolean;
   deals?: Deal[];
+  deals_count?: number; // Contagem de deals do contato
   created_at: string;
   updated_at: string;
   // Computed
