@@ -1,255 +1,338 @@
 // =============================================
-// Pipeline Automation Rules API
-// src/app/api/pipelines/[id]/automations/route.ts
-//
-// GET: Listar regras de automação da pipeline
-// POST: Criar nova regra de automação
+// API: Pipeline Automations
+// /api/pipelines/[id]/automations
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key);
-}
-
-interface RouteParams {
-  params: { id: string };
-}
+import { createAdminClient } from '@/lib/supabase';
 
 // =============================================
-// GET - Listar regras de automação
+// GET - Buscar configurações de automação
 // =============================================
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  const pipelineId = params.id;
-  
-  if (!pipelineId) {
-    return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
-  }
-  
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
-  const searchParams = request.nextUrl.searchParams;
-  const organizationId = searchParams.get('organizationId');
-  const includeTransitions = searchParams.get('includeTransitions') === 'true';
-  
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
-  
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    // Verificar se pipeline existe e pertence à organização
-    const { data: pipeline, error: pipelineError } = await supabase
-      .from('pipelines')
-      .select('id, name, organization_id')
-      .eq('id', pipelineId)
-      .eq('organization_id', organizationId)
-      .single();
-    
-    if (pipelineError || !pipeline) {
-      return NextResponse.json({ error: 'Pipeline not found' }, { status: 404 });
+    const supabase = createAdminClient();
+    const pipelineId = params.id;
+    const { searchParams } = new URL(request.url);
+    const organizationId = searchParams.get('organizationId');
+
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'organizationId é obrigatório' },
+        { status: 400 }
+      );
     }
-    
-    // Buscar regras de automação
+
+    // Buscar regras do pipeline
     const { data: rules, error: rulesError } = await supabase
-      .from('pipeline_automation_rules')
-      .select(`
-        *,
-        initial_stage:pipeline_stages!initial_stage_id(id, name, color),
-        assigned_user:profiles!assign_to_user_id(id, full_name, avatar_url)
-      `)
+      .from('crm_automation_rules')
+      .select('*')
       .eq('pipeline_id', pipelineId)
       .eq('organization_id', organizationId)
-      .order('position', { ascending: true })
       .order('created_at', { ascending: true });
-    
+
     if (rulesError) {
-      console.error('[Automations API] Error fetching rules:', rulesError);
-      return NextResponse.json({ error: rulesError.message }, { status: 500 });
+      console.error('Erro ao buscar regras:', rulesError);
+      throw rulesError;
     }
-    
-    // Buscar transições se solicitado
-    let transitions = null;
-    if (includeTransitions) {
-      const { data: transitionsData } = await supabase
-        .from('pipeline_stage_transitions')
-        .select(`
-          *,
-          from_stage:pipeline_stages!from_stage_id(id, name, color),
-          to_stage:pipeline_stages!to_stage_id(id, name, color)
-        `)
-        .eq('pipeline_id', pipelineId)
-        .eq('organization_id', organizationId)
-        .order('position', { ascending: true });
-      
-      transitions = transitionsData || [];
-    }
-    
-    // Agrupar regras por source_type para facilitar na UI
-    const rulesBySource = (rules || []).reduce((acc: Record<string, any[]>, rule) => {
-      if (!acc[rule.source_type]) {
-        acc[rule.source_type] = [];
-      }
-      acc[rule.source_type].push(rule);
-      return acc;
-    }, {});
-    
-    return NextResponse.json({
-      pipeline: {
-        id: pipeline.id,
-        name: pipeline.name,
-      },
-      rules: rules || [],
-      rulesBySource,
-      transitions,
-      totalRules: rules?.length || 0,
-      activeRules: rules?.filter(r => r.is_enabled).length || 0,
+
+    // Buscar integrações disponíveis
+    const sources = [];
+
+    // Verificar Shopify
+    const { data: shopify } = await supabase
+      .from('shopify_stores')
+      .select('id, shop_name, shop_domain')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    sources.push({
+      type: 'shopify',
+      name: 'Shopify',
+      connected: !!shopify,
+      integration_id: shopify?.id || null,
+      integration_name: shopify?.shop_name || shopify?.shop_domain || null,
     });
-    
-  } catch (error: any) {
-    console.error('[Automations API] Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Verificar WhatsApp
+    const { data: whatsapp } = await supabase
+      .from('whatsapp_configs')
+      .select('id, phone_number, business_name')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    sources.push({
+      type: 'whatsapp',
+      name: 'WhatsApp',
+      connected: !!whatsapp,
+      integration_id: whatsapp?.id || null,
+      integration_name: whatsapp?.business_name || whatsapp?.phone_number || null,
+    });
+
+    // Hotmart (futuro)
+    sources.push({
+      type: 'hotmart',
+      name: 'Hotmart',
+      connected: false,
+      integration_id: null,
+      integration_name: null,
+    });
+
+    // Webhook sempre disponível
+    sources.push({
+      type: 'webhook',
+      name: 'Webhook',
+      connected: true,
+      integration_id: null,
+      integration_name: 'Integração manual',
+    });
+
+    // Formulários sempre disponível
+    sources.push({
+      type: 'form',
+      name: 'Formulários',
+      connected: true,
+      integration_id: null,
+      integration_name: 'Landing pages',
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        pipeline_id: pipelineId,
+        rules: rules || [],
+        sources,
+      },
+    });
+  } catch (error) {
+    console.error('Erro ao buscar automações:', error);
+    return NextResponse.json(
+      { error: 'Erro ao buscar configurações' },
+      { status: 500 }
+    );
   }
 }
 
 // =============================================
-// POST - Criar nova regra de automação
+// POST - Criar regra de automação
 // =============================================
-export async function POST(request: NextRequest, { params }: RouteParams) {
-  const pipelineId = params.id;
-  
-  if (!pipelineId) {
-    return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
-  }
-  
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
+    const supabase = createAdminClient();
+    const pipelineId = params.id;
     const body = await request.json();
+
     const {
       organizationId,
-      name,
-      description,
       sourceType,
-      sourceId,
       triggerEvent,
-      filters,
-      initialStageId,
-      assignToUserId,
-      dealTags,
-      dealTitleTemplate,
-      preventDuplicates,
-      duplicateCheckPeriodHours,
-      updateExistingDeal,
-      isEnabled,
-      position,
+      actionType,
+      targetStageId,
+      autoTags,
+      isActive,
     } = body;
-    
+
     // Validações
     if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'organizationId é obrigatório' },
+        { status: 400 }
+      );
     }
-    
-    if (!name || !sourceType || !triggerEvent) {
-      return NextResponse.json({ 
-        error: 'name, sourceType and triggerEvent are required' 
-      }, { status: 400 });
+
+    if (!sourceType) {
+      return NextResponse.json(
+        { error: 'sourceType é obrigatório' },
+        { status: 400 }
+      );
     }
-    
-    // Verificar se pipeline existe
-    const { data: pipeline, error: pipelineError } = await supabase
-      .from('pipelines')
-      .select('id, organization_id')
-      .eq('id', pipelineId)
+
+    if (!triggerEvent) {
+      return NextResponse.json(
+        { error: 'triggerEvent é obrigatório' },
+        { status: 400 }
+      );
+    }
+
+    if (!targetStageId) {
+      return NextResponse.json(
+        { error: 'targetStageId é obrigatório' },
+        { status: 400 }
+      );
+    }
+
+    // Verificar se já existe regra igual
+    const { data: existing } = await supabase
+      .from('crm_automation_rules')
+      .select('id')
+      .eq('pipeline_id', pipelineId)
       .eq('organization_id', organizationId)
-      .single();
-    
-    if (pipelineError || !pipeline) {
-      return NextResponse.json({ error: 'Pipeline not found' }, { status: 404 });
-    }
-    
-    // Verificar se estágio inicial pertence à pipeline
-    if (initialStageId) {
-      const { data: stage } = await supabase
-        .from('pipeline_stages')
-        .select('id')
-        .eq('id', initialStageId)
-        .eq('pipeline_id', pipelineId)
+      .eq('source_type', sourceType)
+      .eq('trigger_event', triggerEvent)
+      .maybeSingle();
+
+    if (existing) {
+      // Atualizar regra existente
+      const { data: rule, error } = await supabase
+        .from('crm_automation_rules')
+        .update({
+          action_type: actionType || 'create_deal',
+          target_stage_id: targetStageId,
+          auto_tags: autoTags || [],
+          is_active: isActive ?? true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select()
         .single();
-      
-      if (!stage) {
-        return NextResponse.json({ 
-          error: 'Initial stage does not belong to this pipeline' 
-        }, { status: 400 });
-      }
+
+      if (error) throw error;
+
+      return NextResponse.json({
+        success: true,
+        data: rule,
+        updated: true,
+      });
     }
-    
-    // Buscar próxima posição se não fornecida
-    let rulePosition = position;
-    if (rulePosition === undefined) {
-      const { data: lastRule } = await supabase
-        .from('pipeline_automation_rules')
-        .select('position')
-        .eq('pipeline_id', pipelineId)
-        .order('position', { ascending: false })
-        .limit(1)
-        .single();
-      
-      rulePosition = (lastRule?.position || 0) + 1;
-    }
-    
-    // Criar regra
-    const { data: rule, error: createError } = await supabase
-      .from('pipeline_automation_rules')
+
+    // Criar nova regra
+    const { data: rule, error } = await supabase
+      .from('crm_automation_rules')
       .insert({
-        organization_id: organizationId,
         pipeline_id: pipelineId,
-        name,
-        description: description || null,
+        organization_id: organizationId,
         source_type: sourceType,
-        source_id: sourceId || null,
         trigger_event: triggerEvent,
-        filters: filters || {},
-        initial_stage_id: initialStageId || null,
-        assign_to_user_id: assignToUserId || null,
-        deal_tags: dealTags || [],
-        deal_title_template: dealTitleTemplate || null,
-        prevent_duplicates: preventDuplicates ?? true,
-        duplicate_check_period_hours: duplicateCheckPeriodHours ?? 24,
-        update_existing_deal: updateExistingDeal ?? false,
-        is_enabled: isEnabled ?? true,
-        position: rulePosition,
+        action_type: actionType || 'create_deal',
+        target_stage_id: targetStageId,
+        auto_tags: autoTags || [],
+        is_active: isActive ?? true,
       })
-      .select(`
-        *,
-        initial_stage:pipeline_stages!initial_stage_id(id, name, color)
-      `)
+      .select()
       .single();
-    
-    if (createError) {
-      console.error('[Automations API] Error creating rule:', createError);
-      return NextResponse.json({ error: createError.message }, { status: 500 });
+
+    if (error) {
+      console.error('Erro ao criar regra:', error);
+      throw error;
     }
-    
+
     return NextResponse.json({
       success: true,
-      rule,
-      message: 'Automation rule created successfully',
+      data: rule,
+      created: true,
     });
-    
-  } catch (error: any) {
-    console.error('[Automations API] Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('Erro ao criar regra:', error);
+    return NextResponse.json(
+      { error: 'Erro ao criar regra de automação' },
+      { status: 500 }
+    );
+  }
+}
+
+// =============================================
+// PUT - Atualizar regra
+// =============================================
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const supabase = createAdminClient();
+    const body = await request.json();
+
+    const { ruleId, ...updates } = body;
+
+    if (!ruleId) {
+      return NextResponse.json(
+        { error: 'ruleId é obrigatório' },
+        { status: 400 }
+      );
+    }
+
+    // Converter camelCase para snake_case
+    const dbUpdates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (updates.sourceType !== undefined) dbUpdates.source_type = updates.sourceType;
+    if (updates.triggerEvent !== undefined) dbUpdates.trigger_event = updates.triggerEvent;
+    if (updates.actionType !== undefined) dbUpdates.action_type = updates.actionType;
+    if (updates.targetStageId !== undefined) dbUpdates.target_stage_id = updates.targetStageId;
+    if (updates.autoTags !== undefined) dbUpdates.auto_tags = updates.autoTags;
+    if (typeof updates.isActive === 'boolean') dbUpdates.is_active = updates.isActive;
+
+    const { data: rule, error } = await supabase
+      .from('crm_automation_rules')
+      .update(dbUpdates)
+      .eq('id', ruleId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Erro ao atualizar regra:', error);
+      throw error;
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: rule,
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar regra:', error);
+    return NextResponse.json(
+      { error: 'Erro ao atualizar regra' },
+      { status: 500 }
+    );
+  }
+}
+
+// =============================================
+// DELETE - Remover regra
+// =============================================
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const supabase = createAdminClient();
+    const { searchParams } = new URL(request.url);
+    const ruleId = searchParams.get('ruleId');
+
+    if (!ruleId) {
+      return NextResponse.json(
+        { error: 'ruleId é obrigatório' },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await supabase
+      .from('crm_automation_rules')
+      .delete()
+      .eq('id', ruleId);
+
+    if (error) {
+      console.error('Erro ao deletar regra:', error);
+      throw error;
+    }
+
+    return NextResponse.json({
+      success: true,
+      deleted: true,
+    });
+  } catch (error) {
+    console.error('Erro ao deletar regra:', error);
+    return NextResponse.json(
+      { error: 'Erro ao deletar regra' },
+      { status: 500 }
+    );
   }
 }

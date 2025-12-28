@@ -52,6 +52,7 @@ export { DealDrawer } from './DealDrawer'
 export { PipelineModal } from './PipelineModal'
 export { EditStageModal } from './EditStageModal'
 export { ContactDrawer } from './ContactDrawer'
+export { PipelineAutomationConfig } from './PipelineAutomationConfig'
 
 // ===============================
 // KANBAN CARD

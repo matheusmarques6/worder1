@@ -22,6 +22,7 @@ import {
   ShoppingBag,
   AlertTriangle,
   Download,
+  Unlink,
 } from 'lucide-react'
 
 // Import do modal de importação
@@ -57,12 +58,6 @@ interface WhatsAppConfig {
   phone_number: string
   is_active: boolean
   connection_status: string
-}
-
-interface Pipeline {
-  id: string
-  name: string
-  stages: { id: string; name: string; color: string; sort_order: number }[]
 }
 
 // =============================================
@@ -430,73 +425,48 @@ function ShopifyConfigModal({
   onSave: () => void
 }) {
   const [loading, setLoading] = useState(false)
-  const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [showImportModal, setShowImportModal] = useState(false)
-  
-  // Form state
-  const [selectedPipeline, setSelectedPipeline] = useState(store.default_pipeline_id || '')
-  const [selectedStage, setSelectedStage] = useState(store.default_stage_id || '')
-  const [contactType, setContactType] = useState(store.contact_type || 'auto')
-  const [syncOrders, setSyncOrders] = useState(store.sync_orders ?? true)
-  const [syncCustomers, setSyncCustomers] = useState(store.sync_customers ?? true)
-  const [syncCheckouts, setSyncCheckouts] = useState(store.sync_checkouts ?? true)
-  const [autoTags, setAutoTags] = useState<string[]>(store.auto_tags || ['shopify'])
-  const [newTag, setNewTag] = useState('')
+  const [checkingConnection, setCheckingConnection] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<'ok' | 'error' | null>(null)
 
-  useEffect(() => {
-    fetchPipelines()
-  }, [])
-
-  const fetchPipelines = async () => {
+  const checkConnection = async () => {
+    setCheckingConnection(true)
+    setConnectionStatus(null)
     try {
-      const res = await fetch(`/api/deals?type=pipelines&organizationId=${organizationId}`)
-      const data = await res.json()
-      setPipelines(data.pipelines || [])
-    } catch (error) {
-      console.error('Error fetching pipelines:', error)
+      const response = await fetch(`/api/shopify/check-connection?storeId=${store.id}`)
+      if (response.ok) {
+        setConnectionStatus('ok')
+      } else {
+        setConnectionStatus('error')
+      }
+    } catch {
+      setConnectionStatus('error')
+    } finally {
+      setCheckingConnection(false)
     }
   }
 
-  const handleSave = async () => {
+  const handleDisconnect = async () => {
+    if (!confirm('Tem certeza que deseja desconectar esta loja?')) return
+    
     setLoading(true)
     try {
-      const response = await fetch('/api/shopify/configure', {
+      const response = await fetch('/api/shopify/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storeId: store.id,
-          defaultPipelineId: selectedPipeline || null,
-          defaultStageId: selectedStage || null,
-          contactType,
-          syncOrders,
-          syncCustomers,
-          syncCheckouts,
-          autoTags,
-        }),
+        body: JSON.stringify({ storeId: store.id }),
       })
 
       if (response.ok) {
         onSave()
+        onClose()
       }
     } catch (error) {
-      console.error('Error saving config:', error)
+      console.error('Error disconnecting:', error)
     } finally {
       setLoading(false)
     }
   }
-
-  const addTag = () => {
-    if (newTag.trim() && !autoTags.includes(newTag.trim())) {
-      setAutoTags([...autoTags, newTag.trim()])
-      setNewTag('')
-    }
-  }
-
-  const removeTag = (tag: string) => {
-    setAutoTags(autoTags.filter(t => t !== tag))
-  }
-
-  const selectedPipelineData = pipelines.find(p => p.id === selectedPipeline)
 
   return (
     <motion.div
@@ -511,194 +481,82 @@ function ShopifyConfigModal({
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="p-6 border-b border-dark-700 sticky top-0 bg-dark-900 z-10">
+        <div className="p-6 border-b border-dark-700">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-[#96bf48]/20 flex items-center justify-center">
               <ShoppingCart className="w-7 h-7 text-[#96bf48]" />
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">Configurar Shopify</h2>
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-white">Shopify</h2>
               <p className="text-sm text-dark-400">{store.shop_name || store.shop_domain}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+              <span className="text-sm text-green-400">Conectado</span>
             </div>
           </div>
         </div>
 
         {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Pipeline e Estágio */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
-                Pipeline padrão
-              </label>
-              <select
-                value={selectedPipeline}
-                onChange={(e) => {
-                  setSelectedPipeline(e.target.value)
-                  setSelectedStage('')
-                }}
-                className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500"
-              >
-                <option value="">Selecione um pipeline</option>
-                {pipelines.map((pipeline) => (
-                  <option key={pipeline.id} value={pipeline.id}>
-                    {pipeline.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-dark-500 mt-1">
-                Onde os deals serão criados
-              </p>
+          
+          {/* Informações da Loja */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-xl">
+              <span className="text-dark-400 text-sm">Domínio</span>
+              <span className="text-white text-sm font-medium">{store.shop_domain}</span>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
-                Estágio inicial
-              </label>
-              <select
-                value={selectedStage}
-                onChange={(e) => setSelectedStage(e.target.value)}
-                disabled={!selectedPipeline}
-                className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 disabled:opacity-50"
-              >
-                <option value="">Selecione um estágio</option>
-                {selectedPipelineData?.stages
-                  ?.sort((a, b) => a.sort_order - b.sort_order)
-                  .map((stage) => (
-                    <option key={stage.id} value={stage.id}>
-                      {stage.name}
-                    </option>
-                  ))}
-              </select>
-              <p className="text-xs text-dark-500 mt-1">
-                Estágio inicial dos novos deals
-              </p>
-            </div>
-          </div>
-
-          {/* Tipo de Contato */}
-          <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
-              Tipo de contato
-            </label>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { value: 'lead', label: 'Lead', desc: 'Todos são leads' },
-                { value: 'customer', label: 'Cliente', desc: 'Todos são clientes' },
-                { value: 'auto', label: 'Automático', desc: 'Lead → Cliente ao comprar' },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setContactType(option.value)}
-                  className={`p-3 rounded-xl border-2 transition-all text-left ${
-                    contactType === option.value
-                      ? 'border-primary-500 bg-primary-500/10'
-                      : 'border-dark-700 hover:border-dark-600'
-                  }`}
-                >
-                  <span className={`block font-medium ${
-                    contactType === option.value ? 'text-primary-400' : 'text-white'
-                  }`}>
-                    {option.label}
-                  </span>
-                  <span className="block text-xs text-dark-400 mt-0.5">
-                    {option.desc}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Eventos para sincronizar */}
-          <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
-              Eventos para sincronizar
-            </label>
-            <div className="space-y-2">
-              {[
-                { key: 'syncCustomers', value: syncCustomers, setter: setSyncCustomers, label: 'Novos clientes', desc: 'Criar contato quando cliente se cadastrar' },
-                { key: 'syncOrders', value: syncOrders, setter: setSyncOrders, label: 'Novos pedidos', desc: 'Criar deal e atualizar contato em cada pedido' },
-                { key: 'syncCheckouts', value: syncCheckouts, setter: setSyncCheckouts, label: 'Carrinhos abandonados', desc: 'Detectar e criar deal para carrinhos abandonados' },
-              ].map((event) => (
-                <label
-                  key={event.key}
-                  className="flex items-start gap-3 p-3 bg-dark-800/50 rounded-xl cursor-pointer hover:bg-dark-800 transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={event.value}
-                    onChange={(e) => event.setter(e.target.checked)}
-                    className="w-5 h-5 mt-0.5 rounded border-dark-600 bg-dark-700 text-primary-500 focus:ring-primary-500 focus:ring-offset-0"
-                  />
-                  <div>
-                    <span className="block text-white font-medium">{event.label}</span>
-                    <span className="block text-xs text-dark-400">{event.desc}</span>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Tags automáticas */}
-          <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
-              Tags automáticas
-            </label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addTag()}
-                placeholder="Nova tag..."
-                className="flex-1 px-4 py-2 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
-              />
-              <button
-                onClick={addTag}
-                className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
-              >
-                Adicionar
-              </button>
-            </div>
-            {autoTags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {autoTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-primary-500/20 text-primary-400 rounded-lg text-sm"
-                  >
-                    {tag}
-                    <button onClick={() => removeTag(tag)} className="hover:text-primary-300">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
+            {store.shop_email && (
+              <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-xl">
+                <span className="text-dark-400 text-sm">Email</span>
+                <span className="text-white text-sm font-medium">{store.shop_email}</span>
               </div>
             )}
-            <p className="text-xs text-dark-500 mt-2">
-              Estas tags serão adicionadas automaticamente aos contatos do Shopify
-            </p>
+            <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-xl">
+              <span className="text-dark-400 text-sm">Conectado em</span>
+              <span className="text-white text-sm font-medium">
+                {new Date(store.created_at).toLocaleDateString('pt-BR')}
+              </span>
+            </div>
           </div>
 
-          {/* Importar Clientes Existentes */}
-          <div className="p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-xl">
+          {/* Status da Conexão */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={checkConnection}
+              disabled={checkingConnection}
+              className="flex items-center gap-2 px-4 py-2 bg-dark-800 hover:bg-dark-700 rounded-xl text-white text-sm transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${checkingConnection ? 'animate-spin' : ''}`} />
+              Verificar Conexão
+            </button>
+            {connectionStatus === 'ok' && (
+              <span className="flex items-center gap-1.5 text-green-400 text-sm">
+                <Check className="w-4 h-4" />
+                Conexão OK
+              </span>
+            )}
+            {connectionStatus === 'error' && (
+              <span className="flex items-center gap-1.5 text-red-400 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                Erro na conexão
+              </span>
+            )}
+          </div>
+
+          {/* Aviso sobre configurações */}
+          <div className="p-4 bg-primary-500/10 border border-primary-500/20 rounded-xl">
             <div className="flex items-start gap-3">
-              <Download className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <h4 className="font-medium text-white">Importar Clientes Existentes</h4>
+              <Settings className="w-5 h-5 text-primary-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="font-medium text-white">Configurar Automações</h4>
                 <p className="text-sm text-dark-400 mt-1">
-                  Importe todos os clientes já cadastrados no Shopify para o CRM
+                  As configurações de eventos, estágios e importação de clientes 
+                  estão disponíveis na aba <strong>Automações</strong> dentro de cada Pipeline no CRM.
                 </p>
-                <button
-                  onClick={() => setShowImportModal(true)}
-                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white text-sm font-medium transition-colors"
-                >
-                  <Users className="w-4 h-4" />
-                  Importar Clientes
-                </button>
               </div>
             </div>
           </div>
@@ -723,35 +581,35 @@ function ShopifyConfigModal({
               </button>
             </div>
             <p className="text-xs text-dark-500 mt-2">
-              Configure esta URL nas configurações de webhook do Shopify (se necessário)
+              Configure esta URL nas configurações de webhook do Shopify
             </p>
+          </div>
+
+          {/* Desconectar */}
+          <div className="pt-4 border-t border-dark-700">
+            <button
+              onClick={handleDisconnect}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-colors text-sm"
+            >
+              <Unlink className="w-4 h-4" />
+              Desconectar Loja
+            </button>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-dark-700 flex items-center justify-end gap-3 sticky bottom-0 bg-dark-900">
+        <div className="p-6 border-t border-dark-700 flex items-center justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+            className="px-6 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
           >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={loading}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors"
-          >
-            {loading ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <Check className="w-4 h-4" />
-            )}
-            Salvar
+            Fechar
           </button>
         </div>
       </motion.div>
 
-      {/* Modal de Importação */}
+      {/* Modal de Importação - mantido para compatibilidade */}
       <AnimatePresence>
         {showImportModal && (
           <ShopifyImportModal

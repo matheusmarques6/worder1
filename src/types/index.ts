@@ -196,41 +196,10 @@ export interface Contact {
   is_subscribed_sms: boolean;
   is_subscribed_whatsapp: boolean;
   deals?: Deal[];
-  deals_count?: number; // Contagem de deals do contato
   created_at: string;
   updated_at: string;
   // Computed
   total_revenue?: number;
-  // Enriched data (Shopify)
-  last_order_id?: string;
-  last_order_value?: number;
-  last_order_number?: string;
-  last_order_products?: Array<{
-    product_id: string;
-    title: string;
-    quantity: number;
-    price: number;
-    image_url?: string;
-  }>;
-  first_order_at?: string;
-  days_since_last_order?: number;
-  order_frequency_days?: number;
-  favorite_products?: Array<{
-    product_id: string;
-    title: string;
-    count: number;
-  }>;
-  last_seen_at?: string;
-  total_page_views?: number;
-  last_viewed_products?: Array<{
-    product_id: string;
-    title: string;
-    viewed_at: string;
-  }>;
-  rfm_recency_score?: number;
-  rfm_frequency_score?: number;
-  rfm_monetary_score?: number;
-  rfm_segment?: string;
 }
 
 export interface Deal {
@@ -584,3 +553,100 @@ export interface FilterConfig {
   type: 'text' | 'select' | 'date' | 'daterange' | 'number';
   options?: SelectOption[];
 }
+
+// ===============================
+// PIPELINE AUTOMATION TYPES
+// ===============================
+
+export type AutomationSourceType = 
+  | 'shopify' 
+  | 'whatsapp' 
+  | 'hotmart' 
+  | 'webhook' 
+  | 'form';
+
+export type AutomationTriggerEvent = 
+  // Shopify
+  | 'order_created'
+  | 'order_paid'
+  | 'order_shipped'
+  | 'order_delivered'
+  | 'order_refunded'
+  | 'checkout_abandoned'
+  | 'customer_created'
+  // WhatsApp
+  | 'conversation_started'
+  | 'message_received'
+  | 'conversation_ended'
+  // Hotmart
+  | 'purchase_started'
+  | 'purchase_approved'
+  | 'purchase_canceled'
+  | 'subscription_renewed'
+  | 'subscription_canceled'
+  // Form/Webhook
+  | 'form_submitted';
+
+export type AutomationActionType = 
+  | 'create_deal' 
+  | 'move_deal' 
+  | 'update_contact';
+
+export interface PipelineAutomationRule {
+  id: string;
+  pipeline_id: string;
+  organization_id: string;
+  source_type: AutomationSourceType;
+  trigger_event: AutomationTriggerEvent;
+  action_type: AutomationActionType;
+  target_stage_id: string;
+  auto_tags: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationAvailableSource {
+  type: AutomationSourceType;
+  name: string;
+  connected: boolean;
+  integration_id?: string;
+  integration_name?: string;
+}
+
+export interface AutomationEventConfig {
+  event: AutomationTriggerEvent;
+  label: string;
+  description: string;
+}
+
+// Eventos disponíveis por fonte
+export const AUTOMATION_EVENTS: Record<AutomationSourceType, AutomationEventConfig[]> = {
+  shopify: [
+    { event: 'order_created', label: 'Novo pedido', description: 'Quando cliente realizar pedido' },
+    { event: 'order_paid', label: 'Pedido pago', description: 'Quando pagamento for confirmado' },
+    { event: 'checkout_abandoned', label: 'Carrinho abandonado', description: 'Quando abandonar carrinho' },
+    { event: 'customer_created', label: 'Novo cliente', description: 'Quando cliente se cadastrar' },
+    { event: 'order_shipped', label: 'Pedido enviado', description: 'Quando pedido for despachado' },
+    { event: 'order_delivered', label: 'Pedido entregue', description: 'Quando entrega for confirmada' },
+    { event: 'order_refunded', label: 'Reembolso', description: 'Quando reembolso for processado' },
+  ],
+  whatsapp: [
+    { event: 'conversation_started', label: 'Nova conversa', description: 'Quando cliente iniciar conversa' },
+    { event: 'message_received', label: 'Mensagem recebida', description: 'Quando receber mensagem' },
+    { event: 'conversation_ended', label: 'Conversa finalizada', description: 'Quando conversa encerrar' },
+  ],
+  hotmart: [
+    { event: 'purchase_started', label: 'Nova compra', description: 'Quando compra for iniciada' },
+    { event: 'purchase_approved', label: 'Compra aprovada', description: 'Quando pagamento aprovar' },
+    { event: 'purchase_canceled', label: 'Compra cancelada', description: 'Quando compra for cancelada' },
+    { event: 'subscription_renewed', label: 'Assinatura renovada', description: 'Quando renovar assinatura' },
+    { event: 'subscription_canceled', label: 'Assinatura cancelada', description: 'Quando cancelar assinatura' },
+  ],
+  webhook: [
+    { event: 'form_submitted', label: 'Webhook recebido', description: 'Quando receber webhook externo' },
+  ],
+  form: [
+    { event: 'form_submitted', label: 'Formulário enviado', description: 'Quando formulário for preenchido' },
+  ],
+};

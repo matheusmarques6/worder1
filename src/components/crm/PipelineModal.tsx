@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus, Trash2 } from 'lucide-react'
+import { X, Plus, Trash2, Zap } from 'lucide-react'
 import type { Pipeline, PipelineStage } from '@/types'
+import { PipelineAutomationConfig } from './PipelineAutomationConfig'
+import { useAuthStore } from '@/stores'
 
 interface StageInput {
   id?: string
@@ -36,12 +38,16 @@ const defaultStages: StageInput[] = [
 ]
 
 export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineModalProps) {
+  const { user } = useAuthStore()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [pipelineColor, setPipelineColor] = useState('#f97316')
   const [stages, setStages] = useState<StageInput[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Estados para tabs
+  const [activeTab, setActiveTab] = useState<'stages' | 'automations'>('stages')
 
   const isEditing = !!pipeline
 
@@ -64,6 +70,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
         setDescription('')
         setPipelineColor('#f97316')
         setStages([...defaultStages])
+        setActiveTab('stages') // Reset para aba de estágios em novo pipeline
       }
       setError(null)
     }
@@ -183,8 +190,40 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                   </button>
                 </div>
 
+                {/* Tabs - só mostra se estiver editando */}
+                {isEditing && (
+                  <div className="flex border-b border-dark-700">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('stages')}
+                      className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                        activeTab === 'stages'
+                          ? 'text-white border-b-2 border-primary-500'
+                          : 'text-dark-400 hover:text-white'
+                      }`}
+                    >
+                      Estágios
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('automations')}
+                      className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                        activeTab === 'automations'
+                          ? 'text-white border-b-2 border-primary-500'
+                          : 'text-dark-400 hover:text-white'
+                      }`}
+                    >
+                      <Zap className="w-4 h-4" />
+                      Automações
+                    </button>
+                  </div>
+                )}
+
                 {/* Content */}
                 <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+                  {/* Aba de Estágios ou Criação */}
+                  {(activeTab === 'stages' || !isEditing) && (
+                    <>
                   {/* Error */}
                   {error && (
                     <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
@@ -345,6 +384,22 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                       Mínimo de 2 estágios. Use as setas para reordenar.
                     </p>
                   </div>
+                    </>
+                  )}
+
+                  {/* Aba de Automações - só mostra se estiver editando */}
+                  {activeTab === 'automations' && isEditing && pipeline && (
+                    <PipelineAutomationConfig
+                      pipelineId={pipeline.id}
+                      stages={stages.map((s, i) => ({
+                        id: s.id || `temp-${i}`,
+                        name: s.name,
+                        color: s.color,
+                        sort_order: i,
+                        pipeline_id: pipeline.id,
+                      })) as PipelineStage[]}
+                    />
+                  )}
                 </div>
 
                 {/* Footer */}
