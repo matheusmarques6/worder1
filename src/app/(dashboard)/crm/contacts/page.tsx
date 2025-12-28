@@ -400,6 +400,34 @@ export default function ContactsPage() {
   const [importLoading, setImportLoading] = useState(false)
   const [importResult, setImportResult] = useState<{ success: number; errors: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Stats from API
+  const [stats, setStats] = useState({
+    totalContacts: 0,
+    newThisMonth: 0,
+    totalValue: 0,
+  })
+  
+  // Fetch stats from API
+  useEffect(() => {
+    const fetchStats = async () => {
+      if (!user?.organization_id) return
+      try {
+        const res = await fetch(`/api/contacts/stats?organizationId=${user.organization_id}`)
+        const data = await res.json()
+        if (data.success && data.stats) {
+          setStats({
+            totalContacts: data.stats.totalContacts || 0,
+            newThisMonth: data.stats.newThisMonth || 0,
+            totalValue: data.stats.totalValue || 0,
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error)
+      }
+    }
+    fetchStats()
+  }, [user?.organization_id, contacts.length]) // Refetch when contacts change
 
   // Update contact tags
   const handleUpdateTags = async (contactId: string, tags: string[]) => {
@@ -544,21 +572,6 @@ export default function ContactsPage() {
     setEditingContact(contact)
   }
 
-  // Stats
-  const totalContacts = pagination?.total || contacts.length
-  
-  // Count contacts created this month
-  const now = new Date()
-  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const newThisMonth = contacts.filter(c => {
-    if (!c.created_at) return false
-    return new Date(c.created_at) >= firstDayOfMonth
-  }).length
-  
-  const totalValue = contacts.reduce((sum, c) => 
-    sum + (parseFloat(c.total_spent) || 0), 0
-  )
-
   return (
     <div className="space-y-6">
       {/* Hidden file input for import */}
@@ -685,7 +698,7 @@ export default function ContactsPage() {
             </div>
             <div>
               <p className="text-sm text-dark-400">Total de Contatos</p>
-              <p className="text-xl font-bold text-white">{totalContacts}</p>
+              <p className="text-xl font-bold text-white">{stats.totalContacts}</p>
             </div>
           </div>
         </div>
@@ -696,7 +709,7 @@ export default function ContactsPage() {
             </div>
             <div>
               <p className="text-sm text-dark-400">Novos Este Mês</p>
-              <p className="text-xl font-bold text-white">{newThisMonth}</p>
+              <p className="text-xl font-bold text-white">{stats.newThisMonth}</p>
             </div>
           </div>
         </div>
@@ -708,7 +721,7 @@ export default function ContactsPage() {
             <div>
               <p className="text-sm text-dark-400">Valor Total</p>
               <p className="text-xl font-bold text-success-400">
-                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(totalValue)}
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(stats.totalValue)}
               </p>
             </div>
           </div>
