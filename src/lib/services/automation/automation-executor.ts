@@ -38,10 +38,13 @@ interface EventData {
   financial_status?: string;
   fulfillment_status?: string;
   line_items?: any[];
+  customer_name?: string;
   customer?: {
     id?: string;
     email?: string;
     tags?: string;
+    first_name?: string;
+    last_name?: string;
   };
   [key: string]: any;
 }
