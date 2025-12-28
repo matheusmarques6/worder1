@@ -16,6 +16,7 @@ import { EventBus, EventType } from '@/lib/events';
 import { syncContactFromShopify, updateContactOrderStats } from '@/lib/services/shopify/contact-sync';
 import { createOrUpdateDealForContact, moveDealToStage, markDealAsWon } from '@/lib/services/shopify/deal-sync';
 import { trackActivity, trackPurchase, enrichContactFromOrder } from '@/lib/services/shopify/activity-tracker';
+import { executeAutomationRules, mapShopifyEventToTrigger } from '@/lib/services/automation/automation-executor';
 import type { ShopifyStoreConfig, ShopifyCustomer } from '@/lib/services/shopify/types';
 
 // ============================================
@@ -261,6 +262,29 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
       }
     );
   }
+  
+  // ======================================
+  // EXECUTAR REGRAS DE AUTOMAÇÃO
+  // ======================================
+  const automationResult = await executeAutomationRules(
+    store.organization_id,
+    'shopify',
+    'order_created',
+    contact.id,
+    {
+      order_id: String(order.id),
+      order_number: String(order.order_number),
+      total_price: orderValue,
+      currency: order.currency,
+      financial_status: order.financial_status,
+      fulfillment_status: order.fulfillment_status,
+      line_items: order.line_items,
+      customer: order.customer,
+      customer_name: `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim(),
+    }
+  );
+  
+  console.log(`[Shopify] Automation result for order_created:`, automationResult);
 
   // ======================================
   // TRACKING: Registrar atividade e enriquecer contato
@@ -394,7 +418,31 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
       sourceId: String(order.id),
     });
     
-    if (store.default_pipeline_id) {
+    // ======================================
+    // EXECUTAR REGRAS DE AUTOMAÇÃO
+    // ======================================
+    const automationResult = await executeAutomationRules(
+      store.organization_id,
+      'shopify',
+      'order_paid',
+      contact.id,
+      {
+        order_id: String(order.id),
+        order_number: String(order.order_number),
+        total_price: parseFloat(order.total_price || '0'),
+        currency: order.currency,
+        financial_status: order.financial_status,
+        fulfillment_status: order.fulfillment_status,
+        line_items: order.line_items,
+        customer: order.customer,
+        customer_name: `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim(),
+      }
+    );
+    
+    console.log(`[Shopify] Automation result for order_paid:`, automationResult);
+    
+    // Se nenhuma regra criou deal, usar sistema legado
+    if (automationResult.dealsCreated === 0 && store.default_pipeline_id) {
       // Mover deal para estágio "pago" ou marcar como ganho
       await moveDealToStage(contact.id, store, 'paid');
     }
@@ -455,7 +503,32 @@ async function processOrderFulfilled(store: ShopifyStoreConfig, order: any) {
       sourceId: String(order.id),
     });
     
-    if (store.default_pipeline_id) {
+    // ======================================
+    // EXECUTAR REGRAS DE AUTOMAÇÃO
+    // ======================================
+    const automationResult = await executeAutomationRules(
+      store.organization_id,
+      'shopify',
+      'order_fulfilled',
+      contact.id,
+      {
+        order_id: String(order.id),
+        order_number: String(order.order_number),
+        total_price: parseFloat(order.total_price || '0'),
+        currency: order.currency,
+        financial_status: order.financial_status,
+        fulfillment_status: order.fulfillment_status,
+        tracking_number: order.fulfillments?.[0]?.tracking_number,
+        tracking_url: order.fulfillments?.[0]?.tracking_url,
+        customer: order.customer,
+        customer_name: `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim(),
+      }
+    );
+    
+    console.log(`[Shopify] Automation result for order_fulfilled:`, automationResult);
+    
+    // Se nenhuma regra criou deal, usar sistema legado
+    if (automationResult.dealsCreated === 0 && store.default_pipeline_id) {
       // Mover deal para estágio "enviado"
       await moveDealToStage(contact.id, store, 'fulfilled');
     }
