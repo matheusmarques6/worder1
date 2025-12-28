@@ -6,14 +6,14 @@
 -- Criar tabela de regras de automação
 CREATE TABLE IF NOT EXISTS crm_automation_rules (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  pipeline_id UUID NOT NULL REFERENCES crm_pipelines(id) ON DELETE CASCADE,
+  pipeline_id UUID NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   
   -- Configuração da regra
   source_type TEXT NOT NULL CHECK (source_type IN ('shopify', 'whatsapp', 'hotmart', 'webhook', 'form')),
   trigger_event TEXT NOT NULL,
   action_type TEXT NOT NULL DEFAULT 'create_deal' CHECK (action_type IN ('create_deal', 'move_deal', 'update_contact')),
-  target_stage_id UUID NOT NULL REFERENCES crm_pipeline_stages(id) ON DELETE CASCADE,
+  target_stage_id UUID NOT NULL REFERENCES pipeline_stages(id) ON DELETE CASCADE,
   
   -- Configurações adicionais
   auto_tags TEXT[] DEFAULT '{}',

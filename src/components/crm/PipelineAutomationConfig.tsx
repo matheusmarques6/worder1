@@ -25,8 +25,7 @@ import type {
   AutomationSourceType,
   AutomationTriggerEvent,
   AutomationActionType,
-  AutomationAvailableSource,
-  PipelineStage 
+  AutomationAvailableSource
 } from '@/types';
 import { AUTOMATION_EVENTS } from '@/types';
 import ShopifyImportModal from '@/components/integrations/shopify/ShopifyImportModal';
@@ -35,9 +34,15 @@ import ShopifyImportModal from '@/components/integrations/shopify/ShopifyImportM
 // TIPOS
 // =============================================
 
+interface SimpleStage {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface PipelineAutomationConfigProps {
   pipelineId: string;
-  stages: PipelineStage[];
+  stages: SimpleStage[];
 }
 
 // =============================================

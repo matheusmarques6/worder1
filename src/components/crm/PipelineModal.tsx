@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus, Trash2, Zap } from 'lucide-react'
-import type { Pipeline, PipelineStage } from '@/types'
+import type { Pipeline } from '@/types'
 import { PipelineAutomationConfig } from './PipelineAutomationConfig'
 import { useAuthStore } from '@/stores'
 
@@ -395,9 +395,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                         id: s.id || `temp-${i}`,
                         name: s.name,
                         color: s.color,
-                        sort_order: i,
-                        pipeline_id: pipeline.id,
-                      })) as PipelineStage[]}
+                      }))}
                     />
                   )}
                 </div>
