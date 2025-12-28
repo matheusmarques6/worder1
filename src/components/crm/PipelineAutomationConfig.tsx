@@ -127,8 +127,8 @@ export function PipelineAutomationConfig({
         }
 
         // Preencher tags (únicas de todas as regras)
-        const existingTags = loadedRules.flatMap((r: PipelineAutomationRule) => r.auto_tags || []);
-        setAutoTags([...new Set(existingTags)]);
+        const existingTags: string[] = loadedRules.flatMap((r: PipelineAutomationRule) => r.auto_tags || []);
+        setAutoTags([...new Set(existingTags)] as string[]);
 
         // Definir estágio padrão se não tiver
         if (!selectedStage && stages.length > 0) {
