@@ -36,6 +36,7 @@ interface ShopifyStore {
   id: string
   shop_name: string | null
   shop_domain: string
+  shop_email?: string | null
   is_active: boolean
   is_configured: boolean
   connection_status: string
@@ -50,6 +51,7 @@ interface ShopifyStore {
   last_sync_at: string | null
   total_customers_imported: number
   total_orders_imported: number
+  created_at: string
 }
 
 interface WhatsAppConfig {
