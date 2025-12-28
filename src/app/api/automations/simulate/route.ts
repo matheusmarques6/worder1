@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       total_price: orderValue,
       currency: 'BRL',
       financial_status: 'paid',
-      fulfillment_status: null,
+      fulfillment_status: undefined,
       customer_name: customerName,
       customer: {
         id: `test-${contact.id}`,
