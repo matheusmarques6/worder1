@@ -15,6 +15,14 @@ export async function GET(
 ) {
   try {
     const supabase = createAdminClient();
+    
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Erro ao conectar com banco de dados' },
+        { status: 500 }
+      );
+    }
+    
     const pipelineId = params.id;
     const { searchParams } = new URL(request.url);
     const organizationId = searchParams.get('organizationId');
@@ -127,6 +135,14 @@ export async function POST(
 ) {
   try {
     const supabase = createAdminClient();
+    
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Erro ao conectar com banco de dados' },
+        { status: 500 }
+      );
+    }
+    
     const pipelineId = params.id;
     const body = await request.json();
 
@@ -247,6 +263,14 @@ export async function PUT(
 ) {
   try {
     const supabase = createAdminClient();
+    
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Erro ao conectar com banco de dados' },
+        { status: 500 }
+      );
+    }
+    
     const body = await request.json();
 
     const { ruleId, ...updates } = body;
@@ -304,6 +328,14 @@ export async function DELETE(
 ) {
   try {
     const supabase = createAdminClient();
+    
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Erro ao conectar com banco de dados' },
+        { status: 500 }
+      );
+    }
+    
     const { searchParams } = new URL(request.url);
     const ruleId = searchParams.get('ruleId');
 
