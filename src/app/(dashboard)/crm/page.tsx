@@ -37,11 +37,17 @@ import {
   X,
   DollarSign,
   User,
+  Zap,
+  LayoutGrid,
 } from 'lucide-react'
 import { useDeals, usePipelines } from '@/hooks'
 import { useCRMStore, useAuthStore } from '@/stores'
 import { CreateDealModal, DealDrawer, PipelineModal, EditStageModal } from '@/components/crm'
+import { AutomationsPanel } from '@/components/crm/automations'
 import type { Deal, Pipeline, PipelineStage, CreateDealData } from '@/types'
+
+// Tipo para abas
+type CRMTab = 'kanban' | 'automations'
 
 // ==========================================
 // UTILITY FUNCTIONS
@@ -374,6 +380,7 @@ export default function CRMPage() {
   const [showEditStageModal, setShowEditStageModal] = useState(false)
   const [editingStage, setEditingStage] = useState<PipelineStage | null>(null)
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+  const [activeTab, setActiveTab] = useState<CRMTab>('kanban')
   const [filters, setFilters] = useState({
     minValue: '',
     maxValue: '',
@@ -602,6 +609,41 @@ export default function CRMPage() {
 
   return (
     <div className="h-[calc(100vh-200px)] flex flex-col">
+      {/* Tabs Navigation */}
+      <div className="flex items-center gap-1 mb-6 border-b border-dark-700/50 pb-4">
+        <button
+          onClick={() => setActiveTab('kanban')}
+          className={`
+            flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all
+            ${activeTab === 'kanban'
+              ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+              : 'text-dark-400 hover:text-white hover:bg-dark-800'
+            }
+          `}
+        >
+          <LayoutGrid className="w-4 h-4" />
+          <span>Kanban</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('automations')}
+          className={`
+            flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all
+            ${activeTab === 'automations'
+              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+              : 'text-dark-400 hover:text-white hover:bg-dark-800'
+            }
+          `}
+        >
+          <Zap className="w-4 h-4" />
+          <span>Automações</span>
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'automations' ? (
+        <AutomationsPanel />
+      ) : (
+        <>
       {/* Controls */}
       <div className="flex items-center gap-3 mb-6">
         {/* Pipeline Selector */}
@@ -988,6 +1030,8 @@ export default function CRMPage() {
           className="fixed inset-0 z-10" 
           onClick={() => setShowFilterDropdown(false)} 
         />
+      )}
+        </>
       )}
     </div>
   )
