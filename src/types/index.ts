@@ -199,8 +199,27 @@ export interface Contact {
   deals_count?: number;
   created_at: string;
   updated_at: string;
-  // Computed
+  // Analytics / Computed
   total_revenue?: number;
+  total_page_views?: number;
+  last_page_view_at?: string;
+  total_sessions?: number;
+  last_session_at?: string;
+  browser?: string;
+  device?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  timezone?: string;
+  ip_address?: string;
+  referrer?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  notes?: string;
+  status?: string;
+  type?: string;
+  score?: number;
 }
 
 export interface Deal {
