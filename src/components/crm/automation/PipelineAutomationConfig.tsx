@@ -273,14 +273,22 @@ export function PipelineAutomationConfig({
         body: JSON.stringify(payload),
       })
 
-      if (res.ok) {
+      const data = await res.json()
+
+      if (res.ok && data.success) {
         await fetchRules()
         setEditingRule(null)
         setNewRuleSource(null)
         onSave?.()
+      } else {
+        // Mostrar erro ao usuário
+        const errorMessage = data.error || 'Erro ao salvar regra'
+        alert(`Erro: ${errorMessage}\n\nVerifique se a migration foi executada no Supabase.`)
+        console.error('Error saving rule:', data)
       }
     } catch (error) {
       console.error('Error saving rule:', error)
+      alert('Erro de conexão ao salvar regra. Tente novamente.')
     } finally {
       setSaving(false)
     }
