@@ -743,6 +743,10 @@ function RuleConfigModal({
 
   const handleSubmit = () => {
     if (!formData.name || !formData.triggerEvent) return
+    if (!formData.initialStageId) {
+      alert('Selecione um estágio inicial')
+      return
+    }
     onSave(formData)
   }
 
