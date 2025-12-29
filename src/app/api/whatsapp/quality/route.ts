@@ -325,18 +325,22 @@ async function checkAndNotifyQualityDrop(
 
     // TODO: Implementar notificação por email/webhook
     // Por enquanto, apenas salvar no log
-    await supabase.from('activity_logs').insert({
-      organization_id: instance.organization_id,
-      entity_type: 'whatsapp_instance',
-      entity_id: instance.id,
-      action: 'quality_dropped',
-      changes: {
-        previous_rating: previousRating,
-        new_rating: newRating,
-        phone_number: instance.phone_number,
-        messaging_limit: newQuality.messaging_limit_tier,
-      },
-    }).catch(() => {}) // Ignora se tabela não existir
+    try {
+      await supabase.from('activity_logs').insert({
+        organization_id: instance.organization_id,
+        entity_type: 'whatsapp_instance',
+        entity_id: instance.id,
+        action: 'quality_dropped',
+        changes: {
+          previous_rating: previousRating,
+          new_rating: newRating,
+          phone_number: instance.phone_number,
+          messaging_limit: newQuality.messaging_limit_tier,
+        },
+      })
+    } catch {
+      // Ignora se tabela não existir
+    }
   }
 }
 
