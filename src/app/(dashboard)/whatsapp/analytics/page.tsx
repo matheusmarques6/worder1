@@ -23,7 +23,10 @@ import {
   Target,
   Percent,
   Activity,
+  Shield,
 } from 'lucide-react'
+import { QualityDashboard } from '@/components/whatsapp/quality'
+import { useAuthStore } from '@/stores'
 import {
   XAxis,
   YAxis,
@@ -308,7 +311,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 }
 
 export default function WhatsAppAnalyticsPage() {
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'ai'>('campaigns')
+  const { user } = useAuthStore()
+  const organizationId = user?.organization_id || 'default'
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'ai' | 'quality'>('campaigns')
   const [dateRange, setDateRange] = useState('7d')
   const [loading, setLoading] = useState(false)
   
@@ -564,6 +569,17 @@ export default function WhatsAppAnalyticsPage() {
         >
           <Bot className="w-4 h-4" />
           Agentes IA
+        </button>
+        <button
+          onClick={() => setActiveTab('quality')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+            activeTab === 'quality'
+              ? 'bg-primary-500 text-white'
+              : 'bg-dark-800/60 border border-dark-700/50 text-dark-400 hover:text-white hover:border-dark-600'
+          }`}
+        >
+          <Shield className="w-4 h-4" />
+          Qualidade
         </button>
       </div>
 
@@ -934,6 +950,16 @@ export default function WhatsAppAnalyticsPage() {
               ))}
             </div>
           </div>
+        </motion.div>
+      )}
+
+      {/* Quality Tab */}
+      {activeTab === 'quality' && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <QualityDashboard organizationId={organizationId} />
         </motion.div>
       )}
     </div>
