@@ -54,6 +54,12 @@ export { EditStageModal } from './EditStageModal'
 export { ContactDrawer } from './ContactDrawer'
 export { PipelineAutomationConfig } from './PipelineAutomationConfig'
 
+// New CRM components
+export { MergeContactsModal } from './MergeContactsModal'
+export { ImportContactsModal } from './ImportContactsModal'
+export { CustomFieldsManager } from './CustomFieldsManager'
+export { DealTimeline } from './DealTimeline'
+
 // ===============================
 // KANBAN CARD
 // ===============================

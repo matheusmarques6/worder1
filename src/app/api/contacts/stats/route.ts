@@ -1,8 +1,8 @@
 // =============================================
 // Contact Stats API
 // src/app/api/contacts/stats/route.ts
-// 
-// Retorna estatísticas reais dos contatos
+//
+// GET: Estatísticas dos contatos (total, novos, valor)
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -24,61 +24,57 @@ export async function GET(request: NextRequest) {
   }
 
   const organizationId = request.nextUrl.searchParams.get('organizationId');
-  
+
   if (!organizationId) {
     return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
   }
 
   try {
-    // Primeiro dia do mês atual
+    // Calcular primeiro dia do mês atual
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    // 1. Total de contatos
+    // Total de contatos
     const { count: totalContacts } = await supabase
       .from('contacts')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', organizationId);
 
-    // 2. Novos este mês
+    // Novos este mês
     const { count: newThisMonth } = await supabase
       .from('contacts')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', organizationId)
       .gte('created_at', firstDayOfMonth);
 
-    // 3. Valor total (soma de total_spent)
+    // Valor total (soma de total_spent)
     const { data: valueData } = await supabase
       .from('contacts')
       .select('total_spent')
       .eq('organization_id', organizationId);
-    
-    const totalValue = valueData?.reduce((sum, c) => {
-      const spent = parseFloat(c.total_spent) || 0;
-      return sum + spent;
-    }, 0) || 0;
 
-    // 4. Contatos com deals (opcional)
-    const { count: withDeals } = await supabase
+    const totalValue = valueData?.reduce((sum, c) => sum + (Number(c.total_spent) || 0), 0) || 0;
+
+    // Contatos com compras
+    const { count: withOrders } = await supabase
       .from('contacts')
-      .select('*, deals!inner(id)', { count: 'exact', head: true })
-      .eq('organization_id', organizationId);
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .gt('total_orders', 0);
+
+    // Valor médio por contato
+    const avgValue = totalContacts && totalContacts > 0 ? totalValue / totalContacts : 0;
 
     return NextResponse.json({
-      success: true,
-      stats: {
-        totalContacts: totalContacts || 0,
-        newThisMonth: newThisMonth || 0,
-        totalValue: totalValue,
-        withDeals: withDeals || 0,
-      }
+      totalContacts: totalContacts || 0,
+      newThisMonth: newThisMonth || 0,
+      totalValue: Math.round(totalValue * 100) / 100,
+      withOrders: withOrders || 0,
+      avgValue: Math.round(avgValue * 100) / 100,
     });
 
   } catch (error: any) {
-    console.error('[Contact Stats] Error:', error);
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message 
-    }, { status: 500 });
+    console.error('[Contact Stats API] Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

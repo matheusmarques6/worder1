@@ -15,6 +15,7 @@ import {
   Building2
 } from 'lucide-react'
 import { ContactSelector } from './ContactSelector'
+import { DealTimeline } from './DealTimeline'
 import type { Deal, PipelineStage } from '@/types'
 
 interface DealDrawerProps {
@@ -414,6 +415,15 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Stage History Timeline */}
+              <div className="pt-4 border-t border-dark-700">
+                <h3 className="text-sm font-medium text-dark-400 mb-4 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Histórico de Estágios
+                </h3>
+                <DealTimeline dealId={deal.id} />
               </div>
             </div>
 
