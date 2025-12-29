@@ -360,7 +360,7 @@ export default function CRMPage() {
     refetch,
     refetchPipelines
   } = useDeals()
-  const { createPipeline: createPipelineHook, updatePipeline, deletePipeline: deletePipelineHook, updateStage, deleteStage } = usePipelines()
+  const { createPipeline: createPipelineHook, updatePipeline, deletePipeline: deletePipelineHook, createStage, updateStage, deleteStage } = usePipelines()
   
   const [activePipeline, setActivePipeline] = useState<Pipeline | null>(null)
   const [showPipelineDropdown, setShowPipelineDropdown] = useState(false)
@@ -485,12 +485,28 @@ export default function CRMPage() {
 
   const handleCreatePipeline = async (data: { name: string; description?: string; color?: string; stages: { name: string; color: string; position: number }[] }) => {
     if (editingPipeline) {
-      // Ao editar, não podemos enviar stages diretamente - stages é uma tabela separada
+      // Atualizar dados do pipeline
       const { stages, ...pipelineData } = data
       await updatePipeline(editingPipeline.id, pipelineData)
       
-      // Se precisar atualizar stages, fazer separadamente
-      // Por enquanto, stages só são gerenciados na criação
+      // Criar novos estágios (os que não têm id)
+      const existingStageIds = editingPipeline.stages?.map(s => s.id) || []
+      
+      for (const stage of stages) {
+        // Se o estágio tem posição maior que os existentes, é novo
+        const isNew = stage.position >= existingStageIds.length
+        
+        if (isNew) {
+          try {
+            await createStage(editingPipeline.id, {
+              name: stage.name,
+              color: stage.color,
+            })
+          } catch (error) {
+            console.error('Error creating stage:', error)
+          }
+        }
+      }
     } else {
       await createPipelineHook(data)
     }
