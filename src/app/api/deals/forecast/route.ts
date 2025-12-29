@@ -287,18 +287,22 @@ export async function GET(request: NextRequest) {
       topDeals: deals
         .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
         .slice(0, 5)
-        .map(d => ({
-          id: d.id,
-          title: d.title,
-          value: d.value,
-          stage: stagesMap[d.stage_id]?.name || 'Sem Estágio',
-          probability: stagesMap[d.stage_id]?.probability || 50,
-          expectedCloseDate: d.expected_close_date,
-          contact: d.contact ? {
-            name: `${d.contact.first_name || ''} ${d.contact.last_name || ''}`.trim(),
-            email: d.contact.email,
-          } : null,
-        })),
+        .map(d => {
+          // Supabase retorna relações como array
+          const contact = Array.isArray(d.contact) ? d.contact[0] : d.contact;
+          return {
+            id: d.id,
+            title: d.title,
+            value: d.value,
+            stage: stagesMap[d.stage_id]?.name || 'Sem Estágio',
+            probability: stagesMap[d.stage_id]?.probability || 50,
+            expectedCloseDate: d.expected_close_date,
+            contact: contact ? {
+              name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim(),
+              email: contact.email,
+            } : null,
+          };
+        }),
     });
     
   } catch (error: any) {
