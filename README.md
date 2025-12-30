@@ -1,151 +1,128 @@
-# 📦 CRM Advanced Features
+# 📦 CRM Advanced Features - Pacote Completo (Fases 1-4)
 
-## O que está incluído
+## ✅ Todas as Features Implementadas
 
-### ✅ Funcionalidades Implementadas
+### Fase 1 - Core Features
+- 📊 **Forecast de Vendas** - Dashboard operacional
+- 📜 **Histórico de Stages** - Timeline de mudanças
+- 🔧 **Custom Fields Manager** - Gerenciador de campos
+- 🔀 **Merge de Contatos** - Detecção de duplicados
+- 📥 **Import de Contatos** - Importação CSV
+- 📈 **Probabilidade por Stage** - % de fechamento
+- 🎯 **Commit Level** - Classificação de deals
 
-| Recurso | Descrição | Status |
-|---------|-----------|--------|
-| **Forecast de Vendas** | Dashboard com métricas de pipeline, win rate, velocity | ✅ Pronto |
-| **Histórico de Stages** | Timeline de mudanças de estágio do deal | ✅ Pronto |
-| **Custom Fields** | Gerenciador de campos personalizados | ✅ Pronto |
-| **Merge de Contatos** | Detectar e mesclar duplicados | ✅ Pronto |
-| **Import de Contatos** | Importação CSV com mapeamento | ✅ Pronto |
+### Fase 2 - Custom Fields em Formulários
+- 🎨 **CustomFieldRenderer** - Renderização dinâmica
+- 📝 **ContactDrawer** - Edição de campos inline
+- ➕ **CreateContactModal** - Campos na criação
+
+### Fase 3 - Testes End-to-End
+- 🧪 **Página de Diagnóstico** - Testes automatizados
+- 🛠️ **Ferramenta Standalone** - HTML para testes offline
+- 📋 **Checklist Manual** - Verificações manuais
+
+### Fase 4 - Analytics de Vendas
+- 📊 **Dashboard de Analytics** - Gráficos históricos
+- 📈 **7 tipos de gráficos** - Recharts
+- 🎯 **KPIs em tempo real** - Métricas principais
+- 📅 **Filtros por período** - 30d, 3m, 6m, 12m, all
 
 ---
 
-## 📁 Estrutura de Arquivos
+## 📁 Estrutura Completa
 
 ```
 src/
 ├── app/
 │   ├── api/
-│   │   ├── deals/
-│   │   │   ├── [id]/history/route.ts    # API histórico de stages
-│   │   │   └── forecast/route.ts        # API de forecast
-│   │   ├── contacts/
-│   │   │   ├── import/route.ts          # API importação CSV
-│   │   │   ├── merge/route.ts           # API merge duplicados
-│   │   │   └── stats/route.ts           # API estatísticas
-│   │   └── custom-fields/route.ts       # API campos personalizados
-│   └── (dashboard)/crm/
-│       ├── forecast/page.tsx            # Página de forecast
-│       ├── contacts/page.tsx            # Página de contatos (atualizada)
-│       └── layout.tsx                   # Layout com nova aba
-└── components/crm/
-    ├── index.tsx                        # Exports atualizados
-    ├── DealDrawer.tsx                   # Com timeline integrada
-    ├── DealTimeline.tsx                 # Componente de timeline
-    ├── MergeContactsModal.tsx           # Modal de merge
-    ├── ImportContactsModal.tsx          # Modal de import
-    └── CustomFieldsManager.tsx          # Gerenciador de campos
+│   │   ├── analytics/sales/           ← NOVO (Fase 4)
+│   │   ├── deals/[id]/history/
+│   │   ├── deals/forecast/
+│   │   ├── contacts/[id]/
+│   │   ├── contacts/import/
+│   │   ├── contacts/merge/
+│   │   ├── contacts/stats/
+│   │   └── custom-fields/
+│   └── (dashboard)/
+│       ├── analytics/sales/           ← NOVO (Fase 4)
+│       └── crm/
+│           ├── page.tsx
+│           ├── layout.tsx
+│           ├── forecast/
+│           ├── contacts/
+│           └── diagnostics/
+├── components/
+│   ├── crm/
+│   │   ├── CustomFieldRenderer.tsx
+│   │   ├── CustomFieldsManager.tsx
+│   │   ├── DealDrawer.tsx
+│   │   ├── DealTimeline.tsx
+│   │   ├── EditStageModal.tsx
+│   │   ├── ContactDrawer.tsx
+│   │   ├── CreateContactModal.tsx
+│   │   ├── MergeContactsModal.tsx
+│   │   └── ImportContactsModal.tsx
+│   └── layout/
+│       └── Sidebar.tsx                 ← ATUALIZADO (Fase 4)
+├── hooks/usePipelines.ts
+└── types/index.ts
 
-crm-advanced-features.sql                # Migration SQL
+crm-advanced-features.sql
+crm-diagnostico-standalone.html
+contatos-teste-import.csv
 ```
 
 ---
 
-## 🚀 Como Instalar
+## 🚀 Instalação
 
-### 1. Execute o SQL no Supabase
-
+### 1. Execute o SQL
 ```sql
--- No SQL Editor do Supabase, execute:
+-- Supabase SQL Editor
 -- crm-advanced-features.sql
 ```
 
-Este SQL cria:
-- Coluna `probability` nos stages
-- Colunas de forecast nos deals
-- Tabela `deal_stage_history` + trigger
-- Tabela `custom_field_definitions`
-- View e funções de forecast
+### 2. Instale Recharts (se necessário)
+```bash
+npm install recharts
+```
 
-### 2. Substitua os arquivos
+### 3. Copie os arquivos
+```bash
+cp -r src/* /seu-projeto/src/
+```
 
-Copie todos os arquivos para as pastas correspondentes no seu projeto.
-
-### 3. Verifique as dependências
-
-Todas as dependências já estão no projeto:
-- framer-motion ✅
-- lucide-react ✅
+### 4. Deploy
+```bash
+git add . && git commit -m "CRM Advanced Features" && git push
+```
 
 ---
 
 ## 📊 Como Usar
 
-### Forecast de Vendas
-
-Acesse: **CRM → Forecast**
-
-Mostra:
-- Pipeline Total vs Ponderado
-- Ganhos do período
-- Win Rate
-- Funil por estágio
-- Velocidade de vendas
-- Top deals
-
-### Histórico de Stages
-
-Abra qualquer deal → Role até "Histórico de Estágios"
-
-Mostra:
-- Todas as mudanças de estágio
-- Tempo em cada estágio
-- Quem fez a mudança
-
-### Import de Contatos
-
-Acesse: **CRM → Contatos → Importar**
-
-1. Upload do CSV
-2. Mapeamento de colunas
-3. Configurar opções (duplicados, tags)
-4. Importar
-
-### Merge de Contatos
-
-Acesse: **CRM → Contatos → Duplicados**
-
-1. Sistema detecta duplicados automaticamente
-2. Selecione o contato principal
-3. Confirme a mesclagem
-
-### Custom Fields
-
-*(Para ativar, adicione um botão na página de Settings)*
+| Funcionalidade | Caminho |
+|----------------|---------|
+| **Forecast Operacional** | CRM → Forecast |
+| **Analytics Histórico** | Analytics → Vendas/CRM |
+| **Diagnóstico** | CRM → Diagnóstico |
+| **Custom Fields** | Contatos → Abrir → Campos |
+| **Import/Merge** | Contatos → Importar/Duplicados |
 
 ---
 
-## 🔧 Configurações Adicionais
+## 📈 Gráficos de Analytics
 
-### Probabilidade por Stage
-
-Após rodar o SQL, edite cada stage para definir a probabilidade:
-- Lead: 10%
-- Qualificado: 25%
-- Proposta: 50%
-- Negociação: 75%
-- Fechado Ganho: 100%
-- Fechado Perdido: 0%
-
-O sistema usa essas probabilidades para calcular o Weighted Pipeline.
+| Gráfico | Tipo |
+|---------|------|
+| Evolução de Receita | Area Chart |
+| Win Rate | Composed (Bar + Line) |
+| Funil de Conversão | Progress Bars |
+| Velocidade de Vendas | Line Chart |
+| Performance por Estágio | Horizontal Bar |
+| Top 5 Deals | Lista ranqueada |
+| Volume de Deals | Grouped Bar |
 
 ---
 
-## ❓ Troubleshooting
-
-### "Tabela deal_stage_history não existe"
-→ Execute o SQL no Supabase
-
-### Forecast mostrando zero
-→ Verifique se os stages têm `probability` definido
-
-### Import não funciona
-→ Verifique se o CSV tem separador correto (vírgula ou ponto-e-vírgula)
-
----
-
-**Criado em:** Dezembro 2024
+**Versão:** Completa 1.4 | **Fases:** 1, 2, 3, 4 | **Data:** Dezembro 2024

@@ -52,6 +52,8 @@ export function ContactSelector({ selectedId, onSelect, placeholder = 'Seleciona
     last_name: string
     email: string
     phone?: string
+    company?: string
+    custom_fields?: Record<string, any>
   }) => {
     const response = await fetch('/api/contacts', {
       method: 'POST',
@@ -202,6 +204,7 @@ export function ContactSelector({ selectedId, onSelect, placeholder = 'Seleciona
         onClose={() => setShowCreateModal(false)}
         onCreate={handleCreateContact}
         initialEmail={search}
+        organizationId={user?.organization_id}
       />
     </div>
   )

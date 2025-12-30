@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, User, Mail, Phone } from 'lucide-react'
+import { X, User, Mail, Phone, Building2 } from 'lucide-react'
+import { CustomFieldsForm, useCustomFields, validateCustomFields } from './CustomFieldRenderer'
 
 interface CreateContactModalProps {
   isOpen: boolean
@@ -12,23 +13,51 @@ interface CreateContactModalProps {
     last_name: string
     email: string
     phone?: string
+    company?: string
+    custom_fields?: Record<string, any>
   }) => Promise<void>
   initialEmail?: string
+  organizationId?: string
 }
 
-export function CreateContactModal({ isOpen, onClose, onCreate, initialEmail = '' }: CreateContactModalProps) {
+export function CreateContactModal({ isOpen, onClose, onCreate, initialEmail = '', organizationId }: CreateContactModalProps) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState(initialEmail)
   const [phone, setPhone] = useState('')
+  const [company, setCompany] = useState('')
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Fetch custom field definitions
+  const { fields: customFields } = useCustomFields('contact', organizationId)
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setFirstName('')
+      setLastName('')
+      setEmail(initialEmail)
+      setPhone('')
+      setCompany('')
+      setCustomFieldValues({})
+      setError(null)
+    }
+  }, [isOpen, initialEmail])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!firstName.trim() && !email.trim()) {
       setError('Informe pelo menos o nome ou email do contato')
+      return
+    }
+
+    // Validate custom fields
+    const customFieldErrors = validateCustomFields(customFields, customFieldValues)
+    if (Object.keys(customFieldErrors).length > 0) {
+      setError(Object.values(customFieldErrors)[0])
       return
     }
 
@@ -41,6 +70,8 @@ export function CreateContactModal({ isOpen, onClose, onCreate, initialEmail = '
         last_name: lastName.trim(),
         email: email.trim(),
         phone: phone.trim() || undefined,
+        company: company.trim() || undefined,
+        custom_fields: Object.keys(customFieldValues).length > 0 ? customFieldValues : undefined,
       })
       
       // Reset form
@@ -48,6 +79,8 @@ export function CreateContactModal({ isOpen, onClose, onCreate, initialEmail = '
       setLastName('')
       setEmail('')
       setPhone('')
+      setCompany('')
+      setCustomFieldValues({})
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar contato')
@@ -176,6 +209,35 @@ export function CreateContactModal({ isOpen, onClose, onCreate, initialEmail = '
                       />
                     </div>
                   </div>
+
+                  {/* Company */}
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-1.5">
+                      Empresa
+                    </label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                      <input
+                        type="text"
+                        value={company}
+                        onChange={(e) => setCompany(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                        placeholder="Nome da empresa"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Custom Fields */}
+                  {organizationId && customFields.length > 0 && (
+                    <div className="pt-4 border-t border-dark-700">
+                      <CustomFieldsForm
+                        entityType="contact"
+                        organizationId={organizationId}
+                        values={customFieldValues}
+                        onChange={setCustomFieldValues}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Footer */}

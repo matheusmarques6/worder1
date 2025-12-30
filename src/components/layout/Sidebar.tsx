@@ -36,6 +36,7 @@ import {
   Info,
   ExternalLink,
   Loader2,
+  TrendingUp,
 } from 'lucide-react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
@@ -84,6 +85,7 @@ const mainNavItems: NavItem[] = [
 ]
 
 const analyticsNavItems: NavItem[] = [
+  { title: 'Vendas/CRM', href: '/analytics/sales', icon: TrendingUp },
   { title: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
   { title: 'Shopify', href: '/analytics/shopify', icon: ShoppingBag },
   { title: 'E-mail Marketing', href: '/analytics/email', icon: Mail },

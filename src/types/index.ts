@@ -234,6 +234,8 @@ export interface Deal {
   currency: string;
   probability: number;
   expected_close_date?: string;
+  commit_level?: 'omit' | 'pipeline' | 'best_case' | 'commit';
+  forecast_category?: string;
   status: 'open' | 'won' | 'lost';
   won_at?: string;
   lost_at?: string;

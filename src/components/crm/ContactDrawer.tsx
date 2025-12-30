@@ -30,9 +30,11 @@ import {
   Truck,
   CreditCard,
   ExternalLink,
+  Settings,
 } from 'lucide-react'
 import type { Contact, Pipeline, PipelineStage } from '@/types'
 import { useAuthStore } from '@/stores'
+import { CustomFieldsForm, useCustomFields } from './CustomFieldRenderer'
 
 // RFM Segment badges
 const RFM_SEGMENTS: Record<string, { label: string; color: string; icon: any }> = {
@@ -225,6 +227,18 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
   const [loadingEnriched, setLoadingEnriched] = useState(false)
   const [showLastOrder, setShowLastOrder] = useState(true)
   const [showFavorites, setShowFavorites] = useState(false)
+  
+  // Custom fields state
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({})
+  const [editingCustomFields, setEditingCustomFields] = useState(false)
+  const [savingCustomFields, setSavingCustomFields] = useState(false)
+  
+  // Initialize custom field values from contact
+  useEffect(() => {
+    if (contact?.custom_fields) {
+      setCustomFieldValues(contact.custom_fields || {})
+    }
+  }, [contact])
   
   // Orders and Sessions state (Shopify)
   const [orderHistory, setOrderHistory] = useState<OrderHistory[]>([])
@@ -586,6 +600,36 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
     }
   }
 
+  const handleSaveCustomFields = async () => {
+    if (!contact) return
+    
+    const orgId = user?.organization_id || contact.organization_id
+    if (!orgId) return
+
+    setSavingCustomFields(true)
+    try {
+      const response = await fetch(`/api/contacts/${contact.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: orgId,
+          custom_fields: customFieldValues,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao salvar campos personalizados')
+      }
+
+      setEditingCustomFields(false)
+    } catch (error) {
+      console.error('Error saving custom fields:', error)
+      alert('Erro ao salvar campos personalizados')
+    } finally {
+      setSavingCustomFields(false)
+    }
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR')
   }
@@ -669,6 +713,58 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                 <div className="flex items-center gap-3 text-dark-300">
                   <Building2 className="w-4 h-4 text-dark-500" />
                   <span>{contact.company}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Custom Fields */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+                  Campos Personalizados
+                </span>
+                <button
+                  onClick={() => setEditingCustomFields(!editingCustomFields)}
+                  className="p-1 rounded text-dark-400 hover:text-primary-400 transition-colors"
+                  title={editingCustomFields ? 'Cancelar' : 'Editar campos'}
+                >
+                  {editingCustomFields ? <X className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
+                </button>
+              </div>
+
+              <CustomFieldsForm
+                entityType="contact"
+                organizationId={user?.organization_id || contact.organization_id}
+                values={customFieldValues}
+                onChange={setCustomFieldValues}
+                disabled={!editingCustomFields}
+              />
+
+              {editingCustomFields && (
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={() => {
+                      setCustomFieldValues(contact.custom_fields || {})
+                      setEditingCustomFields(false)
+                    }}
+                    className="flex-1 px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-dark-300 text-sm font-medium transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSaveCustomFields}
+                    disabled={savingCustomFields}
+                    className="flex-1 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  >
+                    {savingCustomFields ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      'Salvar'
+                    )}
+                  </button>
                 </div>
               )}
             </div>

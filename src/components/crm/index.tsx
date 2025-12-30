@@ -59,6 +59,8 @@ export { MergeContactsModal } from './MergeContactsModal'
 export { ImportContactsModal } from './ImportContactsModal'
 export { CustomFieldsManager } from './CustomFieldsManager'
 export { DealTimeline } from './DealTimeline'
+export { CustomFieldRenderer, CustomFieldsForm, useCustomFields, validateCustomFields } from './CustomFieldRenderer'
+export type { CustomFieldDefinition } from './CustomFieldRenderer'
 
 // ===============================
 // KANBAN CARD

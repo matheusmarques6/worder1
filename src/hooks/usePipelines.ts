@@ -146,6 +146,7 @@ export function usePipelines() {
     name?: string;
     color?: string;
     position?: number;
+    probability?: number;
   }) => {
     setLoading(true);
     setError(null);

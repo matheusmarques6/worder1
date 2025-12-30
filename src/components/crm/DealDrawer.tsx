@@ -50,6 +50,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
         expected_close_date: deal.expected_close_date,
         notes: deal.notes,
         contact_id: deal.contact_id,
+        commit_level: deal.commit_level || 'pipeline',
       })
       setIsEditing(false)
       setShowDeleteConfirm(false)
@@ -302,6 +303,55 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                       ? new Date(deal.expected_close_date).toLocaleDateString('pt-BR')
                       : 'Não definida'}
                   </p>
+                )}
+              </div>
+
+              {/* Commit Level */}
+              <div>
+                <label className="block text-sm font-medium text-dark-400 mb-2">
+                  Nível de Comprometimento (Forecast)
+                </label>
+                {isEditing ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: 'omit', label: 'Omitir', color: 'bg-dark-600', desc: 'Não incluir no forecast' },
+                      { value: 'pipeline', label: 'Pipeline', color: 'bg-yellow-500', desc: 'Deal padrão' },
+                      { value: 'best_case', label: 'Best Case', color: 'bg-blue-500', desc: 'Cenário otimista' },
+                      { value: 'commit', label: 'Commit', color: 'bg-green-500', desc: 'Praticamente garantido' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setEditedDeal({ ...editedDeal, commit_level: option.value })}
+                        className={`p-3 rounded-xl border transition-all text-left ${
+                          editedDeal.commit_level === option.value
+                            ? 'border-primary-500 bg-primary-500/10'
+                            : 'border-dark-700 bg-dark-800/50 hover:border-dark-600'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className={`w-3 h-3 rounded-full ${option.color}`} />
+                          <span className="text-sm font-medium text-white">{option.label}</span>
+                        </div>
+                        <p className="text-xs text-dark-400">{option.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${
+                      deal.commit_level === 'commit' ? 'bg-green-500' :
+                      deal.commit_level === 'best_case' ? 'bg-blue-500' :
+                      deal.commit_level === 'omit' ? 'bg-dark-600' :
+                      'bg-yellow-500'
+                    }`} />
+                    <span className="text-white">
+                      {deal.commit_level === 'commit' ? 'Commit' :
+                       deal.commit_level === 'best_case' ? 'Best Case' :
+                       deal.commit_level === 'omit' ? 'Omitido' :
+                       'Pipeline'}
+                    </span>
+                  </div>
                 )}
               </div>
 

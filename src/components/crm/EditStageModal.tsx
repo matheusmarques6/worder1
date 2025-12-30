@@ -10,7 +10,7 @@ interface EditStageModalProps {
   stage: PipelineStage | null
   totalStages: number
   onClose: () => void
-  onSave: (stageId: string, data: { name: string; color: string }) => Promise<void>
+  onSave: (stageId: string, data: { name: string; color: string; probability?: number }) => Promise<void>
   onDelete: (stageId: string) => Promise<void>
 }
 
@@ -31,6 +31,7 @@ export function EditStageModal({
 }: EditStageModalProps) {
   const [name, setName] = useState('')
   const [color, setColor] = useState('#f97316')
+  const [probability, setProbability] = useState(50)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,6 +39,7 @@ export function EditStageModal({
     if (isOpen && stage) {
       setName(stage.name)
       setColor(stage.color)
+      setProbability(stage.probability ?? 50)
       setError(null)
     }
   }, [stage, isOpen])
@@ -56,7 +58,7 @@ export function EditStageModal({
     setError(null)
 
     try {
-      await onSave(stage.id, { name, color })
+      await onSave(stage.id, { name, color, probability })
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar estágio')
@@ -192,6 +194,45 @@ export function EditStageModal({
                         ))}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Probability */}
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                      Probabilidade de Fechamento
+                    </label>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-4">
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="5"
+                          value={probability}
+                          onChange={(e) => setProbability(Number(e.target.value))}
+                          className="flex-1 h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                        />
+                        <div className="flex items-center gap-1 min-w-[60px]">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={probability}
+                            onChange={(e) => setProbability(Math.min(100, Math.max(0, Number(e.target.value))))}
+                            className="w-14 px-2 py-1 bg-dark-800 border border-dark-700 rounded-lg text-white text-center text-sm focus:outline-none focus:border-primary-500"
+                          />
+                          <span className="text-dark-400 text-sm">%</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-xs text-dark-500">
+                        <span>0% (Perdido)</span>
+                        <span>50% (Em aberto)</span>
+                        <span>100% (Ganho)</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-dark-500 mt-2">
+                      Usado para calcular o valor ponderado do pipeline (Forecast)
+                    </p>
                   </div>
 
                   {/* Stage Info */}

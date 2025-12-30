@@ -37,11 +37,17 @@ import {
   X,
   DollarSign,
   User,
+  Zap,
+  LayoutGrid,
 } from 'lucide-react'
 import { useDeals, usePipelines } from '@/hooks'
 import { useCRMStore, useAuthStore } from '@/stores'
 import { CreateDealModal, DealDrawer, PipelineModal, EditStageModal } from '@/components/crm'
+import { AutomationsPanel } from '@/components/crm/automations'
 import type { Deal, Pipeline, PipelineStage, CreateDealData } from '@/types'
+
+// Tipo para abas
+type CRMTab = 'kanban' | 'automations'
 
 // ==========================================
 // UTILITY FUNCTIONS
@@ -360,7 +366,7 @@ export default function CRMPage() {
     refetch,
     refetchPipelines
   } = useDeals()
-  const { createPipeline: createPipelineHook, updatePipeline, deletePipeline: deletePipelineHook, createStage, updateStage, deleteStage } = usePipelines()
+  const { createPipeline: createPipelineHook, updatePipeline, deletePipeline: deletePipelineHook, updateStage, deleteStage } = usePipelines()
   
   const [activePipeline, setActivePipeline] = useState<Pipeline | null>(null)
   const [showPipelineDropdown, setShowPipelineDropdown] = useState(false)
@@ -374,6 +380,7 @@ export default function CRMPage() {
   const [showEditStageModal, setShowEditStageModal] = useState(false)
   const [editingStage, setEditingStage] = useState<PipelineStage | null>(null)
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+  const [activeTab, setActiveTab] = useState<CRMTab>('kanban')
   const [filters, setFilters] = useState({
     minValue: '',
     maxValue: '',
@@ -485,28 +492,12 @@ export default function CRMPage() {
 
   const handleCreatePipeline = async (data: { name: string; description?: string; color?: string; stages: { name: string; color: string; position: number }[] }) => {
     if (editingPipeline) {
-      // Atualizar dados do pipeline
+      // Ao editar, não podemos enviar stages diretamente - stages é uma tabela separada
       const { stages, ...pipelineData } = data
       await updatePipeline(editingPipeline.id, pipelineData)
       
-      // Criar novos estágios (os que não têm id)
-      const existingStageIds = editingPipeline.stages?.map(s => s.id) || []
-      
-      for (const stage of stages) {
-        // Se o estágio tem posição maior que os existentes, é novo
-        const isNew = stage.position >= existingStageIds.length
-        
-        if (isNew) {
-          try {
-            await createStage(editingPipeline.id, {
-              name: stage.name,
-              color: stage.color,
-            })
-          } catch (error) {
-            console.error('Error creating stage:', error)
-          }
-        }
-      }
+      // Se precisar atualizar stages, fazer separadamente
+      // Por enquanto, stages só são gerenciados na criação
     } else {
       await createPipelineHook(data)
     }
@@ -547,7 +538,7 @@ export default function CRMPage() {
     setShowEditStageModal(true)
   }
 
-  const handleUpdateStage = async (stageId: string, data: { name: string; color: string }) => {
+  const handleUpdateStage = async (stageId: string, data: { name: string; color: string; probability?: number }) => {
     await updateStage(stageId, data)
     await refetchPipelines()
     setShowEditStageModal(false)
@@ -618,6 +609,41 @@ export default function CRMPage() {
 
   return (
     <div className="h-[calc(100vh-200px)] flex flex-col">
+      {/* Tabs Navigation */}
+      <div className="flex items-center gap-1 mb-6 border-b border-dark-700/50 pb-4">
+        <button
+          onClick={() => setActiveTab('kanban')}
+          className={`
+            flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all
+            ${activeTab === 'kanban'
+              ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+              : 'text-dark-400 hover:text-white hover:bg-dark-800'
+            }
+          `}
+        >
+          <LayoutGrid className="w-4 h-4" />
+          <span>Kanban</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('automations')}
+          className={`
+            flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all
+            ${activeTab === 'automations'
+              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+              : 'text-dark-400 hover:text-white hover:bg-dark-800'
+            }
+          `}
+        >
+          <Zap className="w-4 h-4" />
+          <span>Automações</span>
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'automations' ? (
+        <AutomationsPanel />
+      ) : (
+        <>
       {/* Controls */}
       <div className="flex items-center gap-3 mb-6">
         {/* Pipeline Selector */}
@@ -1004,6 +1030,8 @@ export default function CRMPage() {
           className="fixed inset-0 z-10" 
           onClick={() => setShowFilterDropdown(false)} 
         />
+      )}
+        </>
       )}
     </div>
   )
