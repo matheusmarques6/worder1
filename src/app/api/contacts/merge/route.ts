@@ -164,7 +164,7 @@ export async function GET(request: NextRequest) {
 }
 
 // =============================================
-// POST - Fazer merge de contatos
+// POST - Fazer merge de contatos ou detectar duplicados
 // =============================================
 export async function POST(request: NextRequest) {
   const supabase = getSupabase();
@@ -174,8 +174,58 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const { organizationId, primaryContactId, secondaryContactIds } = body;
+    const { organizationId, action, primaryContactId, secondaryContactIds } = body;
     
+    // Se for ação de detectar, redireciona para lógica de GET
+    if (action === 'detect') {
+      if (!organizationId) {
+        return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
+      }
+      
+      // Buscar todos os contatos
+      const { data: contacts, error } = await supabase
+        .from('contacts')
+        .select('id, email, phone, first_name, last_name, total_orders, total_spent, created_at')
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      
+      if (!contacts || contacts.length === 0) {
+        return NextResponse.json({ duplicates: [] });
+      }
+      
+      // Detectar duplicados por email
+      const emailGroups: Record<string, any[]> = {};
+      
+      contacts.forEach(contact => {
+        if (contact.email) {
+          const normalizedEmail = contact.email.toLowerCase().trim();
+          if (!emailGroups[normalizedEmail]) {
+            emailGroups[normalizedEmail] = [];
+          }
+          emailGroups[normalizedEmail].push(contact);
+        }
+      });
+      
+      const duplicates = Object.values(emailGroups)
+        .filter(g => g.length > 1)
+        .map(group => ({
+          matchType: 'email',
+          matchValue: group[0].email,
+          contacts: group,
+          confidence: 100,
+        }));
+      
+      return NextResponse.json({
+        duplicates,
+        totalGroups: duplicates.length,
+      });
+    }
+    
+    // Lógica original de merge
     if (!organizationId || !primaryContactId || !secondaryContactIds?.length) {
       return NextResponse.json(
         { error: 'organizationId, primaryContactId and secondaryContactIds are required' },

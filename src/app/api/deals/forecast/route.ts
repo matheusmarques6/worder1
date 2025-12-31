@@ -242,6 +242,11 @@ export async function GET(request: NextRequest) {
       
       // Métricas principais
       metrics: {
+        pipeline_total: Math.round(totalPipeline * 100) / 100,
+        weighted_total: Math.round(weightedPipeline * 100) / 100,
+        deal_count: deals.length,
+        avg_deal_value: deals.length > 0 ? Math.round((totalPipeline / deals.length) * 100) / 100 : 0,
+        // Aliases camelCase para compatibilidade
         totalPipeline: Math.round(totalPipeline * 100) / 100,
         weightedPipeline: Math.round(weightedPipeline * 100) / 100,
         dealCount: deals.length,
