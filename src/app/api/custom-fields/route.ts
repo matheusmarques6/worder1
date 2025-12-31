@@ -112,24 +112,24 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const {
-      organizationId,
-      entityType,
-      fieldKey,
-      fieldLabel,
-      fieldType = 'text',
-      options,
-      isRequired = false,
-      defaultValue,
-      validationRegex,
-      placeholder,
-      helpText,
-    } = body;
+    
+    // Aceitar tanto camelCase quanto snake_case
+    const organizationId = body.organizationId || body.organization_id;
+    const entityType = body.entityType || body.entity_type;
+    const fieldKey = body.fieldKey || body.field_key || body.field_name?.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const fieldLabel = body.fieldLabel || body.field_label || body.field_name;
+    const fieldType = body.fieldType || body.field_type || 'text';
+    const options = body.options;
+    const isRequired = body.isRequired ?? body.is_required ?? false;
+    const defaultValue = body.defaultValue || body.default_value;
+    const validationRegex = body.validationRegex || body.validation_regex;
+    const placeholder = body.placeholder;
+    const helpText = body.helpText || body.help_text;
     
     // Validações
-    if (!organizationId || !entityType || !fieldKey || !fieldLabel) {
+    if (!organizationId || !entityType || !fieldLabel) {
       return NextResponse.json(
-        { error: 'organizationId, entityType, fieldKey and fieldLabel are required' },
+        { error: 'organizationId, entityType/entity_type and fieldLabel/field_name are required' },
         { status: 400 }
       );
     }
@@ -230,20 +230,20 @@ export async function PUT(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const {
-      id,
-      organizationId,
-      fieldLabel,
-      fieldType,
-      options,
-      isRequired,
-      defaultValue,
-      validationRegex,
-      placeholder,
-      helpText,
-      position,
-      isActive,
-    } = body;
+    
+    // Aceitar tanto camelCase quanto snake_case
+    const id = body.id;
+    const organizationId = body.organizationId || body.organization_id;
+    const fieldLabel = body.fieldLabel || body.field_label || body.field_name;
+    const fieldType = body.fieldType || body.field_type;
+    const options = body.options;
+    const isRequired = body.isRequired ?? body.is_required;
+    const defaultValue = body.defaultValue ?? body.default_value;
+    const validationRegex = body.validationRegex || body.validation_regex;
+    const placeholder = body.placeholder;
+    const helpText = body.helpText || body.help_text;
+    const position = body.position;
+    const isActive = body.isActive ?? body.is_active;
     
     if (!id || !organizationId) {
       return NextResponse.json(
