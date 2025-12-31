@@ -159,8 +159,8 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
     try {
       await onUpdate(deal.id, { 
         status: 'open',
-        won_at: null,
-        lost_at: null,
+        won_at: undefined,
+        lost_at: undefined,
       } as Partial<Deal>)
     } catch (error) {
       console.error('Erro ao reabrir deal:', error)
