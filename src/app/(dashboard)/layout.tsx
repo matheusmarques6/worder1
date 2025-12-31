@@ -118,6 +118,8 @@ const navigation = [
 ]
 
 const analyticsNav = [
+  { name: 'Vendas/CRM', href: '/crm/analytics', icon: TrendingUp },
+  { name: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
   { name: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
   { name: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
   { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon },
@@ -466,11 +468,11 @@ export default function DashboardLayout({
           </nav>
         </div>
 
-        {/* Analytics */}
+        {/* Forecast */}
         <div>
           {!collapsed && (
             <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
-              Analytics
+              Forecast
             </p>
           )}
           <nav className="space-y-1">
