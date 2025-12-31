@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       acc[field.entity_type].push({
         id: field.id,
         key: field.field_key,
-        label: field.field_name,
+        label: field.field_label,
         type: field.field_type,
         options: field.options,
         isRequired: field.is_required,
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
         id: f.id,
         entityType: f.entity_type,
         key: f.field_key,
-        label: f.field_name,
+        label: f.field_label,
         type: f.field_type,
         options: f.options,
         isRequired: f.is_required,
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
         organization_id: organizationId,
         entity_type: entityType,
         field_key: normalizedKey,
-        field_name: fieldLabel,
+        field_label: fieldLabel,
         field_type: fieldType,
         options: options || null,
         is_required: isRequired,
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
         id: field.id,
         entityType: field.entity_type,
         key: field.field_key,
-        label: field.field_name,
+        label: field.field_label,
         type: field.field_type,
         options: field.options,
         isRequired: field.is_required,
@@ -254,7 +254,7 @@ export async function PUT(request: NextRequest) {
     
     // Construir objeto de update
     const updates: any = {};
-    if (fieldLabel !== undefined) updates.field_name = fieldLabel;
+    if (fieldLabel !== undefined) updates.field_label = fieldLabel;
     if (fieldType !== undefined) updates.field_type = fieldType;
     if (options !== undefined) updates.options = options;
     if (isRequired !== undefined) updates.is_required = isRequired;
@@ -284,7 +284,7 @@ export async function PUT(request: NextRequest) {
         id: field.id,
         entityType: field.entity_type,
         key: field.field_key,
-        label: field.field_name,
+        label: field.field_label,
         type: field.field_type,
         options: field.options,
         isRequired: field.is_required,
