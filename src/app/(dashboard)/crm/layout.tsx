@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutGrid, Users, Settings2, Puzzle, TrendingUp, Terminal } from 'lucide-react'
+import { LayoutGrid, Users, Settings2, Puzzle, TrendingUp } from 'lucide-react'
 
 const tabs = [
   { name: 'Deals', href: '/crm', icon: LayoutGrid },
@@ -10,7 +10,6 @@ const tabs = [
   { name: 'Forecast', href: '/crm/forecast', icon: TrendingUp },
   { name: 'Pipelines', href: '/crm/pipelines', icon: Settings2 },
   { name: 'Integrações', href: '/crm/integrations', icon: Puzzle },
-  { name: 'Diagnóstico', href: '/crm/diagnostics', icon: Terminal },
 ]
 
 export default function CRMLayout({
