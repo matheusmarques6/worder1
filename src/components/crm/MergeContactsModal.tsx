@@ -17,7 +17,8 @@ import {
   Mail,
   Phone,
   Building,
-  ShoppingBag,
+  Loader2,
+  Zap,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
 
@@ -63,12 +64,21 @@ export function MergeContactsModal({
   const { user } = useAuthStore()
   const organizationId = user?.organization_id
   
-  const [step, setStep] = useState<'detect' | 'select' | 'confirm' | 'done'>('detect')
+  const [step, setStep] = useState<'detect' | 'select' | 'confirm' | 'done' | 'merging_all'>('detect')
   const [loading, setLoading] = useState(false)
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([])
   const [selectedGroup, setSelectedGroup] = useState<DuplicateGroup | null>(null)
   const [primaryContactId, setPrimaryContactId] = useState<string | null>(null)
   const [mergeResult, setMergeResult] = useState<any>(null)
+  
+  // Estado para merge em lote
+  const [mergeAllProgress, setMergeAllProgress] = useState({
+    current: 0,
+    total: 0,
+    success: 0,
+    failed: 0,
+    currentGroup: '',
+  })
   
   // Detectar duplicados ao abrir
   useEffect(() => {
@@ -145,15 +155,110 @@ export function MergeContactsModal({
     }
   }
   
+  // =============================================
+  // MERGE ALL - Mesclar todos os grupos de uma vez
+  // =============================================
+  const handleMergeAll = async () => {
+    if (!organizationId || duplicates.length === 0) return
+    
+    // Filtrar apenas grupos de alta confiança para segurança
+    const highConfidenceGroups = duplicates.filter(g => g.confidence === 'high')
+    
+    if (highConfidenceGroups.length === 0) {
+      alert('Nenhum grupo de alta confiança encontrado. Mescle manualmente os grupos de média/baixa confiança.')
+      return
+    }
+    
+    const confirmMessage = `Você está prestes a mesclar ${highConfidenceGroups.length} grupo(s) de contatos duplicados (apenas alta confiança).\n\nEsta ação não pode ser desfeita.\n\nDeseja continuar?`
+    
+    if (!confirm(confirmMessage)) return
+    
+    setStep('merging_all')
+    setMergeAllProgress({
+      current: 0,
+      total: highConfidenceGroups.length,
+      success: 0,
+      failed: 0,
+      currentGroup: '',
+    })
+    
+    let successCount = 0
+    let failedCount = 0
+    
+    for (let i = 0; i < highConfidenceGroups.length; i++) {
+      const group = highConfidenceGroups[i]
+      
+      // Atualizar progresso
+      setMergeAllProgress(prev => ({
+        ...prev,
+        current: i + 1,
+        currentGroup: group.matchValue,
+      }))
+      
+      // Selecionar o contato com maior valor gasto como primário
+      const sorted = [...group.contacts].sort((a, b) => (b.total_spent || 0) - (a.total_spent || 0))
+      const primaryId = sorted[0].id
+      const secondaryIds = sorted.slice(1).map(c => c.id)
+      
+      try {
+        const res = await fetch('/api/contacts/merge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organizationId,
+            primaryContactId: primaryId,
+            secondaryContactIds: secondaryIds,
+          }),
+        })
+        
+        const result = await res.json()
+        
+        if (result.success) {
+          successCount++
+        } else {
+          failedCount++
+          console.error(`Erro ao mesclar grupo ${group.matchValue}:`, result.error)
+        }
+      } catch (error) {
+        failedCount++
+        console.error(`Erro ao mesclar grupo ${group.matchValue}:`, error)
+      }
+      
+      // Atualizar contadores
+      setMergeAllProgress(prev => ({
+        ...prev,
+        success: successCount,
+        failed: failedCount,
+      }))
+      
+      // Pequeno delay para não sobrecarregar
+      await new Promise(r => setTimeout(r, 300))
+    }
+    
+    // Finalizado
+    setMergeResult({
+      success: true,
+      message: `${successCount} grupo(s) mesclado(s) com sucesso${failedCount > 0 ? `, ${failedCount} falha(s)` : ''}`,
+      merged: successCount,
+      failed: failedCount,
+    })
+    setStep('done')
+    onMergeComplete?.()
+  }
+  
   const handleClose = () => {
     setStep('detect')
     setSelectedGroup(null)
     setPrimaryContactId(null)
     setMergeResult(null)
+    setMergeAllProgress({ current: 0, total: 0, success: 0, failed: 0, currentGroup: '' })
     onClose()
   }
   
   if (!isOpen) return null
+  
+  // Contar grupos de alta confiança
+  const highConfidenceCount = duplicates.filter(g => g.confidence === 'high').length
   
   return (
     <AnimatePresence>
@@ -183,6 +288,7 @@ export function MergeContactsModal({
                   {step === 'detect' && 'Contatos duplicados detectados'}
                   {step === 'select' && 'Selecione o contato principal'}
                   {step === 'confirm' && 'Confirme a mesclagem'}
+                  {step === 'merging_all' && 'Mesclando todos os contatos...'}
                   {step === 'done' && 'Mesclagem concluída'}
                 </p>
               </div>
@@ -205,29 +311,32 @@ export function MergeContactsModal({
                 ) : duplicates.length === 0 ? (
                   <div className="text-center py-8">
                     <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
-                    <p className="text-white font-medium">Nenhum duplicado encontrado!</p>
-                    <p className="text-dark-400 text-sm">Seus contatos estão organizados.</p>
+                    <h3 className="text-lg font-medium text-white mb-2">Nenhum duplicado encontrado</h3>
+                    <p className="text-dark-400">Seus contatos estão organizados!</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <p className="text-sm text-dark-400 mb-4">
                       Encontramos {duplicates.length} grupo(s) de possíveis duplicados:
                     </p>
-                    {duplicates.map((group, index) => (
+                    
+                    {duplicates.map((group, idx) => (
                       <button
-                        key={index}
+                        key={idx}
                         onClick={() => handleSelectGroup(group)}
-                        className="w-full p-4 bg-dark-800 rounded-xl border border-dark-700 hover:border-primary-500/50 transition-colors text-left group"
+                        className="w-full p-4 bg-dark-800 hover:bg-dark-750 rounded-xl border border-dark-700 hover:border-dark-600 transition-all group text-left"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className={`
-                              px-2 py-1 rounded text-xs font-medium
-                              ${group.confidence === 'high' ? 'bg-green-500/20 text-green-400' :
-                                group.confidence === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                                'bg-red-500/20 text-red-400'}
+                              text-xs font-medium px-2 py-1 rounded
+                              ${group.confidence === 'high' 
+                                ? 'bg-green-500/20 text-green-400' 
+                                : group.confidence === 'medium'
+                                  ? 'bg-yellow-500/20 text-yellow-400'
+                                  : 'bg-red-500/20 text-red-400'}
                             `}>
-                              {group.confidence === 'high' ? 'Alta' : 
+                              {group.confidence === 'high' ? 'Alta' :
                                group.confidence === 'medium' ? 'Média' : 'Baixa'} confiança
                             </div>
                             <span className="text-sm text-dark-400">
@@ -256,6 +365,48 @@ export function MergeContactsModal({
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+            
+            {/* Step: Merging All (Progress) */}
+            {step === 'merging_all' && (
+              <div className="py-8">
+                <div className="flex flex-col items-center">
+                  <Loader2 className="w-12 h-12 text-primary-400 animate-spin mb-4" />
+                  <h3 className="text-lg font-medium text-white mb-2">
+                    Mesclando contatos...
+                  </h3>
+                  <p className="text-dark-400 mb-6">
+                    Processando: {mergeAllProgress.currentGroup}
+                  </p>
+                  
+                  {/* Progress Bar */}
+                  <div className="w-full max-w-md">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-dark-400">Progresso</span>
+                      <span className="text-white">
+                        {mergeAllProgress.current} / {mergeAllProgress.total}
+                      </span>
+                    </div>
+                    <div className="h-3 bg-dark-700 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary-500 rounded-full transition-all duration-300"
+                        style={{ width: `${(mergeAllProgress.current / mergeAllProgress.total) * 100}%` }}
+                      />
+                    </div>
+                    
+                    <div className="flex justify-center gap-6 mt-4 text-sm">
+                      <span className="text-green-400">
+                        ✓ {mergeAllProgress.success} sucesso
+                      </span>
+                      {mergeAllProgress.failed > 0 && (
+                        <span className="text-red-400">
+                          ✗ {mergeAllProgress.failed} falha(s)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
             
@@ -364,6 +515,11 @@ export function MergeContactsModal({
                 <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-white mb-2">Mesclagem concluída!</h3>
                 <p className="text-dark-400">{mergeResult.message}</p>
+                {mergeResult.failed > 0 && (
+                  <p className="text-yellow-400 text-sm mt-2">
+                    {mergeResult.failed} grupo(s) não puderam ser mesclados. Verifique manualmente.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -375,13 +531,27 @@ export function MergeContactsModal({
                 <button onClick={handleClose} className="px-4 py-2 text-dark-400 hover:text-white transition-colors">
                   Fechar
                 </button>
-                <button
-                  onClick={detectDuplicates}
-                  disabled={loading}
-                  className="px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors"
-                >
-                  Atualizar
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={detectDuplicates}
+                    disabled={loading}
+                    className="px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors"
+                  >
+                    Atualizar
+                  </button>
+                  
+                  {/* BOTÃO MESCLAR TODOS */}
+                  {highConfidenceCount > 0 && (
+                    <button
+                      onClick={handleMergeAll}
+                      disabled={loading}
+                      className="px-5 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-500 transition-colors flex items-center gap-2 font-medium shadow-lg shadow-primary-500/20"
+                    >
+                      <Zap className="w-4 h-4" />
+                      Mesclar Todos ({highConfidenceCount})
+                    </button>
+                  )}
+                </div>
               </>
             )}
             
@@ -419,6 +589,12 @@ export function MergeContactsModal({
                   {loading ? 'Mesclando...' : 'Confirmar Mesclagem'}
                 </button>
               </>
+            )}
+            
+            {step === 'merging_all' && (
+              <p className="text-dark-400 text-sm w-full text-center">
+                Por favor, aguarde enquanto processamos todos os grupos...
+              </p>
             )}
             
             {step === 'done' && (
