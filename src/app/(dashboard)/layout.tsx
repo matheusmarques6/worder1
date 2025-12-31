@@ -118,7 +118,7 @@ const navigation = [
 ]
 
 const analyticsNav = [
-  { name: 'Vendas/CRM', href: '/crm/analytics', icon: TrendingUp },
+  { name: 'Vendas/CRM', href: '/analytics/sales', icon: TrendingUp },
   { name: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
   { name: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
   { name: 'E-mail Marketing', href: '/analytics/email', icon: Mail },

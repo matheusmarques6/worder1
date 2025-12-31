@@ -1,35 +1,31 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  TrendingUp,
-  TrendingDown,
   DollarSign,
   Target,
+  TrendingUp,
+  TrendingDown,
+  Percent,
   Clock,
   Users,
+  AlertTriangle,
+  RefreshCw,
+  ChevronDown,
+  Check,
+  Lightbulb,
   BarChart3,
   PieChart,
-  Activity,
   Award,
-  RefreshCw,
-  Calendar,
-  ChevronDown,
-  ArrowUpRight,
-  ArrowDownRight,
-  Loader2,
-  Filter,
-  Briefcase,
+  X,
 } from 'lucide-react'
 import {
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   LineChart,
   Line,
-  PieChart as RechartsPie,
+  PieChart as RechartsPieChart,
   Pie,
   Cell,
   XAxis,
@@ -38,66 +34,84 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  ComposedChart,
+  Area,
+  AreaChart,
 } from 'recharts'
 import { useAuthStore } from '@/stores'
 
-// Types
-interface KPIs {
-  totalDeals: number
-  wonDeals: number
-  lostDeals: number
-  openDeals: number
-  totalWonValue: number
-  totalLostValue: number
-  totalOpenValue: number
-  weightedPipeline: number
-  winRate: number
-  avgDealSize: number
-  avgSalesCycle: number
+// ==========================================
+// TYPES
+// ==========================================
+interface Pipeline {
+  id: string
+  name: string
+  color: string
 }
 
-interface TimelineData {
-  date: string
-  label: string
-  created: number
-  won: number
-  lost: number
+interface KPIs {
+  pipelineTotal: number
+  weightedTotal: number
   wonValue: number
   lostValue: number
+  winRate: number
+  avgTicket: number
+  avgCycleDays: number
+  totalDeals: number
+  openDeals: number
+  wonDeals: number
+  lostDeals: number
+  variations: {
+    wonValue: number
+    winRate: number
+    avgTicket: number
+    avgCycleDays: number
+  }
 }
 
-interface FunnelData {
+interface CommitLevel {
+  level: string
+  label: string
+  value: number
+  dealCount: number
+  color: string
+}
+
+interface PipelineMetrics {
+  id: string
+  name: string
+  color: string
+  metrics: {
+    totalValue: number
+    wonValue: number
+    winRate: number
+    avgTicket: number
+    avgCycleDays: number
+    totalDeals: number
+    openDeals: number
+    wonDeals: number
+    lostDeals: number
+  }
+}
+
+interface FunnelStage {
+  id: string
   name: string
   color: string
   position: number
+  probability: number
   count: number
   value: number
-  conversionRate: number
+  weightedValue: number
+  percentage: number
 }
 
-interface WinLossData {
-  date: string
-  label: string
-  won: number
-  lost: number
-  winRate: number
-}
-
-interface VelocityData {
-  date: string
-  label: string
+interface VelocityStage {
+  stageId: string
+  stageName: string
+  position: number
+  avgHours: number
   avgDays: number
   transitions: number
-}
-
-interface StagePerformance {
-  name: string
-  color: string
-  position: number
-  currentDeals: number
-  currentValue: number
-  avgTimeInStage: number
 }
 
 interface TopDeal {
@@ -107,29 +121,46 @@ interface TopDeal {
   probability: number
   stageName: string
   stageColor: string
+  contactName: string | null
   createdAt: string
+  expectedCloseDate: string | null
+}
+
+interface DealAtRisk {
+  id: string
+  title: string
+  value: number
+  stageName: string
+  stageColor: string
+  daysSinceUpdate: number
+  updatedAt: string
+}
+
+interface Insight {
+  type: 'positive' | 'negative' | 'neutral'
+  message: string
 }
 
 interface AnalyticsData {
   period: string
+  periodLabel: string
   dateRange: { start: string; end: string }
+  pipelines: Pipeline[]
+  selectedPipelineIds: string[]
   kpis: KPIs
-  timeline: TimelineData[]
-  funnel: FunnelData[]
-  winLoss: WinLossData[]
-  velocity: VelocityData[]
-  stagePerformance: StagePerformance[]
+  byCommitLevel: CommitLevel[]
+  byPipeline: PipelineMetrics[] | null
+  funnel: FunnelStage[]
+  timeline: any[]
+  velocity: VelocityStage[]
   topDeals: TopDeal[]
+  dealsAtRisk: DealAtRisk[]
+  insights: Insight[]
 }
 
-const PERIODS = [
-  { value: '30days', label: 'Últimos 30 dias' },
-  { value: '3months', label: 'Últimos 3 meses' },
-  { value: '6months', label: 'Últimos 6 meses' },
-  { value: '12months', label: 'Últimos 12 meses' },
-  { value: 'all', label: 'Todo o período' },
-]
-
+// ==========================================
+// UTILITY FUNCTIONS
+// ==========================================
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -139,113 +170,737 @@ const formatCurrency = (value: number) => {
   }).format(value)
 }
 
-const formatCompact = (value: number) => {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
-  return value.toString()
+const formatPercent = (value: number) => `${value.toFixed(1)}%`
+
+// ==========================================
+// COMPONENTS
+// ==========================================
+
+// KPI Card Component
+function KPICard({ 
+  icon: Icon, 
+  label, 
+  value, 
+  subtext, 
+  variation, 
+  color = 'primary',
+  format = 'currency'
+}: {
+  icon: any
+  label: string
+  value: number
+  subtext?: string
+  variation?: number
+  color?: 'primary' | 'green' | 'amber' | 'red' | 'blue'
+  format?: 'currency' | 'percent' | 'number' | 'days'
+}) {
+  const colorClasses = {
+    primary: 'bg-primary-500/20 text-primary-400',
+    green: 'bg-green-500/20 text-green-400',
+    amber: 'bg-amber-500/20 text-amber-400',
+    red: 'bg-red-500/20 text-red-400',
+    blue: 'bg-blue-500/20 text-blue-400',
+  }
+
+  const formatValue = () => {
+    switch (format) {
+      case 'currency': return formatCurrency(value)
+      case 'percent': return `${value.toFixed(1)}%`
+      case 'days': return `${value.toFixed(1)} dias`
+      case 'number': return value.toLocaleString('pt-BR')
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5"
+    >
+      <div className={`w-10 h-10 rounded-xl ${colorClasses[color]} flex items-center justify-center mb-3`}>
+        <Icon className="w-5 h-5" />
+      </div>
+      <div className="text-2xl font-bold text-white mb-1">{formatValue()}</div>
+      <div className="text-sm text-dark-400 mb-2">{label}</div>
+      {(subtext || variation !== undefined) && (
+        <div className="flex items-center gap-2">
+          {subtext && <span className="text-xs text-dark-500">{subtext}</span>}
+          {variation !== undefined && variation !== 0 && (
+            <span className={`text-xs flex items-center gap-1 ${variation > 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {variation > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {variation > 0 ? '+' : ''}{variation.toFixed(1)}%
+            </span>
+          )}
+        </div>
+      )}
+    </motion.div>
+  )
 }
 
-export default function SalesAnalyticsPage() {
+// Pipeline Selector Component
+function PipelineSelector({
+  pipelines,
+  selectedIds,
+  onChange,
+}: {
+  pipelines: Pipeline[]
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  const togglePipeline = (id: string) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter(i => i !== id))
+    } else {
+      onChange([...selectedIds, id])
+    }
+  }
+
+  const selectAll = () => onChange(pipelines.map(p => p.id))
+  const selectNone = () => onChange([])
+
+  const displayText = selectedIds.length === 0 || selectedIds.length === pipelines.length
+    ? 'Todos os Pipelines'
+    : selectedIds.length === 1
+    ? pipelines.find(p => p.id === selectedIds[0])?.name || 'Pipeline'
+    : `${selectedIds.length} Pipelines`
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white hover:bg-dark-800 transition-colors min-w-[200px]"
+      >
+        <BarChart3 className="w-4 h-4 text-dark-400" />
+        <span className="flex-1 text-left font-medium">{displayText}</span>
+        <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute left-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
+            >
+              <div className="p-2 border-b border-dark-700/50">
+                <div className="flex gap-2">
+                  <button
+                    onClick={selectAll}
+                    className="flex-1 px-3 py-1.5 text-xs font-medium text-dark-400 hover:text-white bg-dark-700/50 rounded-lg transition-colors"
+                  >
+                    Todos
+                  </button>
+                  <button
+                    onClick={selectNone}
+                    className="flex-1 px-3 py-1.5 text-xs font-medium text-dark-400 hover:text-white bg-dark-700/50 rounded-lg transition-colors"
+                  >
+                    Nenhum
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-60 overflow-y-auto p-2">
+                {pipelines.map(pipeline => (
+                  <button
+                    key={pipeline.id}
+                    onClick={() => togglePipeline(pipeline.id)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-700/50 transition-colors"
+                  >
+                    <div
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        selectedIds.includes(pipeline.id) || selectedIds.length === 0
+                          ? 'bg-primary-500 border-primary-500'
+                          : 'border-dark-600'
+                      }`}
+                    >
+                      {(selectedIds.includes(pipeline.id) || selectedIds.length === 0) && (
+                        <Check className="w-3 h-3 text-white" />
+                      )}
+                    </div>
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: pipeline.color || '#6366f1' }}
+                    />
+                    <span className="text-sm text-white">{pipeline.name}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// Commit Level Cards
+function CommitLevelSection({ data }: { data: CommitLevel[] }) {
+  const total = data.reduce((sum, d) => sum + d.value, 0)
+
+  return (
+    <div className="grid grid-cols-4 gap-4">
+      {data.map(level => (
+        <motion.div
+          key={level.level}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-dark-800/30 border border-dark-700/30 rounded-xl p-4"
+        >
+          <div className="text-xs text-dark-400 mb-2">{level.label}</div>
+          <div className="text-xl font-bold text-white">{formatCurrency(level.value)}</div>
+          <div className="flex items-center gap-2 mt-2">
+            <div 
+              className="h-1.5 rounded-full flex-1 bg-dark-700"
+            >
+              <div 
+                className="h-full rounded-full transition-all duration-500"
+                style={{ 
+                  width: total > 0 ? `${(level.value / total) * 100}%` : '0%',
+                  backgroundColor: level.color 
+                }}
+              />
+            </div>
+            <span className="text-xs text-dark-500">{level.dealCount} deals</span>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  )
+}
+
+// Pipeline Comparison Table
+function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
+  if (!data || data.length === 0) return null
+
+  const totals = {
+    totalValue: data.reduce((sum, p) => sum + p.metrics.totalValue, 0),
+    wonValue: data.reduce((sum, p) => sum + p.metrics.wonValue, 0),
+    totalDeals: data.reduce((sum, p) => sum + p.metrics.totalDeals, 0),
+    wonDeals: data.reduce((sum, p) => sum + p.metrics.wonDeals, 0),
+    lostDeals: data.reduce((sum, p) => sum + p.metrics.lostDeals, 0),
+  }
+  const avgWinRate = totals.wonDeals + totals.lostDeals > 0 
+    ? (totals.wonDeals / (totals.wonDeals + totals.lostDeals)) * 100 
+    : 0
+
+  return (
+    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-dark-700/50">
+        <h3 className="text-lg font-semibold text-white">Comparativo por Pipeline</h3>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-dark-700/50">
+              <th className="text-left px-5 py-3 text-xs font-medium text-dark-400 uppercase">Pipeline</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-dark-400 uppercase">Valor Total</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-dark-400 uppercase">Win Rate</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-dark-400 uppercase">Ciclo</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-dark-400 uppercase">Ticket</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-dark-400 uppercase">Deals</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((pipeline, index) => (
+              <tr key={pipeline.id} className="border-b border-dark-700/30 hover:bg-dark-700/20">
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: pipeline.color }} />
+                    <span className="text-sm font-medium text-white">{pipeline.name}</span>
+                  </div>
+                </td>
+                <td className="text-right px-5 py-3 text-sm text-white font-medium">
+                  {formatCurrency(pipeline.metrics.totalValue)}
+                </td>
+                <td className="text-right px-5 py-3">
+                  <span className={`text-sm font-medium ${pipeline.metrics.winRate >= avgWinRate ? 'text-green-400' : 'text-amber-400'}`}>
+                    {pipeline.metrics.winRate.toFixed(1)}%
+                  </span>
+                </td>
+                <td className="text-right px-5 py-3 text-sm text-dark-300">
+                  {pipeline.metrics.avgCycleDays.toFixed(0)}d
+                </td>
+                <td className="text-right px-5 py-3 text-sm text-dark-300">
+                  {formatCurrency(pipeline.metrics.avgTicket)}
+                </td>
+                <td className="text-right px-5 py-3 text-sm text-dark-300">
+                  {pipeline.metrics.totalDeals}
+                </td>
+              </tr>
+            ))}
+            <tr className="bg-dark-700/30">
+              <td className="px-5 py-3">
+                <span className="text-sm font-semibold text-white">Total</span>
+              </td>
+              <td className="text-right px-5 py-3 text-sm text-white font-semibold">
+                {formatCurrency(totals.totalValue)}
+              </td>
+              <td className="text-right px-5 py-3 text-sm text-white font-semibold">
+                {avgWinRate.toFixed(1)}%
+              </td>
+              <td className="text-right px-5 py-3 text-sm text-dark-300">-</td>
+              <td className="text-right px-5 py-3 text-sm text-dark-300">-</td>
+              <td className="text-right px-5 py-3 text-sm text-white font-semibold">
+                {totals.totalDeals}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// Pipeline Charts
+function PipelineCharts({ data }: { data: PipelineMetrics[] }) {
+  if (!data || data.length === 0) return null
+
+  const barData = data.map(p => ({
+    name: p.name,
+    value: p.metrics.totalValue,
+    color: p.color,
+  }))
+
+  const pieData = data.map(p => ({
+    name: p.name,
+    value: p.metrics.totalDeals,
+    color: p.color,
+  }))
+
+  return (
+    <div className="grid grid-cols-2 gap-6">
+      {/* Bar Chart - Value by Pipeline */}
+      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+        <h3 className="text-sm font-semibold text-white mb-4">Valor por Pipeline</h3>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={barData} layout="vertical">
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+            <XAxis type="number" tickFormatter={(v) => `R$${(v/1000).toFixed(0)}k`} stroke="#9ca3af" fontSize={11} />
+            <YAxis type="category" dataKey="name" stroke="#9ca3af" fontSize={11} width={80} />
+            <Tooltip 
+              formatter={(value: number) => formatCurrency(value)}
+              contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+              labelStyle={{ color: '#fff' }}
+            />
+            <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+              {barData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color || '#6366f1'} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Pie Chart - Deals by Pipeline */}
+      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+        <h3 className="text-sm font-semibold text-white mb-4">Deals por Pipeline</h3>
+        <ResponsiveContainer width="100%" height={200}>
+          <RechartsPieChart>
+            <Pie
+              data={pieData}
+              cx="50%"
+              cy="50%"
+              innerRadius={50}
+              outerRadius={80}
+              dataKey="value"
+              label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+              labelLine={false}
+            >
+              {pieData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color || '#6366f1'} />
+              ))}
+            </Pie>
+            <Tooltip 
+              formatter={(value: number) => `${value} deals`}
+              contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+            />
+          </RechartsPieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+// Funnel Component
+function SalesFunnel({ data }: { data: FunnelStage[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+        <h3 className="text-lg font-semibold text-white mb-4">Funil de Vendas</h3>
+        <div className="text-center text-dark-400 py-8">Sem dados de funil</div>
+      </div>
+    )
+  }
+
+  const maxValue = Math.max(...data.map(s => s.value))
+
+  return (
+    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+      <h3 className="text-lg font-semibold text-white mb-4">Funil de Vendas</h3>
+      <div className="space-y-3">
+        {data.map((stage, index) => (
+          <div key={stage.id} className="group">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color || '#6366f1' }} />
+                <span className="text-sm font-medium text-white">{stage.name}</span>
+                <span className="text-xs text-dark-500">({stage.count})</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-white">{formatCurrency(stage.value)}</span>
+                <span className="text-xs text-dark-500">{stage.probability}%</span>
+              </div>
+            </div>
+            <div className="relative h-8 bg-dark-700/50 rounded-lg overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: maxValue > 0 ? `${(stage.value / maxValue) * 100}%` : '0%' }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="absolute inset-y-0 left-0 rounded-lg"
+                style={{ backgroundColor: stage.color || '#6366f1' }}
+              />
+              <div className="absolute inset-0 flex items-center px-3">
+                <span className="text-xs text-white/80">
+                  Ponderado: {formatCurrency(stage.weightedValue)}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Timeline Chart
+function TimelineChart({ data }: { data: any[] }) {
+  if (!data || data.length === 0) return null
+
+  return (
+    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+      <h3 className="text-lg font-semibold text-white mb-4">Evolução de Deals e Valor</h3>
+      <ResponsiveContainer width="100%" height={250}>
+        <AreaChart data={data}>
+          <defs>
+            <linearGradient id="colorWon" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+            </linearGradient>
+            <linearGradient id="colorLost" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} />
+          <YAxis stroke="#9ca3af" fontSize={11} tickFormatter={(v) => `R$${(v/1000).toFixed(0)}k`} />
+          <Tooltip 
+            contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+            labelStyle={{ color: '#fff' }}
+            formatter={(value: number, name: string) => [
+              formatCurrency(value),
+              name === 'wonValue' ? 'Ganhos' : 'Perdidos'
+            ]}
+          />
+          <Area type="monotone" dataKey="wonValue" stroke="#22c55e" fillOpacity={1} fill="url(#colorWon)" name="wonValue" />
+          <Area type="monotone" dataKey="lostValue" stroke="#ef4444" fillOpacity={1} fill="url(#colorLost)" name="lostValue" />
+        </AreaChart>
+      </ResponsiveContainer>
+      <div className="flex items-center justify-center gap-6 mt-4">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-green-500" />
+          <span className="text-xs text-dark-400">Valor Ganho</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500" />
+          <span className="text-xs text-dark-400">Valor Perdido</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Velocity by Stage
+function VelocitySection({ data }: { data: VelocityStage[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+        <h3 className="text-lg font-semibold text-white mb-4">Velocidade por Estágio</h3>
+        <div className="flex flex-col items-center justify-center py-8 text-dark-400">
+          <Clock className="w-8 h-8 mb-2 opacity-50" />
+          <p className="text-sm">Sem dados de velocidade ainda</p>
+          <p className="text-xs text-dark-500">Mova deals entre estágios para começar a medir</p>
+        </div>
+      </div>
+    )
+  }
+
+  const maxDays = Math.max(...data.map(v => v.avgDays))
+
+  return (
+    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+      <h3 className="text-lg font-semibold text-white mb-4">Velocidade por Estágio</h3>
+      <div className="space-y-3">
+        {data.map((stage, index) => (
+          <div key={stage.stageId}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-white">{stage.stageName}</span>
+              <span className="text-sm font-medium text-dark-300">{stage.avgDays.toFixed(1)} dias</span>
+            </div>
+            <div className="h-2 bg-dark-700/50 rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: maxDays > 0 ? `${(stage.avgDays / maxDays) * 100}%` : '0%' }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Top Deals & Deals at Risk
+function DealsSection({ topDeals, dealsAtRisk }: { topDeals: TopDeal[]; dealsAtRisk: DealAtRisk[] }) {
+  return (
+    <div className="grid grid-cols-2 gap-6">
+      {/* Top Deals */}
+      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Award className="w-5 h-5 text-amber-400" />
+          <h3 className="text-lg font-semibold text-white">Top 5 Deals</h3>
+        </div>
+        {topDeals.length === 0 ? (
+          <div className="text-center text-dark-400 py-6 text-sm">Nenhum deal em aberto</div>
+        ) : (
+          <div className="space-y-3">
+            {topDeals.map((deal, index) => (
+              <div key={deal.id} className="flex items-center gap-3 p-3 bg-dark-700/30 rounded-xl">
+                <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold">
+                  {index + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-white truncate">{deal.title}</div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: deal.stageColor }} />
+                    <span className="text-xs text-dark-400">{deal.stageName}</span>
+                  </div>
+                </div>
+                <div className="text-sm font-semibold text-white">{formatCurrency(deal.value)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Deals at Risk */}
+      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <AlertTriangle className="w-5 h-5 text-red-400" />
+          <h3 className="text-lg font-semibold text-white">Deals em Risco</h3>
+        </div>
+        {dealsAtRisk.length === 0 ? (
+          <div className="text-center text-dark-400 py-6 text-sm">
+            <span className="text-green-400">✓</span> Nenhum deal parado
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {dealsAtRisk.slice(0, 5).map(deal => (
+              <div key={deal.id} className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-white truncate">{deal.title}</div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs text-red-400">{deal.daysSinceUpdate} dias parado</span>
+                    <span className="text-xs text-dark-500">•</span>
+                    <span className="text-xs text-dark-400">{deal.stageName}</span>
+                  </div>
+                </div>
+                <div className="text-sm font-semibold text-white">{formatCurrency(deal.value)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Insights Section
+function InsightsSection({ insights }: { insights: Insight[] }) {
+  if (!insights || insights.length === 0) return null
+
+  const iconMap = {
+    positive: <TrendingUp className="w-4 h-4 text-green-400" />,
+    negative: <TrendingDown className="w-4 h-4 text-red-400" />,
+    neutral: <Lightbulb className="w-4 h-4 text-amber-400" />,
+  }
+
+  const bgMap = {
+    positive: 'bg-green-500/10 border-green-500/20',
+    negative: 'bg-red-500/10 border-red-500/20',
+    neutral: 'bg-amber-500/10 border-amber-500/20',
+  }
+
+  return (
+    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Lightbulb className="w-5 h-5 text-amber-400" />
+        <h3 className="text-lg font-semibold text-white">Insights</h3>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {insights.map((insight, index) => (
+          <div
+            key={index}
+            className={`flex items-start gap-3 p-3 rounded-xl border ${bgMap[insight.type]}`}
+          >
+            <div className="mt-0.5">{iconMap[insight.type]}</div>
+            <p className="text-sm text-white">{insight.message}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ==========================================
+// MAIN PAGE COMPONENT
+// ==========================================
+export default function AnalyticsPage() {
   const { user } = useAuthStore()
+  const organizationId = user?.organization_id
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<AnalyticsData | null>(null)
-  const [period, setPeriod] = useState('6months')
+  const [period, setPeriod] = useState('month')
+  const [selectedPipelineIds, setSelectedPipelineIds] = useState<string[]>([])
   const [showPeriodDropdown, setShowPeriodDropdown] = useState(false)
 
-  const organizationId = user?.organization_id
+  const periods = [
+    { value: 'month', label: 'Este Mês' },
+    { value: 'quarter', label: 'Este Trimestre' },
+    { value: 'year', label: 'Este Ano' },
+    { value: '30days', label: 'Últimos 30 Dias' },
+    { value: '3months', label: 'Últimos 3 Meses' },
+    { value: '6months', label: 'Últimos 6 Meses' },
+  ]
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!organizationId) return
 
     setLoading(true)
     setError(null)
 
     try {
-      const res = await fetch(`/api/analytics/sales?organizationId=${organizationId}&period=${period}`)
+      const params = new URLSearchParams({
+        organizationId,
+        period,
+        includeComparison: 'true',
+      })
       
-      if (!res.ok) {
-        throw new Error('Erro ao carregar dados de analytics')
+      if (selectedPipelineIds.length > 0) {
+        params.set('pipelineIds', selectedPipelineIds.join(','))
       }
 
-      const result = await res.json()
+      const response = await fetch(`/api/analytics/sales?${params}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch analytics')
+      }
+
+      const result = await response.json()
       setData(result)
     } catch (err: any) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }
+  }, [organizationId, period, selectedPipelineIds])
 
   useEffect(() => {
     fetchData()
-  }, [organizationId, period])
+  }, [fetchData])
 
   if (!organizationId) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center">
-        <p className="text-dark-400">Faça login para ver os analytics</p>
+      <div className="flex items-center justify-center h-96">
+        <p className="text-dark-400">Faça login para ver analytics</p>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <BarChart3 className="w-7 h-7 text-primary-400" />
-            Analytics de Vendas
-          </h1>
-          <p className="text-dark-400 mt-1">
-            Acompanhe a performance do seu pipeline de vendas
-          </p>
+          <h1 className="text-2xl font-bold text-white">Analytics de Vendas</h1>
+          <p className="text-dark-400 mt-1">Análise completa do seu pipeline de vendas</p>
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Pipeline Selector */}
+          {data?.pipelines && (
+            <PipelineSelector
+              pipelines={data.pipelines}
+              selectedIds={selectedPipelineIds}
+              onChange={setSelectedPipelineIds}
+            />
+          )}
+
           {/* Period Selector */}
           <div className="relative">
             <button
               onClick={() => setShowPeriodDropdown(!showPeriodDropdown)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white hover:border-dark-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white hover:bg-dark-800 transition-colors"
             >
-              <Calendar className="w-4 h-4 text-dark-400" />
-              <span>{PERIODS.find(p => p.value === period)?.label}</span>
-              <ChevronDown className="w-4 h-4 text-dark-400" />
+              <span className="font-medium">{periods.find(p => p.value === period)?.label}</span>
+              <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showPeriodDropdown ? 'rotate-180' : ''}`} />
             </button>
 
-            {showPeriodDropdown && (
-              <>
-                <div 
-                  className="fixed inset-0 z-10" 
-                  onClick={() => setShowPeriodDropdown(false)} 
-                />
-                <div className="absolute right-0 top-full mt-2 w-48 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 py-1">
-                  {PERIODS.map((p) => (
-                    <button
-                      key={p.value}
-                      onClick={() => {
-                        setPeriod(p.value)
-                        setShowPeriodDropdown(false)
-                      }}
-                      className={`w-full px-4 py-2.5 text-left text-sm hover:bg-dark-700 transition-colors ${
-                        period === p.value ? 'text-primary-400' : 'text-dark-300'
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            <AnimatePresence>
+              {showPeriodDropdown && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowPeriodDropdown(false)} />
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute right-0 top-full mt-2 w-48 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
+                  >
+                    {periods.map(p => (
+                      <button
+                        key={p.value}
+                        onClick={() => {
+                          setPeriod(p.value)
+                          setShowPeriodDropdown(false)
+                        }}
+                        className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
+                          period === p.value
+                            ? 'bg-primary-500/20 text-primary-400'
+                            : 'text-white hover:bg-dark-700/50'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* Refresh */}
+          {/* Refresh Button */}
           <button
             onClick={fetchData}
             disabled={loading}
-            className="p-2.5 bg-dark-800 border border-dark-700 rounded-xl text-dark-400 hover:text-white hover:border-dark-600 transition-colors disabled:opacity-50"
+            className="p-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-dark-400 hover:text-white hover:bg-dark-800 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -254,458 +909,122 @@ export default function SalesAnalyticsPage() {
 
       {/* Loading State */}
       {loading && !data && (
-        <div className="min-h-[400px] flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+        <div className="flex items-center justify-center h-96">
+          <RefreshCw className="w-8 h-8 text-primary-400 animate-spin" />
         </div>
       )}
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400">
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-red-400">
           {error}
         </div>
       )}
 
-      {/* Content */}
+      {/* Data */}
       {data && (
-        <>
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="space-y-6">
+          {/* KPIs Row 1 */}
+          <div className="grid grid-cols-4 gap-4">
             <KPICard
-              title="Valor Ganho"
-              value={formatCurrency(data.kpis.totalWonValue)}
               icon={DollarSign}
-              color="green"
-              subtitle={`${data.kpis.wonDeals} deals fechados`}
+              label="Pipeline Total"
+              value={data.kpis.pipelineTotal}
+              subtext={`${data.kpis.openDeals} deals abertos`}
+              color="primary"
             />
             <KPICard
-              title="Pipeline Aberto"
-              value={formatCurrency(data.kpis.totalOpenValue)}
-              icon={Briefcase}
-              color="blue"
-              subtitle={`Ponderado: ${formatCurrency(data.kpis.weightedPipeline)}`}
-            />
-            <KPICard
-              title="Win Rate"
-              value={`${data.kpis.winRate}%`}
               icon={Target}
-              color="purple"
-              subtitle={`${data.kpis.wonDeals} ganhos / ${data.kpis.wonDeals + data.kpis.lostDeals} fechados`}
+              label="Pipeline Ponderado"
+              value={data.kpis.weightedTotal}
+              subtext="Valor × Probabilidade"
+              color="blue"
             />
             <KPICard
-              title="Ciclo Médio"
-              value={`${data.kpis.avgSalesCycle} dias`}
-              icon={Clock}
+              icon={TrendingUp}
+              label={`Ganhos (${data.periodLabel})`}
+              value={data.kpis.wonValue}
+              subtext={`${data.kpis.wonDeals} deals ganhos`}
+              variation={data.kpis.variations.wonValue}
+              color="green"
+            />
+            <KPICard
+              icon={Percent}
+              label="Win Rate"
+              value={data.kpis.winRate}
+              subtext={`${data.kpis.wonDeals} ganhos / ${data.kpis.wonDeals + data.kpis.lostDeals} fechados`}
+              variation={data.kpis.variations.winRate}
+              format="percent"
               color="amber"
-              subtitle={`Ticket médio: ${formatCurrency(data.kpis.avgDealSize)}`}
             />
           </div>
 
-          {/* Charts Row 1: Timeline + Win/Loss */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Revenue Timeline */}
-            <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary-400" />
-                Evolução de Receita
-              </h3>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data.timeline}>
-                    <defs>
-                      <linearGradient id="wonGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="lostGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                    <XAxis 
-                      dataKey="label" 
-                      stroke="#71717a" 
-                      fontSize={12}
-                      tickLine={false}
-                    />
-                    <YAxis 
-                      stroke="#71717a" 
-                      fontSize={12}
-                      tickLine={false}
-                      tickFormatter={(v) => formatCompact(v)}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#18181b',
-                        border: '1px solid #27272a',
-                        borderRadius: '12px',
-                      }}
-                      formatter={(value: number) => formatCurrency(value)}
-                    />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="wonValue"
-                      name="Ganho"
-                      stroke="#22c55e"
-                      fill="url(#wonGradient)"
-                      strokeWidth={2}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="lostValue"
-                      name="Perdido"
-                      stroke="#ef4444"
-                      fill="url(#lostGradient)"
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Win Rate Over Time */}
-            <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <Target className="w-5 h-5 text-primary-400" />
-                Win Rate ao Longo do Tempo
-              </h3>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={data.winLoss}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                    <XAxis 
-                      dataKey="label" 
-                      stroke="#71717a" 
-                      fontSize={12}
-                      tickLine={false}
-                    />
-                    <YAxis 
-                      yAxisId="left"
-                      stroke="#71717a" 
-                      fontSize={12}
-                      tickLine={false}
-                    />
-                    <YAxis 
-                      yAxisId="right"
-                      orientation="right"
-                      stroke="#71717a" 
-                      fontSize={12}
-                      tickLine={false}
-                      domain={[0, 100]}
-                      tickFormatter={(v) => `${v}%`}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#18181b',
-                        border: '1px solid #27272a',
-                        borderRadius: '12px',
-                      }}
-                    />
-                    <Legend />
-                    <Bar yAxisId="left" dataKey="won" name="Ganhos" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                    <Bar yAxisId="left" dataKey="lost" name="Perdidos" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                    <Line 
-                      yAxisId="right" 
-                      type="monotone" 
-                      dataKey="winRate" 
-                      name="Win Rate" 
-                      stroke="#8b5cf6" 
-                      strokeWidth={3}
-                      dot={{ fill: '#8b5cf6', strokeWidth: 2 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+          {/* KPIs Row 2 */}
+          <div className="grid grid-cols-4 gap-4">
+            <KPICard
+              icon={DollarSign}
+              label="Ticket Médio"
+              value={data.kpis.avgTicket}
+              variation={data.kpis.variations.avgTicket}
+              color="primary"
+            />
+            <KPICard
+              icon={Clock}
+              label="Ciclo de Vendas"
+              value={data.kpis.avgCycleDays}
+              subtext="Dias até fechar"
+              variation={data.kpis.variations.avgCycleDays}
+              format="days"
+              color="blue"
+            />
+            <KPICard
+              icon={TrendingDown}
+              label="Valor Perdido"
+              value={data.kpis.lostValue}
+              subtext={`${data.kpis.lostDeals} deals perdidos`}
+              color="red"
+            />
+            <KPICard
+              icon={Users}
+              label="Total de Deals"
+              value={data.kpis.totalDeals}
+              format="number"
+              color="primary"
+            />
           </div>
 
-          {/* Charts Row 2: Funnel + Velocity */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Funnel */}
-            <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <PieChart className="w-5 h-5 text-primary-400" />
-                Funil de Conversão
-              </h3>
-              <div className="space-y-3">
-                {data.funnel.map((stage, index) => (
-                  <div key={stage.name} className="relative">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: stage.color }}
-                        />
-                        <span className="text-sm text-white font-medium">{stage.name}</span>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm">
-                        <span className="text-dark-400">{stage.count} deals</span>
-                        <span className="text-primary-400 font-medium">{stage.conversionRate}%</span>
-                      </div>
-                    </div>
-                    <div className="h-8 bg-dark-800 rounded-lg overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${stage.conversionRate}%` }}
-                        transition={{ duration: 0.8, delay: index * 0.1 }}
-                        className="h-full rounded-lg flex items-center justify-end pr-3"
-                        style={{ backgroundColor: stage.color }}
-                      >
-                        <span className="text-xs text-white font-medium">
-                          {formatCurrency(stage.value)}
-                        </span>
-                      </motion.div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Sales Velocity */}
-            <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary-400" />
-                Velocidade de Vendas
-              </h3>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data.velocity}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                    <XAxis 
-                      dataKey="label" 
-                      stroke="#71717a" 
-                      fontSize={12}
-                      tickLine={false}
-                    />
-                    <YAxis 
-                      stroke="#71717a" 
-                      fontSize={12}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#18181b',
-                        border: '1px solid #27272a',
-                        borderRadius: '12px',
-                      }}
-                      formatter={(value: number, name: string) => [
-                        name === 'avgDays' ? `${value} dias` : value,
-                        name === 'avgDays' ? 'Tempo Médio' : 'Transições'
-                      ]}
-                    />
-                    <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="avgDays" 
-                      name="Tempo Médio (dias)" 
-                      stroke="#06b6d4" 
-                      strokeWidth={2}
-                      dot={{ fill: '#06b6d4', strokeWidth: 2 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+          {/* Commit Level Section */}
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-4">Forecast por Commit Level</h3>
+            <CommitLevelSection data={data.byCommitLevel} />
           </div>
 
-          {/* Charts Row 3: Stage Performance + Top Deals */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Stage Performance */}
-            <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-primary-400" />
-                Performance por Estágio
-              </h3>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.stagePerformance} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-                    <XAxis type="number" stroke="#71717a" fontSize={12} tickLine={false} />
-                    <YAxis 
-                      type="category" 
-                      dataKey="name" 
-                      stroke="#71717a" 
-                      fontSize={12}
-                      tickLine={false}
-                      width={100}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#18181b',
-                        border: '1px solid #27272a',
-                        borderRadius: '12px',
-                      }}
-                      formatter={(value: number, name: string) => [
-                        name === 'currentValue' ? formatCurrency(value) :
-                        name === 'avgTimeInStage' ? `${value} dias` : value,
-                        name === 'currentValue' ? 'Valor' :
-                        name === 'avgTimeInStage' ? 'Tempo Médio' : 'Deals'
-                      ]}
-                    />
-                    <Legend />
-                    <Bar 
-                      dataKey="currentDeals" 
-                      name="Deals Ativos" 
-                      fill="#8b5cf6" 
-                      radius={[0, 4, 4, 0]}
-                    />
-                    <Bar 
-                      dataKey="avgTimeInStage" 
-                      name="Dias no Estágio" 
-                      fill="#06b6d4" 
-                      radius={[0, 4, 4, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+          {/* Pipeline Comparison (when multiple pipelines) */}
+          {data.byPipeline && data.byPipeline.length > 1 && (
+            <>
+              <PipelineComparisonTable data={data.byPipeline} />
+              <PipelineCharts data={data.byPipeline} />
+            </>
+          )}
 
-            {/* Top Deals */}
-            <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <Award className="w-5 h-5 text-primary-400" />
-                Top 5 Deals em Aberto
-              </h3>
-              <div className="space-y-3">
-                {data.topDeals.length > 0 ? (
-                  data.topDeals.map((deal, index) => (
-                    <motion.div
-                      key={deal.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="flex items-center gap-4 p-3 bg-dark-800/50 border border-dark-700/50 rounded-xl hover:border-dark-600 transition-colors"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-sm">
-                        {index + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white font-medium truncate">{deal.title}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span
-                            className="text-xs px-2 py-0.5 rounded"
-                            style={{
-                              backgroundColor: `${deal.stageColor}20`,
-                              color: deal.stageColor,
-                            }}
-                          >
-                            {deal.stageName}
-                          </span>
-                          <span className="text-xs text-dark-500">
-                            {deal.probability}% prob.
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-green-400 font-semibold">
-                          {formatCurrency(deal.value)}
-                        </p>
-                        <p className="text-xs text-dark-500">
-                          {new Date(deal.createdAt).toLocaleDateString('pt-BR')}
-                        </p>
-                      </div>
-                    </motion.div>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-dark-400">
-                    <Briefcase className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p>Nenhum deal em aberto</p>
-                  </div>
-                )}
-              </div>
-            </div>
+          {/* Funnel & Velocity */}
+          <div className="grid grid-cols-2 gap-6">
+            <SalesFunnel data={data.funnel} />
+            <VelocitySection data={data.velocity} />
           </div>
 
-          {/* Deals Created Over Time */}
-          <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary-400" />
-              Deals Criados vs Fechados
-            </h3>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.timeline}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis 
-                    dataKey="label" 
-                    stroke="#71717a" 
-                    fontSize={12}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    stroke="#71717a" 
-                    fontSize={12}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#18181b',
-                      border: '1px solid #27272a',
-                      borderRadius: '12px',
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="created" name="Criados" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="won" name="Ganhos" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="lost" name="Perdidos" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </>
+          {/* Timeline Chart */}
+          {data.timeline && data.timeline.length > 0 && (
+            <TimelineChart data={data.timeline} />
+          )}
+
+          {/* Top Deals & Deals at Risk */}
+          <DealsSection topDeals={data.topDeals} dealsAtRisk={data.dealsAtRisk} />
+
+          {/* Insights */}
+          <InsightsSection insights={data.insights} />
+        </div>
       )}
     </div>
-  )
-}
-
-// KPI Card Component
-function KPICard({
-  title,
-  value,
-  icon: Icon,
-  color,
-  subtitle,
-}: {
-  title: string
-  value: string
-  icon: any
-  color: 'green' | 'blue' | 'purple' | 'amber' | 'red'
-  subtitle?: string
-}) {
-  const colorClasses = {
-    green: 'bg-green-500/10 text-green-400 border-green-500/20',
-    blue: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    purple: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-    amber: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    red: 'bg-red-500/10 text-red-400 border-red-500/20',
-  }
-
-  const iconColorClasses = {
-    green: 'bg-green-500/20 text-green-400',
-    blue: 'bg-blue-500/20 text-blue-400',
-    purple: 'bg-purple-500/20 text-purple-400',
-    amber: 'bg-amber-500/20 text-amber-400',
-    red: 'bg-red-500/20 text-red-400',
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`bg-dark-900 border rounded-2xl p-5 ${colorClasses[color].split(' ')[2]}`}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className={`p-2.5 rounded-xl ${iconColorClasses[color]}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-      </div>
-      <p className="text-dark-400 text-sm mb-1">{title}</p>
-      <p className="text-2xl font-bold text-white">{value}</p>
-      {subtitle && (
-        <p className="text-sm text-dark-500 mt-1">{subtitle}</p>
-      )}
-    </motion.div>
   )
 }
