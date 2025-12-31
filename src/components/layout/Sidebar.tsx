@@ -85,7 +85,7 @@ const mainNavItems: NavItem[] = [
 ]
 
 const analyticsNavItems: NavItem[] = [
-  { title: 'Vendas/CRM', href: '/analytics/sales', icon: TrendingUp },
+  { title: 'Vendas/CRM', href: '/crm/analytics', icon: TrendingUp },
   { title: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
   { title: 'Shopify', href: '/analytics/shopify', icon: ShoppingBag },
   { title: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
@@ -247,7 +247,7 @@ export function Sidebar() {
           <div>
             {!sidebarCollapsed && (
               <p className="px-4 mb-2 text-xs font-semibold text-dark-500 uppercase tracking-wider">
-                Analytics
+                Forecast
               </p>
             )}
             <div className="space-y-1">
