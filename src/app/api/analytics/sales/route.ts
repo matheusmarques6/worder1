@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+export const dynamic = 'force-dynamic'
+
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -8,7 +10,7 @@ function getSupabase() {
   return createClient(url, key)
 }
 
-// GET - Fetch sales analytics data
+// GET - Fetch sales analytics data with multi-pipeline support
 export async function GET(request: NextRequest) {
   const supabase = getSupabase()
   if (!supabase) {
@@ -17,123 +19,143 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams
   const organizationId = searchParams.get('organizationId')
-  const period = searchParams.get('period') || '6months' // 30days, 3months, 6months, 12months, all
-  const pipelineId = searchParams.get('pipelineId')
+  const period = searchParams.get('period') || 'month'
+  const pipelineIds = searchParams.get('pipelineIds')
+  const includeComparison = searchParams.get('includeComparison') === 'true'
 
   if (!organizationId) {
     return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
   }
 
   try {
-    // Calculate date range
     const now = new Date()
     let startDate: Date
+    let previousStartDate: Date
+    let previousEndDate: Date
     
     switch (period) {
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        previousEndDate = new Date(now.getFullYear(), now.getMonth(), 0)
+        break
+      case 'quarter':
+        const currentQuarter = Math.floor(now.getMonth() / 3)
+        startDate = new Date(now.getFullYear(), currentQuarter * 3, 1)
+        previousStartDate = new Date(now.getFullYear(), (currentQuarter - 1) * 3, 1)
+        previousEndDate = new Date(now.getFullYear(), currentQuarter * 3, 0)
+        break
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1)
+        previousStartDate = new Date(now.getFullYear() - 1, 0, 1)
+        previousEndDate = new Date(now.getFullYear() - 1, 11, 31)
+        break
       case '30days':
         startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        previousStartDate = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
+        previousEndDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
         break
       case '3months':
         startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+        previousStartDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000)
+        previousEndDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
         break
       case '6months':
         startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000)
-        break
-      case '12months':
-        startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
+        previousStartDate = new Date(now.getTime() - 360 * 24 * 60 * 60 * 1000)
+        previousEndDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000)
         break
       default:
-        startDate = new Date('2020-01-01')
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        previousEndDate = new Date(now.getFullYear(), now.getMonth(), 0)
     }
 
-    // Build base query conditions
+    const selectedPipelineIds = pipelineIds ? pipelineIds.split(',').filter(Boolean) : []
+
+    // 1. FETCH PIPELINES
+    const { data: pipelines } = await supabase
+      .from('pipelines')
+      .select('id, name, color')
+      .eq('organization_id', organizationId)
+      .order('position', { ascending: true })
+
+    // 2. FETCH ALL DEALS
     let dealsQuery = supabase
       .from('deals')
       .select(`
-        id,
-        title,
-        value,
-        status,
-        probability,
-        commit_level,
-        stage_id,
-        pipeline_id,
-        created_at,
-        updated_at,
-        won_at,
-        lost_at,
-        stage:pipeline_stages(id, name, color, probability, position)
+        id, title, value, status, probability, commit_level, stage_id, pipeline_id,
+        contact_id, created_at, updated_at, won_at, lost_at, expected_close_date,
+        stage:pipeline_stages(id, name, color, probability, position),
+        contact:contacts(id, first_name, last_name, email)
       `)
       .eq('organization_id', organizationId)
-      .gte('created_at', startDate.toISOString())
-      .order('created_at', { ascending: true })
 
-    if (pipelineId) {
-      dealsQuery = dealsQuery.eq('pipeline_id', pipelineId)
+    if (selectedPipelineIds.length > 0) {
+      dealsQuery = dealsQuery.in('pipeline_id', selectedPipelineIds)
     }
 
-    const { data: deals, error: dealsError } = await dealsQuery
-
+    const { data: allDeals, error: dealsError } = await dealsQuery
     if (dealsError) throw dealsError
 
-    // Get stage history for velocity analysis
-    let historyQuery = supabase
-      .from('deal_stage_history')
-      .select(`
-        id,
-        deal_id,
-        from_stage_id,
-        to_stage_id,
-        changed_at,
-        time_in_previous_stage,
-        from_stage:pipeline_stages!deal_stage_history_from_stage_id_fkey(name),
-        to_stage:pipeline_stages!deal_stage_history_to_stage_id_fkey(name, position)
-      `)
-      .gte('changed_at', startDate.toISOString())
-      .order('changed_at', { ascending: true })
+    const deals = allDeals || []
 
-    // Filter by organization through deals
-    const dealIds = deals?.map(d => d.id) || []
-    if (dealIds.length > 0) {
-      historyQuery = historyQuery.in('deal_id', dealIds)
+    // 3. FETCH PREVIOUS PERIOD DEALS
+    let previousDealsQuery = supabase
+      .from('deals')
+      .select('id, value, status, won_at, lost_at, created_at')
+      .eq('organization_id', organizationId)
+      .gte('created_at', previousStartDate.toISOString())
+      .lte('created_at', previousEndDate.toISOString())
+
+    if (selectedPipelineIds.length > 0) {
+      previousDealsQuery = previousDealsQuery.in('pipeline_id', selectedPipelineIds)
     }
 
-    const { data: history } = await historyQuery
+    const { data: previousDeals } = await previousDealsQuery
 
-    // Calculate timeline data (monthly/weekly aggregation)
-    const timelineData = calculateTimelineData(deals || [], period)
+    // 4. FETCH STAGE HISTORY
+    const dealIds = deals.map(d => d.id)
+    let history: any[] = []
+    
+    if (dealIds.length > 0) {
+      const { data: historyData } = await supabase
+        .from('deal_stage_history')
+        .select('id, deal_id, from_stage_id, to_stage_id, from_stage_name, to_stage_name, changed_at, time_in_previous_stage')
+        .in('deal_id', dealIds)
+        .order('changed_at', { ascending: true })
+      
+      history = historyData || []
+    }
 
-    // Calculate funnel conversion rates
-    const funnelData = calculateFunnelData(deals || [])
-
-    // Calculate win/loss analysis
-    const winLossData = calculateWinLossData(deals || [], period)
-
-    // Calculate velocity metrics over time
-    const velocityData = calculateVelocityData(history || [], period)
-
-    // Calculate performance by stage
-    const stagePerformance = calculateStagePerformance(deals || [], history || [])
-
-    // Calculate top performers (deals and contacts)
-    const topDeals = getTopDeals(deals || [])
-
-    // Summary KPIs
-    const kpis = calculateKPIs(deals || [], startDate)
+    // CALCULATE ALL METRICS
+    const kpis = calculateMainKPIs(deals, previousDeals || [], startDate, now)
+    const byCommitLevel = calculateByCommitLevel(deals)
+    const byPipeline = (includeComparison || selectedPipelineIds.length === 0) 
+      ? calculateByPipeline(deals, pipelines || []) 
+      : null
+    const funnel = calculateFunnelData(deals)
+    const timeline = calculateTimelineData(deals, period)
+    const velocity = calculateVelocityByStage(history, deals)
+    const topDeals = getTopDeals(deals)
+    const dealsAtRisk = getDealsAtRisk(deals)
+    const insights = generateInsights(kpis, byPipeline, velocity, dealsAtRisk)
 
     return NextResponse.json({
       period,
-      dateRange: {
-        start: startDate.toISOString(),
-        end: now.toISOString(),
-      },
+      periodLabel: getPeriodLabel(period),
+      dateRange: { start: startDate.toISOString(), end: now.toISOString() },
+      pipelines: pipelines || [],
+      selectedPipelineIds,
       kpis,
-      timeline: timelineData,
-      funnel: funnelData,
-      winLoss: winLossData,
-      velocity: velocityData,
-      stagePerformance,
+      byCommitLevel,
+      byPipeline,
+      funnel,
+      timeline,
+      velocity,
       topDeals,
+      dealsAtRisk,
+      insights,
     })
   } catch (error: any) {
     console.error('Sales analytics error:', error)
@@ -141,92 +163,175 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function calculateKPIs(deals: any[], startDate: Date) {
-  const now = new Date()
-  const previousStart = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()))
+function getPeriodLabel(period: string): string {
+  const labels: Record<string, string> = {
+    'month': 'Este Mês', 'quarter': 'Este Trimestre', 'year': 'Este Ano',
+    '30days': 'Últimos 30 Dias', '3months': 'Últimos 3 Meses', '6months': 'Últimos 6 Meses',
+  }
+  return labels[period] || 'Este Mês'
+}
 
-  // Current period
-  const wonDeals = deals.filter(d => d.status === 'won')
-  const lostDeals = deals.filter(d => d.status === 'lost')
+function calculateMainKPIs(deals: any[], previousDeals: any[], startDate: Date, now: Date) {
   const openDeals = deals.filter(d => d.status === 'open')
+  const wonDeals = deals.filter(d => d.status === 'won' && d.won_at && new Date(d.won_at) >= startDate)
+  const lostDeals = deals.filter(d => d.status === 'lost' && d.lost_at && new Date(d.lost_at) >= startDate)
+  
+  const prevWonDeals = previousDeals.filter(d => d.status === 'won')
+  const prevLostDeals = previousDeals.filter(d => d.status === 'lost')
 
-  const totalWonValue = wonDeals.reduce((sum, d) => sum + (d.value || 0), 0)
-  const totalLostValue = lostDeals.reduce((sum, d) => sum + (d.value || 0), 0)
-  const totalOpenValue = openDeals.reduce((sum, d) => sum + (d.value || 0), 0)
-  const weightedPipeline = openDeals.reduce((sum, d) => {
-    const prob = d.stage?.probability ?? d.probability ?? 50
+  const pipelineTotal = openDeals.reduce((sum, d) => sum + (d.value || 0), 0)
+  const weightedTotal = openDeals.reduce((sum, d) => {
+    const stage = Array.isArray(d.stage) ? d.stage[0] : d.stage
+    const prob = stage?.probability ?? d.probability ?? 50
     return sum + (d.value || 0) * (prob / 100)
   }, 0)
+  const wonValue = wonDeals.reduce((sum, d) => sum + (d.value || 0), 0)
+  const lostValue = lostDeals.reduce((sum, d) => sum + (d.value || 0), 0)
+  const prevWonValue = prevWonDeals.reduce((sum, d) => sum + (d.value || 0), 0)
 
-  const totalDeals = deals.length
-  const closedDeals = wonDeals.length + lostDeals.length
-  const winRate = closedDeals > 0 ? (wonDeals.length / closedDeals) * 100 : 0
+  const closedCount = wonDeals.length + lostDeals.length
+  const winRate = closedCount > 0 ? (wonDeals.length / closedCount) * 100 : 0
+  const prevClosedCount = prevWonDeals.length + prevLostDeals.length
+  const prevWinRate = prevClosedCount > 0 ? (prevWonDeals.length / prevClosedCount) * 100 : 0
 
-  // Average deal size
-  const avgDealSize = wonDeals.length > 0 ? totalWonValue / wonDeals.length : 0
+  const avgTicket = wonDeals.length > 0 ? wonValue / wonDeals.length : 0
+  const prevAvgTicket = prevWonDeals.length > 0 ? prevWonValue / prevWonDeals.length : 0
 
-  // Average sales cycle (from creation to won)
   const salesCycles = wonDeals
     .filter(d => d.won_at && d.created_at)
-    .map(d => {
-      const created = new Date(d.created_at)
-      const won = new Date(d.won_at)
-      return (won.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
-    })
-  const avgSalesCycle = salesCycles.length > 0
-    ? salesCycles.reduce((a, b) => a + b, 0) / salesCycles.length
-    : 0
+    .map(d => (new Date(d.won_at).getTime() - new Date(d.created_at).getTime()) / (1000 * 60 * 60 * 24))
+  const avgCycleDays = salesCycles.length > 0 ? salesCycles.reduce((a, b) => a + b, 0) / salesCycles.length : 0
+
+  const prevSalesCycles = prevWonDeals
+    .filter(d => d.won_at && d.created_at)
+    .map(d => (new Date(d.won_at).getTime() - new Date(d.created_at).getTime()) / (1000 * 60 * 60 * 24))
+  const prevAvgCycleDays = prevSalesCycles.length > 0 ? prevSalesCycles.reduce((a, b) => a + b, 0) / prevSalesCycles.length : 0
+
+  const calcVariation = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? 100 : 0
+    return ((current - previous) / previous) * 100
+  }
 
   return {
-    totalDeals,
+    pipelineTotal: Math.round(pipelineTotal * 100) / 100,
+    weightedTotal: Math.round(weightedTotal * 100) / 100,
+    wonValue: Math.round(wonValue * 100) / 100,
+    lostValue: Math.round(lostValue * 100) / 100,
+    winRate: Math.round(winRate * 10) / 10,
+    avgTicket: Math.round(avgTicket),
+    avgCycleDays: Math.round(avgCycleDays * 10) / 10,
+    totalDeals: deals.length,
+    openDeals: openDeals.length,
     wonDeals: wonDeals.length,
     lostDeals: lostDeals.length,
-    openDeals: openDeals.length,
-    totalWonValue,
-    totalLostValue,
-    totalOpenValue,
-    weightedPipeline,
-    winRate: Math.round(winRate * 10) / 10,
-    avgDealSize: Math.round(avgDealSize),
-    avgSalesCycle: Math.round(avgSalesCycle * 10) / 10,
+    variations: {
+      wonValue: Math.round(calcVariation(wonValue, prevWonValue) * 10) / 10,
+      winRate: Math.round((winRate - prevWinRate) * 10) / 10,
+      avgTicket: Math.round(calcVariation(avgTicket, prevAvgTicket) * 10) / 10,
+      avgCycleDays: Math.round((avgCycleDays - prevAvgCycleDays) * 10) / 10,
+    }
   }
 }
 
+function calculateByCommitLevel(deals: any[]) {
+  const openDeals = deals.filter(d => d.status === 'open')
+  const levels = ['commit', 'best_case', 'pipeline', 'omit']
+  
+  return levels.map(level => {
+    const levelDeals = openDeals.filter(d => (d.commit_level || 'pipeline') === level)
+    const value = levelDeals.reduce((sum, d) => sum + (d.value || 0), 0)
+    
+    return {
+      level,
+      label: level === 'commit' ? 'Commit' : level === 'best_case' ? 'Best Case' : level === 'pipeline' ? 'Pipeline' : 'Omitido',
+      value: Math.round(value * 100) / 100,
+      dealCount: levelDeals.length,
+      color: level === 'commit' ? '#22c55e' : level === 'best_case' ? '#3b82f6' : level === 'pipeline' ? '#eab308' : '#6b7280'
+    }
+  })
+}
+
+function calculateByPipeline(deals: any[], pipelines: any[]) {
+  return pipelines.map(pipeline => {
+    const pipelineDeals = deals.filter(d => d.pipeline_id === pipeline.id)
+    const openDeals = pipelineDeals.filter(d => d.status === 'open')
+    const wonDeals = pipelineDeals.filter(d => d.status === 'won')
+    const lostDeals = pipelineDeals.filter(d => d.status === 'lost')
+    
+    const totalValue = openDeals.reduce((sum, d) => sum + (d.value || 0), 0)
+    const wonValue = wonDeals.reduce((sum, d) => sum + (d.value || 0), 0)
+    
+    const closedCount = wonDeals.length + lostDeals.length
+    const winRate = closedCount > 0 ? (wonDeals.length / closedCount) * 100 : 0
+    const avgTicket = wonDeals.length > 0 ? wonValue / wonDeals.length : 0
+    
+    const salesCycles = wonDeals
+      .filter(d => d.won_at && d.created_at)
+      .map(d => (new Date(d.won_at).getTime() - new Date(d.created_at).getTime()) / (1000 * 60 * 60 * 24))
+    const avgCycleDays = salesCycles.length > 0 ? salesCycles.reduce((a, b) => a + b, 0) / salesCycles.length : 0
+
+    return {
+      id: pipeline.id,
+      name: pipeline.name,
+      color: pipeline.color || '#6366f1',
+      metrics: {
+        totalValue: Math.round(totalValue * 100) / 100,
+        wonValue: Math.round(wonValue * 100) / 100,
+        winRate: Math.round(winRate * 10) / 10,
+        avgTicket: Math.round(avgTicket),
+        avgCycleDays: Math.round(avgCycleDays * 10) / 10,
+        totalDeals: pipelineDeals.length,
+        openDeals: openDeals.length,
+        wonDeals: wonDeals.length,
+        lostDeals: lostDeals.length,
+      }
+    }
+  })
+}
+
+function calculateFunnelData(deals: any[]) {
+  const openDeals = deals.filter(d => d.status === 'open')
+  const stageGroups: Record<string, { id: string; name: string; color: string; position: number; count: number; value: number; probability: number }> = {}
+
+  openDeals.forEach(deal => {
+    const stage = Array.isArray(deal.stage) ? deal.stage[0] : deal.stage
+    if (!stage) return
+
+    if (!stageGroups[stage.id]) {
+      stageGroups[stage.id] = { id: stage.id, name: stage.name, color: stage.color, position: stage.position, probability: stage.probability || 50, count: 0, value: 0 }
+    }
+    stageGroups[stage.id].count++
+    stageGroups[stage.id].value += deal.value || 0
+  })
+
+  const sortedStages = Object.values(stageGroups).sort((a, b) => a.position - b.position)
+  const firstStageCount = sortedStages[0]?.count || 1
+
+  return sortedStages.map(stage => ({
+    ...stage,
+    value: Math.round(stage.value * 100) / 100,
+    weightedValue: Math.round(stage.value * (stage.probability / 100) * 100) / 100,
+    percentage: Math.round((stage.count / firstStageCount) * 100),
+  }))
+}
+
 function calculateTimelineData(deals: any[], period: string) {
-  // Group by month or week depending on period
   const useWeeks = period === '30days'
   const groupedData: Record<string, { created: number; won: number; lost: number; wonValue: number; lostValue: number }> = {}
 
   deals.forEach(deal => {
     const date = new Date(deal.created_at)
-    let key: string
+    const key = useWeeks 
+      ? (() => { const d = new Date(date); d.setDate(date.getDate() - date.getDay()); return d.toISOString().split('T')[0] })()
+      : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 
-    if (useWeeks) {
-      // Week number
-      const weekStart = new Date(date)
-      weekStart.setDate(date.getDate() - date.getDay())
-      key = weekStart.toISOString().split('T')[0]
-    } else {
-      // Month
-      key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-    }
-
-    if (!groupedData[key]) {
-      groupedData[key] = { created: 0, won: 0, lost: 0, wonValue: 0, lostValue: 0 }
-    }
-
+    if (!groupedData[key]) groupedData[key] = { created: 0, won: 0, lost: 0, wonValue: 0, lostValue: 0 }
     groupedData[key].created++
 
-    if (deal.status === 'won') {
-      groupedData[key].won++
-      groupedData[key].wonValue += deal.value || 0
-    } else if (deal.status === 'lost') {
-      groupedData[key].lost++
-      groupedData[key].lostValue += deal.value || 0
-    }
+    if (deal.status === 'won') { groupedData[key].won++; groupedData[key].wonValue += deal.value || 0 }
+    else if (deal.status === 'lost') { groupedData[key].lost++; groupedData[key].lostValue += deal.value || 0 }
   })
 
-  // Convert to array and sort
   return Object.entries(groupedData)
     .map(([date, data]) => ({
       date,
@@ -238,181 +343,44 @@ function calculateTimelineData(deals: any[], period: string) {
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
-function calculateFunnelData(deals: any[]) {
-  // Group by stage position
-  const stageGroups: Record<string, { name: string; color: string; position: number; count: number; value: number }> = {}
-
+function calculateVelocityByStage(history: any[], deals: any[]) {
+  const stageInfo: Record<string, { name: string; position: number }> = {}
   deals.forEach(deal => {
     const stage = Array.isArray(deal.stage) ? deal.stage[0] : deal.stage
-    if (!stage) return
-
-    const key = stage.id
-    if (!stageGroups[key]) {
-      stageGroups[key] = {
-        name: stage.name,
-        color: stage.color,
-        position: stage.position,
-        count: 0,
-        value: 0,
-      }
-    }
-
-    stageGroups[key].count++
-    stageGroups[key].value += deal.value || 0
+    if (stage) stageInfo[stage.id] = { name: stage.name, position: stage.position }
   })
 
-  return Object.values(stageGroups)
-    .sort((a, b) => a.position - b.position)
-    .map((stage, index, arr) => ({
-      ...stage,
-      conversionRate: index === 0 ? 100 : Math.round((stage.count / arr[0].count) * 100),
-    }))
-}
-
-function calculateWinLossData(deals: any[], period: string) {
-  const useWeeks = period === '30days'
-  const groupedData: Record<string, { won: number; lost: number; winRate: number }> = {}
-
-  // Group closed deals by period
-  const closedDeals = deals.filter(d => d.status === 'won' || d.status === 'lost')
-
-  closedDeals.forEach(deal => {
-    const date = new Date(deal.won_at || deal.lost_at || deal.updated_at)
-    let key: string
-
-    if (useWeeks) {
-      const weekStart = new Date(date)
-      weekStart.setDate(date.getDate() - date.getDay())
-      key = weekStart.toISOString().split('T')[0]
-    } else {
-      key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-    }
-
-    if (!groupedData[key]) {
-      groupedData[key] = { won: 0, lost: 0, winRate: 0 }
-    }
-
-    if (deal.status === 'won') {
-      groupedData[key].won++
-    } else {
-      groupedData[key].lost++
-    }
-  })
-
-  // Calculate win rates
-  Object.values(groupedData).forEach(data => {
-    const total = data.won + data.lost
-    data.winRate = total > 0 ? Math.round((data.won / total) * 100) : 0
-  })
-
-  return Object.entries(groupedData)
-    .map(([date, data]) => ({
-      date,
-      label: useWeeks
-        ? new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-        : new Date(date + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
-      ...data,
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date))
-}
-
-function calculateVelocityData(history: any[], period: string) {
-  const useWeeks = period === '30days'
-  const groupedData: Record<string, { totalDays: number; count: number }> = {}
-
-  history.forEach(h => {
-    if (!h.time_in_previous_stage) return
-
-    const date = new Date(h.changed_at)
-    let key: string
-
-    if (useWeeks) {
-      const weekStart = new Date(date)
-      weekStart.setDate(date.getDate() - date.getDay())
-      key = weekStart.toISOString().split('T')[0]
-    } else {
-      key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-    }
-
-    if (!groupedData[key]) {
-      groupedData[key] = { totalDays: 0, count: 0 }
-    }
-
-    // Convert seconds to days
-    const days = h.time_in_previous_stage / (60 * 60 * 24)
-    groupedData[key].totalDays += days
-    groupedData[key].count++
-  })
-
-  return Object.entries(groupedData)
-    .map(([date, data]) => ({
-      date,
-      label: useWeeks
-        ? new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-        : new Date(date + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
-      avgDays: data.count > 0 ? Math.round((data.totalDays / data.count) * 10) / 10 : 0,
-      transitions: data.count,
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date))
-}
-
-function calculateStagePerformance(deals: any[], history: any[]) {
-  const stageStats: Record<string, {
-    name: string
-    color: string
-    position: number
-    currentDeals: number
-    currentValue: number
-    avgTimeInStage: number
-    conversionToNext: number
-  }> = {}
-
-  // Count current deals per stage
-  deals.forEach(deal => {
-    const stage = Array.isArray(deal.stage) ? deal.stage[0] : deal.stage
-    if (!stage) return
-
-    if (!stageStats[stage.id]) {
-      stageStats[stage.id] = {
-        name: stage.name,
-        color: stage.color,
-        position: stage.position,
-        currentDeals: 0,
-        currentValue: 0,
-        avgTimeInStage: 0,
-        conversionToNext: 0,
-      }
-    }
-
-    if (deal.status === 'open') {
-      stageStats[stage.id].currentDeals++
-      stageStats[stage.id].currentValue += deal.value || 0
-    }
-  })
-
-  // Calculate avg time from history
-  const stageTimeData: Record<string, { totalTime: number; count: number }> = {}
+  const stageTimeData: Record<string, { totalHours: number; count: number }> = {}
 
   history.forEach(h => {
     if (!h.from_stage_id || !h.time_in_previous_stage) return
+    if (!stageTimeData[h.from_stage_id]) stageTimeData[h.from_stage_id] = { totalHours: 0, count: 0 }
 
-    if (!stageTimeData[h.from_stage_id]) {
-      stageTimeData[h.from_stage_id] = { totalTime: 0, count: 0 }
-    }
-
-    stageTimeData[h.from_stage_id].totalTime += h.time_in_previous_stage / (60 * 60 * 24) // to days
+    const hours = (typeof h.time_in_previous_stage === 'number' ? h.time_in_previous_stage : parseInterval(h.time_in_previous_stage)) / 3600
+    stageTimeData[h.from_stage_id].totalHours += hours
     stageTimeData[h.from_stage_id].count++
   })
 
-  Object.entries(stageTimeData).forEach(([stageId, data]) => {
-    if (stageStats[stageId]) {
-      stageStats[stageId].avgTimeInStage = data.count > 0
-        ? Math.round((data.totalTime / data.count) * 10) / 10
-        : 0
-    }
-  })
+  return Object.entries(stageTimeData)
+    .map(([stageId, data]) => ({
+      stageId,
+      stageName: stageInfo[stageId]?.name || history.find(h => h.from_stage_id === stageId)?.from_stage_name || 'Unknown',
+      position: stageInfo[stageId]?.position || 0,
+      avgHours: data.count > 0 ? Math.round((data.totalHours / data.count) * 10) / 10 : 0,
+      avgDays: data.count > 0 ? Math.round((data.totalHours / data.count / 24) * 10) / 10 : 0,
+      transitions: data.count,
+    }))
+    .sort((a, b) => a.position - b.position)
+}
 
-  return Object.values(stageStats).sort((a, b) => a.position - b.position)
+function parseInterval(interval: string): number {
+  if (!interval) return 0
+  let totalSeconds = 0
+  const daysMatch = interval.match(/(\d+)\s*days?/i)
+  if (daysMatch) totalSeconds += parseInt(daysMatch[1]) * 86400
+  const timeMatch = interval.match(/(\d{1,2}):(\d{2}):(\d{2})/)
+  if (timeMatch) { totalSeconds += parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]) }
+  return totalSeconds
 }
 
 function getTopDeals(deals: any[]) {
@@ -420,13 +388,74 @@ function getTopDeals(deals: any[]) {
     .filter(d => d.status === 'open')
     .sort((a, b) => (b.value || 0) - (a.value || 0))
     .slice(0, 5)
-    .map(d => ({
-      id: d.id,
-      title: d.title,
-      value: d.value || 0,
-      probability: d.stage?.probability ?? d.probability ?? 50,
-      stageName: Array.isArray(d.stage) ? d.stage[0]?.name : d.stage?.name,
-      stageColor: Array.isArray(d.stage) ? d.stage[0]?.color : d.stage?.color,
-      createdAt: d.created_at,
-    }))
+    .map(d => {
+      const stage = Array.isArray(d.stage) ? d.stage[0] : d.stage
+      const contact = Array.isArray(d.contact) ? d.contact[0] : d.contact
+      return {
+        id: d.id, title: d.title, value: d.value || 0,
+        probability: stage?.probability ?? d.probability ?? 50,
+        stageName: stage?.name || 'Unknown', stageColor: stage?.color || '#6366f1',
+        contactName: contact ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email : null,
+        createdAt: d.created_at, expectedCloseDate: d.expected_close_date,
+      }
+    })
+}
+
+function getDealsAtRisk(deals: any[], daysThreshold: number = 7) {
+  const now = new Date()
+  const threshold = new Date(now.getTime() - daysThreshold * 24 * 60 * 60 * 1000)
+
+  return deals
+    .filter(d => d.status === 'open' && new Date(d.updated_at) < threshold)
+    .sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime())
+    .slice(0, 10)
+    .map(d => {
+      const stage = Array.isArray(d.stage) ? d.stage[0] : d.stage
+      return {
+        id: d.id, title: d.title, value: d.value || 0,
+        stageName: stage?.name || 'Unknown', stageColor: stage?.color || '#6366f1',
+        daysSinceUpdate: Math.floor((now.getTime() - new Date(d.updated_at).getTime()) / (1000 * 60 * 60 * 24)),
+        updatedAt: d.updated_at,
+      }
+    })
+}
+
+function generateInsights(kpis: any, byPipeline: any[] | null, velocity: any[], dealsAtRisk: any[]) {
+  const insights: { type: 'positive' | 'negative' | 'neutral'; message: string }[] = []
+
+  if (kpis.variations.winRate > 5) {
+    insights.push({ type: 'positive', message: `Taxa de conversão aumentou ${kpis.variations.winRate.toFixed(1)}% vs período anterior` })
+  } else if (kpis.variations.winRate < -5) {
+    insights.push({ type: 'negative', message: `Taxa de conversão caiu ${Math.abs(kpis.variations.winRate).toFixed(1)}% vs período anterior` })
+  }
+
+  if (kpis.variations.avgCycleDays < -1) {
+    insights.push({ type: 'positive', message: `Ciclo de vendas diminuiu ${Math.abs(kpis.variations.avgCycleDays).toFixed(1)} dias` })
+  } else if (kpis.variations.avgCycleDays > 1) {
+    insights.push({ type: 'negative', message: `Ciclo de vendas aumentou ${kpis.variations.avgCycleDays.toFixed(1)} dias` })
+  }
+
+  if (byPipeline && byPipeline.length > 1) {
+    const sorted = [...byPipeline].sort((a, b) => b.metrics.winRate - a.metrics.winRate)
+    if (sorted[0].metrics.winRate > 0 && sorted[1]?.metrics.winRate > 0) {
+      const diff = sorted[0].metrics.winRate - sorted[1].metrics.winRate
+      if (diff > 10) {
+        insights.push({ type: 'neutral', message: `${sorted[0].name} tem ${Math.round(diff)}% mais conversão que ${sorted[1].name}` })
+      }
+    }
+  }
+
+  if (dealsAtRisk.length > 0) {
+    const totalValue = dealsAtRisk.reduce((sum, d) => sum + d.value, 0)
+    insights.push({ type: 'negative', message: `${dealsAtRisk.length} deals (R$ ${totalValue.toLocaleString('pt-BR')}) parados há mais de 7 dias` })
+  }
+
+  if (velocity.length > 0) {
+    const slowest = velocity.reduce((max, v) => v.avgDays > max.avgDays ? v : max, velocity[0])
+    if (slowest.avgDays > 5) {
+      insights.push({ type: 'neutral', message: `Deals ficam em média ${slowest.avgDays} dias no estágio "${slowest.stageName}"` })
+    }
+  }
+
+  return insights
 }
