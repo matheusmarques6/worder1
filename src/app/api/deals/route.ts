@@ -378,11 +378,15 @@ export async function PUT(request: NextRequest) {
         'lost': '❌ Deal marked as Lost',
         'open': '🔄 Deal reopened',
       };
-      await supabase.from('deal_activities').insert({
-        deal_id: id,
-        type: 'status_change',
-        description: statusMessages[updates.status] || `Status changed to ${updates.status}`,
-      }).catch(console.error);
+      try {
+        await supabase.from('deal_activities').insert({
+          deal_id: id,
+          type: 'status_change',
+          description: statusMessages[updates.status] || `Status changed to ${updates.status}`,
+        });
+      } catch (e) {
+        console.error('Failed to log status change activity:', e);
+      }
     }
 
     // 🔥 EMITIR EVENTO DE DEAL GANHO
