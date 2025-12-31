@@ -402,6 +402,31 @@ export default function ContactsPage() {
   const [importLoading, setImportLoading] = useState(false)
   const [importResult, setImportResult] = useState<{ success: number; errors: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Stats from API (accurate totals)
+  const [stats, setStats] = useState<{
+    totalContacts: number
+    newThisMonth: number
+    totalValue: number
+    withOrders: number
+  } | null>(null)
+  
+  // Fetch stats from API
+  useEffect(() => {
+    async function fetchStats() {
+      if (!user?.organization_id) return
+      try {
+        const res = await fetch(`/api/contacts/stats?organizationId=${user.organization_id}`)
+        if (res.ok) {
+          const data = await res.json()
+          setStats(data)
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error)
+      }
+    }
+    fetchStats()
+  }, [user?.organization_id, contacts]) // Refetch when contacts change
 
   // Update contact tags
   const handleUpdateTags = async (contactId: string, tags: string[]) => {
@@ -546,20 +571,10 @@ export default function ContactsPage() {
     setEditingContact(contact)
   }
 
-  // Stats
-  const totalContacts = pagination?.total || contacts.length
-  
-  // Count contacts created this month
-  const now = new Date()
-  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const newThisMonth = contacts.filter(c => {
-    if (!c.created_at) return false
-    return new Date(c.created_at) >= firstDayOfMonth
-  }).length
-  
-  const totalValue = contacts.reduce((sum, c) => 
-    sum + (parseFloat(c.total_spent) || 0), 0
-  )
+  // Stats - use API values (accurate) or pagination fallback
+  const totalContacts = stats?.totalContacts ?? pagination?.total ?? contacts.length
+  const newThisMonth = stats?.newThisMonth ?? 0
+  const totalValue = stats?.totalValue ?? 0
 
   return (
     <div className="space-y-6">
