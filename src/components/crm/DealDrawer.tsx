@@ -313,12 +313,12 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                 </label>
                 {isEditing ? (
                   <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { value: 'omit', label: 'Omitir', color: 'bg-dark-600', desc: 'Não incluir no forecast' },
-                      { value: 'pipeline', label: 'Pipeline', color: 'bg-yellow-500', desc: 'Deal padrão' },
-                      { value: 'best_case', label: 'Best Case', color: 'bg-blue-500', desc: 'Cenário otimista' },
-                      { value: 'commit', label: 'Commit', color: 'bg-green-500', desc: 'Praticamente garantido' },
-                    ].map((option) => (
+                    {([
+                      { value: 'omit' as const, label: 'Omitir', color: 'bg-dark-600', desc: 'Não incluir no forecast' },
+                      { value: 'pipeline' as const, label: 'Pipeline', color: 'bg-yellow-500', desc: 'Deal padrão' },
+                      { value: 'best_case' as const, label: 'Best Case', color: 'bg-blue-500', desc: 'Cenário otimista' },
+                      { value: 'commit' as const, label: 'Commit', color: 'bg-green-500', desc: 'Praticamente garantido' },
+                    ]).map((option) => (
                       <button
                         key={option.value}
                         type="button"

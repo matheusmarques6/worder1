@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  return createClient(url, key)
+}
 
 // GET - Fetch sales analytics data
 export async function GET(request: NextRequest) {
+  const supabase = getSupabase()
+  if (!supabase) {
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  }
+
   const searchParams = request.nextUrl.searchParams
   const organizationId = searchParams.get('organizationId')
   const period = searchParams.get('period') || '6months' // 30days, 3months, 6months, 12months, all

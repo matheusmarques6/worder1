@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  return createClient(url, key)
+}
 
 // GET - Get single contact
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const supabase = getSupabase()
+  if (!supabase) {
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  }
+
   const searchParams = request.nextUrl.searchParams
   const organizationId = searchParams.get('organizationId')
   const contactId = params.id
@@ -40,6 +47,11 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const supabase = getSupabase()
+  if (!supabase) {
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  }
+
   const contactId = params.id
   const body = await request.json()
   const { organizationId, ...updates } = body
@@ -113,6 +125,11 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const supabase = getSupabase()
+  if (!supabase) {
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  }
+
   const searchParams = request.nextUrl.searchParams
   const organizationId = searchParams.get('organizationId')
   const contactId = params.id
