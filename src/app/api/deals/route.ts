@@ -63,16 +63,16 @@ export async function GET(request: NextRequest) {
 
         if (stagesError) throw stagesError;
 
-        // Get deal counts per stage
-        const { data: dealCounts, error: countError } = await supabase
+        // Get deal counts per stage (only open deals)
+        const { data: dealCounts } = await supabase
           .from('deals')
-          .select('stage_id')
+          .select('stage_id, status')
           .eq('organization_id', organizationId);
 
-        // Count deals per stage
+        // Count only OPEN deals per stage
         const stageDealsMap: Record<string, number> = {};
         dealCounts?.forEach(deal => {
-          if (deal.stage_id) {
+          if (deal.stage_id && deal.status === 'open') {
             stageDealsMap[deal.stage_id] = (stageDealsMap[deal.stage_id] || 0) + 1;
           }
         });
@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
     if (stageIds.length > 0) {
       const { data: stages } = await supabase
         .from('pipeline_stages')
-        .select('id, name, color')
+        .select('id, name, color, probability, is_won, is_lost')
         .in('id', stageIds);
       
       stages?.forEach(s => {
@@ -259,12 +259,74 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ pipeline: data });
     }
 
-    // Update deal
-    const previousDeal = await supabase
+    // ==========================================
+    // UPDATE DEAL - Com auto won_at/lost_at
+    // ==========================================
+    
+    // Get previous deal state
+    const { data: previousDeal } = await supabase
       .from('deals')
-      .select('stage_id, value')
+      .select('stage_id, value, status')
       .eq('id', id)
       .single();
+
+    // ==========================================
+    // AUTO-SET won_at/lost_at WHEN STATUS CHANGES
+    // ==========================================
+    if (updates.status) {
+      if (updates.status === 'won' && previousDeal?.status !== 'won') {
+        updates.won_at = updates.won_at || new Date().toISOString();
+        updates.lost_at = null;
+        if (updates.probability === undefined) updates.probability = 100;
+      } else if (updates.status === 'lost' && previousDeal?.status !== 'lost') {
+        updates.lost_at = updates.lost_at || new Date().toISOString();
+        updates.won_at = null;
+        if (updates.probability === undefined) updates.probability = 0;
+      } else if (updates.status === 'open') {
+        // Reopening deal
+        updates.won_at = null;
+        updates.lost_at = null;
+      }
+    }
+
+    // ==========================================
+    // AUTO-UPDATE STATUS WHEN STAGE is_won/is_lost
+    // ==========================================
+    if (updates.stage_id && updates.stage_id !== previousDeal?.stage_id) {
+      // Get new stage info
+      const { data: newStage } = await supabase
+        .from('pipeline_stages')
+        .select('is_won, is_lost, probability')
+        .eq('id', updates.stage_id)
+        .single();
+
+      if (newStage) {
+        // If moving to a "won" stage
+        if (newStage.is_won && previousDeal?.status !== 'won') {
+          updates.status = 'won';
+          updates.won_at = new Date().toISOString();
+          updates.lost_at = null;
+          updates.probability = 100;
+        }
+        // If moving to a "lost" stage
+        else if (newStage.is_lost && previousDeal?.status !== 'lost') {
+          updates.status = 'lost';
+          updates.lost_at = new Date().toISOString();
+          updates.won_at = null;
+          updates.probability = 0;
+        }
+        // If moving from won/lost to a regular stage, reopen
+        else if (!newStage.is_won && !newStage.is_lost && (previousDeal?.status === 'won' || previousDeal?.status === 'lost')) {
+          updates.status = 'open';
+          updates.won_at = null;
+          updates.lost_at = null;
+          // Inherit stage probability
+          if (newStage.probability !== undefined && updates.probability === undefined) {
+            updates.probability = newStage.probability;
+          }
+        }
+      }
+    }
 
     const { data, error } = await supabase
       .from('deals')
@@ -277,14 +339,14 @@ export async function PUT(request: NextRequest) {
       .select(`
         *,
         contact:contacts(id, email, first_name, last_name, avatar_url),
-        stage:pipeline_stages(id, name, color)
+        stage:pipeline_stages(id, name, color, probability, is_won, is_lost)
       `)
       .single();
 
     if (error) throw error;
 
     // Log activity if stage changed
-    if (updates.stage_id && updates.stage_id !== previousDeal.data?.stage_id) {
+    if (updates.stage_id && updates.stage_id !== previousDeal?.stage_id) {
       await supabase.from('deal_activities').insert({
         deal_id: id,
         type: 'stage_change',
@@ -298,7 +360,7 @@ export async function PUT(request: NextRequest) {
         contact_id: data.contact_id,
         email: data.contact?.email,
         data: {
-          from_stage_id: previousDeal.data?.stage_id,
+          from_stage_id: previousDeal?.stage_id,
           to_stage_id: updates.stage_id,
           to_stage_name: data.stage?.name,
           deal_title: data.title,
@@ -309,8 +371,22 @@ export async function PUT(request: NextRequest) {
       }).catch(console.error);
     }
 
+    // Log activity if status changed
+    if (updates.status && updates.status !== previousDeal?.status) {
+      const statusMessages: Record<string, string> = {
+        'won': '🎉 Deal marked as Won',
+        'lost': '❌ Deal marked as Lost',
+        'open': '🔄 Deal reopened',
+      };
+      await supabase.from('deal_activities').insert({
+        deal_id: id,
+        type: 'status_change',
+        description: statusMessages[updates.status] || `Status changed to ${updates.status}`,
+      }).catch(console.error);
+    }
+
     // 🔥 EMITIR EVENTO DE DEAL GANHO
-    if (updates.status === 'won') {
+    if (updates.status === 'won' && previousDeal?.status !== 'won') {
       EventBus.emit(EventType.DEAL_WON, {
         organization_id: organizationId,
         deal_id: id,
@@ -320,14 +396,15 @@ export async function PUT(request: NextRequest) {
           deal_title: data.title,
           deal_value: data.value,
           pipeline_id: data.pipeline_id,
-          won_at: new Date().toISOString(),
+          stage_id: data.stage_id,
+          won_at: data.won_at,
         },
         source: 'crm',
       }).catch(console.error);
     }
 
     // 🔥 EMITIR EVENTO DE DEAL PERDIDO
-    if (updates.status === 'lost') {
+    if (updates.status === 'lost' && previousDeal?.status !== 'lost') {
       EventBus.emit(EventType.DEAL_LOST, {
         organization_id: organizationId,
         deal_id: id,
@@ -336,37 +413,9 @@ export async function PUT(request: NextRequest) {
         data: {
           deal_title: data.title,
           deal_value: data.value,
-          lost_reason: updates.lost_reason,
           pipeline_id: data.pipeline_id,
-        },
-        source: 'crm',
-      }).catch(console.error);
-    }
-
-    // 🔥 EMITIR EVENTO DE VALOR ALTERADO
-    if (updates.value && updates.value !== previousDeal.data?.value) {
-      EventBus.emit(EventType.DEAL_VALUE_CHANGED, {
-        organization_id: organizationId,
-        deal_id: id,
-        contact_id: data.contact_id,
-        data: {
-          old_value: previousDeal.data?.value,
-          new_value: updates.value,
-          deal_title: data.title,
-        },
-        source: 'crm',
-      }).catch(console.error);
-    }
-
-    // 🔥 EMITIR EVENTO DE DEAL ATRIBUÍDO
-    if (updates.assigned_to) {
-      EventBus.emit(EventType.DEAL_ASSIGNED, {
-        organization_id: organizationId,
-        deal_id: id,
-        contact_id: data.contact_id,
-        data: {
-          assigned_to: updates.assigned_to,
-          deal_title: data.title,
+          stage_id: data.stage_id,
+          lost_at: data.lost_at,
         },
         source: 'crm',
       }).catch(console.error);
@@ -409,6 +458,9 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
+// ==========================================
+// CREATE PIPELINE - Com stages padrão completos
+// ==========================================
 async function createPipeline({
   organizationId,
   name,
@@ -420,7 +472,7 @@ async function createPipeline({
   name: string;
   description?: string;
   color?: string;
-  stages?: { name: string; color: string }[];
+  stages?: { name: string; color: string; probability?: number; is_won?: boolean; is_lost?: boolean }[];
 }) {
   // Get max position
   const { data: existingPipelines } = await supabase
@@ -446,25 +498,30 @@ async function createPipeline({
 
   if (error) throw error;
 
-  // Create default stages if provided
+  // Create custom stages if provided
   if (stages && stages.length > 0) {
     const stageInserts = stages.map((stage, index) => ({
       pipeline_id: pipeline.id,
       name: stage.name,
       color: stage.color,
       position: index,
+      probability: stage.probability ?? 50,
+      is_won: stage.is_won ?? false,
+      is_lost: stage.is_lost ?? false,
     }));
 
     await supabase.from('pipeline_stages').insert(stageInserts);
   } else {
-    // Create default stages
+    // ==========================================
+    // DEFAULT STAGES - Com probability e flags
+    // ==========================================
     const defaultStages = [
-      { name: 'Lead', color: '#6366f1' },
-      { name: 'Qualified', color: '#8b5cf6' },
-      { name: 'Proposal', color: '#a855f7' },
-      { name: 'Negotiation', color: '#f59e0b' },
-      { name: 'Closed Won', color: '#22c55e' },
-      { name: 'Closed Lost', color: '#ef4444' },
+      { name: 'Lead', color: '#6366f1', probability: 10, is_won: false, is_lost: false },
+      { name: 'Qualificado', color: '#8b5cf6', probability: 25, is_won: false, is_lost: false },
+      { name: 'Proposta', color: '#a855f7', probability: 50, is_won: false, is_lost: false },
+      { name: 'Negociação', color: '#f59e0b', probability: 75, is_won: false, is_lost: false },
+      { name: 'Ganho', color: '#22c55e', probability: 100, is_won: true, is_lost: false },
+      { name: 'Perdido', color: '#ef4444', probability: 0, is_won: false, is_lost: true },
     ];
 
     const stageInserts = defaultStages.map((stage, index) => ({
@@ -472,6 +529,9 @@ async function createPipeline({
       name: stage.name,
       color: stage.color,
       position: index,
+      probability: stage.probability,
+      is_won: stage.is_won,
+      is_lost: stage.is_lost,
     }));
 
     await supabase.from('pipeline_stages').insert(stageInserts);
@@ -502,10 +562,16 @@ async function createStage({
   pipelineId,
   name,
   color,
+  probability,
+  is_won,
+  is_lost,
 }: {
   pipelineId: string;
   name: string;
   color: string;
+  probability?: number;
+  is_won?: boolean;
+  is_lost?: boolean;
 }) {
   // Get max position
   const { data: existingStages } = await supabase
@@ -524,6 +590,9 @@ async function createStage({
       name,
       color,
       position,
+      probability: probability ?? 50,
+      is_won: is_won ?? false,
+      is_lost: is_lost ?? false,
     })
     .select()
     .single();
@@ -551,6 +620,7 @@ async function createDeal({
   assignedTo,
   assigned_to,
   probability,
+  commit_level,
 }: {
   organizationId?: string;
   organization_id?: string;
@@ -569,6 +639,7 @@ async function createDeal({
   assignedTo?: string;
   assigned_to?: string;
   probability?: number;
+  commit_level?: string;
 }) {
   // Support both camelCase and snake_case
   const orgId = organizationId || organization_id;
@@ -580,6 +651,17 @@ async function createDeal({
 
   if (!orgId || !pplId || !stgId) {
     throw new Error('organizationId, pipelineId and stageId are required');
+  }
+
+  // Get stage info to inherit probability
+  let dealProbability = probability;
+  if (dealProbability === undefined) {
+    const { data: stageInfo } = await supabase
+      .from('pipeline_stages')
+      .select('probability')
+      .eq('id', stgId)
+      .single();
+    dealProbability = stageInfo?.probability ?? 50;
   }
 
   // Get max position in stage
@@ -602,19 +684,20 @@ async function createDeal({
       title,
       value: value || 0,
       currency: currency || 'BRL',
-      probability: probability || 50,
+      probability: dealProbability,
       expected_close_date: expDate,
       description,
       assigned_to: assignTo,
       position,
       status: 'open',
+      commit_level: commit_level || 'pipeline',
       tags: [],
       custom_fields: {},
     })
     .select(`
       *,
       contact:contacts(id, email, first_name, last_name, avatar_url, company),
-      stage:pipeline_stages(id, name, color)
+      stage:pipeline_stages(id, name, color, probability)
     `)
     .single();
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Trash2 } from 'lucide-react'
+import { X, Trash2, Trophy, XCircle, AlertTriangle } from 'lucide-react'
 import type { PipelineStage } from '@/types'
 
 interface EditStageModalProps {
@@ -10,7 +10,7 @@ interface EditStageModalProps {
   stage: PipelineStage | null
   totalStages: number
   onClose: () => void
-  onSave: (stageId: string, data: { name: string; color: string; probability?: number }) => Promise<void>
+  onSave: (stageId: string, data: { name: string; color: string; probability?: number; is_won?: boolean; is_lost?: boolean }) => Promise<void>
   onDelete: (stageId: string) => Promise<void>
 }
 
@@ -32,6 +32,8 @@ export function EditStageModal({
   const [name, setName] = useState('')
   const [color, setColor] = useState('#f97316')
   const [probability, setProbability] = useState(50)
+  const [isWon, setIsWon] = useState(false)
+  const [isLost, setIsLost] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -40,9 +42,28 @@ export function EditStageModal({
       setName(stage.name)
       setColor(stage.color)
       setProbability(stage.probability ?? 50)
+      setIsWon(stage.is_won ?? false)
+      setIsLost(stage.is_lost ?? false)
       setError(null)
     }
   }, [stage, isOpen])
+
+  // Auto-adjust probability when is_won/is_lost changes
+  const handleIsWonChange = (checked: boolean) => {
+    setIsWon(checked)
+    if (checked) {
+      setIsLost(false)
+      setProbability(100)
+    }
+  }
+
+  const handleIsLostChange = (checked: boolean) => {
+    setIsLost(checked)
+    if (checked) {
+      setIsWon(false)
+      setProbability(0)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,7 +79,7 @@ export function EditStageModal({
     setError(null)
 
     try {
-      await onSave(stage.id, { name, color, probability })
+      await onSave(stage.id, { name, color, probability, is_won: isWon, is_lost: isLost })
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar estágio')
@@ -210,7 +231,8 @@ export function EditStageModal({
                           step="5"
                           value={probability}
                           onChange={(e) => setProbability(Number(e.target.value))}
-                          className="flex-1 h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                          disabled={isWon || isLost}
+                          className="flex-1 h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500 disabled:opacity-50"
                         />
                         <div className="flex items-center gap-1 min-w-[60px]">
                           <input
@@ -219,7 +241,8 @@ export function EditStageModal({
                             max="100"
                             value={probability}
                             onChange={(e) => setProbability(Math.min(100, Math.max(0, Number(e.target.value))))}
-                            className="w-14 px-2 py-1 bg-dark-800 border border-dark-700 rounded-lg text-white text-center text-sm focus:outline-none focus:border-primary-500"
+                            disabled={isWon || isLost}
+                            className="w-14 px-2 py-1 bg-dark-800 border border-dark-700 rounded-lg text-white text-center text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50"
                           />
                           <span className="text-dark-400 text-sm">%</span>
                         </div>
@@ -233,6 +256,75 @@ export function EditStageModal({
                     <p className="text-xs text-dark-500 mt-2">
                       Usado para calcular o valor ponderado do pipeline (Forecast)
                     </p>
+                  </div>
+
+                  {/* ==========================================
+                      STAGE TYPE - Is Won / Is Lost
+                      ========================================== */}
+                  <div className="pt-4 border-t border-dark-700">
+                    <label className="block text-sm font-medium text-dark-300 mb-3">
+                      Tipo de Estágio (Automação)
+                    </label>
+                    
+                    <div className="space-y-3">
+                      {/* Is Won */}
+                      <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        isWon 
+                          ? 'border-green-500/50 bg-green-500/10' 
+                          : 'border-dark-700 bg-dark-800/30 hover:border-dark-600'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={isWon}
+                          onChange={(e) => handleIsWonChange(e.target.checked)}
+                          className="w-5 h-5 rounded border-dark-600 bg-dark-700 text-green-500 focus:ring-green-500 focus:ring-offset-dark-900"
+                        />
+                        <Trophy className={`w-5 h-5 ${isWon ? 'text-green-400' : 'text-dark-500'}`} />
+                        <div className="flex-1">
+                          <span className={`font-medium ${isWon ? 'text-green-400' : 'text-white'}`}>
+                            Estágio de Ganho
+                          </span>
+                          <p className="text-xs text-dark-400 mt-0.5">
+                            Deals movidos para cá serão marcados como "Ganho" automaticamente
+                          </p>
+                        </div>
+                      </label>
+
+                      {/* Is Lost */}
+                      <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        isLost 
+                          ? 'border-red-500/50 bg-red-500/10' 
+                          : 'border-dark-700 bg-dark-800/30 hover:border-dark-600'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={isLost}
+                          onChange={(e) => handleIsLostChange(e.target.checked)}
+                          className="w-5 h-5 rounded border-dark-600 bg-dark-700 text-red-500 focus:ring-red-500 focus:ring-offset-dark-900"
+                        />
+                        <XCircle className={`w-5 h-5 ${isLost ? 'text-red-400' : 'text-dark-500'}`} />
+                        <div className="flex-1">
+                          <span className={`font-medium ${isLost ? 'text-red-400' : 'text-white'}`}>
+                            Estágio de Perda
+                          </span>
+                          <p className="text-xs text-dark-400 mt-0.5">
+                            Deals movidos para cá serão marcados como "Perdido" automaticamente
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {(isWon || isLost) && (
+                      <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-300">
+                          {isWon 
+                            ? 'Quando um deal for movido para este estágio, ele será automaticamente marcado como "Ganho" com a data de hoje.'
+                            : 'Quando um deal for movido para este estágio, ele será automaticamente marcado como "Perdido" com a data de hoje.'
+                          }
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Stage Info */}

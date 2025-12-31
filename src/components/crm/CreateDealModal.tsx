@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Calendar } from 'lucide-react'
+import { X, Calendar, Info } from 'lucide-react'
 import { ContactSelector } from './ContactSelector'
 import type { PipelineStage, CreateDealData } from '@/types'
 
@@ -23,12 +23,19 @@ export function CreateDealModal({
   onClose,
   onCreate,
 }: CreateDealModalProps) {
+  // Get initial stage probability
+  const getStageProb = (sId: string) => {
+    const s = stages.find(st => st.id === sId)
+    return s?.probability ?? 50
+  }
+
   const [formData, setFormData] = useState<CreateDealData>({
     title: '',
     value: 0,
-    probability: 50,
+    probability: getStageProb(stageId),
     stage_id: stageId,
     pipeline_id: pipelineId,
+    commit_level: 'pipeline',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -36,16 +43,28 @@ export function CreateDealModal({
   // Reset form when modal opens with new stageId
   useEffect(() => {
     if (isOpen) {
+      const initialStage = stages.find(s => s.id === stageId)
       setFormData({
         title: '',
         value: 0,
-        probability: 50,
+        probability: initialStage?.probability ?? 50,
         stage_id: stageId,
         pipeline_id: pipelineId,
+        commit_level: 'pipeline',
       })
       setError(null)
     }
-  }, [isOpen, stageId, pipelineId])
+  }, [isOpen, stageId, pipelineId, stages])
+
+  // Handle stage change - inherit probability
+  const handleStageChange = (newStageId: string) => {
+    const newStage = stages.find(s => s.id === newStageId)
+    setFormData({ 
+      ...formData, 
+      stage_id: newStageId,
+      probability: newStage?.probability ?? formData.probability,
+    })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,6 +93,9 @@ export function CreateDealModal({
     }
   }
 
+  // Get current stage info
+  const currentStage = stages.find(s => s.id === formData.stage_id)
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -98,7 +120,15 @@ export function CreateDealModal({
               <form onSubmit={handleSubmit}>
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-dark-700">
-                  <h2 className="text-lg font-semibold text-white">Novo Deal</h2>
+                  <div className="flex items-center gap-3">
+                    {currentStage && (
+                      <div 
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: currentStage.color }}
+                      />
+                    )}
+                    <h2 className="text-lg font-semibold text-white">Novo Deal</h2>
+                  </div>
                   <button
                     type="button"
                     onClick={handleClose}
@@ -134,22 +164,39 @@ export function CreateDealModal({
                     />
                   </div>
 
-                  {/* Stage */}
+                  {/* Stage - Visual selector */}
                   <div>
                     <label className="block text-sm font-medium text-dark-300 mb-2">
                       Estágio
                     </label>
-                    <select
-                      value={formData.stage_id}
-                      onChange={(e) => setFormData({ ...formData, stage_id: e.target.value })}
-                      className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 appearance-none cursor-pointer transition-colors"
-                    >
-                      {stages.map((stage) => (
-                        <option key={stage.id} value={stage.id} className="bg-dark-800">
+                    <div className="flex flex-wrap gap-2">
+                      {stages.filter(s => !s.is_won && !s.is_lost).map((stage) => (
+                        <button
+                          key={stage.id}
+                          type="button"
+                          onClick={() => handleStageChange(stage.id)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                            formData.stage_id === stage.id
+                              ? 'text-white shadow-lg'
+                              : 'bg-dark-800/50 text-dark-400 hover:bg-dark-700/50'
+                          }`}
+                          style={
+                            formData.stage_id === stage.id
+                              ? { backgroundColor: stage.color }
+                              : undefined
+                          }
+                        >
                           {stage.name}
-                        </option>
+                          <span className="ml-1 opacity-70">({stage.probability ?? 50}%)</span>
+                        </button>
                       ))}
-                    </select>
+                    </div>
+                    {(currentStage?.is_won || currentStage?.is_lost) && (
+                      <p className="text-xs text-amber-400 mt-2 flex items-center gap-1">
+                        <Info className="w-3 h-3" />
+                        Deals novos não podem ser criados em estágios de ganho/perda
+                      </p>
+                    )}
                   </div>
 
                   {/* Value & Probability */}
@@ -174,6 +221,7 @@ export function CreateDealModal({
                     <div>
                       <label className="block text-sm font-medium text-dark-300 mb-2">
                         Probabilidade
+                        <span className="ml-1 text-xs text-dark-500">(do estágio)</span>
                       </label>
                       <div className="relative">
                         <input
@@ -187,6 +235,35 @@ export function CreateDealModal({
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-500">%</span>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Commit Level */}
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                      Nível de Comprometimento (Forecast)
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {([
+                        { value: 'omit', label: 'Omitir', color: 'bg-dark-600' },
+                        { value: 'pipeline', label: 'Pipeline', color: 'bg-yellow-500' },
+                        { value: 'best_case', label: 'Best Case', color: 'bg-blue-500' },
+                        { value: 'commit', label: 'Commit', color: 'bg-green-500' },
+                      ] as const).map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, commit_level: option.value })}
+                          className={`p-2 rounded-lg border text-center transition-all ${
+                            formData.commit_level === option.value
+                              ? 'border-primary-500 bg-primary-500/10'
+                              : 'border-dark-700 bg-dark-800/50 hover:border-dark-600'
+                          }`}
+                        >
+                          <div className={`w-2 h-2 rounded-full ${option.color} mx-auto mb-1`} />
+                          <span className="text-xs text-white">{option.label}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
 

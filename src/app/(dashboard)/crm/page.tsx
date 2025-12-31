@@ -378,6 +378,7 @@ export default function CRMPage() {
     minValue: '',
     maxValue: '',
     hasContact: 'all' as 'all' | 'yes' | 'no',
+    status: 'open' as 'all' | 'open' | 'won' | 'lost', // Default: só deals abertos
   })
 
   // Set active pipeline when pipelines load
@@ -399,6 +400,11 @@ export default function CRMPage() {
   // Get deals for a specific stage with search and filters
   const getStageDeals = useCallback((stageId: string) => {
     let filteredDeals = deals.filter(deal => deal.stage_id === stageId)
+    
+    // Apply status filter (default: only open deals in Kanban)
+    if (filters.status !== 'all') {
+      filteredDeals = filteredDeals.filter(deal => deal.status === filters.status)
+    }
     
     // Apply search filter
     if (searchQuery.trim()) {
@@ -438,12 +444,12 @@ export default function CRMPage() {
     return filteredDeals
   }, [deals, searchQuery, filters])
   
-  // Check if any filters are active
-  const hasActiveFilters = filters.minValue || filters.maxValue || filters.hasContact !== 'all'
+  // Check if any filters are active (besides default status='open')
+  const hasActiveFilters = filters.minValue || filters.maxValue || filters.hasContact !== 'all' || filters.status !== 'open'
   
   // Clear all filters
   const clearFilters = () => {
-    setFilters({ minValue: '', maxValue: '', hasContact: 'all' })
+    setFilters({ minValue: '', maxValue: '', hasContact: 'all', status: 'open' })
     setSearchQuery('')
   }
 
@@ -762,6 +768,33 @@ export default function CRMPage() {
                   
                   {/* Filters Content */}
                   <div className="p-5 space-y-5">
+                    {/* Status Filter */}
+                    <div>
+                      <label className="flex items-center gap-2 text-xs font-medium text-dark-300 mb-3">
+                        📊 Status do Deal
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[
+                          { value: 'open', label: 'Abertos', color: 'bg-yellow-500' },
+                          { value: 'won', label: 'Ganhos', color: 'bg-green-500' },
+                          { value: 'lost', label: 'Perdidos', color: 'bg-red-500' },
+                          { value: 'all', label: 'Todos', color: 'bg-dark-500' },
+                        ].map(option => (
+                          <button
+                            key={option.value}
+                            onClick={() => setFilters(f => ({ ...f, status: option.value as any }))}
+                            className={`px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                              filters.status === option.value
+                                ? `${option.color} text-white shadow-lg`
+                                : 'bg-dark-900/80 text-dark-400 border border-dark-600/50 hover:border-dark-500 hover:text-dark-300'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
                     {/* Value Range */}
                     <div>
                       <label className="flex items-center gap-2 text-xs font-medium text-dark-300 mb-3">
