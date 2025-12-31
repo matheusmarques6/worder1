@@ -281,6 +281,7 @@ export interface CreateDealData {
   pipeline_id: string;
   notes?: string;
   tags?: string[];
+  commit_level?: 'omit' | 'pipeline' | 'best_case' | 'commit';
 }
 
 export interface UpdateDealData {
