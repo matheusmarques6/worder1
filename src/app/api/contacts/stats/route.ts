@@ -3,6 +3,7 @@
 // src/app/api/contacts/stats/route.ts
 //
 // GET: Estatísticas dos contatos (total, novos, valor)
+// CORRIGIDO: Usa RPC para agregação no banco (sem limite de 1000)
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -47,20 +48,44 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId)
       .gte('created_at', firstDayOfMonth);
 
-    // Valor total (soma de total_spent)
-    const { data: valueData } = await supabase
-      .from('contacts')
-      .select('total_spent')
-      .eq('organization_id', organizationId);
-
-    const totalValue = valueData?.reduce((sum, c) => sum + (Number(c.total_spent) || 0), 0) || 0;
-
     // Contatos com compras
     const { count: withOrders } = await supabase
       .from('contacts')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', organizationId)
       .gt('total_orders', 0);
+
+    // Valor total - usar RPC para agregação no banco (sem limite de 1000)
+    let totalValue = 0;
+    
+    // Tentar usar RPC primeiro
+    const { data: rpcData, error: rpcError } = await supabase
+      .rpc('get_contacts_total_spent', { p_organization_id: organizationId });
+    
+    if (!rpcError && rpcData !== null) {
+      totalValue = Number(rpcData) || 0;
+    } else {
+      // Fallback: buscar em lotes para contornar limite de 1000
+      let offset = 0;
+      const batchSize = 1000;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data: batchData } = await supabase
+          .from('contacts')
+          .select('total_spent')
+          .eq('organization_id', organizationId)
+          .range(offset, offset + batchSize - 1);
+        
+        if (batchData && batchData.length > 0) {
+          totalValue += batchData.reduce((sum, c) => sum + (Number(c.total_spent) || 0), 0);
+          offset += batchSize;
+          hasMore = batchData.length === batchSize;
+        } else {
+          hasMore = false;
+        }
+      }
+    }
 
     // Valor médio por contato
     const avgValue = totalContacts && totalContacts > 0 ? totalValue / totalContacts : 0;
