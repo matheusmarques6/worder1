@@ -360,7 +360,7 @@ export default function CRMPage() {
     refetch,
     refetchPipelines
   } = useDeals()
-  const { createPipeline: createPipelineHook, updatePipeline, deletePipeline: deletePipelineHook, updateStage, deleteStage } = usePipelines()
+  const { createPipeline: createPipelineHook, updatePipeline, deletePipeline: deletePipelineHook, createStage, updateStage, deleteStage } = usePipelines()
   
   const [activePipeline, setActivePipeline] = useState<Pipeline | null>(null)
   const [showPipelineDropdown, setShowPipelineDropdown] = useState(false)
@@ -489,14 +489,40 @@ export default function CRMPage() {
     setShowPipelineDropdown(false)
   }
 
-  const handleCreatePipeline = async (data: { name: string; description?: string; color?: string; stages: { name: string; color: string; position: number }[] }) => {
+  const handleCreatePipeline = async (data: { name: string; description?: string; color?: string; stages: { id?: string; name: string; color: string; position: number }[] }) => {
     if (editingPipeline) {
-      // Ao editar, não podemos enviar stages diretamente - stages é uma tabela separada
-      const { stages, ...pipelineData } = data
+      // Atualizar pipeline
+      const { stages: newStages, ...pipelineData } = data
       await updatePipeline(editingPipeline.id, pipelineData)
       
-      // Se precisar atualizar stages, fazer separadamente
-      // Por enquanto, stages só são gerenciados na criação
+      // Atualizar estágios
+      const existingStageIds = editingPipeline.stages?.map(s => s.id) || []
+      const newStageIds = newStages.filter(s => s.id).map(s => s.id!)
+      
+      // 1. Deletar estágios removidos
+      for (const existingId of existingStageIds) {
+        if (!newStageIds.includes(existingId)) {
+          await deleteStage(existingId)
+        }
+      }
+      
+      // 2. Atualizar/Criar estágios
+      for (const stage of newStages) {
+        if (stage.id && existingStageIds.includes(stage.id)) {
+          // Atualizar existente
+          await updateStage(stage.id, { 
+            name: stage.name, 
+            color: stage.color, 
+            position: stage.position 
+          })
+        } else {
+          // Criar novo
+          await createStage(editingPipeline.id, { 
+            name: stage.name, 
+            color: stage.color 
+          })
+        }
+      }
     } else {
       await createPipelineHook(data)
     }
