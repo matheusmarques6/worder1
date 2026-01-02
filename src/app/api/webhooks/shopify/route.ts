@@ -128,19 +128,34 @@ async function processCustomerCreated(store: ShopifyStoreConfig, customer: any) 
     'customer'
   );
   
-  // Criar deal se pipeline configurado
-  if (store.default_pipeline_id && contact) {
-    await createOrUpdateDealForContact(
-      contact.id,
-      store,
-      'new_customer',
-      0,
-      {
-        shopify_customer_id: customer.id,
-        source: 'customer_created',
-      }
-    );
+  if (!contact) {
+    console.log('[Shopify] Failed to create contact, skipping automation');
+    return;
   }
+
+  // ======================================
+  // EXECUTAR REGRAS DE AUTOMAÇÃO
+  // ======================================
+  const automationResult = await executeAutomationRules(
+    store.organization_id,
+    'shopify',
+    'customer_created',
+    contact.id,
+    {
+      customer_id: String(customer.id),
+      customer_email: customer.email,
+      customer_name: `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
+      customer: customer,
+      total_price: 0, // Novo cliente não tem valor ainda
+      tags: customer.tags,
+      accepts_marketing: customer.accepts_marketing,
+    }
+  );
+
+  console.log(`[Shopify] Automation result for customer_created:`, automationResult);
+
+  // NOTA: Removido createOrUpdateDealForContact automático para novos clientes
+  // Deals são criados apenas via regras de automação ou quando há pedido
 
   // Emitir evento para automações
   await EventBus.emit(EventType.CONTACT_CREATED, {
@@ -246,26 +261,11 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
       .eq('shopify_checkout_id', String(order.checkout_id));
   }
   
-  // Criar/atualizar deal na pipeline
-  if (store.default_pipeline_id) {
-    await createOrUpdateDealForContact(
-      contact.id,
-      store,
-      'new_order',
-      orderValue,
-      {
-        shopify_order_id: order.id,
-        order_number: order.order_number,
-        financial_status: order.financial_status,
-        fulfillment_status: order.fulfillment_status,
-        line_items_count: order.line_items?.length || 0,
-      }
-    );
-  }
-  
   // ======================================
   // EXECUTAR REGRAS DE AUTOMAÇÃO
   // ======================================
+  // NOTA: Removido createOrUpdateDealForContact duplicado
+  // Agora só usa as regras de automação para criar deals
   const automationResult = await executeAutomationRules(
     store.organization_id,
     'shopify',
@@ -285,6 +285,24 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   );
   
   console.log(`[Shopify] Automation result for order_created:`, automationResult);
+  
+  // FALLBACK: Se nenhuma regra criou deal e tem pipeline padrão configurado
+  if (automationResult.dealsCreated === 0 && store.default_pipeline_id) {
+    console.log(`[Shopify] No automation rules matched, using default pipeline fallback`);
+    await createOrUpdateDealForContact(
+      contact.id,
+      store,
+      'new_order',
+      orderValue,
+      {
+        shopify_order_id: order.id,
+        order_number: order.order_number,
+        financial_status: order.financial_status,
+        fulfillment_status: order.fulfillment_status,
+        line_items_count: order.line_items?.length || 0,
+      }
+    );
+  }
 
   // ======================================
   // TRACKING: Registrar atividade e enriquecer contato

@@ -167,7 +167,22 @@ function checkFilters(rule: AutomationRule, eventData: EventData): boolean {
 // =============================================
 
 function generateDealTitle(template: string | null, eventData: EventData, defaultTitle: string): string {
-  if (!template) return defaultTitle;
+  // Se não tem template, gerar título inteligente baseado nos dados
+  if (!template) {
+    const customerName = eventData.customer_name || eventData.customer?.first_name || 'Cliente';
+    
+    // Se tem número do pedido, usar formato "Pedido #123 - Nome"
+    if (eventData.order_number) {
+      return `Pedido #${eventData.order_number} - ${customerName}`;
+    }
+    
+    // Se tem valor, incluir no título
+    if (eventData.total_price && eventData.total_price > 0) {
+      return `${customerName} - R$ ${eventData.total_price.toFixed(2)}`;
+    }
+    
+    return defaultTitle;
+  }
   
   let title = template;
   
