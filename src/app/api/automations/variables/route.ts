@@ -1,10 +1,10 @@
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 // =============================================
 // WORDER: API do Catálogo de Variáveis
 // /src/app/api/automations/variables/route.ts
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { 
   generateVariableCatalog, 
   createSampleContext,
@@ -14,15 +14,8 @@ import {
 } from '@/lib/automation/variables';
 
 // Lazy client
-let _supabase: any = null;
 function getSupabase() {
-  if (!_supabase) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) throw new Error('Supabase not configured');
-    _supabase = createClient(url, key);
-  }
-  return _supabase;
+  return getSupabaseAdmin();
 }
 
 // =============================================
