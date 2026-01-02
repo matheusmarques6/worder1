@@ -3,7 +3,8 @@
 // src/lib/services/integration-health/health-checker.ts
 // =============================================
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { ShopifyHealthChecker } from './checkers/shopify';
 import { WhatsAppHealthChecker } from './checkers/whatsapp';
 import { NotificationService } from './notifier';
@@ -52,10 +53,7 @@ export class IntegrationHealthService {
   private readonly notifier: NotificationService;
   
   constructor(supabaseClient?: SupabaseClient) {
-    this.supabase = supabaseClient ?? createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    this.supabase = supabaseClient ?? getSupabaseAdmin();
     this.notifier = new NotificationService(this.supabase);
   }
   

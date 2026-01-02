@@ -21,8 +21,7 @@ import type {
 } from './types';
 
 // Supabase client getter para evitar problemas de inicialização
-function getSupabase(): SupabaseClient {
-      
+function getSupabase() {
   return getSupabaseAdmin();
 }
 

@@ -3,9 +3,9 @@
 // Helper para ser usado no webhook do WhatsApp
 // =====================================================
 
-import { createClient } from '@supabase/supabase-js'
 import { createAgentEngine } from './engine'
 import { EngineMessage, EngineResponse } from './types'
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 // =====================================================
 // TIPOS
@@ -185,14 +185,7 @@ export async function processWhatsAppWithAgent(
 // =====================================================
 
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url || !key) {
-    throw new Error('Supabase não configurado')
-  }
-
-  return createClient(url, key)
+  return getSupabaseAdmin()
 }
 
 /**

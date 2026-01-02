@@ -1,12 +1,87 @@
 import { NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+
+// =============================================
+// TIPOS
+// =============================================
+
+export interface AuthResult {
+  supabase: SupabaseClient;
+  user: {
+    id: string;
+    email: string;
+    organization_id: string;
+    role?: string;
+  };
+}
+
+// =============================================
+// CLIENTE AUTENTICADO (RLS) - NOVO! USE ESTE!
+// =============================================
+
+/**
+ * Retorna cliente Supabase autenticado + dados do usuário.
+ * RLS é aplicado automaticamente baseado no organization_id.
+ */
+export async function getAuthClient(): Promise<AuthResult | null> {
+  try {
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      return null;
+    }
+    
+    // Buscar dados do perfil
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id, role')
+      .eq('id', user.id)
+      .single();
+    
+    if (!profile?.organization_id) {
+      console.error('[Auth] User has no organization:', user.id);
+      return null;
+    }
+    
+    return {
+      supabase,
+      user: {
+        id: user.id,
+        email: user.email || '',
+        organization_id: profile.organization_id,
+        role: profile.role,
+      },
+    };
+  } catch (error) {
+    console.error('[Auth] Error:', error);
+    return null;
+  }
+}
+
+/**
+ * Helper para respostas de erro de autenticação
+ */
+export function authError(message: string = 'Unauthorized', status: number = 401) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+// =============================================
+// CLIENTE ADMIN (SERVICE_ROLE) - LEGADO
+// Use APENAS para webhooks, cron jobs, etc
+// =============================================
 
 // Singleton Supabase client for API routes
 let supabaseClient: SupabaseClient | null = null;
 
 /**
- * Get or create Supabase admin client for API routes.
- * Returns null if environment variables are not configured.
+ * @deprecated Para APIs normais, use getAuthClient() que respeita RLS.
+ * Este método usa SERVICE_ROLE_KEY e bypassa RLS.
+ * Manter apenas para webhooks, cron jobs, e endpoints que precisam de acesso admin.
  */
 export function getSupabaseClient(): SupabaseClient | null {
   if (!supabaseClient) {

@@ -16,8 +16,7 @@ import type {
 } from './types';
 
 // Supabase client getter
-function getSupabase(): SupabaseClient {
-      
+function getSupabase() {
   return getSupabaseAdmin();
 }
 

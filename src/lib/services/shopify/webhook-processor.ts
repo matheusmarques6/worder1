@@ -30,7 +30,7 @@ import {
   type EventData 
 } from '../automation/rule-engine';
 
-// Supabase client com service role (lazy loaded via supabase-admin)
+// Supabase client com service role
 
 // =============================================
 // Helper: Converte null para undefined

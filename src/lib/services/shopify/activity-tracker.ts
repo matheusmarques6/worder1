@@ -8,8 +8,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
-function getSupabase(): SupabaseClient {
-      
+function getSupabase() {
   return getSupabaseAdmin();
 }
 

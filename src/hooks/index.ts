@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '@/stores';
-import { createClient, RealtimeChannel } from '@supabase/supabase-js';
-import { supabaseClient } from '@/lib/supabase-client';
+import { RealtimeChannel } from '@supabase/supabase-js';
+import { supabaseClient as supabase } from '@/lib/supabase-client';
 
 // Re-export usePipelines
 export { usePipelines } from './usePipelines';
@@ -276,7 +276,7 @@ export function useContacts(options: {
 }
 
 // Supabase client para realtime (lazy loaded)
-const supabaseRealtime = supabaseClient;
+const supabaseRealtime = supabase;
 
 // Deals hook com realtime
 export function useDeals(pipelineId?: string) {

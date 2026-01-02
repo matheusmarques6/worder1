@@ -6,7 +6,8 @@
 // Usado pelos webhooks para criar/mover deals
 // =============================================
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 // =============================================
 // TYPES
@@ -79,11 +80,8 @@ export interface ProcessResult {
 // SUPABASE CLIENT
 // =============================================
 
-function getSupabase(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key);
+function getSupabase() {
+  return getSupabaseAdmin();
 }
 
 // =============================================

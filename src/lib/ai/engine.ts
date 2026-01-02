@@ -4,7 +4,7 @@
 // =====================================================
 
 import { SupabaseClient } from '@supabase/supabase-js'
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import {
   AIAgent,
   AgentAction,
@@ -37,8 +37,8 @@ export class AIAgentEngine {
     this.organizationId = config.organizationId
     this.apiKey = config.apiKey
 
-    // Usar o client centralizado (lazy loaded)
-    this.supabase = supabase as unknown as SupabaseClient
+    // Usar cliente centralizado (lazy loaded)
+    this.supabase = supabaseAdmin as unknown as SupabaseClient
     this.ragService = createRAGService()
     this.promptBuilder = new PromptBuilder(this.agent)
   }
@@ -380,14 +380,8 @@ export async function createAgentEngine(
   agentId: string,
   organizationId: string
 ): Promise<AIAgentEngine> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url || !key) {
-    throw new Error('Supabase não configurado')
-  }
-
-  
+  // Usar cliente centralizado
+  const supabase = supabaseAdmin
 
   // Buscar agente
   const { data: agent, error } = await supabase
