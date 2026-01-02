@@ -4,7 +4,7 @@
 // =============================================
 
 import { Redis } from '@upstash/redis'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 
 // Inicializar Redis (lazy)
 let redis: Redis | null = null
@@ -23,10 +23,6 @@ function getRedis(): Redis {
 }
 
 // Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 // =============================================
 // TIPOS

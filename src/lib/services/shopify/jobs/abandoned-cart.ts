@@ -9,15 +9,10 @@
 // 4. Criar deals e notificações
 // =============================================
 
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createOrUpdateDealForContact } from '../deal-sync';
 import { addAbandonedCartTag } from '../contact-sync';
 import type { ShopifyStoreConfig } from '../types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 interface AbandonedCartResult {
   storesProcessed: number;

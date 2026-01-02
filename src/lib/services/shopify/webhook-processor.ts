@@ -6,7 +6,7 @@
 // por pipeline (RuleEngine)
 // =============================================
 
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import type { 
   ShopifyStoreConfig, 
   ShopifyCustomer,
@@ -30,11 +30,7 @@ import {
   type EventData 
 } from '../automation/rule-engine';
 
-// Supabase client com service role
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Supabase client com service role (lazy loaded via supabase-admin)
 
 // =============================================
 // Helper: Converte null para undefined

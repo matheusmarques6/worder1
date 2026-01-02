@@ -4,7 +4,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import type {
   AIAnalyticsResponse,
   AIAnalyticsSummary,
@@ -19,11 +19,6 @@ import type {
   AIErrorBreakdown,
 } from '@/types/whatsapp-ai-analytics';
 import type { DateRange } from '@/types/whatsapp-analytics';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // GET - Buscar analytics de agentes de IA
 export async function GET(request: NextRequest) {

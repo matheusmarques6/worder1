@@ -1,156 +1,74 @@
-# 📦 CRM Advanced Features - Pacote Final Revisado
+# Arquivos Modificados - Migração RLS
 
-## ✅ Todas as Features
-
-### Fase 1 - Core Features
-- 📊 **Forecast de Vendas** - Dashboard operacional
-- 📜 **Histórico de Stages** - Timeline de mudanças com trigger automático
-- 🔧 **Custom Fields Manager** - Gerenciador de campos personalizados
-- 🔀 **Merge de Contatos** - Detecção e mesclagem de duplicados
-- 📥 **Import de Contatos** - Importação CSV com mapeamento
-- 📈 **Probabilidade por Stage** - % de fechamento (0-100)
-- 🎯 **Commit Level** - Classificação de deals (Omit/Pipeline/Best Case/Commit)
-
-### Fase 2 - Custom Fields em Formulários
-- 🎨 **CustomFieldRenderer** - 9 tipos de campos dinâmicos
-- 📝 **ContactDrawer** - Edição inline de campos personalizados
-- ➕ **CreateContactModal** - Campos na criação de contatos
-
-### Fase 3 - Testes End-to-End
-- 🧪 **Página de Diagnóstico** - 20 testes automatizados
-- 🛠️ **Ferramenta Standalone** - HTML para testes offline
-- 📋 **Checklist Manual** - Verificações visuais
-
-### Fase 4 - Analytics de Vendas
-- 📊 **Dashboard de Analytics** - 7 gráficos Recharts
-- 📈 **KPIs em tempo real** - Valor ganho, win rate, ciclo médio
-- 📅 **Filtros por período** - 30d, 3m, 6m, 12m, all
+## Como usar:
+1. Copie cada arquivo para o caminho correspondente no seu projeto
+2. Mantenha a estrutura de pastas exatamente como está aqui
+3. Execute `npm run build` para verificar se está tudo ok
 
 ---
 
-## 📁 Estrutura
+## 📁 Arquivos NOVOS (Criar):
 
-```
-src/
-├── app/
-│   ├── api/
-│   │   ├── analytics/sales/route.ts
-│   │   ├── contacts/[id]/route.ts
-│   │   ├── contacts/import/route.ts
-│   │   ├── contacts/merge/route.ts
-│   │   ├── contacts/stats/route.ts
-│   │   ├── custom-fields/route.ts
-│   │   └── deals/
-│   │       ├── forecast/route.ts
-│   │       └── [id]/history/route.ts
-│   └── (dashboard)/
-│       ├── analytics/sales/page.tsx
-│       └── crm/
-│           ├── page.tsx
-│           ├── layout.tsx
-│           ├── contacts/page.tsx
-│           ├── forecast/page.tsx
-│           └── diagnostics/page.tsx
-├── components/
-│   ├── crm/
-│   │   ├── index.tsx
-│   │   ├── ContactDrawer.tsx
-│   │   ├── ContactSelector.tsx
-│   │   ├── CreateContactModal.tsx
-│   │   ├── CreateDealModal.tsx
-│   │   ├── CustomFieldRenderer.tsx
-│   │   ├── CustomFieldsManager.tsx
-│   │   ├── DealDrawer.tsx
-│   │   ├── DealTimeline.tsx
-│   │   ├── EditStageModal.tsx
-│   │   ├── ImportContactsModal.tsx
-│   │   ├── MergeContactsModal.tsx
-│   │   ├── PipelineAutomationConfig.tsx
-│   │   └── PipelineModal.tsx
-│   └── layout/
-│       └── Sidebar.tsx
-├── hooks/
-│   └── usePipelines.ts
-└── types/
-    └── index.ts
+### src/lib/
+- `supabase-admin.ts` - Cliente Supabase com SERVICE_ROLE (lazy loaded)
+- `supabase-client.ts` - Cliente Supabase com ANON_KEY (para client-side)
 
-crm-advanced-features-COMPLETO.sql
-crm-diagnostico-standalone.html
-contatos-teste-import.csv
-```
+### supabase/migrations/
+- `001_enable_rls.sql` - Script SQL para habilitar RLS (JÁ EXECUTADO)
 
 ---
 
-## 🚀 Instalação
+## 📝 Arquivos MODIFICADOS (Substituir):
 
-### 1. Execute o SQL no Supabase
-```sql
--- Abra o SQL Editor do Supabase
--- Cole o conteúdo de crm-advanced-features-COMPLETO.sql
--- Execute
-```
+### src/hooks/
+- `index.ts`
+- `useCRMRealtime.ts`
+- `useWhatsAppRealtime.ts`
 
-### 2. Instale Recharts (se necessário)
-```bash
-npm install recharts
-```
+### src/lib/ai/
+- `engine.ts`
 
-### 3. Copie os arquivos
-```bash
-# Copie a pasta src/ para seu projeto
-cp -r src/* /seu-projeto/src/
-```
+### src/lib/whatsapp/
+- `campaign-processor.ts`
+- `template-manager.ts`
 
-### 4. Deploy
-```bash
-git add .
-git commit -m "CRM Advanced Features"
-git push
-```
+### src/lib/services/shopify/
+- `webhook-processor.ts`
+- `activity-tracker.ts`
+- `contact-sync.ts`
+- `deal-sync.ts`
 
----
+### src/lib/services/shopify/jobs/
+- `reconciliation.ts`
+- `abandoned-cart.ts`
 
-## 📊 Rotas Disponíveis
+### src/app/api/workers/
+- `automation/route.ts`
+- `automation-step/route.ts`
+- `campaign/route.ts`
 
-| Rota | Descrição |
-|------|-----------|
-| `/crm` | Kanban de deals |
-| `/crm/contacts` | Lista de contatos |
-| `/crm/forecast` | Forecast operacional |
-| `/crm/pipelines` | Gerenciar pipelines |
-| `/crm/diagnostics` | Testes automatizados |
-| `/analytics/sales` | Analytics histórico |
+### src/app/api/ai-agents/
+- `route.ts`
 
----
+### src/app/api/integrations/shopify/
+- `webhook/route.ts`
+- `auth/route.ts`
+- `callback/route.ts`
 
-## 🔧 APIs
-
-| Endpoint | Método | Descrição |
-|----------|--------|-----------|
-| `/api/deals/forecast` | GET | Métricas de forecast |
-| `/api/deals/[id]/history` | GET | Histórico de mudanças |
-| `/api/contacts/[id]` | GET/PATCH/DELETE | CRUD de contato |
-| `/api/contacts/stats` | GET | Estatísticas |
-| `/api/contacts/merge` | POST | Detectar/mesclar duplicados |
-| `/api/contacts/import` | POST | Importar CSV |
-| `/api/custom-fields` | GET/POST/PUT/DELETE | Campos personalizados |
-| `/api/analytics/sales` | GET | Dados históricos |
+### src/app/api/whatsapp/ (muitos arquivos)
+- Ver estrutura de pastas abaixo
 
 ---
 
-## ✅ Correções TypeScript Aplicadas
+## O que foi alterado:
 
-1. **DealDrawer.tsx** - Corrigido tipo de `commit_level` usando `as const`
-2. **APIs** - Todas usam `getSupabase()` para evitar erros em build time
-3. **Tipos** - `Deal.commit_level` tipado como union literal
-4. **PipelineStage** - Campo `probability` definido
-
----
-
-## 📋 Verificação Rápida
-
-Após deploy, acesse `/crm/diagnostics` e execute os testes para verificar que tudo está funcionando.
+1. **Substituído** `createClient()` no module level por imports lazy de `supabase-admin.ts`
+2. **Corrigido** erros de build causados por inicialização eager do Supabase
+3. **Mantido** toda funcionalidade existente
 
 ---
 
-**Versão:** Final 1.0 | **Data:** Dezembro 2024
+## ⚠️ Importante:
+- SERVICE_ROLE_KEY continua funcionando (bypassa RLS)
+- O código atual não precisa de mais alterações
+- RLS já está ativo no banco protegendo os dados

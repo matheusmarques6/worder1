@@ -7,7 +7,8 @@
 // - full_name do contato (não 'name')
 // =============================================
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type { 
   ShopifyStoreConfig, 
   DealSyncResult,
@@ -16,14 +17,8 @@ import type {
 
 // Supabase client getter
 function getSupabase(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!url || !key) {
-    throw new Error('Supabase not configured');
-  }
-  
-  return createClient(url, key);
+      
+  return getSupabaseAdmin();
 }
 
 /**

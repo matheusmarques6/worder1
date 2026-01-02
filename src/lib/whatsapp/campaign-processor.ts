@@ -3,7 +3,7 @@
 // Processa campanhas usando queue + rate limiting
 // =============================================
 
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { MessageQueue, campaignQueue, QueueJob } from './queue'
 import { WhatsAppRateLimiter, getRateLimiter } from './rate-limiter'
 import { CircuitBreaker, getCircuitBreaker } from './circuit-breaker'
@@ -13,11 +13,6 @@ import { sendTemplateMessage } from './meta-api'
 // =============================================
 // SUPABASE CLIENT
 // =============================================
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 // =============================================
 // CONFIGURAÇÕES

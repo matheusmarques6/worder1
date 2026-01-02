@@ -8,16 +8,11 @@
 // 3. Garantir consistência entre Shopify e CRM
 // =============================================
 
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { ShopifyClient } from '@/lib/integrations/shopify';
 import { syncContactFromShopify, updateContactOrderStats } from '../contact-sync';
 import { createOrUpdateDealForContact } from '../deal-sync';
 import type { ShopifyStoreConfig, ShopifyCustomer, ShopifyOrder } from '../types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 interface ReconciliationResult {
   storesProcessed: number;

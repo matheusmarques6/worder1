@@ -4,12 +4,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 
 const META_API_VERSION = 'v18.0'
 const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`

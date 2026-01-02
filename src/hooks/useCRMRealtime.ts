@@ -6,12 +6,8 @@
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
-import { createClient, RealtimeChannel } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { RealtimeChannel } from '@supabase/supabase-js';
+import { supabaseClient as supabase } from '@/lib/supabase-client';
 
 // =============================================
 // TYPES

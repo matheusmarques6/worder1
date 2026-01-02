@@ -11,7 +11,8 @@
 // NOVO: Proteção contra duplicação com retry e upsert
 // =============================================
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type { 
   ShopifyStoreConfig, 
   ShopifyCustomer, 
@@ -21,14 +22,8 @@ import type {
 
 // Supabase client getter para evitar problemas de inicialização
 function getSupabase(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!url || !key) {
-    throw new Error('Supabase not configured');
-  }
-  
-  return createClient(url, key);
+      
+  return getSupabaseAdmin();
 }
 
 /**
