@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
@@ -23,10 +23,15 @@ import {
   AlertCircle,
   CheckCircle,
   UserPlus,
+  CheckSquare,
+  Square,
+  MinusSquare,
 } from 'lucide-react'
 import { useContacts, useDeals } from '@/hooks'
 import { useAuthStore } from '@/stores'
 import { ContactDrawer, MergeContactsModal, ImportContactsModal } from '@/components/crm'
+import { BulkDeleteModal } from '@/components/crm/BulkDeleteModal'
+import { BulkActionsToolbar } from '@/components/crm/BulkActionsToolbar'
 import type { Contact } from '@/types'
 
 // ==========================================
@@ -241,9 +246,11 @@ interface ContactRowProps {
   onEdit: () => void
   onDelete: () => void
   onClick: () => void
+  isSelected: boolean
+  onToggleSelect: (e: React.MouseEvent) => void
 }
 
-function ContactRow({ contact, onEdit, onDelete, onClick }: ContactRowProps) {
+function ContactRow({ contact, onEdit, onDelete, onClick, isSelected, onToggleSelect }: ContactRowProps) {
   const [showMenu, setShowMenu] = useState(false)
   
   const getInitials = () => {
@@ -261,16 +268,34 @@ function ContactRow({ contact, onEdit, onDelete, onClick }: ContactRowProps) {
 
   return (
     <div 
-      onClick={onClick}
-      className="flex items-center gap-4 p-4 bg-dark-800/30 border border-dark-700/50 rounded-xl hover:bg-dark-800/50 transition-colors group cursor-pointer"
+      className={`flex items-center gap-4 p-4 border rounded-xl transition-colors group cursor-pointer ${
+        isSelected 
+          ? 'bg-primary-500/10 border-primary-500/30' 
+          : 'bg-dark-800/30 border-dark-700/50 hover:bg-dark-800/50'
+      }`}
     >
+      {/* Checkbox */}
+      <div 
+        onClick={onToggleSelect}
+        className="flex-shrink-0 cursor-pointer"
+      >
+        {isSelected ? (
+          <CheckSquare className="w-5 h-5 text-primary-400" />
+        ) : (
+          <Square className="w-5 h-5 text-dark-500 group-hover:text-dark-400" />
+        )}
+      </div>
+
       {/* Avatar */}
-      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
+      <div 
+        onClick={onClick}
+        className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0"
+      >
         <span className="text-white font-bold">{getInitials()}</span>
       </div>
 
       {/* Info */}
-      <div className="flex-1 min-w-0">
+      <div onClick={onClick} className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <h3 className="text-white font-medium truncate">{getDisplayName()}</h3>
           {/* Tags inline */}
@@ -313,7 +338,7 @@ function ContactRow({ contact, onEdit, onDelete, onClick }: ContactRowProps) {
       </div>
 
       {/* Stats */}
-      <div className="flex items-center gap-6 text-sm">
+      <div onClick={onClick} className="flex items-center gap-6 text-sm">
         <div className="text-center">
           <p className="text-dark-500 text-xs">Deals</p>
           <p className="text-white font-medium">{contact.deals_count || 0}</p>
@@ -402,6 +427,148 @@ export default function ContactsPage() {
   const [importLoading, setImportLoading] = useState(false)
   const [importResult, setImportResult] = useState<{ success: number; errors: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // ==========================================
+  // SELEÇÃO EM MASSA
+  // ==========================================
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
+  const [bulkLoading, setBulkLoading] = useState(false)
+
+  // Helpers de seleção
+  const isAllSelected = contacts.length > 0 && contacts.every(c => selectedIds.has(c.id))
+  const isSomeSelected = contacts.some(c => selectedIds.has(c.id))
+  const selectedCount = selectedIds.size
+
+  const handleToggleSelect = useCallback((contactId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(contactId)) {
+        newSet.delete(contactId)
+      } else {
+        newSet.add(contactId)
+      }
+      return newSet
+    })
+  }, [])
+
+  const handleSelectAll = useCallback(() => {
+    if (isAllSelected) {
+      // Desmarcar todos da página atual
+      setSelectedIds(prev => {
+        const newSet = new Set(prev)
+        contacts.forEach(c => newSet.delete(c.id))
+        return newSet
+      })
+    } else {
+      // Marcar todos da página atual
+      setSelectedIds(prev => {
+        const newSet = new Set(prev)
+        contacts.forEach(c => newSet.add(c.id))
+        return newSet
+      })
+    }
+  }, [contacts, isAllSelected])
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
+
+  // Bulk Delete Handler
+  const handleBulkDelete = async (options: { deleteDeals: boolean; deleteConversations: boolean }) => {
+    if (!user?.organization_id) return
+
+    const res = await fetch('/api/contacts/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        organizationId: user.organization_id,
+        action: 'delete',
+        contactIds: Array.from(selectedIds),
+        options: {
+          deleteDeals: options.deleteDeals,
+          deleteConversations: options.deleteConversations,
+          deleteActivities: true,
+        },
+      }),
+    })
+
+    if (!res.ok) {
+      const data = await res.json()
+      throw new Error(data.error || 'Erro ao excluir contatos')
+    }
+
+    // Limpar seleção e recarregar
+    setSelectedIds(new Set())
+    await refetch()
+  }
+
+  // Bulk Add Tags Handler
+  const handleBulkAddTags = async (tags: string[]) => {
+    if (!user?.organization_id || tags.length === 0) return
+    setBulkLoading(true)
+
+    try {
+      const res = await fetch('/api/contacts/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: user.organization_id,
+          action: 'addTags',
+          contactIds: Array.from(selectedIds),
+          options: { tags },
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Erro ao adicionar tags')
+      }
+
+      await refetch()
+    } catch (error) {
+      console.error('Error adding tags:', error)
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  // Bulk Remove Tags Handler
+  const handleBulkRemoveTags = async (tags: string[]) => {
+    if (!user?.organization_id || tags.length === 0) return
+    setBulkLoading(true)
+
+    try {
+      const res = await fetch('/api/contacts/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: user.organization_id,
+          action: 'removeTags',
+          contactIds: Array.from(selectedIds),
+          options: { tags },
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Erro ao remover tags')
+      }
+
+      await refetch()
+    } catch (error) {
+      console.error('Error removing tags:', error)
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  // Export selected contacts
+  const handleExportSelected = async () => {
+    // TODO: Implementar exportação de contatos selecionados
+    console.log('Export selected:', Array.from(selectedIds))
+  }
   
   // Stats from API (accurate totals)
   const [stats, setStats] = useState<{
@@ -742,6 +909,37 @@ export default function ContactsPage() {
         </div>
       </div>
 
+      {/* Bulk Actions Toolbar */}
+      <AnimatePresence>
+        {selectedCount > 0 && (
+          <BulkActionsToolbar
+            selectedCount={selectedCount}
+            totalCount={pagination?.total || contacts.length}
+            allSelected={isAllSelected}
+            onSelectAll={handleSelectAll}
+            onDeselectAll={handleDeselectAll}
+            onDelete={() => setShowBulkDeleteModal(true)}
+            onAddTags={handleBulkAddTags}
+            onRemoveTags={handleBulkRemoveTags}
+            onExport={handleExportSelected}
+            loading={bulkLoading}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Select All Header (when no selection) */}
+      {contacts.length > 0 && selectedCount === 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 text-sm text-dark-400">
+          <button
+            onClick={handleSelectAll}
+            className="flex items-center gap-2 hover:text-white transition-colors"
+          >
+            <Square className="w-4 h-4" />
+            Selecionar todos
+          </button>
+        </div>
+      )}
+
       {/* Contacts List */}
       <div className="space-y-3">
         {loading && contacts.length === 0 ? (
@@ -777,6 +975,8 @@ export default function ContactsPage() {
               onEdit={() => handleEdit(contact)}
               onDelete={() => handleDeleteContact(contact)}
               onClick={() => setSelectedContact(contact)}
+              isSelected={selectedIds.has(contact.id)}
+              onToggleSelect={(e) => handleToggleSelect(contact.id, e)}
             />
           ))
         )}
@@ -855,6 +1055,16 @@ export default function ContactsPage() {
         onMergeComplete={() => {
           refetch()
         }}
+      />
+
+      {/* Bulk Delete Modal */}
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        onConfirm={handleBulkDelete}
+        selectedCount={selectedCount}
+        contactIds={Array.from(selectedIds)}
+        organizationId={user?.organization_id || ''}
       />
     </div>
   )

@@ -7,6 +7,8 @@
 // - shopify_customer_id (não 'metadata.shopify_id')
 // - custom_fields (não 'metadata')
 // - total_orders, total_spent (campos reais)
+//
+// NOVO: Proteção contra duplicação com retry e upsert
 // =============================================
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -32,13 +34,20 @@ function getSupabase(): SupabaseClient {
 /**
  * Sincroniza um cliente do Shopify com o CRM
  * Cria novo contato ou atualiza existente baseado em email/telefone
+ * 
+ * PROTEÇÃO CONTRA DUPLICAÇÃO:
+ * 1. Usa retry com backoff para lidar com race conditions
+ * 2. Verifica duplicata após erro de inserção
+ * 3. Busca por múltiplos identificadores
  */
 export async function syncContactFromShopify(
   customer: Partial<ShopifyCustomer>,
   store: ShopifyStoreConfig,
-  eventType: ShopifyEventType
+  eventType: ShopifyEventType,
+  retryCount: number = 0
 ): Promise<ContactSyncResult> {
   
+  const MAX_RETRIES = 3;
   const supabase = getSupabase();
   
   // 1. Normalizar dados do cliente
@@ -52,42 +61,64 @@ export async function syncContactFromShopify(
     throw new Error('Customer has no email or phone');
   }
   
-  // 2. Buscar contato existente por email, telefone ou shopify_customer_id
-  let existingContact = await findExistingContact(
-    supabase,
-    store.organization_id, 
-    email, 
-    phone,
-    customer.id ? String(customer.id) : null
-  );
-  
-  // 3. Preparar tags
-  const tags = buildTags(store.auto_tags, eventType, existingContact?.tags);
-  
-  // 4. Criar ou atualizar contato
-  if (existingContact) {
-    const result = await updateExistingContact(
+  try {
+    // 2. Buscar contato existente por email, telefone ou shopify_customer_id
+    let existingContact = await findExistingContact(
       supabase,
-      existingContact,
-      { firstName, lastName, email, phone, tags },
-      store,
-      customer,
-      eventType
+      store.organization_id, 
+      email, 
+      phone,
+      customer.id ? String(customer.id) : null
     );
-    return result;
-  } else {
-    const result = await createNewContact(
-      supabase,
-      { firstName, lastName, email, phone, tags },
-      store,
-      customer
-    );
-    return result;
+    
+    // 3. Preparar tags
+    const tags = buildTags(store.auto_tags, eventType, existingContact?.tags);
+    
+    // 4. Criar ou atualizar contato
+    if (existingContact) {
+      const result = await updateExistingContact(
+        supabase,
+        existingContact,
+        { firstName, lastName, email, phone, tags },
+        store,
+        customer,
+        eventType
+      );
+      return result;
+    } else {
+      const result = await createNewContact(
+        supabase,
+        { firstName, lastName, email, phone, tags },
+        store,
+        customer
+      );
+      return result;
+    }
+  } catch (error: any) {
+    // 5. PROTEÇÃO: Se erro de duplicata (unique violation), tentar novamente
+    const isDuplicateError = 
+      error?.code === '23505' || // PostgreSQL unique violation
+      error?.message?.includes('duplicate') ||
+      error?.message?.includes('unique constraint');
+    
+    if (isDuplicateError && retryCount < MAX_RETRIES) {
+      console.log(`[ContactSync] Duplicate detected, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+      
+      // Aguardar um pouco antes de tentar novamente (backoff exponencial)
+      await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, retryCount)));
+      
+      // Tentar novamente - dessa vez vai encontrar o contato existente
+      return syncContactFromShopify(customer, store, eventType, retryCount + 1);
+    }
+    
+    // Se não é erro de duplicata ou excedeu retries, propagar erro
+    throw error;
   }
 }
 
 /**
  * Busca contato existente por email, telefone ou shopify_customer_id
+ * MELHORADO: Busca mais abrangente e robusta
  */
 async function findExistingContact(
   supabase: SupabaseClient,
@@ -109,28 +140,56 @@ async function findExistingContact(
     if (data) return data;
   }
   
-  // Depois tentar por email
+  // Depois tentar por email (case insensitive)
   if (email) {
     const { data } = await supabase
       .from('contacts')
       .select('*')
       .eq('organization_id', organizationId)
       .ilike('email', email)
+      .limit(1)
       .maybeSingle();
     
     if (data) return data;
   }
   
-  // Por fim tentar por telefone
+  // Por fim tentar por telefone (com variações)
   if (phone) {
-    const { data } = await supabase
+    // Tentar telefone exato
+    const { data: exactMatch } = await supabase
       .from('contacts')
       .select('*')
       .eq('organization_id', organizationId)
       .eq('phone', phone)
+      .limit(1)
       .maybeSingle();
     
-    if (data) return data;
+    if (exactMatch) return exactMatch;
+    
+    // Tentar sem o prefixo +55
+    const phoneWithout55 = phone.replace(/^\+55/, '');
+    if (phoneWithout55 !== phone) {
+      const { data: without55 } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .or(`phone.eq.${phoneWithout55},phone.eq.+${phoneWithout55}`)
+        .limit(1)
+        .maybeSingle();
+      
+      if (without55) return without55;
+    }
+    
+    // Tentar também no campo whatsapp
+    const { data: whatsappMatch } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('whatsapp', phone)
+      .limit(1)
+      .maybeSingle();
+    
+    if (whatsappMatch) return whatsappMatch;
   }
   
   return null;
