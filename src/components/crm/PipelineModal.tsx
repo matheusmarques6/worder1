@@ -64,7 +64,6 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
         setDescription('')
         setPipelineColor('#f97316')
         setStages([...defaultStages])
-        setActiveTab('stages') // Reset para aba de estágios em novo pipeline
       }
       setError(null)
     }
