@@ -27,6 +27,8 @@ interface AutomationRule {
   duplicate_check_period_hours: number;
   update_existing_deal: boolean;
   is_enabled: boolean;
+  deals_created_count: number;
+  deals_moved_count: number;
 }
 
 interface EventData {
@@ -383,10 +385,11 @@ export async function executeAutomationRules(
         }
 
         // Incrementar contador da regra
+        const currentCount = rule.deals_created_count || 0;
         await supabase
           .from('pipeline_automation_rules')
           .update({
-            deals_created_count: (rule as any).deals_created_count + 1,
+            deals_created_count: currentCount + 1,
             last_triggered_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })

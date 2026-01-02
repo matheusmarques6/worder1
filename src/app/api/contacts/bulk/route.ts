@@ -325,20 +325,25 @@ async function handleBulkDelete(
 
     results.contactsDeleted = contactsDeleted || 0;
 
-    // 6. Registrar log de auditoria
-    await supabase.from('audit_logs').insert({
-      organization_id: organizationId,
-      action: 'bulk_delete_contacts',
-      entity_type: 'contact',
-      details: {
-        contacts_deleted: results.contactsDeleted,
-        deals_deleted: results.dealsDeleted,
-        conversations_deleted: results.conversationsDeleted,
-        activities_deleted: results.activitiesDeleted,
-        options,
-      },
-      created_at: new Date().toISOString(),
-    }).catch(() => {}); // Ignorar erro se tabela não existir
+    // 6. Registrar log de auditoria (ignorar erros se tabela não existir)
+    try {
+      await supabase.from('audit_logs').insert({
+        organization_id: organizationId,
+        action: 'bulk_delete_contacts',
+        entity_type: 'contact',
+        details: {
+          contacts_deleted: results.contactsDeleted,
+          deals_deleted: results.dealsDeleted,
+          conversations_deleted: results.conversationsDeleted,
+          activities_deleted: results.activitiesDeleted,
+          options,
+        },
+        created_at: new Date().toISOString(),
+      });
+    } catch (auditError) {
+      // Ignorar erro se tabela não existir
+      console.log('[Bulk Delete] Audit log skipped:', auditError);
+    }
 
     console.log(`[Bulk Delete] ✅ Deleted ${results.contactsDeleted} contacts for org ${organizationId}`);
 
