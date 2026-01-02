@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 // Module-level lazy client
 let _supabase: SupabaseClient | null = null;
@@ -20,18 +20,8 @@ const supabase = new Proxy({} as SupabaseClient, {
 });
 
 // Admin client para resetar senhas
-function getAdminClient(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!url || !serviceKey) return null;
-  
-  return createClient(url, serviceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    }
-  });
+function getAdminClient(): SupabaseClient {
+  return getSupabaseAdmin();
 }
 
 // Gerar senha forte aleatória
