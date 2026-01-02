@@ -490,6 +490,8 @@ export default function CRMPage() {
   }
 
   const handleCreatePipeline = async (data: { name: string; description?: string; color?: string; stages: { id?: string; name: string; color: string; position: number }[] }) => {
+    const pipelineIdToUpdate = editingPipeline?.id
+    
     if (editingPipeline) {
       // Atualizar pipeline
       const { stages: newStages, ...pipelineData } = data
@@ -526,7 +528,32 @@ export default function CRMPage() {
     } else {
       await createPipelineHook(data)
     }
+    
+    // Refetch e atualizar activePipeline
     await refetchPipelines()
+    
+    // Aguardar um tick para o state atualizar e depois atualizar activePipeline
+    // Usar setTimeout 0 para permitir que o React processe o update do state
+    setTimeout(async () => {
+      // Buscar pipeline atualizado diretamente da API
+      if (pipelineIdToUpdate) {
+        try {
+          const response = await fetch(
+            `/api/deals?organizationId=${user?.organization_id}&type=pipelines`
+          )
+          if (response.ok) {
+            const result = await response.json()
+            const updatedPipeline = result.pipelines?.find((p: any) => p.id === pipelineIdToUpdate)
+            if (updatedPipeline) {
+              setActivePipeline(updatedPipeline)
+            }
+          }
+        } catch (e) {
+          console.error('Error fetching updated pipeline:', e)
+        }
+      }
+    }, 100)
+    
     setShowPipelineModal(false)
     setEditingPipeline(null)
   }

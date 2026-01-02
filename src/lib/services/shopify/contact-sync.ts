@@ -329,6 +329,8 @@ async function createNewContact(
 ): Promise<ContactSyncResult> {
   
   // Dados iniciais do contato
+  // IMPORTANTE: Não usar customer.orders_count nem total_spent do Shopify
+  // Esses valores serão incrementados por updateContactOrderStats() a cada pedido
   const contactData: Record<string, any> = {
     organization_id: store.organization_id,
     first_name: data.firstName || null,
@@ -339,10 +341,10 @@ async function createNewContact(
     source: 'shopify',
     shopify_customer_id: customer.id ? String(customer.id) : null,
     tags: data.tags,
-    total_orders: customer.orders_count || 0,
-    total_spent: parseFloat(customer.total_spent || '0'),
+    total_orders: 0, // Começa em 0, será incrementado por updateContactOrderStats
+    total_spent: 0,  // Começa em 0, será incrementado por updateContactOrderStats
     average_order_value: 0,
-    lifetime_value: parseFloat(customer.total_spent || '0'),
+    lifetime_value: 0,
     is_subscribed_email: customer.accepts_marketing ?? true,
     is_subscribed_sms: false,
     is_subscribed_whatsapp: true,
@@ -351,6 +353,9 @@ async function createNewContact(
       created_from_shopify: true,
       shopify_created_at: customer.created_at,
       accepts_marketing: customer.accepts_marketing ?? false,
+      // Guardar valores originais do Shopify para referência
+      shopify_orders_count: customer.orders_count || 0,
+      shopify_total_spent: customer.total_spent || '0',
     },
   };
   
