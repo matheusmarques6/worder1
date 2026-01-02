@@ -11,27 +11,21 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { EventBus, EventType } from '@/lib/events';
 import { syncContactFromShopify, updateContactOrderStats } from '@/lib/services/shopify/contact-sync';
 import { createOrUpdateDealForContact, moveDealToStage, markDealAsWon } from '@/lib/services/shopify/deal-sync';
 import { trackActivity, trackPurchase, enrichContactFromOrder } from '@/lib/services/shopify/activity-tracker';
 import { executeAutomationRules, mapShopifyEventToTrigger } from '@/lib/services/automation/automation-executor';
 import type { ShopifyStoreConfig, ShopifyCustomer } from '@/lib/services/shopify/types';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 // ============================================
 // CONFIGURAÇÃO
 // ============================================
 
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
-  if (!url || !key) {
-    throw new Error('Supabase not configured');
-  }
-  
-  return createClient(url, key);
+  return getSupabaseAdmin();
 }
 
 // ============================================

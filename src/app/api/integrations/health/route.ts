@@ -6,8 +6,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { IntegrationHealthService, IntegrationType } from '@/lib/services/integration-health';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 interface ShopifyStoreRow {
   id: string;
@@ -52,10 +52,7 @@ interface FormattedIntegration {
 }
 
 function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  return getSupabaseAdmin();
 }
 
 function getHealthStatus(connectionStatus: string | null, failures: number | null): string {

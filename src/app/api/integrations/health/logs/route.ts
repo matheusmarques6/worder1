@@ -6,7 +6,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 interface HealthLogRow {
   id: string;
@@ -23,10 +23,7 @@ interface HealthLogRow {
 }
 
 function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  return getSupabaseAdmin();
 }
 
 export async function GET(request: NextRequest) {
