@@ -2,18 +2,18 @@
 // API: Verificação SIMPLES - HTML
 // src/app/api/shopify/verificar/route.ts
 // 
-// Acesse: /api/shopify/verificar?org=SEU_ORG_ID
+// Acesse: /api/shopify/verificar
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
-  const orgId = request.nextUrl.searchParams.get('org');
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+
+  const orgId = user.organization_id;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   
   const results: any = {
@@ -23,114 +23,102 @@ export async function GET(request: NextRequest) {
     checks: [],
   };
   
-  const supabase = getSupabase();
+  // Check 1: Database - já passou se chegou aqui
+  results.checks.push({ name: 'Database', status: '✅', message: 'Conectado' });
   
-  // Check 1: Database
-  if (!supabase) {
-    results.checks.push({ name: 'Database', status: '❌', message: 'Supabase não configurado' });
+  // Check 2: Loja conectada - RLS filtra automaticamente
+  const { data: store, error } = await supabase
+    .from('shopify_stores')
+    .select('*')
+    .maybeSingle();
+  
+  if (error) {
+    results.checks.push({ name: 'Loja Shopify', status: '❌', message: error.message });
+  } else if (!store) {
+    results.checks.push({ name: 'Loja Shopify', status: '❌', message: 'Nenhuma loja encontrada' });
   } else {
-    results.checks.push({ name: 'Database', status: '✅', message: 'Conectado' });
-  }
-  
-  // Check 2: Loja conectada
-  if (supabase && orgId) {
-    const { data: store, error } = await supabase
-      .from('shopify_stores')
-      .select('*')
-      .eq('organization_id', orgId)
-      .maybeSingle();
+    results.store = {
+      domain: store.shop_domain,
+      name: store.shop_name,
+      is_active: store.is_active,
+      has_token: !!store.access_token,
+      pipeline_id: store.default_pipeline_id,
+    };
+    results.checks.push({ 
+      name: 'Loja Shopify', 
+      status: store.is_active ? '✅' : '⚠️', 
+      message: `${store.shop_domain} (${store.is_active ? 'ativa' : 'inativa'})` 
+    });
     
-    if (error) {
-      results.checks.push({ name: 'Loja Shopify', status: '❌', message: error.message });
-    } else if (!store) {
-      results.checks.push({ name: 'Loja Shopify', status: '❌', message: 'Nenhuma loja encontrada' });
+    // Check 3: Pipeline configurado
+    if (store.default_pipeline_id) {
+      results.checks.push({ name: 'Pipeline', status: '✅', message: store.default_pipeline_id });
     } else {
-      results.store = {
-        domain: store.shop_domain,
-        name: store.shop_name,
-        is_active: store.is_active,
-        has_token: !!store.access_token,
-        pipeline_id: store.default_pipeline_id,
-      };
-      results.checks.push({ 
-        name: 'Loja Shopify', 
-        status: store.is_active ? '✅' : '⚠️', 
-        message: `${store.shop_domain} (${store.is_active ? 'ativa' : 'inativa'})` 
-      });
-      
-      // Check 3: Pipeline configurado
-      if (store.default_pipeline_id) {
-        results.checks.push({ name: 'Pipeline', status: '✅', message: store.default_pipeline_id });
-      } else {
-        results.checks.push({ name: 'Pipeline', status: '❌', message: 'NÃO CONFIGURADO - Deals não serão criados!' });
-      }
-      
-      // Check 4: Webhooks no Shopify
-      if (store.access_token) {
-        try {
-          const webhooksRes = await fetch(
-            `https://${store.shop_domain}/admin/api/2024-01/webhooks.json`,
-            { headers: { 'X-Shopify-Access-Token': store.access_token } }
-          );
+      results.checks.push({ name: 'Pipeline', status: '❌', message: 'NÃO CONFIGURADO - Deals não serão criados!' });
+    }
+    
+    // Check 4: Webhooks no Shopify
+    if (store.access_token) {
+      try {
+        const webhooksRes = await fetch(
+          `https://${store.shop_domain}/admin/api/2024-01/webhooks.json`,
+          { headers: { 'X-Shopify-Access-Token': store.access_token } }
+        );
+        
+        if (webhooksRes.ok) {
+          const { webhooks } = await webhooksRes.json();
+          results.webhooks = webhooks?.map((w: any) => ({
+            topic: w.topic,
+            url: w.address,
+            correct: w.address.includes('/api/webhooks/shopify'),
+          })) || [];
           
-          if (webhooksRes.ok) {
-            const { webhooks } = await webhooksRes.json();
-            results.webhooks = webhooks?.map((w: any) => ({
-              topic: w.topic,
-              url: w.address,
-              correct: w.address.includes('/api/webhooks/shopify'),
-            })) || [];
-            
-            const correctCount = results.webhooks.filter((w: any) => w.correct).length;
-            const wrongCount = results.webhooks.filter((w: any) => !w.correct).length;
-            
-            if (results.webhooks.length === 0) {
-              results.checks.push({ name: 'Webhooks', status: '❌', message: 'NENHUM webhook registrado!' });
-            } else if (wrongCount > 0) {
-              results.checks.push({ name: 'Webhooks', status: '⚠️', message: `${correctCount} corretos, ${wrongCount} com URL errada` });
-            } else {
-              results.checks.push({ name: 'Webhooks', status: '✅', message: `${correctCount} webhooks OK` });
-            }
+          const correctCount = results.webhooks.filter((w: any) => w.correct).length;
+          const wrongCount = results.webhooks.filter((w: any) => !w.correct).length;
+          
+          if (results.webhooks.length === 0) {
+            results.checks.push({ name: 'Webhooks', status: '❌', message: 'NENHUM webhook registrado!' });
+          } else if (wrongCount > 0) {
+            results.checks.push({ name: 'Webhooks', status: '⚠️', message: `${correctCount} corretos, ${wrongCount} com URL errada` });
           } else {
-            results.checks.push({ name: 'Webhooks', status: '❌', message: 'Não foi possível verificar (token inválido?)' });
+            results.checks.push({ name: 'Webhooks', status: '✅', message: `${correctCount} webhooks OK` });
           }
-        } catch (e: any) {
-          results.checks.push({ name: 'Webhooks', status: '❌', message: e.message });
+        } else {
+          results.checks.push({ name: 'Webhooks', status: '❌', message: 'Não foi possível verificar (token inválido?)' });
         }
-      }
-      
-      // Check 5: Eventos recebidos
-      const { data: events } = await supabase
-        .from('shopify_webhook_events')
-        .select('id, topic, status, received_at')
-        .eq('store_id', store.id)
-        .order('received_at', { ascending: false })
-        .limit(10);
-      
-      results.recentEvents = events || [];
-      
-      if (!events || events.length === 0) {
-        results.checks.push({ name: 'Eventos recebidos', status: '⚠️', message: 'Nenhum evento recebido ainda' });
-      } else {
-        results.checks.push({ name: 'Eventos recebidos', status: '✅', message: `${events.length} eventos recentes` });
-      }
-      
-      // Check 6: Contatos do Shopify
-      const { data: contacts, count } = await supabase
-        .from('contacts')
-        .select('id', { count: 'exact' })
-        .eq('organization_id', orgId)
-        .eq('source', 'shopify');
-      
-      results.contactsCount = count || 0;
-      if (count === 0) {
-        results.checks.push({ name: 'Contatos Shopify', status: '⚠️', message: 'Nenhum contato criado ainda' });
-      } else {
-        results.checks.push({ name: 'Contatos Shopify', status: '✅', message: `${count} contatos` });
+      } catch (e: any) {
+        results.checks.push({ name: 'Webhooks', status: '❌', message: e.message });
       }
     }
-  } else if (!orgId) {
-    results.checks.push({ name: 'Organização', status: '❌', message: 'Informe o org ID: ?org=SEU_ORG_ID' });
+    
+    // Check 5: Eventos recebidos
+    const { data: events } = await supabase
+      .from('shopify_webhook_events')
+      .select('id, topic, status, received_at')
+      .eq('store_id', store.id)
+      .order('received_at', { ascending: false })
+      .limit(10);
+    
+    results.recentEvents = events || [];
+    
+    if (!events || events.length === 0) {
+      results.checks.push({ name: 'Eventos recebidos', status: '⚠️', message: 'Nenhum evento recebido ainda' });
+    } else {
+      results.checks.push({ name: 'Eventos recebidos', status: '✅', message: `${events.length} eventos recentes` });
+    }
+    
+    // Check 6: Contatos do Shopify - RLS filtra automaticamente
+    const { count } = await supabase
+      .from('contacts')
+      .select('id', { count: 'exact' })
+      .eq('source', 'shopify');
+    
+    results.contactsCount = count || 0;
+    if (count === 0) {
+      results.checks.push({ name: 'Contatos Shopify', status: '⚠️', message: 'Nenhum contato criado ainda' });
+    } else {
+      results.checks.push({ name: 'Contatos Shopify', status: '✅', message: `${count} contatos` });
+    }
   }
   
   // Gerar HTML

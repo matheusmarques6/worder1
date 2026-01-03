@@ -6,7 +6,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 interface HealthLogRow {
   id: string;
@@ -22,35 +22,24 @@ interface HealthLogRow {
   checked_at: string;
 }
 
-function getSupabaseClient() {
-  return getSupabaseAdmin();
-}
-
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organizationId');
     const integrationType = searchParams.get('type');
     const integrationId = searchParams.get('integrationId');
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
     
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: 'organizationId required' },
-        { status: 400 }
-      );
-    }
-    
-    const supabase = getSupabaseClient();
-    
+    // RLS filtra automaticamente por organization_id
     let query = supabase
       .from('integration_health_logs')
       .select('*')
-      .eq('organization_id', organizationId)
       .order('checked_at', { ascending: false })
       .limit(limit);
     
-    // Filtros opcionais
     if (integrationType) {
       query = query.eq('integration_type', integrationType);
     }
@@ -63,10 +52,7 @@ export async function GET(request: NextRequest) {
     
     if (error) {
       console.error('Error fetching health logs:', error);
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
     
     const logs = (data as HealthLogRow[]).map(log => ({
@@ -91,46 +77,33 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Endpoint para limpar logs antigos (opcional, para manutenção)
+// Endpoint para limpar logs antigos
 export async function DELETE(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organizationId');
     const daysOld = parseInt(searchParams.get('daysOld') || '30');
     
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: 'organizationId required' },
-        { status: 400 }
-      );
-    }
-    
-    const supabase = getSupabaseClient();
-    
-    // Calcular data limite
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);
     
-    // Primeiro contar quantos serão deletados
+    // RLS filtra automaticamente
     const { count: toDeleteCount } = await supabase
       .from('integration_health_logs')
       .select('*', { count: 'exact', head: true })
-      .eq('organization_id', organizationId)
       .lt('checked_at', cutoffDate.toISOString());
     
-    // Depois deletar
     const { error } = await supabase
       .from('integration_health_logs')
       .delete()
-      .eq('organization_id', organizationId)
       .lt('checked_at', cutoffDate.toISOString());
     
     if (error) {
       console.error('Error deleting old logs:', error);
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
     
     return NextResponse.json({

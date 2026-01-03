@@ -6,19 +6,14 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
-function getSupabase() {
-  return getSupabaseAdmin();
-}
-
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
 
   const storeId = request.nextUrl.searchParams.get('storeId');
 
@@ -27,7 +22,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 1. Buscar dados da loja
+    // 1. Buscar dados da loja - RLS filtra automaticamente
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
       .select('*')
@@ -65,7 +60,7 @@ export async function GET(request: NextRequest) {
       const errorText = await response.text();
       console.error('[Shopify Check] API error:', response.status, errorText);
       
-      // Atualizar status da loja
+      // Atualizar status da loja - RLS filtra automaticamente
       await supabase
         .from('shopify_stores')
         .update({ 
@@ -85,7 +80,7 @@ export async function GET(request: NextRequest) {
 
     const shopData = await response.json();
 
-    // 4. Atualizar status da loja como ativa
+    // 4. Atualizar status da loja como ativa - RLS filtra automaticamente
     await supabase
       .from('shopify_stores')
       .update({ 

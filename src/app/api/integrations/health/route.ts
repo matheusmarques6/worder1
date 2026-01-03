@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { IntegrationHealthService, IntegrationType } from '@/lib/services/integration-health';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 interface ShopifyStoreRow {
   id: string;
@@ -51,10 +51,6 @@ interface FormattedIntegration {
   health_status: string;
 }
 
-function getSupabaseClient() {
-  return getSupabaseAdmin();
-}
-
 function getHealthStatus(connectionStatus: string | null, failures: number | null): string {
   const status = connectionStatus ?? 'active';
   const consecutiveFailures = failures ?? 0;
@@ -65,30 +61,21 @@ function getHealthStatus(connectionStatus: string | null, failures: number | nul
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organizationId');
-    
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: 'organizationId required' },
-        { status: 400 }
-      );
-    }
-    
-    const supabase = getSupabaseClient();
-    
-    // Tentar buscar via view primeiro
+    // Tentar buscar via view primeiro - RLS filtra automaticamente
     const { data: integrations, error } = await supabase
       .from('v_integration_status')
-      .select('*')
-      .eq('organization_id', organizationId);
+      .select('*');
     
     if (!error && integrations) {
       return NextResponse.json({ integrations });
     }
     
-    // Fallback: buscar direto das tabelas
+    // Fallback: buscar direto das tabelas - RLS filtra automaticamente
     const formattedIntegrations: FormattedIntegration[] = [];
     
     // Buscar Shopify stores
@@ -107,7 +94,6 @@ export async function GET(request: NextRequest) {
         last_sync_at,
         created_at
       `)
-      .eq('organization_id', organizationId)
       .or('status.eq.active,status.is.null');
     
     if (shopifyStores) {
@@ -144,7 +130,6 @@ export async function GET(request: NextRequest) {
         consecutive_failures,
         created_at
       `)
-      .eq('organization_id', organizationId)
       .eq('is_active', true);
     
     if (whatsappConfigs) {
@@ -176,20 +161,23 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+
   try {
     const body = await request.json();
-    const { type, integrationId, organizationId, checkAll } = body as {
+    const { type, integrationId, checkAll } = body as {
       type?: string;
       integrationId?: string;
-      organizationId?: string;
       checkAll?: boolean;
     };
     
-    const supabase = getSupabaseClient();
     const healthService = new IntegrationHealthService(supabase);
     
-    if (checkAll && organizationId) {
-      const results = await healthService.checkOrganizationIntegrations(organizationId);
+    if (checkAll) {
+      // Usa organization_id do usuário autenticado
+      const results = await healthService.checkOrganizationIntegrations(user.organization_id);
       return NextResponse.json(results);
     }
     

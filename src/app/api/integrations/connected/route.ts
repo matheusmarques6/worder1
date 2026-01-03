@@ -7,13 +7,9 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // Definição dos eventos disponíveis por integração
 const INTEGRATION_EVENTS: Record<string, Array<{
@@ -83,16 +79,9 @@ const INTEGRATION_FILTERS: Record<string, Array<{
 };
 
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
-  const organizationId = request.nextUrl.searchParams.get('organizationId');
-  
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
   
   try {
     const connectedIntegrations: Array<{
@@ -107,17 +96,13 @@ export async function GET(request: NextRequest) {
       filters: typeof INTEGRATION_FILTERS[string];
     }> = [];
     
-    // =========================================
-    // 1. Verificar Shopify
-    // =========================================
+    // 1. Verificar Shopify - RLS filtra automaticamente
     const { data: shopifyStores } = await supabase
       .from('shopify_stores')
       .select('id, shop_domain, shop_name, is_active, access_token')
-      .eq('organization_id', organizationId)
       .eq('is_active', true);
     
     if (shopifyStores && shopifyStores.length > 0) {
-      // Verificar se tem access_token válido
       const validStores = shopifyStores.filter(s => s.access_token);
       
       if (validStores.length > 0) {
@@ -142,17 +127,13 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // =========================================
-    // 2. Verificar WhatsApp
-    // =========================================
+    // 2. Verificar WhatsApp - RLS filtra automaticamente
     const { data: whatsappAccounts } = await supabase
       .from('whatsapp_accounts')
       .select('id, phone_number, phone_number_id, display_name, is_active, access_token')
-      .eq('organization_id', organizationId)
       .eq('is_active', true);
     
     if (whatsappAccounts && whatsappAccounts.length > 0) {
-      // Verificar se tem credenciais válidas
       const validAccounts = whatsappAccounts.filter(a => a.access_token && a.phone_number_id);
       
       if (validAccounts.length > 0) {
@@ -177,14 +158,11 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // =========================================
-    // 3. Verificar Hotmart (se existir tabela)
-    // =========================================
+    // 3. Verificar Hotmart
     try {
       const { data: hotmartAccounts } = await supabase
         .from('hotmart_accounts')
         .select('id, account_name, is_active, client_id, client_secret')
-        .eq('organization_id', organizationId)
         .eq('is_active', true);
       
       if (hotmartAccounts && hotmartAccounts.length > 0) {
@@ -214,14 +192,11 @@ export async function GET(request: NextRequest) {
       // Tabela não existe, ignorar
     }
     
-    // =========================================
-    // 4. Verificar WooCommerce (se existir tabela)
-    // =========================================
+    // 4. Verificar WooCommerce
     try {
       const { data: wooStores } = await supabase
         .from('woocommerce_stores')
         .select('id, store_url, store_name, is_active, consumer_key, consumer_secret')
-        .eq('organization_id', organizationId)
         .eq('is_active', true);
       
       if (wooStores && wooStores.length > 0) {
@@ -252,9 +227,7 @@ export async function GET(request: NextRequest) {
       // Tabela não existe, ignorar
     }
     
-    // =========================================
     // 5. Webhook sempre disponível
-    // =========================================
     connectedIntegrations.push({
       id: 'webhook',
       type: 'webhook',
@@ -269,9 +242,7 @@ export async function GET(request: NextRequest) {
       filters: INTEGRATION_FILTERS.webhook,
     });
     
-    // =========================================
-    // Integrações não configuradas (para mostrar na UI)
-    // =========================================
+    // Integrações não configuradas
     const allIntegrationTypes = ['shopify', 'whatsapp', 'hotmart', 'woocommerce'];
     const connectedTypes = connectedIntegrations.map(i => i.type);
     const notConfigured = allIntegrationTypes
