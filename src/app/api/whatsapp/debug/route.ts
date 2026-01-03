@@ -6,11 +6,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 
+// =============================================
+// PROTEÇÃO: Debug routes devem ser bloqueadas em produção
+// =============================================
+const DEBUG_SECRET = process.env.DEBUG_ROUTE_SECRET;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+function isAuthorized(request: NextRequest): boolean {
+  if (!IS_PRODUCTION) return true;
+  if (!DEBUG_SECRET) return false;
+  
+  const providedSecret = request.headers.get('x-debug-secret') || 
+                         request.nextUrl.searchParams.get('secret');
+  return providedSecret === DEBUG_SECRET;
+}
+
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const WEBHOOK_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app';
 
 export async function GET(request: NextRequest) {
+  // VERIFICAR AUTORIZAÇÃO
+  if (!isAuthorized(request)) {
+    console.warn('[WhatsApp Debug] Unauthorized access attempt');
+    return NextResponse.json(
+      { error: 'Not available in production without authorization' },
+      { status: 403 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action') || 'status';
   const instanceName = searchParams.get('instance');
@@ -121,7 +145,7 @@ async function checkEvolutionAPI() {
     const response = await fetch(EVOLUTION_API_URL, {
       method: 'GET',
       headers: {
-        'apikey': EVOLUTION_API_KEY,
+        'apikey': EVOLUTION_API_KEY || '',
       },
     });
 
@@ -145,7 +169,7 @@ async function listEvolutionInstances() {
     const response = await fetch(`${EVOLUTION_API_URL}/instance/fetchInstances`, {
       method: 'GET',
       headers: {
-        'apikey': EVOLUTION_API_KEY,
+        'apikey': EVOLUTION_API_KEY || '',
       },
     });
 
@@ -184,7 +208,7 @@ async function checkInstanceWebhook(instanceName: string) {
     const response = await fetch(`${EVOLUTION_API_URL}/webhook/find/${instanceName}`, {
       method: 'GET',
       headers: {
-        'apikey': EVOLUTION_API_KEY,
+        'apikey': EVOLUTION_API_KEY || '',
       },
     });
 
@@ -211,7 +235,7 @@ async function configureInstanceWebhook(instanceName: string) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': EVOLUTION_API_KEY,
+        'apikey': EVOLUTION_API_KEY || '',
       },
       body: JSON.stringify({
         webhook: {

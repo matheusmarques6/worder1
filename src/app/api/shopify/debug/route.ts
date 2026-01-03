@@ -6,7 +6,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
 
+// =============================================
+// PROTEÇÃO: Debug routes devem ser bloqueadas em produção
+// =============================================
+const DEBUG_SECRET = process.env.DEBUG_ROUTE_SECRET;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+function isAuthorized(request: NextRequest): boolean {
+  if (!IS_PRODUCTION) return true;
+  if (!DEBUG_SECRET) return false;
+  
+  const providedSecret = request.headers.get('x-debug-secret') || 
+                         request.nextUrl.searchParams.get('secret');
+  return providedSecret === DEBUG_SECRET;
+}
+
 export async function GET(request: NextRequest) {
+  // VERIFICAR AUTORIZAÇÃO
+  if (!isAuthorized(request)) {
+    console.warn('[Shopify Debug] Unauthorized access attempt');
+    return NextResponse.json(
+      { error: 'Not available in production without authorization' },
+      { status: 403 }
+    );
+  }
+
   const supabase = getSupabaseClient()
 
   if (!supabase) {

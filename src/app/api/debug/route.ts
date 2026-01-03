@@ -3,6 +3,29 @@ export const dynamic = 'force-dynamic';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 
+// =============================================
+// PROTEÇÃO: Debug routes devem ser bloqueadas em produção
+// =============================================
+const DEBUG_SECRET = process.env.DEBUG_ROUTE_SECRET;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+function isAuthorized(request: NextRequest): boolean {
+  // Em desenvolvimento, permitir sempre
+  if (!IS_PRODUCTION) {
+    return true;
+  }
+  
+  // Em produção, exigir secret
+  if (!DEBUG_SECRET) {
+    return false; // Bloquear se não tiver secret configurado
+  }
+  
+  const providedSecret = request.headers.get('x-debug-secret') || 
+                         request.nextUrl.searchParams.get('secret');
+  
+  return providedSecret === DEBUG_SECRET;
+}
+
 let _supabase: SupabaseClient | null = null;
 function getDb(): SupabaseClient {
   if (!_supabase) {
@@ -17,6 +40,15 @@ const supabase = new Proxy({} as SupabaseClient, {
 });
 
 export async function GET(request: NextRequest) {
+  // VERIFICAR AUTORIZAÇÃO
+  if (!isAuthorized(request)) {
+    console.warn('[Debug] Unauthorized access attempt from:', request.headers.get('x-forwarded-for'));
+    return NextResponse.json(
+      { error: 'Not available in production without authorization' },
+      { status: 403 }
+    );
+  }
+
   try {
     // 1. Check stores in database
     const { data: stores, error: storesError } = await supabase

@@ -8,25 +8,122 @@ import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { parseEvolutionWebhook, isMessageEvent, isConnectionEvent, isQRCodeEvent } from '@/lib/whatsapp/evolution-api';
 
 // =============================================
+// RATE LIMITING
+// =============================================
+const rateLimit = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 100;
+const RATE_WINDOW = 60 * 1000;
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const record = rateLimit.get(ip);
+  
+  if (!record || now > record.resetAt) {
+    rateLimit.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return true;
+  }
+  
+  if (record.count >= RATE_LIMIT) {
+    return false;
+  }
+  
+  record.count++;
+  return true;
+}
+
+// =============================================
+// WEBHOOK VERIFICATION
+// =============================================
+async function verifyWebhookToken(request: NextRequest): Promise<{ valid: boolean; instanceName?: string }> {
+  // Option 1: Bearer token
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    
+    const { data: instance } = await supabase
+      .from('evolution_instances')
+      .select('instance_name, organization_id')
+      .eq('webhook_token', token)
+      .single();
+    
+    if (instance) {
+      return { valid: true, instanceName: instance.instance_name };
+    }
+  }
+  
+  // Option 2: Global webhook secret
+  const globalSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
+  const providedSecret = request.headers.get('x-webhook-secret') || 
+                         request.headers.get('apikey') ||
+                         request.nextUrl.searchParams.get('token');
+  
+  if (globalSecret && providedSecret === globalSecret) {
+    return { valid: true };
+  }
+  
+  // Option 3: Query string token
+  const queryToken = request.nextUrl.searchParams.get('webhook_token');
+  if (queryToken) {
+    const { data: instance } = await supabase
+      .from('evolution_instances')
+      .select('instance_name')
+      .eq('webhook_token', queryToken)
+      .single();
+    
+    if (instance) {
+      return { valid: true, instanceName: instance.instance_name };
+    }
+  }
+  
+  return { valid: false };
+}
+
+// =============================================
 // POST - Receber eventos
 // =============================================
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 
+             request.headers.get('x-real-ip') || 
+             'unknown';
+
+  // Rate limiting
+  if (!checkRateLimit(ip)) {
+    console.warn('[Evolution Webhook] Rate limit exceeded:', ip);
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+  }
+
   try {
+    // Verificar autenticação
+    const { valid, instanceName: tokenInstance } = await verifyWebhookToken(request);
+    
     const body = await request.json();
     const event = parseEvolutionWebhook(body);
 
-    console.log('[Evolution Webhook]', event.event, '-', event.instance);
+    // Log para auditoria
+    console.log('[Evolution Webhook]', {
+      event: event.event,
+      instance: event.instance,
+      ip,
+      hasValidToken: valid,
+      timestamp: new Date().toISOString()
+    });
 
     // Buscar instância
     const { data: instance } = await supabase
       .from('evolution_instances')
-      .select('*')
-      .eq('instance_name', event.instance)
+      .select('*, webhook_token')
+      .eq('instance_name', tokenInstance || event.instance)
       .single();
 
     if (!instance) {
       console.warn('[Evolution Webhook] Unknown instance:', event.instance);
       return NextResponse.json({ received: true });
+    }
+
+    // Se a instância tem webhook_token configurado, exigir autenticação
+    if (instance.webhook_token && !valid) {
+      console.warn('[Evolution Webhook] Unauthorized - instance requires token:', event.instance);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Processar evento
