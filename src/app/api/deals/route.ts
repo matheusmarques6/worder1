@@ -1,57 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
-import { SupabaseClient } from '@supabase/supabase-js';
+import { getAuthClient, authError } from '@/lib/api-utils';
 import { EventBus, EventType } from '@/lib/events';
 
-// Module-level lazy client
-let _supabase: SupabaseClient | null = null;
-function getDb(): SupabaseClient {
-  if (!_supabase) {
-    _supabase = getSupabaseClient();
-    if (!_supabase) throw new Error('Database not configured');
-  }
-  return _supabase;
-}
-
-// Proxy for backward compatibility with existing code
-const supabase = new Proxy({} as SupabaseClient, {
-  get(_, prop) {
-    return (getDb() as any)[prop];
-  }
-});
+// ✅ MIGRADO PARA RLS - Não usa mais getSupabaseClient()
 
 // GET - List deals, pipelines, or single deal
 export async function GET(request: NextRequest) {
-  try {
-    getDb(); // Verify connection early
-  } catch {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
 
   const searchParams = request.nextUrl.searchParams;
-  const organizationId = searchParams.get('organizationId');
-  const type = searchParams.get('type') || 'deals'; // deals | pipelines
+  const type = searchParams.get('type') || 'deals';
   const dealId = searchParams.get('id');
   const pipelineId = searchParams.get('pipelineId');
   const stageId = searchParams.get('stageId');
   const contactId = searchParams.get('contactId');
 
-  if (!organizationId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
-  }
-
   try {
     if (type === 'pipelines') {
-      // First, get all pipelines
       const { data: pipelines, error: pipelineError } = await supabase
         .from('pipelines')
         .select('*')
-        .eq('organization_id', organizationId)
         .order('position');
 
       if (pipelineError) throw pipelineError;
 
-      // Then, get all stages for these pipelines
       const pipelineIds = pipelines?.map(p => p.id) || [];
       
       if (pipelineIds.length > 0) {
@@ -63,13 +39,10 @@ export async function GET(request: NextRequest) {
 
         if (stagesError) throw stagesError;
 
-        // Get deal counts per stage (only open deals)
         const { data: dealCounts } = await supabase
           .from('deals')
-          .select('stage_id, status')
-          .eq('organization_id', organizationId);
+          .select('stage_id, status');
 
-        // Count only OPEN deals per stage
         const stageDealsMap: Record<string, number> = {};
         dealCounts?.forEach(deal => {
           if (deal.stage_id && deal.status === 'open') {
@@ -77,7 +50,6 @@ export async function GET(request: NextRequest) {
           }
         });
 
-        // Combine pipelines with their stages
         const pipelinesWithStages = pipelines?.map(pipeline => ({
           ...pipeline,
           stages: (stages || [])
@@ -96,17 +68,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (dealId) {
-      // Get deal with contact
       const { data: deal, error: dealError } = await supabase
         .from('deals')
         .select('*')
         .eq('id', dealId)
-        .eq('organization_id', organizationId)
         .single();
 
       if (dealError) throw dealError;
 
-      // Get contact separately if exists
       let contact = null;
       if (deal?.contact_id) {
         const { data: contactData } = await supabase
@@ -117,7 +86,6 @@ export async function GET(request: NextRequest) {
         contact = contactData;
       }
 
-      // Get stage separately if exists
       let stage = null;
       if (deal?.stage_id) {
         const { data: stageData } = await supabase
@@ -128,78 +96,51 @@ export async function GET(request: NextRequest) {
         stage = stageData;
       }
 
-      return NextResponse.json({ 
-        deal: { 
-          ...deal, 
-          contact, 
-          stage 
-        } 
-      });
+      return NextResponse.json({ deal: { ...deal, contact, stage } });
     }
 
-    // List deals with contacts and stages
     let dealsQuery = supabase
       .from('deals')
       .select('*')
-      .eq('organization_id', organizationId)
       .order('position');
     
-    // Filter by contact_id if provided
     if (contactId) {
       dealsQuery = dealsQuery.eq('contact_id', contactId);
     }
 
     const { data: deals, error: dealsError } = await dealsQuery;
-
     if (dealsError) throw dealsError;
 
-    // Get unique contact IDs and stage IDs
     const contactIds = [...new Set(deals?.filter(d => d.contact_id).map(d => d.contact_id))];
     const stageIds = [...new Set(deals?.filter(d => d.stage_id).map(d => d.stage_id))];
 
-    // Fetch contacts in batch
     let contactsMap: Record<string, any> = {};
     if (contactIds.length > 0) {
       const { data: contacts } = await supabase
         .from('contacts')
         .select('id, email, first_name, last_name, avatar_url, company')
         .in('id', contactIds);
-      
-      contacts?.forEach(c => {
-        contactsMap[c.id] = c;
-      });
+      contacts?.forEach(c => { contactsMap[c.id] = c; });
     }
 
-    // Fetch stages in batch
     let stagesMap: Record<string, any> = {};
     if (stageIds.length > 0) {
       const { data: stages } = await supabase
         .from('pipeline_stages')
         .select('id, name, color, probability, is_won, is_lost')
         .in('id', stageIds);
-      
-      stages?.forEach(s => {
-        stagesMap[s.id] = s;
-      });
+      stages?.forEach(s => { stagesMap[s.id] = s; });
     }
 
-    // Combine deals with contacts and stages
     const dealsWithRelations = deals?.map(deal => ({
       ...deal,
       contact: deal.contact_id ? contactsMap[deal.contact_id] : null,
       stage: deal.stage_id ? stagesMap[deal.stage_id] : null
     }));
 
-    // Filter by pipeline or stage if specified
     let filteredDeals = dealsWithRelations || [];
-
-    if (pipelineId) {
-      filteredDeals = filteredDeals.filter(d => d.pipeline_id === pipelineId);
-    }
-
-    if (stageId) {
-      filteredDeals = filteredDeals.filter(d => d.stage_id === stageId);
-    }
+    if (pipelineId) filteredDeals = filteredDeals.filter(d => d.pipeline_id === pipelineId);
+    if (stageId) filteredDeals = filteredDeals.filter(d => d.stage_id === stageId);
 
     return NextResponse.json({ deals: filteredDeals });
   } catch (error: any) {
@@ -209,20 +150,27 @@ export async function GET(request: NextRequest) {
 
 // POST - Create deal or pipeline
 export async function POST(request: NextRequest) {
-  const { action, ...data } = await request.json();
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
+
+  const body = await request.json();
+  const { action, ...data } = body;
 
   try {
     switch (action) {
       case 'create-pipeline':
-        return await createPipeline(data);
+        return await createPipeline(supabase, organizationId, data);
       case 'create-stage':
-        return await createStage(data);
+        return await createStage(supabase, data);
       case 'create-deal':
-        return await createDeal(data);
+        return await createDeal(supabase, organizationId, data);
       case 'add-activity':
-        return await addActivity(data);
+        return await addActivity(supabase, data);
       default:
-        return await createDeal(data); // Default to creating deal
+        return await createDeal(supabase, organizationId, data);
     }
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -231,7 +179,14 @@ export async function POST(request: NextRequest) {
 
 // PUT - Update deal or stage
 export async function PUT(request: NextRequest) {
-  const { type, id, organizationId, ...updates } = await request.json();
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
+
+  const body = await request.json();
+  const { type, id, organizationId: _, ...updates } = body;
 
   try {
     if (type === 'stage') {
@@ -241,7 +196,6 @@ export async function PUT(request: NextRequest) {
         .eq('id', id)
         .select()
         .single();
-
       if (error) throw error;
       return NextResponse.json({ stage: data });
     }
@@ -251,28 +205,20 @@ export async function PUT(request: NextRequest) {
         .from('pipelines')
         .update(updates)
         .eq('id', id)
-        .eq('organization_id', organizationId)
         .select()
         .single();
-
       if (error) throw error;
       return NextResponse.json({ pipeline: data });
     }
 
-    // ==========================================
-    // UPDATE DEAL - Com auto won_at/lost_at
-    // ==========================================
-    
-    // Get previous deal state
+    // UPDATE DEAL
     const { data: previousDeal } = await supabase
       .from('deals')
       .select('stage_id, value, status')
       .eq('id', id)
       .single();
 
-    // ==========================================
-    // AUTO-SET won_at/lost_at WHEN STATUS CHANGES
-    // ==========================================
+    // Auto-set won_at/lost_at when status changes
     if (updates.status) {
       if (updates.status === 'won' && previousDeal?.status !== 'won') {
         updates.won_at = updates.won_at || new Date().toISOString();
@@ -283,144 +229,56 @@ export async function PUT(request: NextRequest) {
         updates.won_at = null;
         if (updates.probability === undefined) updates.probability = 0;
       } else if (updates.status === 'open') {
-        // Reopening deal
         updates.won_at = null;
         updates.lost_at = null;
       }
     }
 
-    // ==========================================
-    // AUTO-UPDATE STATUS WHEN STAGE is_won/is_lost
-    // ==========================================
-    if (updates.stage_id && updates.stage_id !== previousDeal?.stage_id) {
-      // Get new stage info
-      const { data: newStage } = await supabase
-        .from('pipeline_stages')
-        .select('is_won, is_lost, probability')
-        .eq('id', updates.stage_id)
-        .single();
-
-      if (newStage) {
-        // If moving to a "won" stage
-        if (newStage.is_won && previousDeal?.status !== 'won') {
-          updates.status = 'won';
-          updates.won_at = new Date().toISOString();
-          updates.lost_at = null;
-          updates.probability = 100;
-        }
-        // If moving to a "lost" stage
-        else if (newStage.is_lost && previousDeal?.status !== 'lost') {
-          updates.status = 'lost';
-          updates.lost_at = new Date().toISOString();
-          updates.won_at = null;
-          updates.probability = 0;
-        }
-        // If moving from won/lost to a regular stage, reopen
-        else if (!newStage.is_won && !newStage.is_lost && (previousDeal?.status === 'won' || previousDeal?.status === 'lost')) {
-          updates.status = 'open';
-          updates.won_at = null;
-          updates.lost_at = null;
-          // Inherit stage probability
-          if (newStage.probability !== undefined && updates.probability === undefined) {
-            updates.probability = newStage.probability;
-          }
-        }
-      }
-    }
-
     const { data, error } = await supabase
       .from('deals')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
-      .eq('organization_id', organizationId)
-      .select(`
-        *,
-        contact:contacts(id, email, first_name, last_name, avatar_url),
-        stage:pipeline_stages(id, name, color, probability, is_won, is_lost)
-      `)
+      .select(`*, contact:contacts(*), stage:pipeline_stages(*)`)
       .single();
 
     if (error) throw error;
 
-    // Log activity if stage changed
-    if (updates.stage_id && updates.stage_id !== previousDeal?.stage_id) {
-      await supabase.from('deal_activities').insert({
-        deal_id: id,
-        type: 'stage_change',
-        description: `Deal moved to ${data.stage?.name}`,
-      });
-
-      // 🔥 EMITIR EVENTO DE MUDANÇA DE ESTÁGIO
+    // Emit events
+    if (updates.stage_id && previousDeal?.stage_id !== updates.stage_id) {
       EventBus.emit(EventType.DEAL_STAGE_CHANGED, {
         organization_id: organizationId,
         deal_id: id,
         contact_id: data.contact_id,
         email: data.contact?.email,
         data: {
+          deal_title: data.title,
+          deal_value: data.value,
           from_stage_id: previousDeal?.stage_id,
           to_stage_id: updates.stage_id,
           to_stage_name: data.stage?.name,
-          deal_title: data.title,
-          deal_value: data.value,
-          pipeline_id: data.pipeline_id,
         },
         source: 'crm',
       }).catch(console.error);
     }
 
-    // Log activity if status changed
-    if (updates.status && updates.status !== previousDeal?.status) {
-      const statusMessages: Record<string, string> = {
-        'won': '🎉 Deal marked as Won',
-        'lost': '❌ Deal marked as Lost',
-        'open': '🔄 Deal reopened',
-      };
-      try {
-        await supabase.from('deal_activities').insert({
-          deal_id: id,
-          type: 'status_change',
-          description: statusMessages[updates.status] || `Status changed to ${updates.status}`,
-        });
-      } catch (e) {
-        console.error('Failed to log status change activity:', e);
-      }
-    }
-
-    // 🔥 EMITIR EVENTO DE DEAL GANHO
     if (updates.status === 'won' && previousDeal?.status !== 'won') {
       EventBus.emit(EventType.DEAL_WON, {
         organization_id: organizationId,
         deal_id: id,
         contact_id: data.contact_id,
         email: data.contact?.email,
-        data: {
-          deal_title: data.title,
-          deal_value: data.value,
-          pipeline_id: data.pipeline_id,
-          stage_id: data.stage_id,
-          won_at: data.won_at,
-        },
+        data: { deal_title: data.title, deal_value: data.value },
         source: 'crm',
       }).catch(console.error);
     }
 
-    // 🔥 EMITIR EVENTO DE DEAL PERDIDO
     if (updates.status === 'lost' && previousDeal?.status !== 'lost') {
       EventBus.emit(EventType.DEAL_LOST, {
         organization_id: organizationId,
         deal_id: id,
         contact_id: data.contact_id,
         email: data.contact?.email,
-        data: {
-          deal_title: data.title,
-          deal_value: data.value,
-          pipeline_id: data.pipeline_id,
-          stage_id: data.stage_id,
-          lost_at: data.lost_at,
-        },
+        data: { deal_title: data.title, deal_value: data.value },
         source: 'crm',
       }).catch(console.error);
     }
@@ -431,30 +289,36 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE - Delete deal, pipeline, or stage
+// DELETE - Delete deal or pipeline
 export async function DELETE(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  
+  const { supabase } = auth;
+
   const searchParams = request.nextUrl.searchParams;
   const type = searchParams.get('type') || 'deal';
   const id = searchParams.get('id');
-  const organizationId = searchParams.get('organizationId');
 
-  if (!id || !organizationId) {
-    return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+  if (!id) {
+    return NextResponse.json({ error: 'ID required' }, { status: 400 });
   }
 
   try {
-    let table = 'deals';
-    if (type === 'pipeline') table = 'pipelines';
-    if (type === 'stage') table = 'pipeline_stages';
-
-    const query = supabase.from(table).delete().eq('id', id);
-    
-    if (type !== 'stage') {
-      query.eq('organization_id', organizationId);
+    if (type === 'pipeline') {
+      await supabase.from('pipeline_stages').delete().eq('pipeline_id', id);
+      const { error } = await supabase.from('pipelines').delete().eq('id', id);
+      if (error) throw error;
+      return NextResponse.json({ success: true });
     }
 
-    const { error } = await query;
+    if (type === 'stage') {
+      const { error } = await supabase.from('pipeline_stages').delete().eq('id', id);
+      if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
 
+    const { error } = await supabase.from('deals').delete().eq('id', id);
     if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (error: any) {
@@ -462,27 +326,13 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-// ==========================================
-// CREATE PIPELINE - Com stages padrão completos
-// ==========================================
-async function createPipeline({
-  organizationId,
-  name,
-  description,
-  color,
-  stages,
-}: {
-  organizationId: string;
-  name: string;
-  description?: string;
-  color?: string;
-  stages?: { name: string; color: string; probability?: number; is_won?: boolean; is_lost?: boolean }[];
-}) {
-  // Get max position
+// Helper functions with supabase client passed in
+async function createPipeline(supabase: any, organizationId: string, data: any) {
+  const { name, description, color, stages } = data;
+
   const { data: existingPipelines } = await supabase
     .from('pipelines')
     .select('position')
-    .eq('organization_id', organizationId)
     .order('position', { ascending: false })
     .limit(1);
 
@@ -502,9 +352,8 @@ async function createPipeline({
 
   if (error) throw error;
 
-  // Create custom stages if provided
   if (stages && stages.length > 0) {
-    const stageInserts = stages.map((stage, index) => ({
+    const stageInserts = stages.map((stage: any, index: number) => ({
       pipeline_id: pipeline.id,
       name: stage.name,
       color: stage.color,
@@ -513,12 +362,8 @@ async function createPipeline({
       is_won: stage.is_won ?? false,
       is_lost: stage.is_lost ?? false,
     }));
-
     await supabase.from('pipeline_stages').insert(stageInserts);
   } else {
-    // ==========================================
-    // DEFAULT STAGES - Com probability e flags
-    // ==========================================
     const defaultStages = [
       { name: 'Lead', color: '#6366f1', probability: 10, is_won: false, is_lost: false },
       { name: 'Qualificado', color: '#8b5cf6', probability: 25, is_won: false, is_lost: false },
@@ -527,26 +372,13 @@ async function createPipeline({
       { name: 'Ganho', color: '#22c55e', probability: 100, is_won: true, is_lost: false },
       { name: 'Perdido', color: '#ef4444', probability: 0, is_won: false, is_lost: true },
     ];
-
     const stageInserts = defaultStages.map((stage, index) => ({
       pipeline_id: pipeline.id,
-      name: stage.name,
-      color: stage.color,
+      ...stage,
       position: index,
-      probability: stage.probability,
-      is_won: stage.is_won,
-      is_lost: stage.is_lost,
     }));
-
     await supabase.from('pipeline_stages').insert(stageInserts);
   }
-
-  // Fetch pipeline with stages separately
-  const { data: createdPipeline } = await supabase
-    .from('pipelines')
-    .select('*')
-    .eq('id', pipeline.id)
-    .single();
 
   const { data: pipelineStages } = await supabase
     .from('pipeline_stages')
@@ -554,30 +386,12 @@ async function createPipeline({
     .eq('pipeline_id', pipeline.id)
     .order('position');
 
-  const fullPipeline = {
-    ...createdPipeline,
-    stages: pipelineStages || []
-  };
-
-  return NextResponse.json({ pipeline: fullPipeline }, { status: 201 });
+  return NextResponse.json({ pipeline: { ...pipeline, stages: pipelineStages || [] } }, { status: 201 });
 }
 
-async function createStage({
-  pipelineId,
-  name,
-  color,
-  probability,
-  is_won,
-  is_lost,
-}: {
-  pipelineId: string;
-  name: string;
-  color: string;
-  probability?: number;
-  is_won?: boolean;
-  is_lost?: boolean;
-}) {
-  // Get max position
+async function createStage(supabase: any, data: any) {
+  const { pipelineId, name, color, probability, is_won, is_lost } = data;
+
   const { data: existingStages } = await supabase
     .from('pipeline_stages')
     .select('position')
@@ -587,7 +401,7 @@ async function createStage({
 
   const position = (existingStages?.[0]?.position || 0) + 1;
 
-  const { data, error } = await supabase
+  const { data: stage, error } = await supabase
     .from('pipeline_stages')
     .insert({
       pipeline_id: pipelineId,
@@ -602,154 +416,87 @@ async function createStage({
     .single();
 
   if (error) throw error;
-
-  return NextResponse.json({ stage: data }, { status: 201 });
+  return NextResponse.json({ stage }, { status: 201 });
 }
 
-async function createDeal({
-  organizationId,
-  organization_id,
-  pipelineId,
-  pipeline_id,
-  stageId,
-  stage_id,
-  contactId,
-  contact_id,
-  title,
-  value,
-  currency,
-  expectedCloseDate,
-  expected_close_date,
-  description,
-  assignedTo,
-  assigned_to,
-  probability,
-  commit_level,
-}: {
-  organizationId?: string;
-  organization_id?: string;
-  pipelineId?: string;
-  pipeline_id?: string;
-  stageId?: string;
-  stage_id?: string;
-  contactId?: string;
-  contact_id?: string;
-  title: string;
-  value?: number;
-  currency?: string;
-  expectedCloseDate?: string;
-  expected_close_date?: string;
-  description?: string;
-  assignedTo?: string;
-  assigned_to?: string;
-  probability?: number;
-  commit_level?: string;
-}) {
-  // Support both camelCase and snake_case
-  const orgId = organizationId || organization_id;
-  const pplId = pipelineId || pipeline_id;
-  const stgId = stageId || stage_id;
-  const ctcId = contactId || contact_id;
-  const expDate = expectedCloseDate || expected_close_date;
-  const assignTo = assignedTo || assigned_to;
+async function createDeal(supabase: any, organizationId: string, data: any) {
+  const pipelineId = data.pipelineId || data.pipeline_id;
+  const stageId = data.stageId || data.stage_id;
+  const contactId = data.contactId || data.contact_id;
+  const expDate = data.expectedCloseDate || data.expected_close_date;
+  const assignTo = data.assignedTo || data.assigned_to;
 
-  if (!orgId || !pplId || !stgId) {
-    throw new Error('organizationId, pipelineId and stageId are required');
+  if (!pipelineId || !stageId) {
+    throw new Error('pipelineId and stageId are required');
   }
 
-  // Get stage info to inherit probability
-  let dealProbability = probability;
+  let dealProbability = data.probability;
   if (dealProbability === undefined) {
     const { data: stageInfo } = await supabase
       .from('pipeline_stages')
       .select('probability')
-      .eq('id', stgId)
+      .eq('id', stageId)
       .single();
     dealProbability = stageInfo?.probability ?? 50;
   }
 
-  // Get max position in stage
   const { data: existingDeals } = await supabase
     .from('deals')
     .select('position')
-    .eq('stage_id', stgId)
+    .eq('stage_id', stageId)
     .order('position', { ascending: false })
     .limit(1);
 
   const position = (existingDeals?.[0]?.position || 0) + 1;
 
-  const { data, error } = await supabase
+  const { data: deal, error } = await supabase
     .from('deals')
     .insert({
-      organization_id: orgId,
-      pipeline_id: pplId,
-      stage_id: stgId,
-      contact_id: ctcId || null,
-      title,
-      value: value || 0,
-      currency: currency || 'BRL',
+      organization_id: organizationId,
+      pipeline_id: pipelineId,
+      stage_id: stageId,
+      contact_id: contactId || null,
+      title: data.title,
+      value: data.value || 0,
+      currency: data.currency || 'BRL',
       probability: dealProbability,
       expected_close_date: expDate,
-      description,
+      description: data.description,
       assigned_to: assignTo,
       position,
       status: 'open',
-      commit_level: commit_level || 'pipeline',
+      commit_level: data.commit_level || 'pipeline',
       tags: [],
       custom_fields: {},
     })
-    .select(`
-      *,
-      contact:contacts(id, email, first_name, last_name, avatar_url, company),
-      stage:pipeline_stages(id, name, color, probability)
-    `)
+    .select(`*, contact:contacts(*), stage:pipeline_stages(*)`)
     .single();
 
   if (error) throw error;
 
-  // Log activity (ignore errors)
-  try {
-    await supabase.from('deal_activities').insert({
-      deal_id: data.id,
-      type: 'created',
-      description: 'Deal created',
-    });
-  } catch (e) {
-    console.warn('Failed to log activity:', e);
-  }
-
-  // 🔥 EMITIR EVENTO DE DEAL CRIADO
   EventBus.emit(EventType.DEAL_CREATED, {
-    organization_id: orgId,
-    deal_id: data.id,
-    contact_id: ctcId,
-    email: data.contact?.email,
+    organization_id: organizationId,
+    deal_id: deal.id,
+    contact_id: contactId,
+    email: deal.contact?.email,
     data: {
-      deal_title: title,
-      deal_value: value || 0,
-      pipeline_id: pplId,
-      stage_id: stgId,
-      stage_name: data.stage?.name,
+      deal_title: data.title,
+      deal_value: data.value || 0,
+      pipeline_id: pipelineId,
+      stage_id: stageId,
+      stage_name: deal.stage?.name,
       assigned_to: assignTo,
     },
     source: 'crm',
   }).catch(console.error);
 
-  return NextResponse.json({ deal: data }, { status: 201 });
+  return NextResponse.json({ deal }, { status: 201 });
 }
 
-async function addActivity({
-  dealId,
-  type,
-  description,
-  userId,
-}: {
-  dealId: string;
-  type: string;
-  description: string;
-  userId?: string;
-}) {
-  const { data, error } = await supabase
+async function addActivity(supabase: any, data: any) {
+  const { dealId, type, description, userId } = data;
+
+  const { data: activity, error } = await supabase
     .from('deal_activities')
     .insert({
       deal_id: dealId,
@@ -757,13 +504,9 @@ async function addActivity({
       description,
       user_id: userId,
     })
-    .select(`
-      *,
-      user:users(first_name, last_name)
-    `)
+    .select()
     .single();
 
   if (error) throw error;
-
-  return NextResponse.json({ activity: data }, { status: 201 });
+  return NextResponse.json({ activity }, { status: 201 });
 }

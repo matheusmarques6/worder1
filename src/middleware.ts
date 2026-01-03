@@ -9,8 +9,24 @@ import { createClient } from '@supabase/supabase-js';
 // Routes that don't require authentication
 const publicRoutes = ['/', '/signup', '/login', '/register', '/forgot-password', '/reset-password', '/change-password'];
 
-// Public API routes (webhooks, etc)
-const publicApiRoutes = ['/api/auth', '/api/shopify', '/api/klaviyo', '/api/webhooks', '/api/public'];
+// Public API routes (APENAS webhooks e callbacks OAuth - ser ESPECÍFICO!)
+// ⚠️ NUNCA adicione prefixos genéricos como '/api/shopify' ou '/api/klaviyo'
+const publicApiRoutes = [
+  '/api/auth',
+  '/api/public',
+  // Webhooks externos (recebem eventos de terceiros)
+  '/api/webhooks',
+  '/api/whatsapp/webhook',
+  '/api/whatsapp/evolution/webhook',
+  '/api/whatsapp/cloud/webhook',
+  // OAuth callbacks (retorno de OAuth de terceiros)
+  '/api/integrations/shopify/callback',
+  '/api/integrations/meta/callback',
+  '/api/integrations/tiktok/callback',
+  '/api/integrations/google/callback',
+  // Shopify webhooks específicos
+  '/api/shopify/webhooks',
+];
 
 // Routes that should redirect to dashboard/inbox if already authenticated
 const authRoutes = ['/', '/signup', '/login'];

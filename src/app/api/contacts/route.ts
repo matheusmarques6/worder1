@@ -1,25 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { getAuthClient, authError } from '@/lib/api-utils';
 import { EventBus, EventType } from '@/lib/events';
 
 // GET - List contacts or get single contact
 export async function GET(request: NextRequest) {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  // ✅ MIGRADO PARA RLS - usa getAuthClient()
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  
+  const { supabase, user } = auth;
+  // organization_id vem do usuário autenticado, NÃO do request
+  const organizationId = user.organization_id;
 
   const searchParams = request.nextUrl.searchParams;
-  const organizationId = searchParams.get('organizationId');
   const contactId = searchParams.get('id');
   const search = searchParams.get('search');
   const tags = searchParams.get('tags');
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '50');
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
-  }
 
   try {
     if (contactId) {
@@ -36,7 +34,7 @@ export async function GET(request: NextRequest) {
           )
         `)
         .eq('id', contactId)
-        .eq('organization_id', organizationId)
+        // RLS já filtra por organization_id automaticamente
         .single();
 
       if (error) throw error;
@@ -46,7 +44,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('contacts')
       .select('*, deals(id)', { count: 'exact' })
-      .eq('organization_id', organizationId)
+      // RLS já filtra por organization_id automaticamente
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
 
@@ -67,7 +65,7 @@ export async function GET(request: NextRequest) {
     const contactsWithDealsCount = data?.map(contact => ({
       ...contact,
       deals_count: contact.deals?.length || 0,
-      deals: undefined, // Remover array de deals para não poluir resposta
+      deals: undefined,
     })) || [];
 
     return NextResponse.json({
@@ -86,17 +84,16 @@ export async function GET(request: NextRequest) {
 
 // POST - Create contact
 export async function POST(request: NextRequest) {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  // ✅ MIGRADO PARA RLS
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
 
   const body = await request.json();
-  const { organizationId, ...contactData } = body;
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
-  }
+  // Ignorar organizationId do body - usar o do usuário autenticado
+  const { organizationId: _, ...contactData } = body;
 
   try {
     // Check for existing contact by email
@@ -104,8 +101,8 @@ export async function POST(request: NextRequest) {
       const { data: existing } = await supabase
         .from('contacts')
         .select('id')
-        .eq('organization_id', organizationId)
         .eq('email', contactData.email)
+        // RLS garante que só vê da própria org
         .single();
 
       if (existing) {
@@ -119,7 +116,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('contacts')
       .insert({
-        organization_id: organizationId,
+        organization_id: organizationId, // Usa org do usuário autenticado
         ...contactData,
         source: contactData.source || 'manual',
       })
@@ -151,19 +148,23 @@ export async function POST(request: NextRequest) {
 
 // PUT - Update contact
 export async function PUT(request: NextRequest) {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  // ✅ MIGRADO PARA RLS
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
 
-  const { id, organizationId, ...updates } = await request.json();
+  const body = await request.json();
+  // Ignorar organizationId do body
+  const { id, organizationId: _, ...updates } = body;
 
-  if (!id || !organizationId) {
-    return NextResponse.json({ error: 'Contact ID and Organization ID required' }, { status: 400 });
+  if (!id) {
+    return NextResponse.json({ error: 'Contact ID required' }, { status: 400 });
   }
 
   try {
-    // Buscar dados anteriores para comparação
+    // Buscar dados anteriores para comparação (RLS filtra automaticamente)
     const { data: previousContact } = await supabase
       .from('contacts')
       .select('tags, email')
@@ -177,7 +178,7 @@ export async function PUT(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .eq('organization_id', organizationId)
+      // RLS já garante que só atualiza da própria org
       .select()
       .single();
 
@@ -218,25 +219,26 @@ export async function PUT(request: NextRequest) {
 
 // DELETE - Delete contact
 export async function DELETE(request: NextRequest) {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  // ✅ MIGRADO PARA RLS
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  
+  const { supabase } = auth;
 
   const searchParams = request.nextUrl.searchParams;
   const id = searchParams.get('id');
-  const organizationId = searchParams.get('organizationId');
+  // Ignorar organizationId da URL - RLS garante isolamento
 
-  if (!id || !organizationId) {
-    return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+  if (!id) {
+    return NextResponse.json({ error: 'Contact ID required' }, { status: 400 });
   }
 
   try {
     const { error } = await supabase
       .from('contacts')
       .delete()
-      .eq('id', id)
-      .eq('organization_id', organizationId);
+      .eq('id', id);
+      // RLS já garante que só deleta da própria org
 
     if (error) throw error;
 

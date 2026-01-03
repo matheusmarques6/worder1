@@ -1,24 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseClient } from '@/lib/api-utils'
-import { SupabaseClient } from '@supabase/supabase-js'
+import { getAuthClient, authError } from '@/lib/api-utils'
 
-// Module-level lazy client
-let _supabase: SupabaseClient | null = null
-function getDb(): SupabaseClient {
-  if (!_supabase) {
-    _supabase = getSupabaseClient()
-    if (!_supabase) throw new Error('Database not configured')
-  }
-  return _supabase
-}
+// ✅ MIGRADO PARA RLS - Apenas admins podem gerenciar API keys
 
-const supabase = new Proxy({} as SupabaseClient, {
-  get(_, prop) {
-    return (getDb() as any)[prop]
-  }
-})
-
-// Criptografia simples (em produção, usar algo mais robusto)
 function maskApiKey(key: string): string {
   if (!key || key.length < 8) return '***'
   return `${key.slice(0, 4)}...${key.slice(-4)}`
@@ -26,28 +10,24 @@ function maskApiKey(key: string): string {
 
 // GET - Lista API keys da organização
 export async function GET(request: NextRequest) {
-  try {
-    getDb()
-  } catch {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
-
-  const searchParams = request.nextUrl.searchParams
-  const orgId = searchParams.get('organization_id') || searchParams.get('organizationId')
+  const auth = await getAuthClient();
+  if (!auth) return authError();
   
-  if (!orgId) {
-    return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+  const { supabase, user } = auth;
+  
+  // Verificar se é admin
+  if (user.role !== 'admin' && user.role !== 'owner') {
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
   }
 
   try {
     const { data: keys, error } = await supabase
       .from('organization_api_keys')
       .select('id, provider, api_key_hint, is_active, is_valid, last_validated_at, total_requests, total_tokens_used, last_used_at, created_at')
-      .eq('organization_id', orgId)
+      // RLS filtra automaticamente por organization_id
       .order('provider', { ascending: true })
 
     if (error) {
-      // Se a tabela não existe, retornar array vazio
       if (error.code === '42P01') {
         return NextResponse.json({ keys: [] })
       }
@@ -64,20 +44,20 @@ export async function GET(request: NextRequest) {
 
 // POST - Adicionar/atualizar API key
 export async function POST(request: NextRequest) {
-  try {
-    getDb()
-  } catch {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  
+  const { supabase, user } = auth;
+  
+  // Verificar se é admin
+  if (user.role !== 'admin' && user.role !== 'owner') {
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
   }
 
   try {
     const body = await request.json()
-    const orgId = body.organization_id || body.organizationId
+    // Ignorar organization_id do body - usar o do usuário autenticado
     const { provider, api_key, base_url } = body
-    
-    if (!orgId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     if (!provider || !api_key) {
       return NextResponse.json(
@@ -86,7 +66,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar provider
     const validProviders = ['openai', 'anthropic', 'google', 'groq', 'mistral', 'deepseek', 'cohere', 'together', 'openrouter', 'perplexity', 'xai', 'ollama']
     if (!validProviders.includes(provider)) {
       return NextResponse.json(
@@ -95,16 +74,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar a API key fazendo uma chamada de teste
     const validation = await validateApiKey(provider, api_key, base_url)
 
-    // Upsert (inserir ou atualizar)
     const { data, error } = await supabase
       .from('organization_api_keys')
       .upsert({
-        organization_id: orgId,
+        organization_id: user.organization_id, // Usa org do usuário autenticado
         provider,
-        api_key, // Em produção, criptografar!
+        api_key,
         api_key_hint: maskApiKey(api_key),
         base_url: base_url || null,
         is_active: true,
@@ -139,20 +116,19 @@ export async function POST(request: NextRequest) {
 
 // DELETE - Remover API key
 export async function DELETE(request: NextRequest) {
-  try {
-    getDb()
-  } catch {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  
+  const { supabase, user } = auth;
+  
+  // Verificar se é admin
+  if (user.role !== 'admin' && user.role !== 'owner') {
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
   }
 
   try {
     const searchParams = request.nextUrl.searchParams
-    const orgId = searchParams.get('organization_id') || searchParams.get('organizationId')
     const provider = searchParams.get('provider')
-    
-    if (!orgId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
     
     if (!provider) {
       return NextResponse.json({ error: 'provider is required' }, { status: 400 })
@@ -161,7 +137,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabase
       .from('organization_api_keys')
       .delete()
-      .eq('organization_id', orgId)
+      // RLS garante que só deleta da própria org
       .eq('provider', provider)
 
     if (error) throw error
@@ -190,7 +166,6 @@ async function validateApiKey(provider: string, apiKey: string, baseUrl?: string
       }
 
       case 'anthropic': {
-        // Anthropic não tem endpoint de validação simples, tentamos uma completion mínima
         const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -204,7 +179,6 @@ async function validateApiKey(provider: string, apiKey: string, baseUrl?: string
             messages: [{ role: 'user', content: 'Hi' }]
           })
         })
-        // Mesmo que dê erro de rate limit, a key é válida
         if (res.status === 401) {
           return { valid: false, error: 'Invalid API key' }
         }
@@ -270,7 +244,6 @@ async function validateApiKey(provider: string, apiKey: string, baseUrl?: string
       }
 
       case 'ollama': {
-        // Ollama é local, verifica se o servidor está acessível
         const url = baseUrl || 'http://localhost:11434'
         try {
           const res = await fetch(`${url}/api/tags`)
@@ -284,7 +257,6 @@ async function validateApiKey(provider: string, apiKey: string, baseUrl?: string
       }
 
       default:
-        // Para providers não implementados, assumir válido
         return { valid: true }
     }
   } catch (error: any) {
