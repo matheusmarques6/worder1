@@ -8,13 +8,9 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 interface RouteParams {
   params: { id: string; ruleId: string };
@@ -24,24 +20,18 @@ interface RouteParams {
 // GET - Buscar regra específica
 // =============================================
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   const { id: pipelineId, ruleId } = params;
   
   if (!pipelineId || !ruleId) {
     return NextResponse.json({ error: 'Pipeline ID and Rule ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
-  const organizationId = request.nextUrl.searchParams.get('organizationId');
-  
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
-  
   try {
+    // RLS filtra automaticamente por organization_id
     const { data: rule, error } = await supabase
       .from('pipeline_automation_rules')
       .select(`
@@ -52,7 +42,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       `)
       .eq('id', ruleId)
       .eq('pipeline_id', pipelineId)
-      .eq('organization_id', organizationId)
       .single();
     
     if (error || !rule) {
@@ -71,21 +60,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PUT - Atualizar regra
 // =============================================
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   const { id: pipelineId, ruleId } = params;
   
   if (!pipelineId || !ruleId) {
     return NextResponse.json({ error: 'Pipeline ID and Rule ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
   try {
     const body = await request.json();
     const {
-      organizationId,
       name,
       description,
       sourceType,
@@ -103,17 +90,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       position,
     } = body;
     
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-    }
-    
-    // Verificar se regra existe
+    // Verificar se regra existe - RLS filtra automaticamente
     const { data: existingRule, error: findError } = await supabase
       .from('pipeline_automation_rules')
       .select('id')
       .eq('id', ruleId)
       .eq('pipeline_id', pipelineId)
-      .eq('organization_id', organizationId)
       .single();
     
     if (findError || !existingRule) {
@@ -136,7 +118,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
     
-    // Montar objeto de atualização (apenas campos fornecidos)
+    // Montar objeto de atualização
     const updateData: Record<string, any> = {
       updated_at: new Date().toISOString(),
     };
@@ -157,7 +139,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (isEnabled !== undefined) updateData.is_enabled = isEnabled;
     if (position !== undefined) updateData.position = position;
     
-    // Atualizar
+    // Atualizar - RLS filtra automaticamente
     const { data: rule, error: updateError } = await supabase
       .from('pipeline_automation_rules')
       .update(updateData)
@@ -189,38 +171,30 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // DELETE - Deletar regra
 // =============================================
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   const { id: pipelineId, ruleId } = params;
   
   if (!pipelineId || !ruleId) {
     return NextResponse.json({ error: 'Pipeline ID and Rule ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
-  const organizationId = request.nextUrl.searchParams.get('organizationId');
-  
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
-  
   try {
-    // Verificar se regra existe
+    // Verificar se regra existe - RLS filtra automaticamente
     const { data: existingRule, error: findError } = await supabase
       .from('pipeline_automation_rules')
       .select('id, name')
       .eq('id', ruleId)
       .eq('pipeline_id', pipelineId)
-      .eq('organization_id', organizationId)
       .single();
     
     if (findError || !existingRule) {
       return NextResponse.json({ error: 'Rule not found' }, { status: 404 });
     }
     
-    // Deletar
+    // Deletar - RLS filtra automaticamente
     const { error: deleteError } = await supabase
       .from('pipeline_automation_rules')
       .delete()

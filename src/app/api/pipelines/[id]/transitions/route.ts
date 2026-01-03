@@ -9,13 +9,9 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 interface RouteParams {
   params: { id: string };
@@ -25,24 +21,18 @@ interface RouteParams {
 // GET - Listar transições
 // =============================================
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   const pipelineId = params.id;
   
   if (!pipelineId) {
     return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
-  const organizationId = request.nextUrl.searchParams.get('organizationId');
-  
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
-  
   try {
+    // RLS filtra automaticamente por organization_id
     const { data: transitions, error } = await supabase
       .from('pipeline_stage_transitions')
       .select(`
@@ -51,7 +41,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         to_stage:pipeline_stages!to_stage_id(id, name, color)
       `)
       .eq('pipeline_id', pipelineId)
-      .eq('organization_id', organizationId)
       .order('position', { ascending: true })
       .order('created_at', { ascending: true });
     
@@ -75,21 +64,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // POST - Criar transição
 // =============================================
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+
   const pipelineId = params.id;
   
   if (!pipelineId) {
     return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
   try {
     const body = await request.json();
     const {
-      organizationId,
       name,
       description,
       sourceType,
@@ -103,19 +90,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       position,
     } = body;
     
-    // Validações
-    if (!organizationId || !sourceType || !triggerEvent || !toStageId) {
+    if (!sourceType || !triggerEvent || !toStageId) {
       return NextResponse.json({ 
-        error: 'organizationId, sourceType, triggerEvent and toStageId are required' 
+        error: 'sourceType, triggerEvent and toStageId are required' 
       }, { status: 400 });
     }
     
-    // Verificar se pipeline existe
+    // Verificar se pipeline existe - RLS filtra automaticamente
     const { data: pipeline } = await supabase
       .from('pipelines')
       .select('id')
       .eq('id', pipelineId)
-      .eq('organization_id', organizationId)
       .single();
     
     if (!pipeline) {
@@ -161,11 +146,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       transitionPosition = (lastTransition?.position || 0) + 1;
     }
     
-    // Criar transição
+    // Criar transição - usa organization_id do usuário autenticado
     const { data: transition, error: createError } = await supabase
       .from('pipeline_stage_transitions')
       .insert({
-        organization_id: organizationId,
+        organization_id: user.organization_id,
         pipeline_id: pipelineId,
         name: name || `${sourceType} - ${triggerEvent}`,
         description,
@@ -207,21 +192,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 // PUT - Atualizar transição
 // =============================================
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   const pipelineId = params.id;
   
   if (!pipelineId) {
     return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
   try {
     const body = await request.json();
     const {
-      organizationId,
       transitionId,
       name,
       description,
@@ -236,17 +219,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       position,
     } = body;
     
-    if (!organizationId || !transitionId) {
-      return NextResponse.json({ error: 'organizationId and transitionId required' }, { status: 400 });
+    if (!transitionId) {
+      return NextResponse.json({ error: 'transitionId required' }, { status: 400 });
     }
     
-    // Verificar se transição existe
+    // Verificar se transição existe - RLS filtra automaticamente
     const { data: existing } = await supabase
       .from('pipeline_stage_transitions')
       .select('id')
       .eq('id', transitionId)
       .eq('pipeline_id', pipelineId)
-      .eq('organization_id', organizationId)
       .single();
     
     if (!existing) {
@@ -270,6 +252,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (isEnabled !== undefined) updateData.is_enabled = isEnabled;
     if (position !== undefined) updateData.position = position;
     
+    // RLS filtra automaticamente
     const { data: transition, error: updateError } = await supabase
       .from('pipeline_stage_transitions')
       .update(updateData)
@@ -302,32 +285,30 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // DELETE - Deletar transição
 // =============================================
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   const pipelineId = params.id;
   
   if (!pipelineId) {
     return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
   const searchParams = request.nextUrl.searchParams;
-  const organizationId = searchParams.get('organizationId');
   const transitionId = searchParams.get('transitionId');
   
-  if (!organizationId || !transitionId) {
-    return NextResponse.json({ error: 'organizationId and transitionId required' }, { status: 400 });
+  if (!transitionId) {
+    return NextResponse.json({ error: 'transitionId required' }, { status: 400 });
   }
   
   try {
+    // RLS filtra automaticamente
     const { error: deleteError } = await supabase
       .from('pipeline_stage_transitions')
       .delete()
       .eq('id', transitionId)
-      .eq('pipeline_id', pipelineId)
-      .eq('organization_id', organizationId);
+      .eq('pipeline_id', pipelineId);
     
     if (deleteError) {
       console.error('[Transitions API] Error deleting:', deleteError);

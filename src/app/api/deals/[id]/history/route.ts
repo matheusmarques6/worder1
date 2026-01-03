@@ -6,35 +6,30 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 interface RouteParams {
   params: { id: string };
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   const dealId = params.id;
   
   if (!dealId) {
     return NextResponse.json({ error: 'Deal ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
   const searchParams = request.nextUrl.searchParams;
   const limit = parseInt(searchParams.get('limit') || '50');
   
   try {
-    // Buscar histórico de mudanças
+    // Buscar histórico de mudanças - RLS filtra automaticamente
     const { data: history, error } = await supabase
       .from('deal_stage_history')
       .select(`
@@ -57,7 +52,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     
-    // Buscar info dos usuários que fizeram mudanças
+    // Buscar info dos usuários
     const userIds = [...new Set(history?.filter(h => h.changed_by).map(h => h.changed_by))];
     let usersMap: Record<string, any> = {};
     
@@ -92,7 +87,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Calcular métricas
     const totalTimeInPipeline = history?.reduce((acc, h) => {
       if (h.time_in_previous_stage) {
-        // Converter interval para horas
         const match = h.time_in_previous_stage.match(/(\d+):(\d+):(\d+)/);
         if (match) {
           const hours = parseInt(match[1]) + parseInt(match[2]) / 60;

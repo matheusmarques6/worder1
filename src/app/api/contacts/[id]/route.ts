@@ -1,34 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 // GET - Get single contact
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
 
-  const searchParams = request.nextUrl.searchParams
-  const organizationId = searchParams.get('organizationId')
   const contactId = params.id
 
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-  }
-
   try {
+    // RLS filtra automaticamente por organization_id
     const { data: contact, error } = await supabase
       .from('contacts')
       .select('*')
       .eq('id', contactId)
-      .eq('organization_id', organizationId)
       .single()
 
     if (error) throw error
@@ -44,18 +33,13 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
 
   const contactId = params.id
   const body = await request.json()
   const { organizationId, ...updates } = body
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-  }
 
   try {
     // Build update object with only provided fields
@@ -83,14 +67,12 @@ export async function PATCH(
       }
     }
 
-    // Handle custom_fields merge if needed
+    // Handle custom_fields merge if needed - RLS filtra automaticamente
     if (updates.custom_fields && updates.merge_custom_fields) {
-      // Get current contact to merge custom fields
       const { data: currentContact } = await supabase
         .from('contacts')
         .select('custom_fields')
         .eq('id', contactId)
-        .eq('organization_id', organizationId)
         .single()
 
       if (currentContact) {
@@ -101,11 +83,11 @@ export async function PATCH(
       }
     }
 
+    // RLS filtra automaticamente
     const { data: contact, error } = await supabase
       .from('contacts')
       .update(updateData)
       .eq('id', contactId)
-      .eq('organization_id', organizationId)
       .select()
       .single()
 
@@ -122,33 +104,24 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
 
-  const searchParams = request.nextUrl.searchParams
-  const organizationId = searchParams.get('organizationId')
   const contactId = params.id
 
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-  }
-
   try {
-    // First, update any deals to remove contact_id
+    // First, update any deals to remove contact_id - RLS filtra automaticamente
     await supabase
       .from('deals')
       .update({ contact_id: null })
       .eq('contact_id', contactId)
-      .eq('organization_id', organizationId)
 
-    // Delete the contact
+    // Delete the contact - RLS filtra automaticamente
     const { error } = await supabase
       .from('contacts')
       .delete()
       .eq('id', contactId)
-      .eq('organization_id', organizationId)
 
     if (error) throw error
 

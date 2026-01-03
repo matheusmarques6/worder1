@@ -7,37 +7,26 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // =============================================
 // GET - Detectar possíveis duplicados
 // =============================================
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
   
   const searchParams = request.nextUrl.searchParams;
-  const organizationId = searchParams.get('organizationId');
   const limit = parseInt(searchParams.get('limit') || '50');
   
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
-  
   try {
-    // Buscar todos os contatos
+    // RLS filtra automaticamente por organization_id
     const { data: contacts, error } = await supabase
       .from('contacts')
       .select('id, email, phone, first_name, last_name, total_orders, total_spent, created_at')
-      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -48,13 +37,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ duplicates: [] });
     }
     
-    // Detectar duplicados por email
     const emailGroups: Record<string, any[]> = {};
     const phoneGroups: Record<string, any[]> = {};
     const nameGroups: Record<string, any[]> = {};
     
     contacts.forEach(contact => {
-      // Por email
       if (contact.email) {
         const normalizedEmail = contact.email.toLowerCase().trim();
         if (!emailGroups[normalizedEmail]) {
@@ -63,7 +50,6 @@ export async function GET(request: NextRequest) {
         emailGroups[normalizedEmail].push(contact);
       }
       
-      // Por telefone
       if (contact.phone) {
         const normalizedPhone = contact.phone.replace(/\D/g, '');
         if (normalizedPhone.length >= 10) {
@@ -74,7 +60,6 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      // Por nome (fuzzy)
       if (contact.first_name && contact.last_name) {
         const normalizedName = `${contact.first_name} ${contact.last_name}`.toLowerCase().trim();
         if (!nameGroups[normalizedName]) {
@@ -84,11 +69,9 @@ export async function GET(request: NextRequest) {
       }
     });
     
-    // Montar lista de duplicados
     const duplicates: any[] = [];
     const processedIds = new Set<string>();
     
-    // Duplicados por email (maior confiança)
     Object.entries(emailGroups)
       .filter(([_, contacts]) => contacts.length > 1)
       .forEach(([email, contacts]) => {
@@ -104,7 +87,6 @@ export async function GET(request: NextRequest) {
         }
       });
     
-    // Duplicados por telefone (alta confiança)
     Object.entries(phoneGroups)
       .filter(([_, contacts]) => contacts.length > 1)
       .forEach(([phone, contacts]) => {
@@ -120,7 +102,6 @@ export async function GET(request: NextRequest) {
         }
       });
     
-    // Duplicados por nome (média confiança)
     Object.entries(nameGroups)
       .filter(([_, contacts]) => contacts.length > 1)
       .forEach(([name, contacts]) => {
@@ -136,7 +117,6 @@ export async function GET(request: NextRequest) {
         }
       });
     
-    // Ordenar por confiança e limitar
     const sortedDuplicates = duplicates
       .sort((a, b) => {
         const confidenceOrder: Record<string, number> = { high: 3, medium: 2, low: 1 };
@@ -161,29 +141,23 @@ export async function GET(request: NextRequest) {
 }
 
 // =============================================
-// POST - Fazer merge de contatos ou detectar duplicados
+// POST - Fazer merge de contatos
 // =============================================
 export async function POST(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
   
   try {
     const body = await request.json();
-    const { organizationId, action, primaryContactId, secondaryContactIds } = body;
+    const { action, primaryContactId, secondaryContactIds } = body;
     
-    // Se for ação de detectar, redireciona para lógica de GET
+    // Se for ação de detectar
     if (action === 'detect') {
-      if (!organizationId) {
-        return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-      }
-      
-      // Buscar todos os contatos
+      // RLS filtra automaticamente
       const { data: contacts, error } = await supabase
         .from('contacts')
         .select('id, email, phone, first_name, last_name, total_orders, total_spent, created_at')
-        .eq('organization_id', organizationId)
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -194,7 +168,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ duplicates: [] });
       }
       
-      // Detectar duplicados por email
       const emailGroups: Record<string, any[]> = {};
       
       contacts.forEach(contact => {
@@ -222,84 +195,66 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // Lógica original de merge
-    if (!organizationId || !primaryContactId || !secondaryContactIds?.length) {
+    // Lógica de merge
+    if (!primaryContactId || !secondaryContactIds?.length) {
       return NextResponse.json(
-        { error: 'organizationId, primaryContactId and secondaryContactIds are required' },
+        { error: 'primaryContactId and secondaryContactIds are required' },
         { status: 400 }
       );
     }
     
-    // Buscar contatos
+    // RLS filtra automaticamente
     const allContactIds = [primaryContactId, ...secondaryContactIds];
     const { data: contacts, error: fetchError } = await supabase
       .from('contacts')
       .select('*')
-      .eq('organization_id', organizationId)
       .in('id', allContactIds);
     
     if (fetchError || !contacts?.length) {
-      return NextResponse.json(
-        { error: 'Contacts not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Contacts not found' }, { status: 404 });
     }
     
     const primary = contacts.find(c => c.id === primaryContactId);
     const secondaries = contacts.filter(c => c.id !== primaryContactId);
     
     if (!primary) {
-      return NextResponse.json(
-        { error: 'Primary contact not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Primary contact not found' }, { status: 404 });
     }
     
-    // ========================================
     // Fazer merge dos dados
-    // ========================================
-    
-    // Combinar tags (único)
     const allTags = [
       ...(primary.tags || []),
       ...secondaries.flatMap(s => s.tags || []),
     ];
     const uniqueTags = [...new Set(allTags)];
     
-    // Somar métricas
     const totalOrders = (primary.total_orders || 0) + 
       secondaries.reduce((sum, s) => sum + (s.total_orders || 0), 0);
     const totalSpent = (primary.total_spent || 0) + 
       secondaries.reduce((sum, s) => sum + (s.total_spent || 0), 0);
     
-    // Merge custom_fields (secundários preenchem gaps do primário)
     const mergedCustomFields = {
       ...secondaries.reduce((acc, s) => ({ ...acc, ...(s.custom_fields || {}) }), {}),
-      ...(primary.custom_fields || {}), // Primário tem prioridade
+      ...(primary.custom_fields || {}),
     };
     
-    // Pegar dados mais recentes que estão faltando no primário
     const fillGaps: any = {};
     
-    // Email - usar o primeiro disponível
     if (!primary.email) {
       const emailFromSecondary = secondaries.find(s => s.email)?.email;
       if (emailFromSecondary) fillGaps.email = emailFromSecondary;
     }
     
-    // Phone
     if (!primary.phone) {
       const phoneFromSecondary = secondaries.find(s => s.phone)?.phone;
       if (phoneFromSecondary) fillGaps.phone = phoneFromSecondary;
     }
     
-    // Company
     if (!primary.company) {
       const companyFromSecondary = secondaries.find(s => s.company)?.company;
       if (companyFromSecondary) fillGaps.company = companyFromSecondary;
     }
     
-    // Last order (pegar o mais recente)
     const allLastOrders = [primary, ...secondaries]
       .filter(c => c.last_order_at)
       .sort((a, b) => new Date(b.last_order_at).getTime() - new Date(a.last_order_at).getTime());
@@ -312,7 +267,6 @@ export async function POST(request: NextRequest) {
       fillGaps.last_order_number = allLastOrders[0].last_order_number;
     }
     
-    // First order (pegar o mais antigo)
     const allFirstOrders = [primary, ...secondaries]
       .filter(c => c.first_order_at)
       .sort((a, b) => new Date(a.first_order_at).getTime() - new Date(b.first_order_at).getTime());
@@ -322,9 +276,7 @@ export async function POST(request: NextRequest) {
       fillGaps.first_order_at = allFirstOrders[0].first_order_at;
     }
     
-    // ========================================
     // Atualizar contato primário
-    // ========================================
     const { error: updateError } = await supabase
       .from('contacts')
       .update({
@@ -343,55 +295,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
     
-    // ========================================
-    // Transferir relacionamentos
-    // ========================================
-    
-    // Transferir deals
+    // Transferir relacionamentos - RLS filtra automaticamente
     const { error: dealsError } = await supabase
       .from('deals')
       .update({ contact_id: primaryContactId, updated_at: new Date().toISOString() })
       .in('contact_id', secondaryContactIds);
     
-    if (dealsError) {
-      console.error('[Merge] Error transferring deals:', dealsError);
-    }
+    if (dealsError) console.error('[Merge] Error transferring deals:', dealsError);
     
-    // Transferir conversas WhatsApp
     const { error: conversationsError } = await supabase
       .from('whatsapp_conversations')
       .update({ contact_id: primaryContactId, updated_at: new Date().toISOString() })
       .in('contact_id', secondaryContactIds);
     
-    if (conversationsError) {
-      console.error('[Merge] Error transferring conversations:', conversationsError);
-    }
+    if (conversationsError) console.error('[Merge] Error transferring conversations:', conversationsError);
     
-    // Transferir atividades (manter todas)
     const { error: activitiesError } = await supabase
       .from('contact_activities')
       .update({ contact_id: primaryContactId })
       .in('contact_id', secondaryContactIds);
     
-    if (activitiesError) {
-      console.error('[Merge] Error transferring activities:', activitiesError);
-    }
+    if (activitiesError) console.error('[Merge] Error transferring activities:', activitiesError);
     
-    // Transferir purchases
     const { error: purchasesError } = await supabase
       .from('contact_purchases')
       .update({ contact_id: primaryContactId })
       .in('contact_id', secondaryContactIds);
     
-    if (purchasesError) {
-      console.error('[Merge] Error transferring purchases:', purchasesError);
-    }
+    if (purchasesError) console.error('[Merge] Error transferring purchases:', purchasesError);
     
-    // ========================================
     // Registrar atividade de merge
-    // ========================================
     await supabase.from('contact_activities').insert({
-      organization_id: organizationId,
+      organization_id: user.organization_id,
       contact_id: primaryContactId,
       type: 'merge',
       title: `Contatos mesclados`,
@@ -405,22 +340,15 @@ export async function POST(request: NextRequest) {
       occurred_at: new Date().toISOString(),
     });
     
-    // ========================================
     // Deletar contatos secundários
-    // ========================================
     const { error: deleteError } = await supabase
       .from('contacts')
       .delete()
       .in('id', secondaryContactIds);
     
-    if (deleteError) {
-      console.error('[Merge] Error deleting secondaries:', deleteError);
-      // Não falha o merge, só loga
-    }
+    if (deleteError) console.error('[Merge] Error deleting secondaries:', deleteError);
     
-    // ========================================
     // Buscar contato atualizado
-    // ========================================
     const { data: mergedContact } = await supabase
       .from('contacts')
       .select('*')

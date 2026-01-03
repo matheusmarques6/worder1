@@ -6,28 +6,18 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
-function getSupabase() {
-  return getSupabaseAdmin();
-}
-
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
   
   const searchParams = request.nextUrl.searchParams;
-  const organizationId = searchParams.get('organizationId');
   const pipelineId = searchParams.get('pipelineId');
-  const period = searchParams.get('period') || 'month'; // month, quarter, year
-  
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
+  const period = searchParams.get('period') || 'month';
   
   try {
     // Calcular datas do período
@@ -56,9 +46,7 @@ export async function GET(request: NextRequest) {
         previousEndDate = new Date(now.getFullYear(), now.getMonth(), 0);
     }
     
-    // ========================================
-    // 1. BUSCAR DEALS ABERTOS
-    // ========================================
+    // 1. BUSCAR DEALS ABERTOS - RLS filtra automaticamente
     let dealsQuery = supabase
       .from('deals')
       .select(`
@@ -73,7 +61,6 @@ export async function GET(request: NextRequest) {
         pipeline_id,
         contact:contacts(id, first_name, last_name, email)
       `)
-      .eq('organization_id', organizationId)
       .eq('status', 'open');
     
     if (pipelineId) {
@@ -87,9 +74,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: dealsError.message }, { status: 500 });
     }
     
-    // ========================================
     // 2. BUSCAR STAGES COM PROBABILIDADE
-    // ========================================
     const stageIds = [...new Set(openDeals?.map(d => d.stage_id).filter(Boolean))];
     let stagesMap: Record<string, any> = {};
     
@@ -104,21 +89,16 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    // ========================================
     // 3. CALCULAR MÉTRICAS
-    // ========================================
     const deals = openDeals || [];
     
-    // Total pipeline
     const totalPipeline = deals.reduce((sum, d) => sum + (Number(d.value) || 0), 0);
     
-    // Weighted pipeline (valor × probabilidade)
     const weightedPipeline = deals.reduce((sum, d) => {
       const probability = stagesMap[d.stage_id]?.probability || 50;
       return sum + ((Number(d.value) || 0) * probability / 100);
     }, 0);
     
-    // Por commit level
     const byCommitLevel = {
       omit: deals.filter(d => d.commit_level === 'omit').reduce((s, d) => s + (Number(d.value) || 0), 0),
       pipeline: deals.filter(d => d.commit_level === 'pipeline' || !d.commit_level).reduce((s, d) => s + (Number(d.value) || 0), 0),
@@ -126,7 +106,6 @@ export async function GET(request: NextRequest) {
       commit: deals.filter(d => d.commit_level === 'commit').reduce((s, d) => s + (Number(d.value) || 0), 0),
     };
     
-    // Por stage
     const byStage = deals.reduce((acc: any, deal) => {
       const stage = stagesMap[deal.stage_id];
       const stageName = stage?.name || 'Sem Estágio';
@@ -152,16 +131,12 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {});
     
-    // Ordenar por position
     const stagesArray = Object.values(byStage).sort((a: any, b: any) => a.position - b.position);
     
-    // ========================================
-    // 4. BUSCAR DEALS FECHADOS (para win rate)
-    // ========================================
+    // 4. BUSCAR DEALS FECHADOS - RLS filtra automaticamente
     const { data: closedDeals } = await supabase
       .from('deals')
       .select('id, status, value, closed_at')
-      .eq('organization_id', organizationId)
       .in('status', ['won', 'lost'])
       .gte('closed_at', startDate.toISOString())
       .lte('closed_at', endDate.toISOString());
@@ -173,13 +148,10 @@ export async function GET(request: NextRequest) {
     const winRate = totalClosed > 0 ? (wonDeals.length / totalClosed) * 100 : 0;
     const wonValue = wonDeals.reduce((s, d) => s + (Number(d.value) || 0), 0);
     
-    // ========================================
-    // 5. BUSCAR PERÍODO ANTERIOR
-    // ========================================
+    // 5. BUSCAR PERÍODO ANTERIOR - RLS filtra automaticamente
     const { data: previousClosedDeals } = await supabase
       .from('deals')
       .select('id, status, value')
-      .eq('organization_id', organizationId)
       .in('status', ['won', 'lost'])
       .gte('closed_at', previousStartDate.toISOString())
       .lte('closed_at', previousEndDate.toISOString());
@@ -187,13 +159,10 @@ export async function GET(request: NextRequest) {
     const previousWonDeals = previousClosedDeals?.filter(d => d.status === 'won') || [];
     const previousWonValue = previousWonDeals.reduce((s, d) => s + (Number(d.value) || 0), 0);
     
-    // ========================================
-    // 6. CALCULAR VELOCIDADE DE VENDAS
-    // ========================================
+    // 6. CALCULAR VELOCIDADE - RLS filtra automaticamente
     const { data: stageHistory } = await supabase
       .from('deal_stage_history')
       .select('to_stage_id, to_stage_name, time_in_previous_stage')
-      .eq('organization_id', organizationId)
       .gte('changed_at', startDate.toISOString());
     
     const velocityByStage = stageHistory?.reduce((acc: any, h) => {
@@ -209,7 +178,6 @@ export async function GET(request: NextRequest) {
       
       acc[h.to_stage_id].count++;
       
-      // Converter interval para horas
       if (h.time_in_previous_stage) {
         const match = h.time_in_previous_stage.match(/(\d+):(\d+):(\d+)/);
         if (match) {
@@ -220,7 +188,6 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {}) || {};
     
-    // Calcular média por stage
     const velocity = Object.entries(velocityByStage).map(([id, data]: [string, any]) => ({
       stageId: id,
       stageName: data.name,
@@ -228,29 +195,24 @@ export async function GET(request: NextRequest) {
       dealsCount: data.count,
     }));
     
-    // ========================================
     // 7. MONTAR RESPOSTA
-    // ========================================
     return NextResponse.json({
       period,
       periodLabel: period === 'month' ? 'Este Mês' : period === 'quarter' ? 'Este Trimestre' : 'Este Ano',
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
       
-      // Métricas principais
       metrics: {
         pipeline_total: Math.round(totalPipeline * 100) / 100,
         weighted_total: Math.round(weightedPipeline * 100) / 100,
         deal_count: deals.length,
         avg_deal_value: deals.length > 0 ? Math.round((totalPipeline / deals.length) * 100) / 100 : 0,
-        // Aliases camelCase para compatibilidade
         totalPipeline: Math.round(totalPipeline * 100) / 100,
         weightedPipeline: Math.round(weightedPipeline * 100) / 100,
         dealCount: deals.length,
         avgDealValue: deals.length > 0 ? Math.round((totalPipeline / deals.length) * 100) / 100 : 0,
       },
       
-      // Por commit level
       byCommitLevel: {
         omit: Math.round(byCommitLevel.omit * 100) / 100,
         pipeline: Math.round(byCommitLevel.pipeline * 100) / 100,
@@ -258,10 +220,8 @@ export async function GET(request: NextRequest) {
         commit: Math.round(byCommitLevel.commit * 100) / 100,
       },
       
-      // Por stage (para funil)
       byStage: stagesArray,
       
-      // Performance do período
       performance: {
         won: {
           count: wonDeals.length,
@@ -274,7 +234,6 @@ export async function GET(request: NextRequest) {
         winRate: Math.round(winRate * 10) / 10,
       },
       
-      // Comparação com período anterior
       vsPrevious: {
         previousWonValue: Math.round(previousWonValue * 100) / 100,
         changePercent: previousWonValue > 0 
@@ -282,15 +241,12 @@ export async function GET(request: NextRequest) {
           : wonValue > 0 ? 100 : 0,
       },
       
-      // Velocidade de vendas
       velocity,
       
-      // Top deals
       topDeals: deals
         .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
         .slice(0, 5)
         .map(d => {
-          // Supabase retorna relações como array
           const contact = Array.isArray(d.contact) ? d.contact[0] : d.contact;
           return {
             id: d.id,

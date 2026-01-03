@@ -7,13 +7,9 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 interface RouteParams {
   params: { id: string };
@@ -23,39 +19,32 @@ interface RouteParams {
 // GET - Listar regras de automação
 // =============================================
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   const pipelineId = params.id;
   
   if (!pipelineId) {
     return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
   const searchParams = request.nextUrl.searchParams;
-  const organizationId = searchParams.get('organizationId');
   const includeTransitions = searchParams.get('includeTransitions') === 'true';
   
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
-  
   try {
-    // Verificar se pipeline existe e pertence à organização
+    // Verificar se pipeline existe - RLS filtra automaticamente
     const { data: pipeline, error: pipelineError } = await supabase
       .from('pipelines')
       .select('id, name, organization_id')
       .eq('id', pipelineId)
-      .eq('organization_id', organizationId)
       .single();
     
     if (pipelineError || !pipeline) {
       return NextResponse.json({ error: 'Pipeline not found' }, { status: 404 });
     }
     
-    // Buscar regras de automação
+    // Buscar regras de automação - RLS filtra automaticamente
     const { data: rules, error: rulesError } = await supabase
       .from('pipeline_automation_rules')
       .select(`
@@ -64,7 +53,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         assigned_user:profiles!assign_to_user_id(id, full_name, avatar_url)
       `)
       .eq('pipeline_id', pipelineId)
-      .eq('organization_id', organizationId)
       .order('position', { ascending: true })
       .order('created_at', { ascending: true });
     
@@ -73,7 +61,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: rulesError.message }, { status: 500 });
     }
     
-    // Buscar transições se solicitado
+    // Buscar transições se solicitado - RLS filtra automaticamente
     let transitions = null;
     if (includeTransitions) {
       const { data: transitionsData } = await supabase
@@ -84,13 +72,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           to_stage:pipeline_stages!to_stage_id(id, name, color)
         `)
         .eq('pipeline_id', pipelineId)
-        .eq('organization_id', organizationId)
         .order('position', { ascending: true });
       
       transitions = transitionsData || [];
     }
     
-    // Agrupar regras por source_type para facilitar na UI
+    // Agrupar regras por source_type
     const rulesBySource = (rules || []).reduce((acc: Record<string, any[]>, rule) => {
       if (!acc[rule.source_type]) {
         acc[rule.source_type] = [];
@@ -121,21 +108,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // POST - Criar nova regra de automação
 // =============================================
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+
   const pipelineId = params.id;
   
   if (!pipelineId) {
     return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
   try {
     const body = await request.json();
     const {
-      organizationId,
       name,
       description,
       sourceType,
@@ -153,30 +138,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       position,
     } = body;
     
-    // Validações
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-    }
-    
     if (!name || !sourceType || !triggerEvent) {
       return NextResponse.json({ 
         error: 'name, sourceType and triggerEvent are required' 
       }, { status: 400 });
     }
     
-    // Validar que tem um estágio inicial
     if (!initialStageId) {
       return NextResponse.json({ 
         error: 'initialStageId é obrigatório. Selecione um estágio inicial.' 
       }, { status: 400 });
     }
     
-    // Verificar se pipeline existe
+    // Verificar se pipeline existe - RLS filtra automaticamente
     const { data: pipeline, error: pipelineError } = await supabase
       .from('pipelines')
       .select('id, organization_id')
       .eq('id', pipelineId)
-      .eq('organization_id', organizationId)
       .single();
     
     if (pipelineError || !pipeline) {
@@ -213,11 +191,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       rulePosition = (lastRule?.position || 0) + 1;
     }
     
-    // Criar regra
+    // Criar regra - usa organization_id do usuário autenticado
     const { data: rule, error: createError } = await supabase
       .from('pipeline_automation_rules')
       .insert({
-        organization_id: organizationId,
+        organization_id: user.organization_id,
         pipeline_id: pipelineId,
         name,
         description: description || null,

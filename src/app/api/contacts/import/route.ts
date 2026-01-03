@@ -6,13 +6,9 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 interface ContactRow {
   email?: string;
@@ -28,29 +24,21 @@ interface ContactRow {
 // POST - Importar contatos
 // =============================================
 export async function POST(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
   
   try {
     const body = await request.json();
     const {
-      organizationId,
       contacts,
       columnMapping,
       options = {},
     } = body;
     
-    // options:
-    // - skipDuplicates: boolean (default: true)
-    // - duplicateField: 'email' | 'phone' (default: 'email')
-    // - updateExisting: boolean (default: false)
-    // - defaultTags: string[]
-    
-    if (!organizationId || !contacts?.length) {
+    if (!contacts?.length) {
       return NextResponse.json(
-        { error: 'organizationId and contacts are required' },
+        { error: 'contacts are required' },
         { status: 400 }
       );
     }
@@ -72,7 +60,6 @@ export async function POST(request: NextRequest) {
         }
       });
       
-      // Se não tem mapping, tentar detectar automaticamente
       if (!columnMapping || Object.keys(columnMapping).length === 0) {
         Object.entries(row).forEach(([key, value]) => {
           const normalizedKey = key.toLowerCase().trim();
@@ -96,7 +83,6 @@ export async function POST(request: NextRequest) {
       return mapped;
     });
     
-    // Validar contatos (pelo menos email ou phone)
     const validContacts = mappedContacts.filter(c => c.email || c.phone);
     const invalidCount = mappedContacts.length - validContacts.length;
     
@@ -107,7 +93,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Buscar contatos existentes para detectar duplicados
+    // Buscar contatos existentes - RLS filtra automaticamente
     let existingContacts: any[] = [];
     
     if (skipDuplicates || updateExisting) {
@@ -118,14 +104,12 @@ export async function POST(request: NextRequest) {
         const { data } = await supabase
           .from('contacts')
           .select('id, email, phone')
-          .eq('organization_id', organizationId)
           .in('email', emails);
         existingContacts = data || [];
       } else if (duplicateField === 'phone' && phones.length > 0) {
         const { data } = await supabase
           .from('contacts')
-          .select('id, email, phone')
-          .eq('organization_id', organizationId);
+          .select('id, email, phone');
         
         existingContacts = (data || []).filter(c => {
           const normalizedPhone = c.phone?.replace(/\D/g, '');
@@ -134,7 +118,6 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Criar mapa de existentes
     const existingMap = new Map<string, any>();
     existingContacts.forEach(c => {
       if (duplicateField === 'email' && c.email) {
@@ -144,7 +127,6 @@ export async function POST(request: NextRequest) {
       }
     });
     
-    // Separar em novos e duplicados
     const newContacts: any[] = [];
     const duplicateContacts: any[] = [];
     const toUpdate: any[] = [];
@@ -167,9 +149,8 @@ export async function POST(request: NextRequest) {
       }
     });
     
-    // Preparar para inserção
+    // Preparar para inserção - usa organization_id do usuário autenticado
     const contactsToInsert = newContacts.map(contact => {
-      // Processar tags
       let tags = defaultTags;
       if (contact.tags) {
         const contactTags = contact.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
@@ -177,7 +158,7 @@ export async function POST(request: NextRequest) {
       }
       
       return {
-        organization_id: organizationId,
+        organization_id: user.organization_id,
         email: contact.email?.toLowerCase() || null,
         phone: contact.phone || null,
         first_name: contact.first_name || null,
@@ -190,7 +171,6 @@ export async function POST(request: NextRequest) {
       };
     });
     
-    // Inserir em batches de 100
     const BATCH_SIZE = 100;
     let insertedCount = 0;
     let errorCount = 0;
@@ -213,7 +193,6 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Atualizar existentes se necessário
     let updatedCount = 0;
     
     if (updateExisting && toUpdate.length > 0) {
@@ -261,9 +240,6 @@ export async function POST(request: NextRequest) {
 // GET - Preview de importação
 // =============================================
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  
-  // Retorna informações sobre o formato esperado
   return NextResponse.json({
     supportedFormats: ['csv', 'json'],
     columns: {
@@ -302,7 +278,6 @@ export async function GET(request: NextRequest) {
       },
     },
     example: {
-      organizationId: 'uuid',
       contacts: [
         { email: 'joao@exemplo.com', nome: 'João Silva', telefone: '11999999999' },
       ],

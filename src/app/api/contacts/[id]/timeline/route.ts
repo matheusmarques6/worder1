@@ -6,37 +6,32 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 interface RouteParams {
   params: { id: string };
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   const contactId = params.id;
   
   if (!contactId) {
     return NextResponse.json({ error: 'Contact ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
   const searchParams = request.nextUrl.searchParams;
   const limit = parseInt(searchParams.get('limit') || '30');
   const offset = parseInt(searchParams.get('offset') || '0');
-  const type = searchParams.get('type'); // Filtrar por tipo
+  const type = searchParams.get('type');
   
   try {
-    // 1. Buscar dados enriquecidos do contato
+    // 1. Buscar dados enriquecidos do contato - RLS filtra automaticamente
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .select(`
@@ -81,7 +76,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
     }
     
-    // 2. Buscar atividades
+    // 2. Buscar atividades - RLS filtra automaticamente
     let activitiesQuery = supabase
       .from('contact_activities')
       .select('*', { count: 'exact' })
@@ -96,7 +91,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     
     const { data: activities, error: activitiesError, count: activitiesCount } = await activitiesQuery;
     
-    // 3. Buscar últimas compras (produtos)
+    // 3. Buscar últimas compras - RLS filtra automaticamente
     const { data: purchases } = await supabase
       .from('contact_purchases')
       .select('*')
@@ -104,7 +99,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .order('order_date', { ascending: false })
       .limit(20);
     
-    // 4. Buscar pedidos únicos (para histórico)
+    // 4. Buscar pedidos únicos
     const uniqueOrders = purchases?.reduce((acc: any[], purchase) => {
       if (!acc.find(o => o.order_id === purchase.order_id)) {
         acc.push({
@@ -120,7 +115,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return acc;
     }, []) || [];
     
-    // 5. Buscar sessões de navegação (histórico de visitas)
+    // 5. Buscar sessões de navegação - RLS filtra automaticamente
     const { data: sessions } = await supabase
       .from('contact_sessions')
       .select('*')
@@ -132,7 +127,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       contact: {
         ...contact,
-        // Garantir que arrays existem
         last_order_products: contact.last_order_products || [],
         favorite_products: contact.favorite_products || [],
         last_viewed_products: contact.last_viewed_products || [],
@@ -159,32 +153,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // POST - Adicionar atividade manual
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+
   const contactId = params.id;
   
   if (!contactId) {
     return NextResponse.json({ error: 'Contact ID required' }, { status: 400 });
   }
   
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-  
   try {
     const body = await request.json();
-    const { organizationId, type, title, description, metadata } = body;
+    const { type, title, description, metadata } = body;
     
-    if (!organizationId || !type || !title) {
+    if (!type || !title) {
       return NextResponse.json(
-        { error: 'organizationId, type and title are required' },
+        { error: 'type and title are required' },
         { status: 400 }
       );
     }
     
+    // Usa organization_id do usuário autenticado
     const { data, error } = await supabase
       .from('contact_activities')
       .insert({
-        organization_id: organizationId,
+        organization_id: user.organization_id,
         contact_id: contactId,
         type,
         title,

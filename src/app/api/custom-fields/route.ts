@@ -9,36 +9,26 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // =============================================
 // GET - Listar campos personalizados
 // =============================================
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
   
   const searchParams = request.nextUrl.searchParams;
-  const organizationId = searchParams.get('organizationId');
-  const entityType = searchParams.get('entityType'); // 'contact', 'deal', 'company'
-  
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
+  const entityType = searchParams.get('entityType');
   
   try {
+    // RLS filtra automaticamente por organization_id
     let query = supabase
       .from('custom_field_definitions')
       .select('*')
-      .eq('organization_id', organizationId)
       .eq('is_active', true)
       .order('position', { ascending: true });
     
@@ -102,16 +92,13 @@ export async function GET(request: NextRequest) {
 // POST - Criar campo personalizado
 // =============================================
 export async function POST(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
   
   try {
     const body = await request.json();
     
-    // Aceitar tanto camelCase quanto snake_case
-    const organizationId = body.organizationId || body.organization_id;
     const entityType = body.entityType || body.entity_type;
     const fieldKey = body.fieldKey || body.field_key || body.field_name?.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     const fieldLabel = body.fieldLabel || body.field_label || body.field_name;
@@ -123,10 +110,9 @@ export async function POST(request: NextRequest) {
     const placeholder = body.placeholder;
     const helpText = body.helpText || body.help_text;
     
-    // Validações
-    if (!organizationId || !entityType || !fieldLabel) {
+    if (!entityType || !fieldLabel) {
       return NextResponse.json(
-        { error: 'organizationId, entityType/entity_type and fieldLabel/field_name are required' },
+        { error: 'entityType/entity_type and fieldLabel/field_name are required' },
         { status: 400 }
       );
     }
@@ -145,17 +131,15 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Normalizar key (lowercase, underscore)
     const normalizedKey = fieldKey
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_|_$/g, '');
     
-    // Buscar última posição
+    // Buscar última posição - RLS filtra automaticamente
     const { data: lastField } = await supabase
       .from('custom_field_definitions')
       .select('position')
-      .eq('organization_id', organizationId)
       .eq('entity_type', entityType)
       .order('position', { ascending: false })
       .limit(1)
@@ -163,11 +147,11 @@ export async function POST(request: NextRequest) {
     
     const nextPosition = (lastField?.position || 0) + 1;
     
-    // Criar campo
+    // Criar campo - usa organization_id do usuário autenticado
     const { data: field, error } = await supabase
       .from('custom_field_definitions')
       .insert({
-        organization_id: organizationId,
+        organization_id: user.organization_id,
         entity_type: entityType,
         field_key: normalizedKey,
         field_label: fieldLabel,
@@ -185,7 +169,7 @@ export async function POST(request: NextRequest) {
       .single();
     
     if (error) {
-      if (error.code === '23505') { // Unique violation
+      if (error.code === '23505') {
         return NextResponse.json(
           { error: 'Campo com essa chave já existe' },
           { status: 409 }
@@ -220,17 +204,14 @@ export async function POST(request: NextRequest) {
 // PUT - Atualizar campo personalizado
 // =============================================
 export async function PUT(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
   
   try {
     const body = await request.json();
     
-    // Aceitar tanto camelCase quanto snake_case
     const id = body.id;
-    const organizationId = body.organizationId || body.organization_id;
     const fieldLabel = body.fieldLabel || body.field_label || body.field_name;
     const fieldType = body.fieldType || body.field_type;
     const options = body.options;
@@ -242,14 +223,10 @@ export async function PUT(request: NextRequest) {
     const position = body.position;
     const isActive = body.isActive ?? body.is_active;
     
-    if (!id || !organizationId) {
-      return NextResponse.json(
-        { error: 'id and organizationId are required' },
-        { status: 400 }
-      );
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
     
-    // Construir objeto de update
     const updates: any = {};
     if (fieldLabel !== undefined) updates.field_label = fieldLabel;
     if (fieldType !== undefined) updates.field_type = fieldType;
@@ -262,11 +239,11 @@ export async function PUT(request: NextRequest) {
     if (position !== undefined) updates.position = position;
     if (isActive !== undefined) updates.is_active = isActive;
     
+    // RLS filtra automaticamente
     const { data: field, error } = await supabase
       .from('custom_field_definitions')
       .update(updates)
       .eq('id', id)
-      .eq('organization_id', organizationId)
       .select()
       .single();
     
@@ -299,29 +276,23 @@ export async function PUT(request: NextRequest) {
 // DELETE - Remover campo personalizado
 // =============================================
 export async function DELETE(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
   
   const searchParams = request.nextUrl.searchParams;
   const id = searchParams.get('id');
-  const organizationId = searchParams.get('organizationId');
   
-  if (!id || !organizationId) {
-    return NextResponse.json(
-      { error: 'id and organizationId are required' },
-      { status: 400 }
-    );
+  if (!id) {
+    return NextResponse.json({ error: 'id is required' }, { status: 400 });
   }
   
   try {
-    // Soft delete (marcar como inativo)
+    // Soft delete - RLS filtra automaticamente
     const { error } = await supabase
       .from('custom_field_definitions')
       .update({ is_active: false })
-      .eq('id', id)
-      .eq('organization_id', organizationId);
+      .eq('id', id);
     
     if (error) {
       console.error('[Custom Fields API] Error:', error);

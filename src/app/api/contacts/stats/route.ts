@@ -7,62 +7,48 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
-function getSupabase() {
-  return getSupabaseAdmin();
-}
-
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-
-  const organizationId = request.nextUrl.searchParams.get('organizationId');
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
 
   try {
     // Calcular primeiro dia do mês atual
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    // Total de contatos
+    // Total de contatos - RLS filtra automaticamente
     const { count: totalContacts } = await supabase
       .from('contacts')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', organizationId);
+      .select('*', { count: 'exact', head: true });
 
-    // Novos este mês
+    // Novos este mês - RLS filtra automaticamente
     const { count: newThisMonth } = await supabase
       .from('contacts')
       .select('*', { count: 'exact', head: true })
-      .eq('organization_id', organizationId)
       .gte('created_at', firstDayOfMonth);
 
-    // Contatos com compras
+    // Contatos com compras - RLS filtra automaticamente
     const { count: withOrders } = await supabase
       .from('contacts')
       .select('*', { count: 'exact', head: true })
-      .eq('organization_id', organizationId)
       .gt('total_orders', 0);
 
-    // Valor total - usar RPC para agregação no banco (sem limite de 1000)
+    // Valor total - usar RPC para agregação no banco
     let totalValue = 0;
     
-    // Tentar usar RPC primeiro
+    // Tentar usar RPC primeiro (a RPC deve respeitar RLS ou receber org_id)
     const { data: rpcData, error: rpcError } = await supabase
-      .rpc('get_contacts_total_spent', { p_organization_id: organizationId });
+      .rpc('get_contacts_total_spent', { p_organization_id: user.organization_id });
     
     if (!rpcError && rpcData !== null) {
       totalValue = Number(rpcData) || 0;
     } else {
-      // Fallback: buscar em lotes para contornar limite de 1000
+      // Fallback: buscar em lotes - RLS filtra automaticamente
       let offset = 0;
       const batchSize = 1000;
       let hasMore = true;
@@ -71,7 +57,6 @@ export async function GET(request: NextRequest) {
         const { data: batchData } = await supabase
           .from('contacts')
           .select('total_spent')
-          .eq('organization_id', organizationId)
           .range(offset, offset + batchSize - 1);
         
         if (batchData && batchData.length > 0) {

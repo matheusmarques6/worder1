@@ -10,42 +10,29 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // =============================================
 // GET - Preview de exclusão (mostra o que será afetado)
 // =============================================
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
 
   const searchParams = request.nextUrl.searchParams;
-  const organizationId = searchParams.get('organizationId');
   const contactIds = searchParams.get('contactIds')?.split(',').filter(Boolean);
-  const filter = searchParams.get('filter'); // 'all', 'source:shopify', 'tag:teste', etc
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
-  }
+  const filter = searchParams.get('filter');
 
   try {
     let targetContactIds: string[] = [];
 
-    // Se tem IDs específicos, usa eles
     if (contactIds && contactIds.length > 0) {
       targetContactIds = contactIds;
-    } 
-    // Se tem filtro, busca os IDs correspondentes
-    else if (filter) {
-      const ids = await getContactIdsByFilter(supabase, organizationId, filter);
+    } else if (filter) {
+      const ids = await getContactIdsByFilter(supabase, filter);
       targetContactIds = ids;
     } else {
       return NextResponse.json({ error: 'contactIds or filter required' }, { status: 400 });
@@ -62,25 +49,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Contar deals associados
+    // RLS filtra automaticamente
     const { count: dealsCount } = await supabase
       .from('deals')
       .select('id', { count: 'exact', head: true })
-      .eq('organization_id', organizationId)
       .in('contact_id', targetContactIds);
 
-    // Contar conversas WhatsApp
     const { count: conversationsCount } = await supabase
       .from('whatsapp_conversations')
       .select('id', { count: 'exact', head: true })
-      .eq('organization_id', organizationId)
       .in('contact_id', targetContactIds);
 
-    // Contar atividades
     const { count: activitiesCount } = await supabase
       .from('activities')
       .select('id', { count: 'exact', head: true })
-      .eq('organization_id', organizationId)
       .in('contact_id', targetContactIds);
 
     return NextResponse.json({
@@ -89,7 +71,7 @@ export async function GET(request: NextRequest) {
         dealsCount: dealsCount || 0,
         conversationsCount: conversationsCount || 0,
         activitiesCount: activitiesCount || 0,
-        contactIds: targetContactIds.slice(0, 100), // Retorna primeiros 100 para preview
+        contactIds: targetContactIds.slice(0, 100),
       }
     });
 
@@ -103,41 +85,33 @@ export async function GET(request: NextRequest) {
 // POST - Executar operação em massa
 // =============================================
 export async function POST(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
 
   try {
     const body = await request.json();
     const {
-      organizationId,
       action,
       contactIds,
       filter,
       options = {},
     } = body;
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
-    }
-
     if (!action) {
       return NextResponse.json({ error: 'Action required' }, { status: 400 });
     }
 
-    // Determinar quais contatos serão afetados
     let targetContactIds: string[] = [];
 
     if (contactIds && contactIds.length > 0) {
       targetContactIds = contactIds;
     } else if (filter) {
-      targetContactIds = await getContactIdsByFilter(supabase, organizationId, filter);
+      targetContactIds = await getContactIdsByFilter(supabase, filter);
     } else {
       return NextResponse.json({ error: 'contactIds or filter required' }, { status: 400 });
     }
 
-    // Limite de segurança
     const MAX_BULK_OPERATIONS = 1000;
     if (targetContactIds.length > MAX_BULK_OPERATIONS) {
       return NextResponse.json({ 
@@ -145,16 +119,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Executar ação
     switch (action) {
       case 'delete':
-        return await handleBulkDelete(supabase, organizationId, targetContactIds, options);
+        return await handleBulkDelete(supabase, user.organization_id, targetContactIds, options);
       
       case 'addTags':
-        return await handleAddTags(supabase, organizationId, targetContactIds, options.tags);
+        return await handleAddTags(supabase, targetContactIds, options.tags);
       
       case 'removeTags':
-        return await handleRemoveTags(supabase, organizationId, targetContactIds, options.tags);
+        return await handleRemoveTags(supabase, targetContactIds, options.tags);
       
       default:
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
@@ -170,20 +143,13 @@ export async function POST(request: NextRequest) {
 // HELPERS
 // =============================================
 
-/**
- * Busca IDs de contatos por filtro
- */
 async function getContactIdsByFilter(
   supabase: any,
-  organizationId: string,
   filter: string
 ): Promise<string[]> {
-  let query = supabase
-    .from('contacts')
-    .select('id')
-    .eq('organization_id', organizationId);
+  // RLS filtra automaticamente por organization_id
+  let query = supabase.from('contacts').select('id');
 
-  // Parsear filtro
   if (filter.startsWith('source:')) {
     const source = filter.replace('source:', '');
     query = query.eq('source', source);
@@ -202,12 +168,6 @@ async function getContactIdsByFilter(
   } else if (filter.startsWith('created_after:')) {
     const date = filter.replace('created_after:', '');
     query = query.gt('created_at', date);
-  } else if (filter === 'duplicates_email') {
-    // Buscar emails duplicados e retornar todos exceto o mais antigo
-    const { data: duplicates } = await supabase.rpc('find_duplicate_contacts_by_email', {
-      org_id: organizationId
-    });
-    return duplicates?.map((d: any) => d.id) || [];
   }
 
   const { data, error } = await query.limit(1000);
@@ -220,9 +180,6 @@ async function getContactIdsByFilter(
   return data?.map((c: any) => c.id) || [];
 }
 
-/**
- * Exclusão em massa de contatos
- */
 async function handleBulkDelete(
   supabase: any,
   organizationId: string,
@@ -242,40 +199,32 @@ async function handleBulkDelete(
   };
 
   try {
-    // 1. Deletar atividades (sempre, para não ter orfãos)
+    // RLS filtra automaticamente em todas as queries
     const { count: activitiesDeleted } = await supabase
       .from('activities')
       .delete({ count: 'exact' })
-      .eq('organization_id', organizationId)
       .in('contact_id', contactIds);
     
     results.activitiesDeleted = activitiesDeleted || 0;
 
-    // 2. Deletar deals se solicitado
     if (options.deleteDeals) {
       const { count: dealsDeleted } = await supabase
         .from('deals')
         .delete({ count: 'exact' })
-        .eq('organization_id', organizationId)
         .in('contact_id', contactIds);
       
       results.dealsDeleted = dealsDeleted || 0;
     } else {
-      // Apenas desvincular deals (set contact_id = null)
       await supabase
         .from('deals')
         .update({ contact_id: null, updated_at: new Date().toISOString() })
-        .eq('organization_id', organizationId)
         .in('contact_id', contactIds);
     }
 
-    // 3. Deletar conversas WhatsApp se solicitado
     if (options.deleteConversations) {
-      // Primeiro deletar mensagens
       const { data: conversations } = await supabase
         .from('whatsapp_conversations')
         .select('id')
-        .eq('organization_id', organizationId)
         .in('contact_id', contactIds);
       
       if (conversations && conversations.length > 0) {
@@ -294,26 +243,20 @@ async function handleBulkDelete(
         results.conversationsDeleted = convsDeleted || 0;
       }
     } else {
-      // Apenas desvincular conversas
       await supabase
         .from('whatsapp_conversations')
         .update({ contact_id: null, updated_at: new Date().toISOString() })
-        .eq('organization_id', organizationId)
         .in('contact_id', contactIds);
     }
 
-    // 4. Deletar pedidos Shopify associados (opcional - desvincular)
     await supabase
       .from('shopify_orders')
       .update({ contact_id: null, updated_at: new Date().toISOString() })
-      .eq('organization_id', organizationId)
       .in('contact_id', contactIds);
 
-    // 5. Deletar contatos
     const { count: contactsDeleted, error: deleteError } = await supabase
       .from('contacts')
       .delete({ count: 'exact' })
-      .eq('organization_id', organizationId)
       .in('id', contactIds);
 
     if (deleteError) {
@@ -322,7 +265,6 @@ async function handleBulkDelete(
 
     results.contactsDeleted = contactsDeleted || 0;
 
-    // 6. Registrar log de auditoria (ignorar erros se tabela não existir)
     try {
       await supabase.from('audit_logs').insert({
         organization_id: organizationId,
@@ -338,11 +280,10 @@ async function handleBulkDelete(
         created_at: new Date().toISOString(),
       });
     } catch (auditError) {
-      // Ignorar erro se tabela não existir
       console.log('[Bulk Delete] Audit log skipped:', auditError);
     }
 
-    console.log(`[Bulk Delete] ✅ Deleted ${results.contactsDeleted} contacts for org ${organizationId}`);
+    console.log(`[Bulk Delete] ✅ Deleted ${results.contactsDeleted} contacts`);
 
     return NextResponse.json({
       success: true,
@@ -361,12 +302,8 @@ async function handleBulkDelete(
   }
 }
 
-/**
- * Adicionar tags em massa
- */
 async function handleAddTags(
   supabase: any,
-  organizationId: string,
   contactIds: string[],
   tags: string[]
 ): Promise<NextResponse> {
@@ -377,21 +314,18 @@ async function handleAddTags(
   let updated = 0;
   const errors: string[] = [];
 
-  // Processar em lotes de 100
   const batchSize = 100;
   for (let i = 0; i < contactIds.length; i += batchSize) {
     const batch = contactIds.slice(i, i + batchSize);
     
-    // Buscar tags atuais
+    // RLS filtra automaticamente
     const { data: contacts } = await supabase
       .from('contacts')
       .select('id, tags')
-      .eq('organization_id', organizationId)
       .in('id', batch);
 
     if (!contacts) continue;
 
-    // Atualizar cada contato
     for (const contact of contacts) {
       const currentTags = contact.tags || [];
       const newTags = [...new Set([...currentTags, ...tags])];
@@ -416,12 +350,8 @@ async function handleAddTags(
   });
 }
 
-/**
- * Remover tags em massa
- */
 async function handleRemoveTags(
   supabase: any,
-  organizationId: string,
   contactIds: string[],
   tags: string[]
 ): Promise<NextResponse> {
@@ -432,21 +362,18 @@ async function handleRemoveTags(
   let updated = 0;
   const errors: string[] = [];
 
-  // Processar em lotes de 100
   const batchSize = 100;
   for (let i = 0; i < contactIds.length; i += batchSize) {
     const batch = contactIds.slice(i, i + batchSize);
     
-    // Buscar tags atuais
+    // RLS filtra automaticamente
     const { data: contacts } = await supabase
       .from('contacts')
       .select('id, tags')
-      .eq('organization_id', organizationId)
       .in('id', batch);
 
     if (!contacts) continue;
 
-    // Atualizar cada contato
     for (const contact of contacts) {
       const currentTags = contact.tags || [];
       const newTags = currentTags.filter((t: string) => !tags.includes(t));
