@@ -128,6 +128,17 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Helper para verificar se usuário é admin/owner
+async function isUserAdmin(supabase: any, userId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .single();
+  
+  return data?.role === 'admin' || data?.role === 'owner';
+}
+
 // POST - Criar agente ou atribuir chat
 export async function POST(request: NextRequest) {
   const auth = await getAuthClient();
@@ -200,6 +211,15 @@ export async function POST(request: NextRequest) {
 
     // CRIAR AGENTE HUMANO
     if (agentType === 'human') {
+      // ⚠️ GATE DE SEGURANÇA: Apenas admin/owner pode criar agentes
+      const isAdmin = await isUserAdmin(supabase, user.id);
+      if (!isAdmin) {
+        return NextResponse.json(
+          { error: 'Apenas administradores podem criar agentes' },
+          { status: 403 }
+        );
+      }
+
       if (!email) {
         return NextResponse.json({ error: 'email is required for human agents' }, { status: 400 });
       }
@@ -490,9 +510,18 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase } = auth;
+  const { supabase, user } = auth;
 
   try {
+    // ⚠️ GATE DE SEGURANÇA: Apenas admin/owner pode deletar agentes
+    const isAdmin = await isUserAdmin(supabase, user.id);
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: 'Apenas administradores podem deletar agentes' },
+        { status: 403 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get('id');
     
