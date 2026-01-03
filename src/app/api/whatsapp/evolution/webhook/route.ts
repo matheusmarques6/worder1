@@ -120,10 +120,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    // Se a instância tem webhook_token configurado, exigir autenticação
-    if (instance.webhook_token && !valid) {
-      console.warn('[Evolution Webhook] Unauthorized - instance requires token:', event.instance);
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // SEGURANÇA: Exigir autenticação SEMPRE
+    const globalSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
+    const hasGlobalAuth = globalSecret && valid;
+    const hasInstanceAuth = instance.webhook_token && valid;
+    
+    if (!hasGlobalAuth && !hasInstanceAuth) {
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('[Evolution Webhook] BLOCKED - No valid authentication:', {
+          instance: event.instance,
+          ip,
+          hasToken: valid,
+          hasGlobalSecret: !!globalSecret,
+          hasInstanceToken: !!instance.webhook_token,
+        });
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      } else {
+        console.warn('[Evolution Webhook] DEV MODE - Would block in production:', event.instance);
+      }
     }
 
     // Processar evento

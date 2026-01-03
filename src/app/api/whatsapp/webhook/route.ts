@@ -117,10 +117,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Instance not found' }, { status: 404 });
     }
     
-    // Se a instância tem webhook_token configurado, exigir autenticação
-    if (instance.webhook_token && !valid) {
-      console.warn('[Webhook] Unauthorized - instance requires token:', instanceName);
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // SEGURANÇA: Exigir autenticação SEMPRE
+    // Opção 1: Token específico da instância
+    // Opção 2: Secret global EVOLUTION_WEBHOOK_SECRET
+    const globalSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
+    const hasGlobalAuth = globalSecret && valid;
+    const hasInstanceAuth = instance.webhook_token && valid;
+    
+    // Se não tem nenhuma forma de autenticação válida, bloquear
+    if (!hasGlobalAuth && !hasInstanceAuth) {
+      // Em produção, SEMPRE bloquear. Em dev, alertar mas permitir (para testes)
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('[Webhook] BLOCKED - No valid authentication:', {
+          instance: instanceName,
+          ip,
+          hasToken: valid,
+          hasGlobalSecret: !!globalSecret,
+          hasInstanceToken: !!instance.webhook_token,
+        });
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      } else {
+        console.warn('[Webhook] DEV MODE - Would block in production:', instanceName);
+      }
     }
 
     // Processar evento

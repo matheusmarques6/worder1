@@ -230,10 +230,12 @@ BEGIN
     table_name, table_name
   );
   
-  -- Create UPDATE policy
+  -- Create UPDATE policy (USANDO + WITH CHECK para prevenir mudança de org_id)
   EXECUTE format('
     CREATE POLICY "%s_org_update" ON %I
-    FOR UPDATE USING (organization_id = auth.organization_id())',
+    FOR UPDATE 
+    USING (organization_id = auth.organization_id())
+    WITH CHECK (organization_id = auth.organization_id())',
     table_name, table_name
   );
   
