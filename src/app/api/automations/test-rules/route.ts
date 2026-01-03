@@ -6,27 +6,17 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
-function getSupabase() {
-  return getSupabaseAdmin();
-}
-
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
 
-  const organizationId = request.nextUrl.searchParams.get('organizationId');
   const sourceType = request.nextUrl.searchParams.get('sourceType') || 'shopify';
   const triggerEvent = request.nextUrl.searchParams.get('triggerEvent') || 'order_paid';
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-  }
 
   try {
     // 1. Verificar se tabela existe
@@ -44,15 +34,14 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // 2. Buscar todas as regras da organização
+    // 2. Buscar todas as regras da organização - RLS filtra automaticamente
     const { data: allRules, error: allRulesError } = await supabase
       .from('pipeline_automation_rules')
       .select(`
         *,
         pipeline:pipelines!pipeline_id(id, name),
         initial_stage:pipeline_stages!initial_stage_id(id, name, color)
-      `)
-      .eq('organization_id', organizationId);
+      `);
 
     if (allRulesError) {
       return NextResponse.json({
@@ -62,7 +51,7 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // 3. Buscar regras ativas para o evento específico
+    // 3. Buscar regras ativas para o evento específico - RLS filtra automaticamente
     const { data: activeRules, error: activeError } = await supabase
       .from('pipeline_automation_rules')
       .select(`
@@ -70,7 +59,6 @@ export async function GET(request: NextRequest) {
         pipeline:pipelines!pipeline_id(id, name),
         initial_stage:pipeline_stages!initial_stage_id(id, name, color)
       `)
-      .eq('organization_id', organizationId)
       .eq('source_type', sourceType)
       .eq('trigger_event', triggerEvent)
       .eq('is_enabled', true);
@@ -83,25 +71,22 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // 4. Verificar configuração do Shopify
+    // 4. Verificar configuração do Shopify - RLS filtra automaticamente
     const { data: shopifyStore } = await supabase
       .from('shopify_stores')
       .select('id, shop_domain, is_active, default_pipeline_id, default_stage_id')
-      .eq('organization_id', organizationId)
       .eq('is_active', true)
       .maybeSingle();
 
-    // 5. Verificar webhooks registrados
+    // 5. Verificar webhooks registrados - RLS filtra automaticamente
     const { data: webhookEvents } = await supabase
       .from('shopify_webhook_events')
       .select('id, topic, status, received_at')
-      .eq('organization_id', organizationId)
       .order('received_at', { ascending: false })
       .limit(10);
 
     return NextResponse.json({
       success: true,
-      organizationId,
       query: { sourceType, triggerEvent },
       
       // Resumo

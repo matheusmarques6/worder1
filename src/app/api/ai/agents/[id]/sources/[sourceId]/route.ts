@@ -1,13 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 // =====================================================
 // GET - BUSCAR FONTE ESPECÍFICA
@@ -17,23 +9,19 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string; sourceId: string } }
 ) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const supabase = getSupabase()
     const { id: agentId, sourceId } = params
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
-
+    // RLS filtra automaticamente por organization_id
     const { data: source, error } = await supabase
       .from('ai_agent_sources')
       .select('*')
       .eq('id', sourceId)
       .eq('agent_id', agentId)
-      .eq('organization_id', organizationId)
       .single()
 
     if (error) {
@@ -59,30 +47,24 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string; sourceId: string } }
 ) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const supabase = getSupabase()
     const { id: agentId, sourceId } = params
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
-
-    // Buscar fonte para obter file_url (para deletar do storage)
+    // Buscar fonte para obter file_url - RLS filtra automaticamente
     const { data: source } = await supabase
       .from('ai_agent_sources')
       .select('file_url')
       .eq('id', sourceId)
       .eq('agent_id', agentId)
-      .eq('organization_id', organizationId)
       .single()
 
     // Deletar do storage se houver arquivo
     if (source?.file_url) {
       try {
-        // Extrair path do arquivo da URL
         const urlParts = source.file_url.split('/ai-sources/')
         if (urlParts[1]) {
           await supabase.storage
@@ -91,7 +73,6 @@ export async function DELETE(
         }
       } catch (storageError) {
         console.error('Error deleting file from storage:', storageError)
-        // Continua mesmo se falhar a remoção do storage
       }
     }
 
@@ -101,13 +82,12 @@ export async function DELETE(
       .delete()
       .eq('source_id', sourceId)
 
-    // Deletar fonte (cascata já remove chunks pelo FK)
+    // Deletar fonte - RLS filtra automaticamente
     const { error } = await supabase
       .from('ai_agent_sources')
       .delete()
       .eq('id', sourceId)
       .eq('agent_id', agentId)
-      .eq('organization_id', organizationId)
 
     if (error) {
       console.error('Error deleting source:', error)

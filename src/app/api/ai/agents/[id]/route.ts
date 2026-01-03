@@ -1,13 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 // =====================================================
 // GET - BUSCAR AGENTE POR ID
@@ -17,23 +9,19 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Autenticação via RLS
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const supabase = getSupabase()
     const agentId = params.id
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
-
-    // Buscar agente
+    // Buscar agente - RLS filtra automaticamente por organization_id
     const { data: agent, error } = await supabase
       .from('ai_agents')
       .select('*')
       .eq('id', agentId)
-      .eq('organization_id', organizationId)
       .single()
 
     if (error) {
@@ -59,23 +47,20 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Autenticação via RLS
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const supabase = getSupabase()
     const agentId = params.id
     const body = await request.json()
 
-    const { organization_id } = body
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
-
-    // Verificar se agente existe
+    // Verificar se agente existe (RLS garante que só vê da própria org)
     const { data: existing, error: checkError } = await supabase
       .from('ai_agents')
       .select('id')
       .eq('id', agentId)
-      .eq('organization_id', organization_id)
       .single()
 
     if (checkError || !existing) {
@@ -107,12 +92,11 @@ export async function PUT(
       }
     }
 
-    // Atualizar
+    // Atualizar - RLS filtra automaticamente
     const { data: agent, error } = await supabase
       .from('ai_agents')
       .update(updateData)
       .eq('id', agentId)
-      .eq('organization_id', organization_id)
       .select()
       .single()
 
@@ -137,16 +121,14 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Autenticação via RLS
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const supabase = getSupabase()
     const agentId = params.id
     const body = await request.json()
-
-    const { organization_id } = body
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
 
     // Preparar dados para atualização
     const updateData: Record<string, any> = {
@@ -173,12 +155,11 @@ export async function PATCH(
       }
     }
 
-    // Atualizar
+    // Atualizar - RLS filtra automaticamente
     const { data: agent, error } = await supabase
       .from('ai_agents')
       .update(updateData)
       .eq('id', agentId)
-      .eq('organization_id', organization_id)
       .select()
       .single()
 
@@ -205,23 +186,19 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Autenticação via RLS
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const supabase = getSupabase()
     const agentId = params.id
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
-
-    // Deletar (cascata remove fontes, chunks, ações, integrações)
+    // Deletar - RLS filtra automaticamente (cascata remove fontes, chunks, ações, integrações)
     const { error } = await supabase
       .from('ai_agents')
       .delete()
       .eq('id', agentId)
-      .eq('organization_id', organizationId)
 
     if (error) {
       console.error('Error deleting agent:', error)

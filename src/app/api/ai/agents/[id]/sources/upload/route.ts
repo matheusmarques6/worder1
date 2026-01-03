@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // Tipos de arquivo permitidos
 const ALLOWED_MIME_TYPES = [
@@ -32,20 +24,18 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+
   try {
-    const supabase = getSupabase()
     const agentId = params.id
 
     // Parse form data
     const formData = await request.formData()
     const file = formData.get('file') as File | null
-    const organizationId = formData.get('organization_id') as string | null
 
     // Validações
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
-
     if (!file) {
       return NextResponse.json({ error: 'file é obrigatório' }, { status: 400 })
     }
@@ -65,12 +55,11 @@ export async function POST(
       }, { status: 400 })
     }
 
-    // Verificar se agente existe
+    // Verificar se agente existe - RLS filtra automaticamente
     const { data: agent, error: agentError } = await supabase
       .from('ai_agents')
       .select('id')
       .eq('id', agentId)
-      .eq('organization_id', organizationId)
       .single()
 
     if (agentError || !agent) {
@@ -80,7 +69,7 @@ export async function POST(
     // Gerar nome único para o arquivo
     const timestamp = Date.now()
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-    const fileName = `${organizationId}/${agentId}/${timestamp}_${sanitizedName}`
+    const fileName = `${user.organization_id}/${agentId}/${timestamp}_${sanitizedName}`
 
     // Upload para o storage do Supabase
     const fileBuffer = Buffer.from(await file.arrayBuffer())
@@ -95,8 +84,6 @@ export async function POST(
 
     if (uploadError) {
       console.error('Error uploading file:', uploadError)
-      // Se o bucket não existir, criar a fonte sem o arquivo
-      // e processar o conteúdo diretamente
       console.log('Storage upload failed, will process file content directly')
     }
 
@@ -111,9 +98,9 @@ export async function POST(
       fileUrl = urlData?.publicUrl
     }
 
-    // Criar registro da fonte
+    // Criar registro da fonte - usa organization_id do usuário autenticado
     const sourceData = {
-      organization_id: organizationId,
+      organization_id: user.organization_id,
       agent_id: agentId,
       source_type: 'file',
       name: file.name,
@@ -137,8 +124,7 @@ export async function POST(
     }
 
     // Processar arquivo em background
-    // Para arquivos, passamos o conteúdo diretamente se não houver storage
-    processFileAsync(source.id, organizationId, fileBuffer, file.type).catch(err => {
+    processFileAsync(source.id, user.organization_id, fileBuffer, file.type).catch(err => {
       console.error('Error in async file processing:', err)
     })
 
@@ -177,4 +163,3 @@ async function processFileAsync(
     console.error('Error triggering file processing:', error)
   }
 }
-

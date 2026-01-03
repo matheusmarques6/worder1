@@ -4,22 +4,16 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic'
 
-function getSupabase() {
-  return getSupabaseAdmin();
-}
-
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
 
   const searchParams = request.nextUrl.searchParams
-  const organizationId = searchParams.get('organizationId')
   const status = searchParams.get('status')
   const source = searchParams.get('source')
   const days = searchParams.get('days')
@@ -27,15 +21,11 @@ export async function GET(request: NextRequest) {
   const page = parseInt(searchParams.get('page') || '1')
   const limit = parseInt(searchParams.get('limit') || '50')
 
-  if (!organizationId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
-  }
-
   try {
+    // RLS filtra automaticamente por organization_id
     let query = supabase
       .from('automation_logs')
       .select('*')
-      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1)
 
@@ -65,7 +55,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ logs: data || [] })
   } catch (error: any) {
     console.error('Error fetching automation logs:', error)
-    // Return empty array if table doesn't exist yet
     if (error.code === '42P01') {
       return NextResponse.json({ logs: [] })
     }
@@ -75,15 +64,13 @@ export async function GET(request: NextRequest) {
 
 // POST - Create log entry (used by automation engine)
 export async function POST(request: NextRequest) {
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
 
   try {
     const body = await request.json()
     const {
-      organizationId,
       rule_id,
       rule_name,
       source_type,
@@ -96,14 +83,15 @@ export async function POST(request: NextRequest) {
       metadata,
     } = body
 
-    if (!organizationId || !source_type || !event_type || !status) {
+    if (!source_type || !event_type || !status) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // Usa organization_id do usuário autenticado
     const { data, error } = await supabase
       .from('automation_logs')
       .insert({
-        organization_id: organizationId,
+        organization_id: user.organization_id,
         rule_id,
         rule_name,
         source_type,

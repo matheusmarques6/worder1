@@ -4,33 +4,20 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic'
 
-function getSupabase() {
-  return getSupabaseAdmin();
-}
-
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
-
-  const searchParams = request.nextUrl.searchParams
-  const organizationId = searchParams.get('organizationId')
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
 
   try {
-    // Get rules count
+    // Get rules count - RLS filtra automaticamente
     const { data: rules, error: rulesError } = await supabase
       .from('automation_rules')
       .select('id, is_enabled, deals_created_count, deals_moved_count')
-      .eq('organization_id', organizationId)
 
     if (rulesError) throw rulesError
 
@@ -47,10 +34,10 @@ export async function GET(request: NextRequest) {
 
     let errorsCount = 0
     try {
+      // RLS filtra automaticamente
       const { count, error: logsError } = await supabase
         .from('automation_logs')
         .select('id', { count: 'exact', head: true })
-        .eq('organization_id', organizationId)
         .eq('status', 'error')
         .gte('created_at', sevenDaysAgo.toISOString())
 
@@ -58,7 +45,6 @@ export async function GET(request: NextRequest) {
         errorsCount = count || 0
       }
     } catch (e) {
-      // Table might not exist yet
       console.log('automation_logs table may not exist yet')
     }
 

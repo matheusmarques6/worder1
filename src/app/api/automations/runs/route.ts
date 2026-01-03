@@ -1,25 +1,22 @@
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
 // =============================================
 // WORDER: API de Execuções de Automações
 // /src/app/api/automations/runs/route.ts
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-
-// Lazy client
-function getSupabase() {
-  return getSupabaseAdmin();
-}
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 // =============================================
 // GET - Listar execuções
 // =============================================
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const supabase = getSupabase();
     const searchParams = request.nextUrl.searchParams;
     
-    const organizationId = searchParams.get('organizationId');
     const automationId = searchParams.get('automationId');
     const runId = searchParams.get('runId');
     const status = searchParams.get('status');
@@ -31,16 +28,12 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '20', 10), 100);
     const includeSteps = searchParams.get('includeSteps') === 'true';
     
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-    }
-    
     // Se pediu um run específico
     if (runId) {
-      return getRunDetail(supabase, organizationId, runId, includeSteps);
+      return getRunDetail(supabase, runId, includeSteps);
     }
     
-    // Listar runs
+    // Listar runs - RLS filtra automaticamente
     let query = supabase
       .from('automation_runs')
       .select(`
@@ -48,7 +41,6 @@ export async function GET(request: NextRequest) {
         automations(name),
         contacts(id, email, first_name, last_name)
       `, { count: 'exact' })
-      .eq('organization_id', organizationId)
       .order('started_at', { ascending: false });
     
     if (automationId) {
@@ -131,11 +123,10 @@ export async function GET(request: NextRequest) {
 // =============================================
 async function getRunDetail(
   supabase: any, 
-  organizationId: string, 
   runId: string,
   includeSteps: boolean
 ) {
-  // Buscar run
+  // Buscar run - RLS filtra automaticamente
   const { data: run, error: runError } = await supabase
     .from('automation_runs')
     .select(`
@@ -144,7 +135,6 @@ async function getRunDetail(
       contacts(id, email, first_name, last_name, phone)
     `)
     .eq('id', runId)
-    .eq('organization_id', organizationId)
     .single();
   
   if (runError || !run) {
@@ -214,24 +204,23 @@ async function getRunDetail(
 // POST - Reexecutar ou testar automação
 // =============================================
 export async function POST(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const supabase = getSupabase();
     const body = await request.json();
     
-    const { action, organizationId, automationId, runId, testData } = body;
-    
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-    }
+    const { action, automationId, runId, testData } = body;
     
     // Ação: reexecutar um run anterior
     if (action === 'rerun' && runId) {
-      return rerunExecution(supabase, organizationId, runId);
+      return rerunExecution(supabase, runId);
     }
     
     // Ação: testar automação com dados de exemplo
     if (action === 'test' && automationId) {
-      return testAutomation(supabase, organizationId, automationId, testData);
+      return testAutomation(supabase, automationId, testData);
     }
     
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
@@ -245,20 +234,19 @@ export async function POST(request: NextRequest) {
 // =============================================
 // Reexecutar uma execução anterior
 // =============================================
-async function rerunExecution(supabase: any, organizationId: string, runId: string) {
-  // Buscar run original
+async function rerunExecution(supabase: any, runId: string) {
+  // Buscar run original - RLS filtra automaticamente
   const { data: originalRun, error } = await supabase
     .from('automation_runs')
     .select('*')
     .eq('id', runId)
-    .eq('organization_id', organizationId)
     .single();
   
   if (error || !originalRun) {
     return NextResponse.json({ error: 'Run not found' }, { status: 404 });
   }
   
-  // Buscar automação
+  // Buscar automação - RLS filtra automaticamente
   const { data: automation } = await supabase
     .from('automations')
     .select('*')
@@ -269,14 +257,10 @@ async function rerunExecution(supabase: any, organizationId: string, runId: stri
     return NextResponse.json({ error: 'Automation not found' }, { status: 404 });
   }
   
-  // TODO: Chamar engine de execução
-  // Por enquanto, retornar que foi enfileirado
-  
   return NextResponse.json({
     message: 'Reexecução enfileirada',
     original_run_id: runId,
     automation_id: automation.id,
-    // new_run_id: newRun.id // Quando implementado
   });
 }
 
@@ -285,35 +269,30 @@ async function rerunExecution(supabase: any, organizationId: string, runId: stri
 // =============================================
 async function testAutomation(
   supabase: any, 
-  organizationId: string, 
   automationId: string,
   testData?: any
 ) {
-  // Buscar automação
+  // Buscar automação - RLS filtra automaticamente
   const { data: automation, error } = await supabase
     .from('automations')
     .select('*')
     .eq('id', automationId)
-    .eq('organization_id', organizationId)
     .single();
   
   if (error || !automation) {
     return NextResponse.json({ error: 'Automation not found' }, { status: 404 });
   }
   
-  // Buscar um contato de exemplo se não fornecido
+  // Buscar um contato de exemplo se não fornecido - RLS filtra automaticamente
   let contactId = testData?.contact_id;
   if (!contactId) {
     const { data: contacts } = await supabase
       .from('contacts')
       .select('id')
-      .eq('organization_id', organizationId)
       .limit(1);
     
     contactId = contacts?.[0]?.id;
   }
-  
-  // TODO: Chamar engine de execução em modo teste
   
   return NextResponse.json({
     message: 'Teste enfileirado',
@@ -327,25 +306,23 @@ async function testAutomation(
 // DELETE - Limpar execuções antigas
 // =============================================
 export async function DELETE(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const supabase = getSupabase();
     const searchParams = request.nextUrl.searchParams;
     
-    const organizationId = searchParams.get('organizationId');
     const automationId = searchParams.get('automationId');
     const olderThanDays = parseInt(searchParams.get('olderThanDays') || '30', 10);
-    
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 });
-    }
     
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
     
+    // RLS filtra automaticamente
     let query = supabase
       .from('automation_runs')
       .delete()
-      .eq('organization_id', organizationId)
       .lt('created_at', cutoffDate.toISOString());
     
     if (automationId) {

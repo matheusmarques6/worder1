@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chunkText } from '@/lib/ai/processors/text-processor'
 import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // =====================================================
 // POST - SINCRONIZAR PRODUTOS
@@ -23,24 +15,19 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string; integrationId: string } }
 ) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+
   try {
-    const supabase = getSupabase()
     const { id: agentId, integrationId } = params
-    const body = await request.json()
 
-    const { organization_id } = body
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
-
-    // Buscar integração
+    // Buscar integração - RLS filtra automaticamente
     const { data: integration, error: intError } = await supabase
       .from('ai_agent_integrations')
       .select('*')
       .eq('id', integrationId)
       .eq('agent_id', agentId)
-      .eq('organization_id', organization_id)
       .single()
 
     if (intError || !integration) {
@@ -57,7 +44,7 @@ export async function POST(
     let products: any[] = []
     
     try {
-      products = await fetchProducts(supabase, organization_id, integration)
+      products = await fetchProducts(supabase, user.organization_id, integration)
     } catch (fetchError: any) {
       await supabase
         .from('ai_agent_integrations')
@@ -83,7 +70,7 @@ export async function POST(
       const { data: source } = await supabase
         .from('ai_agent_sources')
         .insert({
-          organization_id,
+          organization_id: user.organization_id,
           agent_id: agentId,
           source_type: 'products',
           name: `Produtos ${integration.integration_type}`,
@@ -124,7 +111,7 @@ export async function POST(
 
     // Inserir chunks
     const chunks = productTexts.map((text, i) => ({
-      organization_id,
+      organization_id: user.organization_id,
       source_id: sourceId,
       agent_id: agentId,
       content: text,
@@ -189,16 +176,14 @@ async function fetchProducts(
   organizationId: string,
   integration: any
 ): Promise<any[]> {
-  // Buscar produtos da tabela de produtos sincronizados
+  // Buscar produtos da tabela de produtos sincronizados - RLS já filtra
   const { data: products, error } = await supabase
     .from('shopify_products')
     .select('*')
-    .eq('organization_id', organizationId)
     .limit(1000)
 
   if (error) {
     console.error('Error fetching products:', error)
-    // Retornar array vazio se tabela não existir
     return []
   }
 
@@ -212,37 +197,31 @@ async function fetchProducts(
 function formatProductForEmbedding(product: any, integration: any): string {
   const parts: string[] = []
 
-  // Nome do produto
   const name = product.title || product.name
   if (name) {
     parts.push(`Produto: ${name}`)
   }
 
-  // Descrição
   const description = product.description || product.body_html
   if (description) {
-    // Remover HTML tags
     const cleanDesc = description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
     if (cleanDesc) {
       parts.push(`Descrição: ${cleanDesc}`)
     }
   }
 
-  // Preço (se permitido)
   if (integration.allow_price_info) {
     const price = product.price || product.variants?.[0]?.price
     if (price) {
       parts.push(`Preço: R$ ${parseFloat(price).toFixed(2)}`)
     }
     
-    // Preço comparativo (desconto)
     const comparePrice = product.compare_at_price || product.variants?.[0]?.compare_at_price
     if (comparePrice && parseFloat(comparePrice) > parseFloat(price || 0)) {
       parts.push(`Preço original: R$ ${parseFloat(comparePrice).toFixed(2)}`)
     }
   }
 
-  // Estoque (se permitido)
   if (integration.allow_stock_info) {
     const quantity = product.inventory_quantity || product.variants?.[0]?.inventory_quantity
     if (quantity !== undefined && quantity !== null) {
@@ -254,19 +233,16 @@ function formatProductForEmbedding(product: any, integration: any): string {
     }
   }
 
-  // SKU
   const sku = product.sku || product.variants?.[0]?.sku
   if (sku) {
     parts.push(`SKU: ${sku}`)
   }
 
-  // Categoria/Tipo
   const type = product.product_type || product.category
   if (type) {
     parts.push(`Categoria: ${type}`)
   }
 
-  // Tags
   if (product.tags) {
     const tags = typeof product.tags === 'string' ? product.tags : product.tags.join(', ')
     if (tags) {
@@ -274,7 +250,6 @@ function formatProductForEmbedding(product: any, integration: any): string {
     }
   }
 
-  // Variantes
   if (product.variants && product.variants.length > 1) {
     const variantInfo = product.variants
       .slice(0, 5)
@@ -289,4 +264,3 @@ function formatProductForEmbedding(product: any, integration: any): string {
 
   return parts.join('\n')
 }
-

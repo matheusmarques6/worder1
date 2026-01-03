@@ -1,28 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic'
 
-function getSupabase() {
-  return getSupabaseAdmin();
-}
-
 // GET - Fetch sales analytics data with multi-pipeline support
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
 
   const searchParams = request.nextUrl.searchParams
-  const organizationId = searchParams.get('organizationId')
   const period = searchParams.get('period') || 'month'
   const pipelineIds = searchParams.get('pipelineIds')
   const includeComparison = searchParams.get('includeComparison') === 'true'
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId is required' }, { status: 400 })
-  }
 
   try {
     const now = new Date()
@@ -70,14 +60,13 @@ export async function GET(request: NextRequest) {
 
     const selectedPipelineIds = pipelineIds ? pipelineIds.split(',').filter(Boolean) : []
 
-    // 1. FETCH PIPELINES
+    // 1. FETCH PIPELINES - RLS filtra automaticamente
     const { data: pipelines } = await supabase
       .from('pipelines')
       .select('id, name, color')
-      .eq('organization_id', organizationId)
       .order('position', { ascending: true })
 
-    // 2. FETCH ALL DEALS
+    // 2. FETCH ALL DEALS - RLS filtra automaticamente
     let dealsQuery = supabase
       .from('deals')
       .select(`
@@ -86,7 +75,6 @@ export async function GET(request: NextRequest) {
         stage:pipeline_stages(id, name, color, probability, position),
         contact:contacts(id, first_name, last_name, email)
       `)
-      .eq('organization_id', organizationId)
 
     if (selectedPipelineIds.length > 0) {
       dealsQuery = dealsQuery.in('pipeline_id', selectedPipelineIds)
@@ -97,11 +85,10 @@ export async function GET(request: NextRequest) {
 
     const deals = allDeals || []
 
-    // 3. FETCH PREVIOUS PERIOD DEALS
+    // 3. FETCH PREVIOUS PERIOD DEALS - RLS filtra automaticamente
     let previousDealsQuery = supabase
       .from('deals')
       .select('id, value, status, won_at, lost_at, created_at')
-      .eq('organization_id', organizationId)
       .gte('created_at', previousStartDate.toISOString())
       .lte('created_at', previousEndDate.toISOString())
 
@@ -111,7 +98,7 @@ export async function GET(request: NextRequest) {
 
     const { data: previousDeals } = await previousDealsQuery
 
-    // 4. FETCH STAGE HISTORY
+    // 4. FETCH STAGE HISTORY - RLS filtra automaticamente
     const dealIds = deals.map(d => d.id)
     let history: any[] = []
     
@@ -191,40 +178,39 @@ function calculateMainKPIs(deals: any[], previousDeals: any[], startDate: Date, 
   const prevClosedCount = prevWonDeals.length + prevLostDeals.length
   const prevWinRate = prevClosedCount > 0 ? (prevWonDeals.length / prevClosedCount) * 100 : 0
 
-  const avgTicket = wonDeals.length > 0 ? wonValue / wonDeals.length : 0
-  const prevAvgTicket = prevWonDeals.length > 0 ? prevWonValue / prevWonDeals.length : 0
+  const avgDealValue = openDeals.length > 0 ? pipelineTotal / openDeals.length : 0
+  const avgWonValue = wonDeals.length > 0 ? wonValue / wonDeals.length : 0
 
-  const salesCycles = wonDeals
-    .filter(d => d.won_at && d.created_at)
-    .map(d => (new Date(d.won_at).getTime() - new Date(d.created_at).getTime()) / (1000 * 60 * 60 * 24))
+  const salesCycles = wonDeals.map(d => {
+    const created = new Date(d.created_at)
+    const won = new Date(d.won_at)
+    return (won.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
+  }).filter(days => days >= 0)
   const avgCycleDays = salesCycles.length > 0 ? salesCycles.reduce((a, b) => a + b, 0) / salesCycles.length : 0
 
-  const prevSalesCycles = prevWonDeals
-    .filter(d => d.won_at && d.created_at)
-    .map(d => (new Date(d.won_at).getTime() - new Date(d.created_at).getTime()) / (1000 * 60 * 60 * 24))
+  const prevSalesCycles = prevWonDeals.map(d => {
+    if (!d.won_at) return -1
+    const created = new Date(d.created_at)
+    const won = new Date(d.won_at)
+    return (won.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
+  }).filter(days => days >= 0)
   const prevAvgCycleDays = prevSalesCycles.length > 0 ? prevSalesCycles.reduce((a, b) => a + b, 0) / prevSalesCycles.length : 0
-
-  const calcVariation = (current: number, previous: number) => {
-    if (previous === 0) return current > 0 ? 100 : 0
-    return ((current - previous) / previous) * 100
-  }
 
   return {
     pipelineTotal: Math.round(pipelineTotal * 100) / 100,
     weightedTotal: Math.round(weightedTotal * 100) / 100,
     wonValue: Math.round(wonValue * 100) / 100,
     lostValue: Math.round(lostValue * 100) / 100,
+    openDealsCount: openDeals.length,
+    wonDealsCount: wonDeals.length,
+    lostDealsCount: lostDeals.length,
     winRate: Math.round(winRate * 10) / 10,
-    avgTicket: Math.round(avgTicket),
+    avgDealValue: Math.round(avgDealValue),
+    avgWonValue: Math.round(avgWonValue),
     avgCycleDays: Math.round(avgCycleDays * 10) / 10,
-    totalDeals: deals.length,
-    openDeals: openDeals.length,
-    wonDeals: wonDeals.length,
-    lostDeals: lostDeals.length,
     variations: {
-      wonValue: Math.round(calcVariation(wonValue, prevWonValue) * 10) / 10,
+      wonValue: prevWonValue > 0 ? Math.round(((wonValue - prevWonValue) / prevWonValue) * 1000) / 10 : 0,
       winRate: Math.round((winRate - prevWinRate) * 10) / 10,
-      avgTicket: Math.round(calcVariation(avgTicket, prevAvgTicket) * 10) / 10,
       avgCycleDays: Math.round((avgCycleDays - prevAvgCycleDays) * 10) / 10,
     }
   }
@@ -232,20 +218,23 @@ function calculateMainKPIs(deals: any[], previousDeals: any[], startDate: Date, 
 
 function calculateByCommitLevel(deals: any[]) {
   const openDeals = deals.filter(d => d.status === 'open')
-  const levels = ['commit', 'best_case', 'pipeline', 'omit']
-  
-  return levels.map(level => {
-    const levelDeals = openDeals.filter(d => (d.commit_level || 'pipeline') === level)
-    const value = levelDeals.reduce((sum, d) => sum + (d.value || 0), 0)
-    
-    return {
-      level,
-      label: level === 'commit' ? 'Commit' : level === 'best_case' ? 'Best Case' : level === 'pipeline' ? 'Pipeline' : 'Omitido',
-      value: Math.round(value * 100) / 100,
-      dealCount: levelDeals.length,
-      color: level === 'commit' ? '#22c55e' : level === 'best_case' ? '#3b82f6' : level === 'pipeline' ? '#eab308' : '#6b7280'
+  const levels = { omit: 0, pipeline: 0, best_case: 0, commit: 0 }
+  const counts = { omit: 0, pipeline: 0, best_case: 0, commit: 0 }
+
+  openDeals.forEach(deal => {
+    const level = deal.commit_level || 'pipeline'
+    if (level in levels) {
+      levels[level as keyof typeof levels] += deal.value || 0
+      counts[level as keyof typeof counts]++
     }
   })
+
+  return {
+    omit: { value: Math.round(levels.omit * 100) / 100, count: counts.omit },
+    pipeline: { value: Math.round(levels.pipeline * 100) / 100, count: counts.pipeline },
+    bestCase: { value: Math.round(levels.best_case * 100) / 100, count: counts.best_case },
+    commit: { value: Math.round(levels.commit * 100) / 100, count: counts.commit },
+  }
 }
 
 function calculateByPipeline(deals: any[], pipelines: any[]) {
@@ -254,17 +243,19 @@ function calculateByPipeline(deals: any[], pipelines: any[]) {
     const openDeals = pipelineDeals.filter(d => d.status === 'open')
     const wonDeals = pipelineDeals.filter(d => d.status === 'won')
     const lostDeals = pipelineDeals.filter(d => d.status === 'lost')
-    
+
     const totalValue = openDeals.reduce((sum, d) => sum + (d.value || 0), 0)
     const wonValue = wonDeals.reduce((sum, d) => sum + (d.value || 0), 0)
-    
     const closedCount = wonDeals.length + lostDeals.length
     const winRate = closedCount > 0 ? (wonDeals.length / closedCount) * 100 : 0
     const avgTicket = wonDeals.length > 0 ? wonValue / wonDeals.length : 0
-    
-    const salesCycles = wonDeals
-      .filter(d => d.won_at && d.created_at)
-      .map(d => (new Date(d.won_at).getTime() - new Date(d.created_at).getTime()) / (1000 * 60 * 60 * 24))
+
+    const salesCycles = wonDeals.map(d => {
+      if (!d.won_at) return -1
+      const created = new Date(d.created_at)
+      const won = new Date(d.won_at)
+      return (won.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
+    }).filter(days => days >= 0)
     const avgCycleDays = salesCycles.length > 0 ? salesCycles.reduce((a, b) => a + b, 0) / salesCycles.length : 0
 
     return {

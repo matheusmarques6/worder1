@@ -4,32 +4,23 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic'
 
-function getSupabase() {
-  return getSupabaseAdmin();
-}
-
 // GET - List all automation rules
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
 
   const searchParams = request.nextUrl.searchParams
-  const organizationId = searchParams.get('organizationId')
   const pipelineId = searchParams.get('pipelineId')
   const sourceType = searchParams.get('source')
   const actionType = searchParams.get('action')
 
-  if (!organizationId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
-  }
-
   try {
+    // RLS filtra automaticamente por organization_id
     let query = supabase
       .from('automation_rules')
       .select(`
@@ -38,7 +29,6 @@ export async function GET(request: NextRequest) {
         initial_stage:pipeline_stages!automation_rules_initial_stage_id_fkey(id, name, color),
         target_stage:pipeline_stages!automation_rules_target_stage_id_fkey(id, name, color)
       `)
-      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
 
     if (pipelineId) {
@@ -64,15 +54,13 @@ export async function GET(request: NextRequest) {
 
 // POST - Create new automation rule
 export async function POST(request: NextRequest) {
-  const supabase = getSupabase()
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
 
   try {
     const body = await request.json()
     const {
-      organizationId,
       name,
       source_type,
       trigger_event,
@@ -87,25 +75,25 @@ export async function POST(request: NextRequest) {
       is_enabled,
     } = body
 
-    if (!organizationId || !name || !source_type || !trigger_event || !action_type) {
+    if (!name || !source_type || !trigger_event || !action_type) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Get max position
+    // Get max position - RLS filtra automaticamente
     const { data: maxPos } = await supabase
       .from('automation_rules')
       .select('position')
-      .eq('organization_id', organizationId)
       .order('position', { ascending: false })
       .limit(1)
       .single()
 
     const position = (maxPos?.position || 0) + 1
 
+    // Usa organization_id do usuário autenticado
     const { data, error } = await supabase
       .from('automation_rules')
       .insert({
-        organization_id: organizationId,
+        organization_id: user.organization_id,
         name,
         source_type,
         trigger_event,

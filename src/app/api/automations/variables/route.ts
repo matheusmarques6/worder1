@@ -1,10 +1,10 @@
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
 // =============================================
 // WORDER: API do Catálogo de Variáveis
 // /src/app/api/automations/variables/route.ts
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthClient, authError } from '@/lib/api-utils';
 import { 
   generateVariableCatalog, 
   createSampleContext,
@@ -13,17 +13,15 @@ import {
   TRIGGER_VARIABLES
 } from '@/lib/automation/variables';
 
-// Lazy client
-function getSupabase() {
-  return getSupabaseAdmin();
-}
-
 // =============================================
 // GET - Obter catálogo de variáveis
 // =============================================
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   try {
-    const supabase = getSupabase();
     const searchParams = request.nextUrl.searchParams;
     
     const triggerType = searchParams.get('triggerType') || 'trigger_order';
@@ -68,15 +66,17 @@ export async function GET(request: NextRequest) {
 // POST - Preview de interpolação
 // =============================================
 export async function POST(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+
   try {
-    const supabase = getSupabase();
     const body = await request.json();
     
     const { 
       template,           // String com variáveis: "Olá {{contact.first_name}}"
       triggerType,        // Tipo do trigger
       contactId,          // ID do contato (opcional, para dados reais)
-      organizationId,     // ID da organização
       useSampleData       // Usar dados de exemplo
     } = body;
     
@@ -86,9 +86,9 @@ export async function POST(request: NextRequest) {
     
     let context;
     
-    // Usar dados reais se tiver contactId
-    if (contactId && organizationId && !useSampleData) {
-      context = await buildRealContext(supabase, organizationId, contactId, triggerType);
+    // Usar dados reais se tiver contactId - usa organization_id do usuário autenticado
+    if (contactId && !useSampleData) {
+      context = await buildRealContext(supabase, user.organization_id, contactId, triggerType);
     } else {
       // Usar dados de exemplo
       context = createSampleContext(triggerType || 'trigger_order');
@@ -143,15 +143,14 @@ async function buildRealContext(
 ) {
   const now = new Date();
   
-  // Buscar contato
+  // Buscar contato - RLS filtra automaticamente
   const { data: contact } = await supabase
     .from('contacts')
     .select('*')
     .eq('id', contactId)
-    .eq('organization_id', organizationId)
     .single();
   
-  // Buscar deal mais recente do contato (se houver)
+  // Buscar deal mais recente do contato - RLS filtra automaticamente
   const { data: deals } = await supabase
     .from('deals')
     .select(`
@@ -166,11 +165,10 @@ async function buildRealContext(
   
   const deal = deals?.[0];
   
-  // Buscar automação (para o nome)
+  // Buscar automação - RLS filtra automaticamente
   const { data: automation } = await supabase
     .from('automations')
     .select('name')
-    .eq('organization_id', organizationId)
     .limit(1)
     .single();
   

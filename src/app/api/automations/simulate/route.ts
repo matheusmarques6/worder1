@@ -7,39 +7,28 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { executeAutomationRules } from '@/lib/services/automation/automation-executor';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
-function getSupabase() {
-  return getSupabaseAdmin();
-}
-
 export async function POST(request: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
 
   try {
     const body = await request.json();
     const { 
-      organizationId, 
       triggerEvent = 'order_paid',
       orderValue = 150.00,
       customerName = 'Cliente Teste',
       customerEmail = 'teste@exemplo.com',
     } = body;
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId é obrigatório' }, { status: 400 });
-    }
-
-    // 1. Verificar se há regras ativas
+    // 1. Verificar se há regras ativas - RLS filtra automaticamente
     const { data: rules, error: rulesError } = await supabase
       .from('pipeline_automation_rules')
       .select('id, name, trigger_event, initial_stage_id')
-      .eq('organization_id', organizationId)
       .eq('source_type', 'shopify')
       .eq('trigger_event', triggerEvent)
       .eq('is_enabled', true);
@@ -62,23 +51,22 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
-    // 2. Buscar ou criar contato de teste
+    // 2. Buscar ou criar contato de teste - RLS filtra automaticamente
     let contact = null;
     const { data: existingContact } = await supabase
       .from('contacts')
       .select('id, email, first_name')
-      .eq('organization_id', organizationId)
       .eq('email', customerEmail)
       .maybeSingle();
 
     if (existingContact) {
       contact = existingContact;
     } else {
-      // Criar contato de teste
+      // Criar contato de teste - usa organization_id do usuário
       const { data: newContact, error: contactError } = await supabase
         .from('contacts')
         .insert({
-          organization_id: organizationId,
+          organization_id: user.organization_id,
           email: customerEmail,
           first_name: customerName.split(' ')[0],
           last_name: customerName.split(' ').slice(1).join(' ') || 'Teste',
@@ -123,9 +111,9 @@ export async function POST(request: NextRequest) {
       ],
     };
 
-    // 4. Executar regras de automação
+    // 4. Executar regras de automação - usa organization_id do usuário
     const result = await executeAutomationRules(
-      organizationId,
+      user.organization_id,
       'shopify',
       triggerEvent,
       contact.id,
@@ -181,7 +169,6 @@ export async function GET() {
     description: 'Simula um evento do Shopify para testar regras de automação',
     
     body: {
-      organizationId: '(obrigatório) ID da sua organização',
       triggerEvent: '(opcional) order_created | order_paid | order_fulfilled - default: order_paid',
       orderValue: '(opcional) Valor do pedido simulado - default: 150.00',
       customerName: '(opcional) Nome do cliente - default: Cliente Teste',
@@ -189,7 +176,6 @@ export async function GET() {
     },
     
     example: {
-      organizationId: 'seu-organization-id-aqui',
       triggerEvent: 'order_paid',
       orderValue: 250.00,
       customerName: 'João Silva',
