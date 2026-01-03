@@ -1,19 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
-import { SupabaseClient } from '@supabase/supabase-js';
-
-let _supabase: SupabaseClient | null = null;
-function getDb(): SupabaseClient {
-  if (!_supabase) {
-    _supabase = getSupabaseClient();
-    if (!_supabase) throw new Error('Database not configured');
-  }
-  return _supabase;
-}
-
-const supabase = new Proxy({} as SupabaseClient, {
-  get(_, prop) { return (getDb() as any)[prop]; }
-});
+import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { generateOAuthState } from '@/lib/oauth-security';
 
 const META_API_VERSION = 'v19.0';
 const META_API_URL = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -36,14 +24,20 @@ async function metaFetch(accessToken: string, endpoint: string, params: Record<s
 
 // GET - Get OAuth URL or fetch data
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
+
   const action = request.nextUrl.searchParams.get('action');
-  const organizationId = request.nextUrl.searchParams.get('organizationId');
   
-  // Generate OAuth URL
+  // Generate OAuth URL (com state seguro!)
   if (action === 'auth_url') {
     const clientId = process.env.META_APP_ID;
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/meta/callback`;
-    const state = organizationId;
+    
+    // GERAR STATE SEGURO (assinado e com expiração)
+    const state = generateOAuthState(organizationId, user.id, 'meta');
     
     const scopes = [
       'ads_read',
@@ -56,39 +50,33 @@ export async function GET(request: NextRequest) {
       `client_id=${clientId}&` +
       `redirect_uri=${encodeURIComponent(redirectUri)}&` +
       `scope=${scopes}&` +
-      `state=${state}&` +
+      `state=${encodeURIComponent(state)}&` +
       `response_type=code`;
     
     return NextResponse.json({ authUrl });
   }
   
-  // Get connected accounts
+  // Get connected accounts (RLS filtra automaticamente)
   if (action === 'accounts') {
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
-    }
-    
     const { data: accounts } = await supabase
       .from('meta_accounts')
-      .select('*')
-      .eq('organization_id', organizationId);
+      .select('*');
     
     return NextResponse.json({ accounts: accounts || [] });
   }
   
-  // Get metrics
+  // Get metrics (RLS filtra automaticamente)
   if (action === 'metrics') {
     const startDate = request.nextUrl.searchParams.get('startDate');
     const endDate = request.nextUrl.searchParams.get('endDate');
     
-    if (!organizationId || !startDate || !endDate) {
-      return NextResponse.json({ error: 'Missing required params' }, { status: 400 });
+    if (!startDate || !endDate) {
+      return NextResponse.json({ error: 'Missing date params' }, { status: 400 });
     }
     
     const { data: metrics } = await supabase
       .from('meta_insights')
       .select('*')
-      .eq('organization_id', organizationId)
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date', { ascending: true });
@@ -96,16 +84,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ metrics: metrics || [] });
   }
   
-  // Get campaigns
+  // Get campaigns (RLS filtra automaticamente)
   if (action === 'campaigns') {
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
-    }
-    
     const { data: campaigns } = await supabase
       .from('meta_campaigns')
       .select('*')
-      .eq('organization_id', organizationId)
       .order('created_time', { ascending: false });
     
     return NextResponse.json({ campaigns: campaigns || [] });
@@ -116,13 +99,18 @@ export async function GET(request: NextRequest) {
 
 // POST - Connect account or sync data
 export async function POST(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
+
   try {
     const body = await request.json();
-    const { action, organizationId, adAccountId, accessToken } = body;
+    const { action, adAccountId, accessToken } = body;
     
     // Connect new ad account
     if (action === 'connect') {
-      if (!organizationId || !adAccountId || !accessToken) {
+      if (!adAccountId || !accessToken) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
       }
       
@@ -131,9 +119,9 @@ export async function POST(request: NextRequest) {
         fields: 'id,name,account_id,currency,timezone_name,business'
       });
       
-      // Save to database
+      // Save to database (RLS filtra automaticamente)
       const { error } = await supabase.from('meta_accounts').upsert({
-        organization_id: organizationId,
+        organization_id: organizationId, // Do user autenticado
         access_token: accessToken,
         ad_account_id: adAccountId,
         ad_account_name: accountInfo.name,
@@ -148,22 +136,17 @@ export async function POST(request: NextRequest) {
       if (error) throw error;
       
       // Trigger initial sync
-      await syncMetaData(organizationId, adAccountId, accessToken);
+      await syncMetaData(supabase, organizationId, adAccountId, accessToken);
       
       return NextResponse.json({ success: true, account: accountInfo });
     }
     
     // Sync data
     if (action === 'sync') {
-      if (!organizationId) {
-        return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
-      }
-      
-      // Get all connected accounts
+      // Get all connected accounts (RLS filtra automaticamente)
       const { data: accounts } = await supabase
         .from('meta_accounts')
         .select('*')
-        .eq('organization_id', organizationId)
         .eq('is_active', true);
       
       if (!accounts?.length) {
@@ -172,7 +155,7 @@ export async function POST(request: NextRequest) {
       
       // Sync each account
       for (const account of accounts) {
-        await syncMetaData(organizationId, account.ad_account_id, account.access_token);
+        await syncMetaData(supabase, organizationId, account.ad_account_id, account.access_token);
       }
       
       return NextResponse.json({ success: true });
@@ -187,15 +170,15 @@ export async function POST(request: NextRequest) {
 
 // DELETE - Disconnect account
 export async function DELETE(request: NextRequest) {
-  const organizationId = request.nextUrl.searchParams.get('organizationId');
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+
   const adAccountId = request.nextUrl.searchParams.get('adAccountId');
   
-  if (!organizationId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
-  }
-  
   try {
-    let query = supabase.from('meta_accounts').delete().eq('organization_id', organizationId);
+    // RLS filtra automaticamente pela organização do usuário
+    let query = supabase.from('meta_accounts').delete();
     if (adAccountId) query = query.eq('ad_account_id', adAccountId);
     
     await query;
@@ -206,19 +189,18 @@ export async function DELETE(request: NextRequest) {
 }
 
 // Sync Meta data
-async function syncMetaData(organizationId: string, adAccountId: string, accessToken: string) {
+async function syncMetaData(supabase: any, organizationId: string, adAccountId: string, accessToken: string) {
   try {
     // Sync campaigns
-    await syncCampaigns(organizationId, adAccountId, accessToken);
+    await syncCampaigns(supabase, organizationId, adAccountId, accessToken);
     
     // Sync insights for last 30 days
-    await syncInsights(organizationId, adAccountId, accessToken, 30);
+    await syncInsights(supabase, organizationId, adAccountId, accessToken, 30);
     
     // Update last sync timestamp
     await supabase
       .from('meta_accounts')
       .update({ last_sync_at: new Date().toISOString() })
-      .eq('organization_id', organizationId)
       .eq('ad_account_id', adAccountId);
   } catch (error) {
     console.error('Meta sync error:', error);
@@ -226,7 +208,7 @@ async function syncMetaData(organizationId: string, adAccountId: string, accessT
   }
 }
 
-async function syncCampaigns(organizationId: string, adAccountId: string, accessToken: string) {
+async function syncCampaigns(supabase: any, organizationId: string, adAccountId: string, accessToken: string) {
   const campaigns = await metaFetch(accessToken, `/act_${adAccountId}/campaigns`, {
     fields: 'id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time,created_time,updated_time',
     limit: '500'
@@ -249,7 +231,7 @@ async function syncCampaigns(organizationId: string, adAccountId: string, access
   }
 }
 
-async function syncInsights(organizationId: string, adAccountId: string, accessToken: string, days: number) {
+async function syncInsights(supabase: any, organizationId: string, adAccountId: string, accessToken: string, days: number) {
   const endDate = new Date();
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);

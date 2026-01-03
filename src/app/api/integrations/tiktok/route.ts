@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { getAuthClient, authError, getSupabaseClient } from '@/lib/api-utils';
+import { generateOAuthState } from '@/lib/oauth-security';
 import { SupabaseClient } from '@supabase/supabase-js';
 
 // ==========================================
-// DATABASE SETUP
+// DATABASE SETUP (para funções de sync)
 // ==========================================
 
 let _supabase: SupabaseClient | null = null;
@@ -102,43 +103,43 @@ function parseObjectiveLabel(objective: string): string {
 // ==========================================
 
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
+
   try {
     const action = request.nextUrl.searchParams.get('action');
-    const organizationId = request.nextUrl.searchParams.get('organizationId');
 
     // ========================================
-    // AUTH URL - Generate OAuth URL
+    // AUTH URL - Generate OAuth URL (com state seguro!)
     // ========================================
     if (action === 'auth_url') {
       const appId = process.env.TIKTOK_APP_ID;
       const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/tiktok/callback`;
-      const state = organizationId || '';
       
       if (!appId) {
         return NextResponse.json({ error: 'TikTok App ID not configured' }, { status: 500 });
       }
       
+      // GERAR STATE SEGURO (assinado e com expiração)
+      const state = generateOAuthState(organizationId, user.id, 'tiktok');
+      
       const authUrl = `https://business-api.tiktok.com/portal/auth?` +
         `app_id=${appId}&` +
         `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-        `state=${state}`;
+        `state=${encodeURIComponent(state)}`;
       
       return NextResponse.json({ authUrl });
     }
 
-    // Validate organizationId for other actions
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 });
-    }
-
     // ========================================
-    // ACCOUNTS - Get connected accounts
+    // ACCOUNTS - Get connected accounts (RLS filtra)
     // ========================================
     if (action === 'accounts') {
       const { data: accounts, error } = await supabase
         .from('tiktok_accounts')
-        .select('*')
-        .eq('organization_id', organizationId);
+        .select('*');
       
       if (error) throw error;
 
@@ -167,7 +168,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ========================================
-    // DASHBOARD METRICS - Combined data for dashboard
+    // DASHBOARD METRICS - Combined data for dashboard (RLS filtra)
     // ========================================
     if (action === 'dashboard_metrics') {
       const startDate = request.nextUrl.searchParams.get('startDate');
@@ -177,11 +178,10 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Start and end dates required' }, { status: 400 });
       }
 
-      // Get metrics
+      // Get metrics (RLS filtra automaticamente)
       const { data: metrics, error: metricsError } = await supabase
         .from('tiktok_metrics')
         .select('*')
-        .eq('organization_id', organizationId)
         .eq('level', 'advertiser')
         .gte('date', startDate)
         .lte('date', endDate)
@@ -189,20 +189,18 @@ export async function GET(request: NextRequest) {
       
       if (metricsError) throw metricsError;
 
-      // Get campaigns with their aggregated metrics
+      // Get campaigns with their aggregated metrics (RLS filtra)
       const { data: campaigns, error: campaignsError } = await supabase
         .from('tiktok_campaigns')
         .select('*')
-        .eq('organization_id', organizationId)
         .order('created_at', { ascending: false });
       
       if (campaignsError) throw campaignsError;
 
-      // Get campaign metrics for the period
+      // Get campaign metrics for the period (RLS filtra)
       const { data: campaignMetrics, error: cmError } = await supabase
         .from('tiktok_metrics')
         .select('*')
-        .eq('organization_id', organizationId)
         .eq('level', 'campaign')
         .gte('date', startDate)
         .lte('date', endDate);
