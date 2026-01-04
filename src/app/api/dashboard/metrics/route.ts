@@ -1,19 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
-import { SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
-let _supabase: SupabaseClient | null = null;
-function getDb(): SupabaseClient {
-  if (!_supabase) {
-    _supabase = getSupabaseClient();
-    if (!_supabase) throw new Error('Database not configured');
+export const dynamic = 'force-dynamic';
+
+// Admin client para queries
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (url && key && !url.includes('placeholder')) {
+    return createClient(url, key);
   }
-  return _supabase;
+  return null;
 }
 
-const supabase = new Proxy({} as SupabaseClient, {
-  get(_, prop) { return (getDb() as any)[prop]; }
-});
+// Buscar organization_id do usuário logado
+async function getUserOrganization(request: NextRequest) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return null;
+
+  const accessToken = request.cookies.get('sb-access-token')?.value;
+  if (!accessToken) return null;
+
+  const { data: { user }, error } = await supabase.auth.getUser(accessToken);
+  if (error || !user) return null;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .single();
+
+  return profile?.organization_id || null;
+}
 
 function getDateRange(period: string): { startDate: Date; endDate: Date } {
   const today = new Date();
@@ -49,7 +67,6 @@ function getDateRange(period: string): { startDate: Date; endDate: Date } {
       break;
     case 'all':
     default:
-      // All time - 5 years
       startDate = new Date(today);
       startDate.setFullYear(startDate.getFullYear() - 5);
       startDate.setHours(0, 0, 0, 0);
@@ -59,27 +76,43 @@ function getDateRange(period: string): { startDate: Date; endDate: Date } {
   return { startDate, endDate: today };
 }
 
-function calcChange(current: number, previous: number): number {
-  if (previous === 0) return current > 0 ? 100 : 0;
-  return ((current - previous) / previous) * 100;
-}
-
 function formatDateLabel(date: Date): string {
   return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
 }
 
 export async function GET(request: NextRequest) {
-  // Default to 'all' to show all data
   const range = request.nextUrl.searchParams.get('range') || 'all';
   const storeId = request.nextUrl.searchParams.get('storeId');
 
   try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+    }
+
+    // ✅ CORREÇÃO: Buscar organization_id do usuário
+    const organizationId = await getUserOrganization(request);
+    
+    if (!organizationId) {
+      console.log('[metrics] No organization found for user');
+      return NextResponse.json({
+        metrics: null,
+        totals: { pedidos: 0, pedidosPagos: 0, receita: 0 },
+        chartData: [],
+        stores: [],
+        integrations: { shopify: false, klaviyo: false, meta: false, google: false, tiktok: false },
+      });
+    }
+
+    console.log('[metrics] Fetching data for organization:', organizationId);
+
     const { startDate, endDate } = getDateRange(range);
 
-    // Get stores
+    // ✅ CORREÇÃO: Buscar lojas APENAS da organização do usuário
     const { data: stores } = await supabase
       .from('shopify_stores')
       .select('*')
+      .eq('organization_id', organizationId)
       .eq('is_active', true);
 
     const hasStores = stores && stores.length > 0;
@@ -96,21 +129,21 @@ export async function GET(request: NextRequest) {
 
     const storeIds = stores.map(s => s.id);
 
-    // ============================================
-    // BUSCAR TODOS OS PEDIDOS (SEM FILTRO DE DATA)
-    // ============================================
+    // ✅ CORREÇÃO: Buscar pedidos APENAS das lojas da organização
     let allOrdersQuery = supabase.from('shopify_orders').select('*');
     
-    if (storeId) {
+    if (storeId && storeIds.includes(storeId)) {
+      // Se storeId específico e pertence à org, filtrar só por ele
       allOrdersQuery = allOrdersQuery.eq('store_id', storeId);
-    } else if (storeIds.length > 0) {
+    } else {
+      // Senão, buscar de todas as lojas da org
       allOrdersQuery = allOrdersQuery.in('store_id', storeIds);
     }
 
     const { data: allOrders } = await allOrdersQuery;
     const orders = allOrders || [];
 
-    // Calcular métricas de TODOS os pedidos
+    // Calcular métricas
     let totalReceita = 0;
     let totalImpostos = 0;
     let paidCount = 0;
@@ -124,29 +157,21 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Custos estimados (30% da receita)
     const custos = totalReceita * 0.30;
     const lucro = totalReceita - custos - totalImpostos;
     const margem = totalReceita > 0 ? (lucro / totalReceita) * 100 : 0;
     const ticketMedio = paidCount > 0 ? totalReceita / paidCount : 0;
 
-    // ============================================
-    // CHART DATA - Últimos 30 dias com dados
-    // ============================================
+    // Chart data
     const chartData: any[] = [];
-    
-    // Encontrar range de datas dos pedidos
     const orderDates = orders
       .filter(o => ['paid', 'partially_paid'].includes(o.financial_status))
       .map(o => new Date(o.created_at))
       .sort((a, b) => a.getTime() - b.getTime());
 
     if (orderDates.length > 0) {
-      // Pegar últimos 30 dias com dados ou menos
       const minDate = orderDates[0];
       const maxDate = orderDates[orderDates.length - 1];
-      
-      // Gerar dados por dia
       const dayMs = 24 * 60 * 60 * 1000;
       const chartStart = new Date(Math.max(minDate.getTime(), maxDate.getTime() - 30 * dayMs));
       
@@ -178,26 +203,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Se não tem dados no chart, criar dados vazios para os últimos 7 dias
     if (chartData.length === 0) {
       const dayMs = 24 * 60 * 60 * 1000;
       for (let i = 6; i >= 0; i--) {
         const d = new Date(Date.now() - i * dayMs);
         chartData.push({
           date: formatDateLabel(d),
-          receita: 0,
-          custos: 0,
-          marketing: 0,
-          impostos: 0,
-          lucro: 0,
-          pedidos: 0,
+          receita: 0, custos: 0, marketing: 0, impostos: 0, lucro: 0, pedidos: 0,
         });
       }
     }
 
-    // ============================================
-    // STORES DATA
-    // ============================================
+    // Stores data - apenas lojas da organização
     const storesData = stores.map(store => {
       const storeOrders = orders.filter(o => o.store_id === store.id);
       const paidStoreOrders = storeOrders.filter(o => ['paid', 'partially_paid'].includes(o.financial_status));
@@ -219,10 +236,11 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Check integrations
+    // Check klaviyo
     const { data: klaviyoAccount } = await supabase
       .from('klaviyo_accounts')
       .select('id')
+      .eq('organization_id', organizationId)
       .eq('is_active', true)
       .limit(1)
       .single();
