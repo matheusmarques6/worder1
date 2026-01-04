@@ -51,10 +51,10 @@ export async function GET(request: NextRequest) {
 
     console.log('[/api/stores] Fetching stores for org:', profile.organization_id);
 
-    // Buscar lojas da organização
+    // Buscar lojas da organização - APENAS colunas que existem
     const { data: stores, error } = await supabase
       .from('shopify_stores')
-      .select('id, shop_domain, shop_name, shop_email, is_active, last_sync_at, total_orders, total_revenue')
+      .select('id, shop_domain, shop_name, shop_email, is_active, last_sync_at, organization_id')
       .eq('organization_id', profile.organization_id)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
