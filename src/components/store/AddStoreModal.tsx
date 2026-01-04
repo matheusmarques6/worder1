@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 interface AddStoreModalProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess: (store: { name: string; domain: string; accessToken: string; apiSecret: string }) => void
+  onSuccess: (store: { name: string; domain: string; accessToken: string; apiSecret?: string }) => void
 }
 
 export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps) {
@@ -36,7 +36,8 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
   const totalSteps = 4
 
   const handleSubmit = async () => {
-    if (!storeName || !storeDomain || !accessToken || !apiSecret) {
+    // ✅ apiSecret é opcional
+    if (!storeName || !storeDomain || !accessToken) {
       setError('Preencha todos os campos obrigatórios')
       return
     }
@@ -53,7 +54,7 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
           name: storeName,
           domain: storeDomain.replace('.myshopify.com', ''),
           accessToken,
-          apiSecret,
+          apiSecret: apiSecret || undefined, // ✅ Opcional
         }),
       })
 
@@ -68,7 +69,7 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
         name: storeName,
         domain: `${storeDomain}.myshopify.com`,
         accessToken,
-        apiSecret,
+        apiSecret: apiSecret || undefined, // ✅ Opcional
       })
       
       // Reset form
@@ -98,7 +99,7 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
     if (step === 1) return storeName.trim().length > 0
     if (step === 2) return storeDomain.trim().length > 0
     if (step === 3) return accessToken.trim().length > 0
-    if (step === 4) return apiSecret.trim().length > 0 // API Secret agora é obrigatório
+    if (step === 4) return true // ✅ API Secret é opcional
     return false
   }
 
@@ -283,7 +284,7 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
                     <label className="block text-sm font-medium text-white mb-2">
                       <div className="flex items-center gap-2">
                         <Shield className="w-4 h-4 text-green-400" />
-                        API Secret Key
+                        API Secret Key <span className="text-dark-500 font-normal">(opcional)</span>
                       </div>
                     </label>
                     <input
@@ -295,7 +296,7 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
                       autoFocus
                     />
                     <p className="text-xs text-dark-500 mt-2">
-                      Necessário para validar webhooks e receber eventos em tempo real.
+                      Opcional. Usado para validar webhooks e receber eventos em tempo real.
                     </p>
                   </div>
 

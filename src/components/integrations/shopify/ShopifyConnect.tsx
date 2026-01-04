@@ -230,8 +230,9 @@ export default function ShopifyConnect() {
     const trimmedToken = accessToken.trim();
     const trimmedSecret = apiSecret.trim();
     
-    if (!trimmedName || !trimmedDomain || !trimmedToken || !trimmedSecret) {
-      setError('Preencha todos os campos');
+    // ✅ apiSecret é opcional
+    if (!trimmedName || !trimmedDomain || !trimmedToken) {
+      setError('Preencha nome, domínio e access token');
       return;
     }
 
@@ -251,7 +252,7 @@ export default function ShopifyConnect() {
           name: trimmedName,
           domain: trimmedDomain,
           accessToken: trimmedToken,
-          apiSecret: trimmedSecret,
+          apiSecret: trimmedSecret || undefined, // ✅ Opcional
         }),
       });
 
@@ -576,7 +577,7 @@ export default function ShopifyConnect() {
 
             <div>
               <label className="block text-sm text-dark-400 mb-2">
-                API Secret Key <span className="text-red-400">*</span>
+                API Secret Key <span className="text-dark-500">(opcional)</span>
               </label>
               <div className="relative">
                 <input
@@ -585,7 +586,6 @@ export default function ShopifyConnect() {
                   onChange={(e) => setApiSecret(e.target.value)}
                   placeholder="shpss_xxxxxxxxxxxxxxxxxxxxxxxx"
                   className="w-full px-4 py-3 pr-12 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-[#95BF47] transition-colors font-mono text-sm"
-                  required
                 />
                 <button
                   type="button"
@@ -607,7 +607,7 @@ export default function ShopifyConnect() {
               </button>
               <button
                 type="submit"
-                disabled={connecting || !storeName || !shopDomain || !accessToken || !apiSecret}
+                disabled={connecting || !storeName || !shopDomain || !accessToken}
                 className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#95BF47] hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-colors"
               >
                 {connecting ? (

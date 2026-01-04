@@ -25,9 +25,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, domain, accessToken, apiSecret } = body;
 
-    if (!name || !domain || !accessToken || !apiSecret) {
+    // ✅ MUDANÇA: apiSecret agora é OPCIONAL
+    if (!name || !domain || !accessToken) {
       return NextResponse.json(
-        { error: 'Nome, domínio, access token e API secret são obrigatórios' },
+        { error: 'Nome, domínio e access token são obrigatórios' },
         { status: 400 }
       );
     }
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
         .update({
           shop_name: name,
           access_token: accessToken.trim(),
-          api_secret: apiSecret.trim(),
+          api_secret: apiSecret?.trim() || null, // ✅ Permite null
           shop_email: shopData.email,
           currency: shopData.currency,
           timezone: shopData.timezone,
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
         shop_name: name,
         shop_email: shopData.email,
         access_token: accessToken.trim(),
-        api_secret: apiSecret.trim(),
+        api_secret: apiSecret?.trim() || null, // ✅ Permite null
         currency: shopData.currency,
         timezone: shopData.timezone,
         is_active: true,
