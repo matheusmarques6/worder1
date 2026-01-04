@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createSupabaseRouteClient } from '@/lib/supabase-route';
+
 
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
 
@@ -15,7 +15,7 @@ async function getOrgId(supabase: any) {
 // GET - Lista mensagens
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteClient();
     const orgId = await getOrgId(supabase);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
 // POST - Enviar mensagem
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteClient();
     const orgId = await getOrgId(supabase);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
