@@ -1,34 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return NextResponse.json({ success: false, stores: [], error: 'Database not configured' });
-    }
-
-    // Criar cliente com cookies do request para pegar sessão do usuário
-    const cookieStore = cookies();
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
-    });
+    const supabase = createSupabaseServerClient();
 
     // Verificar usuário autenticado
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
       console.log('[/api/stores] No authenticated user');
-      return NextResponse.json({ success: false, stores: [], error: 'Not authenticated' });
+      return NextResponse.json(
+        { success: false, stores: [], error: 'Not authenticated' },
+        { status: 401 }
+      );
     }
 
     // Buscar organization_id do usuário
@@ -40,7 +27,10 @@ export async function GET(request: NextRequest) {
 
     if (profileError || !profile?.organization_id) {
       console.log('[/api/stores] No organization found for user:', user.id);
-      return NextResponse.json({ success: false, stores: [], error: 'No organization' });
+      return NextResponse.json(
+        { success: false, stores: [], error: 'No organization' },
+        { status: 401 }
+      );
     }
 
     console.log('[/api/stores] Fetching stores for org:', profile.organization_id);
