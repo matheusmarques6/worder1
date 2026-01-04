@@ -1,335 +1,229 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 
-// Types
-export interface Contact {
-  id: string
-  phone_number: string
-  name?: string
-  profile_picture_url?: string
-  email?: string
-  tags?: string[]
-}
+// ===============================
+// INBOX STORE - WhatsApp Inbox
+// ✅ SEM PERSIST - dados vêm do servidor
+// ===============================
 
-export interface Conversation {
+export interface WhatsAppNumber {
   id: string
-  whatsapp_number_id: string
-  contact_id: string
-  contact?: Contact
-  status: 'open' | 'closed' | 'pending'
-  last_message?: string
-  last_message_at?: string
-  unread_count: number
-  assigned_agent_id?: string
-  assigned_agent?: {
-    id: string
-    name: string
-    type: 'human' | 'ai'
-  }
-  ai_enabled?: boolean
-  created_at: string
-  updated_at: string
+  phone: string
+  name: string
+  isConnected: boolean
+  provider: 'evolution' | 'cloud'
+  instanceName?: string
 }
 
 export interface Message {
   id: string
   conversation_id: string
-  whatsapp_number_id: string
-  message_id?: string
-  type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'location' | 'template'
-  content?: string
+  content: string
+  type: 'text' | 'image' | 'audio' | 'video' | 'document' | 'sticker'
+  direction: 'inbound' | 'outbound'
+  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
+  sender_name?: string
+  sender_phone?: string
   media_url?: string
   media_mime_type?: string
-  is_from_me: boolean
-  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
   timestamp: string
   created_at: string
-  // AI
-  is_ai_generated?: boolean
-  ai_model?: string
+  metadata?: Record<string, unknown>
 }
 
-export interface WhatsAppNumber {
+export interface Conversation {
   id: string
-  phone_number: string
-  display_name?: string
-  provider: 'meta_cloud' | 'evolution'
-  is_connected: boolean
-  is_active: boolean
+  organization_id: string
+  whatsapp_number_id: string
+  contact_phone: string
+  contact_name: string
+  contact_avatar?: string
+  last_message?: string
+  last_message_at?: string
+  unread_count: number
+  status: 'open' | 'closed' | 'pending'
+  assigned_agent_id?: string
+  assigned_agent_name?: string
+  bot_enabled: boolean
+  tags: string[]
+  created_at: string
+  updated_at: string
+  messages?: Message[]
 }
 
-export interface Agent {
-  id: string
-  name: string
-  type: 'human' | 'ai'
-  status: 'online' | 'offline' | 'away' | 'busy'
-  is_active: boolean
+interface InboxFilters {
+  status: 'all' | 'open' | 'closed' | 'pending'
+  assignedTo: 'all' | 'me' | 'unassigned' | string
+  search: string
+  tags: string[]
+  numberId: string | null
 }
 
-// Store State
 interface InboxState {
   // Data
   conversations: Conversation[]
-  messages: Record<string, Message[]> // keyed by conversation_id
+  currentConversation: Conversation | null
+  messages: Record<string, Message[]>
   whatsappNumbers: WhatsAppNumber[]
-  agents: Agent[]
-  
-  // Selection
-  selectedNumberId: string | null
-  selectedConversationId: string | null
-  
-  // Filters
-  searchQuery: string
-  statusFilter: 'all' | 'open' | 'closed' | 'pending'
-  agentFilter: string | null // agent_id or null for all
+  currentNumber: WhatsAppNumber | null
   
   // UI State
   isLoading: boolean
-  isSending: boolean
+  isLoadingMessages: boolean
   error: string | null
+  filters: InboxFilters
   
-  // Actions
+  // Actions - Conversations
   setConversations: (conversations: Conversation[]) => void
   addConversation: (conversation: Conversation) => void
-  updateConversation: (id: string, updates: Partial<Conversation>) => void
+  updateConversation: (id: string, data: Partial<Conversation>) => void
+  removeConversation: (id: string) => void
+  setCurrentConversation: (conversation: Conversation | null) => void
   
+  // Actions - Messages
   setMessages: (conversationId: string, messages: Message[]) => void
   addMessage: (conversationId: string, message: Message) => void
-  updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void
+  updateMessage: (conversationId: string, messageId: string, data: Partial<Message>) => void
   
+  // Actions - WhatsApp Numbers
   setWhatsAppNumbers: (numbers: WhatsAppNumber[]) => void
-  setAgents: (agents: Agent[]) => void
+  setCurrentNumber: (number: WhatsAppNumber | null) => void
+  updateNumber: (id: string, data: Partial<WhatsAppNumber>) => void
   
-  setSelectedNumber: (numberId: string | null) => void
-  setSelectedConversation: (conversationId: string | null) => void
-  
-  setSearchQuery: (query: string) => void
-  setStatusFilter: (status: 'all' | 'open' | 'closed' | 'pending') => void
-  setAgentFilter: (agentId: string | null) => void
-  
+  // Actions - UI
   setLoading: (loading: boolean) => void
-  setSending: (sending: boolean) => void
+  setLoadingMessages: (loading: boolean) => void
   setError: (error: string | null) => void
+  setFilters: (filters: Partial<InboxFilters>) => void
+  resetFilters: () => void
   
-  // Computed
-  getFilteredConversations: () => Conversation[]
-  getSelectedConversation: () => Conversation | null
-  getConversationMessages: (conversationId: string) => Message[]
-  
-  // Realtime handlers
-  handleNewMessage: (message: Message) => void
-  handleConversationUpdate: (conversation: Conversation) => void
-  handleMessageStatusUpdate: (messageId: string, status: string) => void
-  
-  // Reset
-  reset: () => void
+  // Actions - Cleanup
   clearAll: () => void
 }
 
-const initialState = {
-  conversations: [],
-  messages: {},
-  whatsappNumbers: [],
-  agents: [],
-  selectedNumberId: null,
-  selectedConversationId: null,
-  searchQuery: '',
-  statusFilter: 'all' as const,
-  agentFilter: null,
-  isLoading: false,
-  isSending: false,
-  error: null,
+const defaultFilters: InboxFilters = {
+  status: 'all',
+  assignedTo: 'all',
+  search: '',
+  tags: [],
+  numberId: null,
 }
 
-export const useInboxStore = create<InboxState>()(
-  persist(
-    (set, get) => ({
-      ...initialState,
+export const useInboxStore = create<InboxState>((set, get) => ({
+  // Initial State
+  conversations: [],
+  currentConversation: null,
+  messages: {},
+  whatsappNumbers: [],
+  currentNumber: null,
+  isLoading: false,
+  isLoadingMessages: false,
+  error: null,
+  filters: { ...defaultFilters },
+  
+  // Conversations
+  setConversations: (conversations) => set({ conversations, error: null }),
+  addConversation: (conversation) => set((state) => ({
+    conversations: [conversation, ...state.conversations.filter(c => c.id !== conversation.id)],
+  })),
+  updateConversation: (id, data) => set((state) => ({
+    conversations: state.conversations.map((c) => 
+      c.id === id ? { ...c, ...data } : c
+    ),
+    currentConversation: state.currentConversation?.id === id 
+      ? { ...state.currentConversation, ...data }
+      : state.currentConversation,
+  })),
+  removeConversation: (id) => set((state) => ({
+    conversations: state.conversations.filter((c) => c.id !== id),
+    currentConversation: state.currentConversation?.id === id ? null : state.currentConversation,
+  })),
+  setCurrentConversation: (currentConversation) => set({ currentConversation }),
+  
+  // Messages
+  setMessages: (conversationId, messages) => set((state) => ({
+    messages: { ...state.messages, [conversationId]: messages },
+  })),
+  addMessage: (conversationId, message) => set((state) => ({
+    messages: {
+      ...state.messages,
+      [conversationId]: [...(state.messages[conversationId] || []), message],
+    },
+  })),
+  updateMessage: (conversationId, messageId, data) => set((state) => ({
+    messages: {
+      ...state.messages,
+      [conversationId]: (state.messages[conversationId] || []).map((m) =>
+        m.id === messageId ? { ...m, ...data } : m
+      ),
+    },
+  })),
+  
+  // WhatsApp Numbers
+  setWhatsAppNumbers: (whatsappNumbers) => set({ whatsappNumbers }),
+  setCurrentNumber: (currentNumber) => set({ currentNumber }),
+  updateNumber: (id, data) => set((state) => ({
+    whatsappNumbers: state.whatsappNumbers.map((n) =>
+      n.id === id ? { ...n, ...data } : n
+    ),
+    currentNumber: state.currentNumber?.id === id
+      ? { ...state.currentNumber, ...data }
+      : state.currentNumber,
+  })),
+  
+  // UI
+  setLoading: (isLoading) => set({ isLoading }),
+  setLoadingMessages: (isLoadingMessages) => set({ isLoadingMessages }),
+  setError: (error) => set({ error }),
+  setFilters: (filters) => set((state) => ({
+    filters: { ...state.filters, ...filters },
+  })),
+  resetFilters: () => set({ filters: { ...defaultFilters } }),
+  
+  // Cleanup
+  clearAll: () => set({
+    conversations: [],
+    currentConversation: null,
+    messages: {},
+    whatsappNumbers: [],
+    currentNumber: null,
+    isLoading: false,
+    isLoadingMessages: false,
+    error: null,
+    filters: { ...defaultFilters },
+  }),
+}))
 
-      // Setters
-      setConversations: (conversations) => set({ conversations }),
-      
-      addConversation: (conversation) => set((state) => ({
-        conversations: [conversation, ...state.conversations.filter(c => c.id !== conversation.id)],
-      })),
-      
-      updateConversation: (id, updates) => set((state) => ({
-        conversations: state.conversations.map(c =>
-          c.id === id ? { ...c, ...updates } : c
-        ),
-      })),
+// Selectors
+export const useSelectedConversation = () => useInboxStore((state) => state.currentConversation)
 
-      setMessages: (conversationId, messages) => set((state) => ({
-        messages: { ...state.messages, [conversationId]: messages },
-      })),
-      
-      addMessage: (conversationId, message) => set((state) => {
-        const existing = state.messages[conversationId] || []
-        // Avoid duplicates
-        if (existing.some(m => m.id === message.id)) {
-          return state
-        }
-        return {
-          messages: {
-            ...state.messages,
-            [conversationId]: [...existing, message],
-          },
-        }
-      }),
-      
-      updateMessage: (conversationId, messageId, updates) => set((state) => ({
-        messages: {
-          ...state.messages,
-          [conversationId]: (state.messages[conversationId] || []).map(m =>
-            m.id === messageId ? { ...m, ...updates } : m
-          ),
-        },
-      })),
-
-      setWhatsAppNumbers: (numbers) => set({ whatsappNumbers: numbers }),
-      setAgents: (agents) => set({ agents }),
-
-      setSelectedNumber: (numberId) => set({ 
-        selectedNumberId: numberId,
-        selectedConversationId: null, // Reset conversation when changing number
-      }),
-      
-      setSelectedConversation: (conversationId) => set({ 
-        selectedConversationId: conversationId,
-      }),
-
-      setSearchQuery: (query) => set({ searchQuery: query }),
-      setStatusFilter: (status) => set({ statusFilter: status }),
-      setAgentFilter: (agentId) => set({ agentFilter: agentId }),
-
-      setLoading: (loading) => set({ isLoading: loading }),
-      setSending: (sending) => set({ isSending: sending }),
-      setError: (error) => set({ error }),
-
-      // Computed
-      getFilteredConversations: () => {
-        const state = get()
-        let filtered = state.conversations
-
-        // Filter by number
-        if (state.selectedNumberId) {
-          filtered = filtered.filter(c => c.whatsapp_number_id === state.selectedNumberId)
-        }
-
-        // Filter by status
-        if (state.statusFilter !== 'all') {
-          filtered = filtered.filter(c => c.status === state.statusFilter)
-        }
-
-        // Filter by agent
-        if (state.agentFilter) {
-          filtered = filtered.filter(c => c.assigned_agent_id === state.agentFilter)
-        }
-
-        // Filter by search
-        if (state.searchQuery) {
-          const query = state.searchQuery.toLowerCase()
-          filtered = filtered.filter(c => 
-            c.contact?.name?.toLowerCase().includes(query) ||
-            c.contact?.phone_number?.includes(query) ||
-            c.last_message?.toLowerCase().includes(query)
-          )
-        }
-
-        // Sort by last message
-        filtered.sort((a, b) => {
-          const aTime = new Date(a.last_message_at || a.updated_at).getTime()
-          const bTime = new Date(b.last_message_at || b.updated_at).getTime()
-          return bTime - aTime
-        })
-
-        return filtered
-      },
-
-      getSelectedConversation: () => {
-        const state = get()
-        if (!state.selectedConversationId) return null
-        return state.conversations.find(c => c.id === state.selectedConversationId) || null
-      },
-
-      getConversationMessages: (conversationId) => {
-        const state = get()
-        return state.messages[conversationId] || []
-      },
-
-      // Realtime handlers
-      handleNewMessage: (message) => {
-        const state = get()
-        
-        // Add message
-        state.addMessage(message.conversation_id, message)
-
-        // Update conversation
-        const conversation = state.conversations.find(c => c.id === message.conversation_id)
-        if (conversation) {
-          state.updateConversation(message.conversation_id, {
-            last_message: message.content || `[${message.type}]`,
-            last_message_at: message.created_at,
-            unread_count: message.is_from_me ? conversation.unread_count : conversation.unread_count + 1,
-          })
-        }
-      },
-
-      handleConversationUpdate: (conversation) => {
-        const state = get()
-        const exists = state.conversations.some(c => c.id === conversation.id)
-        
-        if (exists) {
-          state.updateConversation(conversation.id, conversation)
-        } else {
-          state.addConversation(conversation)
-        }
-      },
-
-      handleMessageStatusUpdate: (messageId, status) => {
-        const state = get()
-        
-        // Find and update message in all conversations
-        Object.keys(state.messages).forEach(conversationId => {
-          const messages = state.messages[conversationId]
-          const messageIndex = messages.findIndex(m => m.id === messageId || m.message_id === messageId)
-          
-          if (messageIndex !== -1) {
-            state.updateMessage(conversationId, messages[messageIndex].id, { status: status as any })
-          }
-        })
-      },
-
-      // Reset
-      reset: () => set(initialState),
-      
-      // ✅ NOVO: Limpar dados (mantém preferências de UI)
-      clearAll: () => set({
-        conversations: [],
-        messages: {},
-        whatsappNumbers: [],
-        agents: [],
-        selectedConversationId: null,
-        searchQuery: '',
-        isLoading: false,
-        isSending: false,
-        error: null,
-        // ✅ Mantém: selectedNumberId, statusFilter, agentFilter (preferências)
-      }),
-    }),
-    {
-      name: 'inbox-storage',
-      // ✅ PARTIALIZE: Só persiste preferências de UI, NÃO dados do servidor
-      partialize: (state) => ({
-        selectedNumberId: state.selectedNumberId,
-        statusFilter: state.statusFilter,
-      }),
+export const useFilteredConversations = () => useInboxStore((state) => {
+  const { conversations, filters } = state
+  
+  return conversations.filter((conv) => {
+    // Status filter
+    if (filters.status !== 'all' && conv.status !== filters.status) return false
+    
+    // Number filter
+    if (filters.numberId && conv.whatsapp_number_id !== filters.numberId) return false
+    
+    // Search filter
+    if (filters.search) {
+      const search = filters.search.toLowerCase()
+      const matchesName = conv.contact_name?.toLowerCase().includes(search)
+      const matchesPhone = conv.contact_phone?.includes(search)
+      const matchesMessage = conv.last_message?.toLowerCase().includes(search)
+      if (!matchesName && !matchesPhone && !matchesMessage) return false
     }
-  )
-)
+    
+    // Tags filter
+    if (filters.tags.length > 0) {
+      const hasTag = filters.tags.some(tag => conv.tags?.includes(tag))
+      if (!hasTag) return false
+    }
+    
+    return true
+  })
+})
 
-// Selectors (for performance)
-export const useSelectedConversation = () => useInboxStore((state) => state.getSelectedConversation())
-export const useFilteredConversations = () => useInboxStore((state) => state.getFilteredConversations())
-export const useConversationMessages = (conversationId: string) => 
-  useInboxStore((state) => state.getConversationMessages(conversationId))
+export const useConversationMessages = (conversationId: string | undefined) => 
+  useInboxStore((state) => conversationId ? state.messages[conversationId] || [] : [])

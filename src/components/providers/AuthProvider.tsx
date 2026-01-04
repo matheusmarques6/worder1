@@ -15,17 +15,13 @@ import { supabaseClient } from '@/lib/supabase-client';
  * 4. Re-popular user ao logar
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user, setUser, setLoading } = useAuthStore();
+  const { setUser, setLoading } = useAuthStore();
   const initialized = useRef(false);
 
   useEffect(() => {
-    // Evitar inicialização dupla
     if (initialized.current) return;
     initialized.current = true;
 
-    // ==========================================
-    // 1. INICIALIZAR USUÁRIO ATUAL
-    // ==========================================
     const initAuth = async () => {
       try {
         console.log('[AuthProvider] Initializing auth...');
@@ -46,7 +42,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Buscar profile para pegar organization_id
         const { data: profile, error: profileError } = await supabaseClient
           .from('profiles')
           .select('organization_id, role, name')
@@ -54,14 +49,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
 
         if (profileError || !profile?.organization_id) {
-          console.error('[AuthProvider] Profile error or no organization:', profileError?.message);
-          // User existe mas não tem organization - pode ser onboarding incompleto
+          console.error('[AuthProvider] Profile error:', profileError?.message);
           setUser(null);
           setLoading(false);
           return;
         }
 
-        console.log('[AuthProvider] User authenticated:', authUser.email, 'Org:', profile.organization_id);
+        console.log('[AuthProvider] User authenticated:', authUser.email);
 
         setUser({
           id: authUser.id,
@@ -83,18 +77,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
-    // ==========================================
-    // 2. LISTENER PARA MUDANÇAS DE AUTH
-    // ==========================================
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
       async (event, session) => {
         console.log('[AuthProvider] Auth state changed:', event);
 
-        // SIGNED_OUT ou sessão inválida
         if (event === 'SIGNED_OUT' || !session) {
-          console.log('[AuthProvider] User signed out - clearing all stores');
+          console.log('[AuthProvider] User signed out - clearing stores');
           
-          // ✅ CRÍTICO: Limpar TODOS os stores
           setUser(null);
           useStoreStore.getState().clearStores();
           useCRMStore.getState().clearAll();
@@ -105,10 +94,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // SIGNED_IN ou TOKEN_REFRESHED
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           try {
-            // Re-buscar profile para garantir dados atualizados
             const { data: profile } = await supabaseClient
               .from('profiles')
               .select('organization_id, role, name')
@@ -116,8 +103,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .single();
 
             if (profile?.organization_id) {
-              console.log('[AuthProvider] User profile loaded:', session.user.email);
-              
               setUser({
                 id: session.user.id,
                 email: session.user.email || '',
@@ -129,13 +114,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               });
             }
           } catch (error) {
-            console.error('[AuthProvider] Error loading profile:', error);
+            console.error('[AuthProvider] Profile fetch error:', error);
           }
         }
       }
     );
 
-    // Cleanup
     return () => {
       subscription.unsubscribe();
     };
@@ -143,3 +127,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return <>{children}</>;
 }
+
+export default AuthProvider;
