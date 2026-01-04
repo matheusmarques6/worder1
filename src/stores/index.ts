@@ -10,18 +10,8 @@ import type {
   Automation 
 } from '@/types'
 
-// Forward declaration para evitar import circular
-// O InboxStore será importado dinamicamente quando necessário
-const clearInboxStore = () => {
-  // Import dinâmico para evitar circular dependency
-  import('./inboxStore').then(({ useInboxStore }) => {
-    useInboxStore.getState().clearAll()
-  })
-}
-
 // ===============================
 // STORE (SHOPIFY) STORE
-// ✅ SEM PERSIST - dados vêm do servidor a cada login
 // ===============================
 export interface ShopifyStore {
   id: string
@@ -39,7 +29,6 @@ interface StoreState {
   stores: ShopifyStore[]
   currentStore: ShopifyStore | null
   isLoading: boolean
-  error: string | null
   
   setStores: (stores: ShopifyStore[]) => void
   setCurrentStore: (store: ShopifyStore | null) => void
@@ -47,7 +36,6 @@ interface StoreState {
   updateStore: (id: string, data: Partial<ShopifyStore>) => void
   removeStore: (id: string) => void
   setLoading: (loading: boolean) => void
-  setError: (error: string | null) => void
   clearStores: () => void
 }
 
@@ -56,13 +44,12 @@ export const useStoreStore = create<StoreState>((set) => ({
   stores: [],
   currentStore: null,
   isLoading: false,
-  error: null,
   
-  setStores: (stores) => set({ stores, error: null }),
+  setStores: (stores) => set({ stores }),
   setCurrentStore: (currentStore) => set({ currentStore }),
   addStore: (store) => set((state) => ({ 
     stores: [...state.stores, store],
-    currentStore: state.currentStore || store, // Auto-select if first store
+    currentStore: state.currentStore || store,
   })),
   updateStore: (id, data) => set((state) => ({
     stores: state.stores.map((s) => (s.id === id ? { ...s, ...data } : s)),
@@ -77,13 +64,11 @@ export const useStoreStore = create<StoreState>((set) => ({
       : state.currentStore,
   })),
   setLoading: (isLoading) => set({ isLoading }),
-  setError: (error) => set({ error }),
-  clearStores: () => set({ stores: [], currentStore: null, error: null, isLoading: false }),
+  clearStores: () => set({ stores: [], currentStore: null, isLoading: false }),
 }))
 
 // ===============================
 // AUTH STORE
-// ✅ SEM PERSIST - sessão gerenciada pelo Supabase
 // ===============================
 interface AuthState {
   user: User | null
@@ -99,15 +84,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   setUser: (user) => set({ user }),
   setLoading: (isLoading) => set({ isLoading }),
-  logout: () => {
-    // ✅ CRÍTICO: Limpar TODOS os stores ao deslogar para evitar vazamento de dados
-    useStoreStore.getState().clearStores()
-    useCRMStore.getState().clearAll()
-    useWhatsAppStore.getState().clearAll()
-    useAutomationStore.getState().clearAll()
-    clearInboxStore()
-    set({ user: null, isLoading: false })
-  },
+  logout: () => set({ user: null, isLoading: false }),
   signOut: async () => {
     try {
       await fetch('/api/auth', {
@@ -118,19 +95,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (e) {
       console.error('Logout error:', e)
     }
-    // ✅ CRÍTICO: Limpar TODOS os stores ao deslogar para evitar vazamento de dados
-    useStoreStore.getState().clearStores()
-    useCRMStore.getState().clearAll()
-    useWhatsAppStore.getState().clearAll()
-    useAutomationStore.getState().clearAll()
-    clearInboxStore()
     set({ user: null, isLoading: false })
   },
 }))
 
 // ===============================
 // UI STORE
-// ✅ COM PERSIST - são preferências de UI (OK!)
 // ===============================
 interface UIState {
   sidebarCollapsed: boolean
@@ -163,7 +133,6 @@ export const useUIStore = create<UIState>()(
 
 // ===============================
 // CRM STORE
-// ✅ SEM PERSIST - dados vêm do servidor
 // ===============================
 interface CRMState {
   pipelines: Pipeline[]
@@ -298,7 +267,6 @@ export const useCRMStore = create<CRMState>((set) => ({
 
 // ===============================
 // WHATSAPP STORE
-// ✅ SEM PERSIST - dados vêm do servidor
 // ===============================
 interface WhatsAppState {
   conversations: WhatsAppConversation[]
@@ -358,7 +326,6 @@ export const useWhatsAppStore = create<WhatsAppState>((set) => ({
 
 // ===============================
 // AUTOMATION STORE
-// ✅ SEM PERSIST - dados vêm do servidor
 // ===============================
 interface AutomationState {
   automations: Automation[]
