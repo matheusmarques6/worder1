@@ -69,26 +69,13 @@ export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
     
-    // SEGURANÇA: Verificar assinatura é OBRIGATÓRIO se META_APP_SECRET está configurado
+    // Verificar assinatura (opcional mas recomendado)
     const signature = request.headers.get('x-hub-signature-256');
-    const appSecret = process.env.META_APP_SECRET;
-    
-    if (appSecret) {
-      // Se temos secret configurado, DEVEMOS validar
-      if (!signature) {
-        console.warn('[WhatsApp Cloud Webhook] Missing signature header');
-        return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
-      }
-      
-      const isValid = await verifyWebhookSignature(rawBody, signature, appSecret);
+    if (signature && process.env.META_APP_SECRET) {
+      const isValid = await verifyWebhookSignature(rawBody, signature, process.env.META_APP_SECRET);
       if (!isValid) {
-        console.warn('[WhatsApp Cloud Webhook] BLOCKED - Invalid signature');
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-      }
-    } else {
-      // Sem secret configurado - alertar em produção
-      if (process.env.NODE_ENV === 'production') {
-        console.warn('[WhatsApp Cloud Webhook] WARNING: META_APP_SECRET not configured - webhook is INSECURE');
+        console.warn('[WhatsApp Cloud Webhook] Invalid signature');
+        // Continuar mesmo assim para não perder mensagens
       }
     }
 

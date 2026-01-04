@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseRouteClient } from '@/lib/supabase-route';
-
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 import { getSupabaseClient } from '@/lib/api-utils';
 
 // Helper para obter organization_id do usuário
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       orgId = orgIdFromQuery;
     } else {
       // Fallback para autenticação por sessão
-      supabase = createSupabaseRouteClient();
+      supabase = createRouteHandlerClient({ cookies });
       const result = await getOrgIdFromSession(supabase);
       orgId = result.orgId;
       currentUser = result.user;
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
 // POST - Criar nova conversa
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient();
+    const supabase = createRouteHandlerClient({ cookies });
     const { orgId } = await getOrgIdFromSession(supabase);
     
     if (!orgId) {
@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
 // PATCH - Atualizar conversa
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient();
+    const supabase = createRouteHandlerClient({ cookies });
     const { orgId } = await getOrgIdFromSession(supabase);
     
     if (!orgId) {
@@ -251,7 +251,7 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Arquivar/deletar conversa
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient();
+    const supabase = createRouteHandlerClient({ cookies });
     const { orgId } = await getOrgIdFromSession(supabase);
     
     if (!orgId) {

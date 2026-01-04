@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseRouteClient } from '@/lib/supabase-route';
-
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 import { getSupabaseClient } from '@/lib/api-utils'
 
 async function getOrgIdFromSession(supabase: any) {
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
   } else {
     // Fallback para autenticação por sessão
     try {
-      supabase = createSupabaseRouteClient()
+      supabase = createRouteHandlerClient({ cookies })
       orgId = await getOrgIdFromSession(supabase)
     } catch {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
 // POST - Adicionar número de WhatsApp
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient()
+    const supabase = createRouteHandlerClient({ cookies })
     const orgId = await getOrgIdFromSession(supabase)
     
     if (!orgId) {
@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
 // PATCH - Atualizar número de WhatsApp
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient()
+    const supabase = createRouteHandlerClient({ cookies })
     const orgId = await getOrgIdFromSession(supabase)
     
     if (!orgId) {
@@ -302,7 +302,7 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Remover número de WhatsApp
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient()
+    const supabase = createRouteHandlerClient({ cookies })
     const orgId = await getOrgIdFromSession(supabase)
     
     if (!orgId) {

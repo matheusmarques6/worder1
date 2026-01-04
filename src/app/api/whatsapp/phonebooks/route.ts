@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseRouteClient } from '@/lib/supabase-route';
-
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
 async function getOrgId(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -20,7 +20,7 @@ function normalizePhone(phone: string): string {
 // GET - Lista phonebooks ou contatos
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient();
+    const supabase = createRouteHandlerClient({ cookies });
     const orgId = await getOrgId(supabase);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 // POST - Criar phonebook ou adicionar contatos
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient();
+    const supabase = createRouteHandlerClient({ cookies });
     const orgId = await getOrgId(supabase);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
 // PATCH - Atualizar phonebook ou contato
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient();
+    const supabase = createRouteHandlerClient({ cookies });
     const orgId = await getOrgId(supabase);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -222,7 +222,7 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Deletar phonebook ou contato
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient();
+    const supabase = createRouteHandlerClient({ cookies });
     const orgId = await getOrgId(supabase);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
