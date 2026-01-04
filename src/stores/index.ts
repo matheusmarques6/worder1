@@ -36,36 +36,40 @@ interface StoreState {
   updateStore: (id: string, data: Partial<ShopifyStore>) => void
   removeStore: (id: string) => void
   setLoading: (loading: boolean) => void
-  clearStores: () => void
 }
 
-// ✅ SEM PERSIST - dados devem vir do servidor
-export const useStoreStore = create<StoreState>((set) => ({
-  stores: [],
-  currentStore: null,
-  isLoading: false,
-  
-  setStores: (stores) => set({ stores }),
-  setCurrentStore: (currentStore) => set({ currentStore }),
-  addStore: (store) => set((state) => ({ 
-    stores: [...state.stores, store],
-    currentStore: state.currentStore || store,
-  })),
-  updateStore: (id, data) => set((state) => ({
-    stores: state.stores.map((s) => (s.id === id ? { ...s, ...data } : s)),
-    currentStore: state.currentStore?.id === id 
-      ? { ...state.currentStore, ...data } 
-      : state.currentStore,
-  })),
-  removeStore: (id) => set((state) => ({
-    stores: state.stores.filter((s) => s.id !== id),
-    currentStore: state.currentStore?.id === id 
-      ? state.stores.find(s => s.id !== id) || null 
-      : state.currentStore,
-  })),
-  setLoading: (isLoading) => set({ isLoading }),
-  clearStores: () => set({ stores: [], currentStore: null, isLoading: false }),
-}))
+export const useStoreStore = create<StoreState>()(
+  persist(
+    (set) => ({
+      stores: [],
+      currentStore: null,
+      isLoading: false,
+      
+      setStores: (stores) => set({ stores }),
+      setCurrentStore: (currentStore) => set({ currentStore }),
+      addStore: (store) => set((state) => ({ 
+        stores: [...state.stores, store],
+        currentStore: state.currentStore || store, // Auto-select if first store
+      })),
+      updateStore: (id, data) => set((state) => ({
+        stores: state.stores.map((s) => (s.id === id ? { ...s, ...data } : s)),
+        currentStore: state.currentStore?.id === id 
+          ? { ...state.currentStore, ...data } 
+          : state.currentStore,
+      })),
+      removeStore: (id) => set((state) => ({
+        stores: state.stores.filter((s) => s.id !== id),
+        currentStore: state.currentStore?.id === id 
+          ? state.stores.find(s => s.id !== id) || null 
+          : state.currentStore,
+      })),
+      setLoading: (isLoading) => set({ isLoading }),
+    }),
+    {
+      name: 'worder-stores',
+    }
+  )
+)
 
 // ===============================
 // AUTH STORE
@@ -170,7 +174,6 @@ interface CRMState {
   deleteContact: (id: string) => void
   
   setLoading: (loading: boolean) => void
-  clearAll: () => void
 }
 
 export const useCRMStore = create<CRMState>((set) => ({
@@ -255,14 +258,6 @@ export const useCRMStore = create<CRMState>((set) => ({
   })),
   
   setLoading: (isLoading) => set({ isLoading }),
-  clearAll: () => set({
-    pipelines: [],
-    selectedPipeline: null,
-    deals: [],
-    contacts: [],
-    selectedContact: null,
-    isLoading: false,
-  }),
 }))
 
 // ===============================
@@ -283,7 +278,6 @@ interface WhatsAppState {
   addMessage: (conversationId: string, message: any) => void
   setLoading: (loading: boolean) => void
   setConnected: (connected: boolean) => void
-  clearAll: () => void
 }
 
 export const useWhatsAppStore = create<WhatsAppState>((set) => ({
@@ -315,13 +309,6 @@ export const useWhatsAppStore = create<WhatsAppState>((set) => ({
   })),
   setLoading: (isLoading) => set({ isLoading }),
   setConnected: (isConnected) => set({ isConnected }),
-  clearAll: () => set({
-    conversations: [],
-    selectedConversation: null,
-    messages: {},
-    isLoading: false,
-    isConnected: false,
-  }),
 }))
 
 // ===============================
@@ -338,7 +325,6 @@ interface AutomationState {
   updateAutomation: (id: string, data: Partial<Automation>) => void
   deleteAutomation: (id: string) => void
   setLoading: (loading: boolean) => void
-  clearAll: () => void
 }
 
 export const useAutomationStore = create<AutomationState>((set) => ({
@@ -362,11 +348,6 @@ export const useAutomationStore = create<AutomationState>((set) => ({
     selectedAutomation: state.selectedAutomation?.id === id ? null : state.selectedAutomation,
   })),
   setLoading: (isLoading) => set({ isLoading }),
-  clearAll: () => set({
-    automations: [],
-    selectedAutomation: null,
-    isLoading: false,
-  }),
 }))
 
 // ===============================

@@ -7,7 +7,7 @@ function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
-  if (url && key) {
+  if (url && key && !url.includes('placeholder')) {
     return createClient(url, key);
   }
   return null;
@@ -25,22 +25,16 @@ export async function GET(request: NextRequest) {
     const accessToken = request.cookies.get('sb-access-token')?.value;
     
     if (!accessToken) {
-      console.log('[/api/stores] No access token');
-      return NextResponse.json(
-        { success: false, stores: [], error: 'Not authenticated' },
-        { status: 401 }
-      );
+      console.log('[/api/stores] No access token - returning empty');
+      return NextResponse.json({ success: true, stores: [], hasStores: false });
     }
 
     // Verificar usuário pelo token
     const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
     
     if (authError || !user) {
-      console.log('[/api/stores] Invalid token');
-      return NextResponse.json(
-        { success: false, stores: [], error: 'Invalid session' },
-        { status: 401 }
-      );
+      console.log('[/api/stores] Invalid token - returning empty');
+      return NextResponse.json({ success: true, stores: [], hasStores: false });
     }
 
     // Buscar organization_id do usuário
@@ -52,10 +46,7 @@ export async function GET(request: NextRequest) {
 
     if (!profile?.organization_id) {
       console.log('[/api/stores] No organization for user:', user.id);
-      return NextResponse.json(
-        { success: false, stores: [], error: 'No organization' },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: true, stores: [], hasStores: false });
     }
 
     console.log('[/api/stores] Fetching stores for org:', profile.organization_id);
