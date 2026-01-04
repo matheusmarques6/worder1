@@ -11,17 +11,19 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase } = auth;
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
 
   try {
     const { searchParams } = new URL(request.url);
     const unreadOnly = searchParams.get('unreadOnly') === 'true';
     const limit = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 100);
     
-    // RLS filtra automaticamente por organization_id
+    // ✅ CORREÇÃO: Filtrar por organization_id explicitamente
     let query = supabase
       .from('notifications')
       .select('*')
+      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
       .limit(limit);
     
@@ -34,6 +36,7 @@ export async function GET(request: NextRequest) {
       supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
         .eq('read', false)
     ]);
     
@@ -54,7 +57,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase } = auth;
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
 
   try {
     const body = await request.json();
@@ -66,19 +70,21 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
     
     if (markAllRead) {
-      // RLS filtra automaticamente
+      // ✅ CORREÇÃO: Filtrar por organization_id
       const { error } = await supabase
         .from('notifications')
         .update({ read: true, read_at: now })
+        .eq('organization_id', organizationId)
         .eq('read', false);
       
       if (error) throw error;
       
     } else if (notificationIds && notificationIds.length > 0) {
-      // RLS filtra automaticamente
+      // ✅ CORREÇÃO: Filtrar por organization_id
       const { error } = await supabase
         .from('notifications')
         .update({ read: true, read_at: now })
+        .eq('organization_id', organizationId)
         .in('id', notificationIds);
       
       if (error) throw error;
@@ -96,7 +102,8 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase } = auth;
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -104,19 +111,21 @@ export async function DELETE(request: NextRequest) {
     const deleteAll = searchParams.get('deleteAll') === 'true';
     
     if (deleteAll) {
-      // RLS filtra automaticamente
+      // ✅ CORREÇÃO: Filtrar por organization_id
       const { error } = await supabase
         .from('notifications')
         .delete()
+        .eq('organization_id', organizationId)
         .eq('read', true);
       
       if (error) throw error;
       
     } else if (id) {
-      // RLS filtra automaticamente
+      // ✅ CORREÇÃO: Filtrar por organization_id
       const { error } = await supabase
         .from('notifications')
         .delete()
+        .eq('organization_id', organizationId)
         .eq('id', id);
       
       if (error) throw error;

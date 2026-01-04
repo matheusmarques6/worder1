@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
           )
         `)
         .eq('id', contactId)
-        // RLS já filtra por organization_id automaticamente
+        .eq('organization_id', organizationId)
         .single();
 
       if (error) throw error;
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('contacts')
       .select('*, deals(id)', { count: 'exact' })
-      // RLS já filtra por organization_id automaticamente
+      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
 

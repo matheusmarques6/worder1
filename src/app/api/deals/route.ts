@@ -21,9 +21,11 @@ export async function GET(request: NextRequest) {
 
   try {
     if (type === 'pipelines') {
+      // ✅ CORREÇÃO: Filtrar pipelines por organization_id
       const { data: pipelines, error: pipelineError } = await supabase
         .from('pipelines')
         .select('*')
+        .eq('organization_id', organizationId)
         .order('position');
 
       if (pipelineError) throw pipelineError;
@@ -39,9 +41,11 @@ export async function GET(request: NextRequest) {
 
         if (stagesError) throw stagesError;
 
+        // ✅ CORREÇÃO: Filtrar deals por organization_id
         const { data: dealCounts } = await supabase
           .from('deals')
-          .select('stage_id, status');
+          .select('stage_id, status')
+          .eq('organization_id', organizationId);
 
         const stageDealsMap: Record<string, number> = {};
         dealCounts?.forEach(deal => {
@@ -68,10 +72,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (dealId) {
+      // ✅ CORREÇÃO: Verificar se deal pertence à organização
       const { data: deal, error: dealError } = await supabase
         .from('deals')
         .select('*')
         .eq('id', dealId)
+        .eq('organization_id', organizationId)
         .single();
 
       if (dealError) throw dealError;
@@ -99,9 +105,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ deal: { ...deal, contact, stage } });
     }
 
+    // ✅ CORREÇÃO: Filtrar deals por organization_id
     let dealsQuery = supabase
       .from('deals')
       .select('*')
+      .eq('organization_id', organizationId)
       .order('position');
     
     if (contactId) {
