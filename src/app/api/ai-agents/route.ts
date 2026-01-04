@@ -1,40 +1,47 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
-// GET - Listar agentes
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
+  const { searchParams } = new URL(request.url);
+  const orgParam = searchParams.get('organizationId') || searchParams.get('organization_id');
+  if (orgParam && orgParam !== organizationId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
-
     const { data, error } = await supabase
       .from('ai_agents')
-      .select('*')
+      .select(`
+        *,
+        sources:ai_agent_sources(id, name, type, status)
+      `)
       .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .order('name', { ascending: true })
+      .order('created_at', { ascending: false });
 
-    if (error) throw error
-
-    return NextResponse.json({ agents: data || [] })
+    if (error) throw error;
+    return NextResponse.json({ agents: data || [] });
   } catch (error: any) {
-    console.error('Error fetching agents:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('AI Agents GET error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// POST - Criar agente
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { organizationId, name, description, systemPrompt, model, temperature, maxTokens } = body
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
 
-    if (!organizationId || !name || !systemPrompt) {
-      return NextResponse.json({ error: 'organizationId, name, systemPrompt required' }, { status: 400 })
+  try {
+    const body = await request.json();
+    const { name, description, model, system_prompt, temperature, max_tokens, is_active } = body;
+
+    if (!name) {
+      return NextResponse.json({ error: 'Agent name required' }, { status: 400 });
     }
 
     const { data, error } = await supabase
@@ -43,19 +50,76 @@ export async function POST(request: NextRequest) {
         organization_id: organizationId,
         name,
         description,
-        system_prompt: systemPrompt,
         model: model || 'gpt-4o-mini',
-        temperature: temperature || 0.7,
-        max_tokens: maxTokens || 500,
+        system_prompt: system_prompt || '',
+        temperature: temperature ?? 0.7,
+        max_tokens: max_tokens ?? 1000,
+        is_active: is_active ?? true,
+        created_by: auth.user.id,
       })
       .select()
-      .single()
+      .single();
 
-    if (error) throw error
-
-    return NextResponse.json({ agent: data })
+    if (error) throw error;
+    return NextResponse.json({ agent: data }, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating agent:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('AI Agents POST error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
+  try {
+    const body = await request.json();
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Agent ID required' }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from('ai_agents')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('organization_id', organizationId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return NextResponse.json({ agent: data });
+  } catch (error: any) {
+    console.error('AI Agents PUT error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+
+  if (!id) {
+    return NextResponse.json({ error: 'Agent ID required' }, { status: 400 });
+  }
+
+  try {
+    const { error } = await supabase
+      .from('ai_agents')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organizationId);
+
+    if (error) throw error;
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('AI Agents DELETE error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

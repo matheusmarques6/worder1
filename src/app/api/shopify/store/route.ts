@@ -1,64 +1,47 @@
-// =============================================
-// API: Get Shopify Store
-// src/app/api/shopify/store/route.ts
-// =============================================
-
-import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseClient } from '@/lib/api-utils'
+import { NextRequest, NextResponse } from 'next/server';
+import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
-  const supabase = getSupabaseClient()
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
 
+  const supabase = getSupabaseClient();
   if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
-  const searchParams = request.nextUrl.searchParams
-  const organizationId = searchParams.get('organizationId')
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
+  const { searchParams } = new URL(request.url);
+  const orgParam = searchParams.get('organizationId') || searchParams.get('organization_id');
+  if (orgParam && orgParam !== organizationId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+
+  const storeId = searchParams.get('storeId');
 
   try {
-    const { data: store, error } = await supabase
+    if (storeId) {
+      const { data, error } = await supabase
+        .from('shopify_stores')
+        .select('*')
+        .eq('id', storeId)
+        .eq('organization_id', organizationId)
+        .single();
+
+      if (error) throw error;
+      return NextResponse.json({ store: data });
+    }
+
+    const { data, error } = await supabase
       .from('shopify_stores')
-      .select(`
-        id,
-        shop_name,
-        shop_domain,
-        shop_email,
-        currency,
-        timezone,
-        is_active,
-        is_configured,
-        connection_status,
-        default_pipeline_id,
-        default_stage_id,
-        contact_type,
-        auto_tags,
-        sync_orders,
-        sync_customers,
-        sync_checkouts,
-        sync_refunds,
-        stage_mapping,
-        last_sync_at,
-        last_reconcile_at,
-        total_customers_imported,
-        total_orders_imported,
-        created_at
-      `)
+      .select('*')
       .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .order('created_at', { ascending: false });
 
-    if (error) throw error
-
-    return NextResponse.json({ store })
+    if (error) throw error;
+    return NextResponse.json({ stores: data || [] });
   } catch (error: any) {
-    console.error('Error fetching Shopify store:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Shopify Store GET error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

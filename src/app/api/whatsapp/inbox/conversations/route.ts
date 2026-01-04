@@ -1,67 +1,52 @@
-// Forçar rota dinâmica
-export const dynamic = 'force-dynamic';
-
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-    const status = searchParams.get('status')
-    const search = searchParams.get('search')
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
+  const { searchParams } = new URL(request.url);
+  const orgParam = searchParams.get('organizationId') || searchParams.get('organization_id');
+  if (orgParam && orgParam !== organizationId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  try {
+    const status = searchParams.get('status') || 'open';
+    const assignedTo = searchParams.get('assignedTo');
+    const search = searchParams.get('search');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
+    const offset = (page - 1) * limit;
 
     let query = supabase
       .from('whatsapp_conversations')
       .select(`
         *,
-        contact:whatsapp_contacts(*)
-      `)
+        contact:whatsapp_contacts(*),
+        instance:whatsapp_instances(id, title, phone_number),
+        assigned_agent:whatsapp_agents(id, name, avatar_url)
+      `, { count: 'exact' })
       .eq('organization_id', organizationId)
+      .eq('status', status)
       .order('last_message_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
-    if (status && status !== 'all') {
-      query = query.eq('status', status)
-    }
+    if (assignedTo) query = query.eq('assigned_to', assignedTo);
 
-    const { data, error } = await query
+    const { data, error, count } = await query;
+    if (error) throw error;
 
-    if (error) throw error
-
-    // Formatar para o frontend
-    const conversations = (data || []).map(conv => ({
-      id: conv.id,
-      organization_id: conv.organization_id,
-      contact_id: conv.contact_id,
-      phone_number: conv.phone_number,
-      status: conv.status,
-      is_bot_active: conv.is_bot_active,
-      last_message_at: conv.last_message_at,
-      last_message_preview: conv.last_message_preview,
-      unread_count: conv.unread_count || 0,
-      can_send_template_only: false,
-      contact_name: conv.contact?.name || conv.contact?.profile_name || conv.phone_number,
-      contact_avatar: conv.contact?.profile_picture_url,
-      contact_tags: conv.contact?.tags || [],
-    }))
-
-    // Filtrar por busca se necessário
-    let filtered = conversations
-    if (search) {
-      const searchLower = search.toLowerCase()
-      filtered = conversations.filter(c => 
-        c.contact_name?.toLowerCase().includes(searchLower) ||
-        c.phone_number?.includes(search)
-      )
-    }
-
-    return NextResponse.json({ conversations: filtered })
+    return NextResponse.json({
+      conversations: data || [],
+      total: count || 0,
+      page,
+      limit
+    });
   } catch (error: any) {
-    console.error('Error fetching conversations:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Inbox Conversations GET error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

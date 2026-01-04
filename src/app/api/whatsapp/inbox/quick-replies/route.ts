@@ -1,98 +1,118 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
-// GET /api/whatsapp/inbox/quick-replies
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
+  const { searchParams } = new URL(request.url);
+  const orgParam = searchParams.get('organizationId') || searchParams.get('organization_id');
+  if (orgParam && orgParam !== organizationId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-    const category = searchParams.get('category')
-    const search = searchParams.get('search')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
-    }
-
-    let query = supabase
+    const { data, error } = await supabase
       .from('whatsapp_quick_replies')
       .select('*')
       .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .order('use_count', { ascending: false })
+      .order('title');
 
-    if (category) {
-      query = query.eq('category', category)
-    }
-
-    if (search) {
-      query = query.or(`shortcut.ilike.%${search}%,title.ilike.%${search}%,content.ilike.%${search}%`)
-    }
-
-    const { data, error } = await query
-
-    if (error) throw error
-
-    return NextResponse.json({ quickReplies: data || [] })
-
-  } catch (error) {
-    console.error('Error fetching quick replies:', error)
-    return NextResponse.json({ error: 'Failed to fetch quick replies' }, { status: 500 })
+    if (error) throw error;
+    return NextResponse.json({ quickReplies: data || [] });
+  } catch (error: any) {
+    console.error('Quick replies GET error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// POST /api/whatsapp/inbox/quick-replies
 export async function POST(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
   try {
-    const body = await request.json()
-    const { 
-      organizationId, 
-      shortcut, 
-      title, 
-      content, 
-      category,
-      mediaUrl,
-      mediaType,
-      mediaFilename,
-      userId 
-    } = body
+    const body = await request.json();
+    const { title, shortcut, content, category } = body;
 
-    if (!organizationId || !shortcut || !title || !content) {
-      return NextResponse.json({ 
-        error: 'Organization ID, shortcut, title and content required' 
-      }, { status: 400 })
+    if (!title || !content) {
+      return NextResponse.json({ error: 'Title and content required' }, { status: 400 });
     }
-
-    // Garante que shortcut começa com /
-    const normalizedShortcut = shortcut.startsWith('/') ? shortcut : `/${shortcut}`
 
     const { data, error } = await supabase
       .from('whatsapp_quick_replies')
       .insert({
         organization_id: organizationId,
-        shortcut: normalizedShortcut,
         title,
+        shortcut,
         content,
         category,
-        media_url: mediaUrl,
-        media_type: mediaType,
-        media_filename: mediaFilename,
-        created_by: userId,
-        created_at: new Date().toISOString()
       })
-      .select('*')
-      .single()
+      .select()
+      .single();
 
-    if (error) {
-      if (error.code === '23505') { // unique violation
-        return NextResponse.json({ error: 'Shortcut already exists' }, { status: 400 })
-      }
-      throw error
+    if (error) throw error;
+    return NextResponse.json({ quickReply: data }, { status: 201 });
+  } catch (error: any) {
+    console.error('Quick reply POST error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
+  try {
+    const body = await request.json();
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID required' }, { status: 400 });
     }
 
-    return NextResponse.json({ quickReply: data })
+    const { data, error } = await supabase
+      .from('whatsapp_quick_replies')
+      .update(updates)
+      .eq('id', id)
+      .eq('organization_id', organizationId)
+      .select()
+      .single();
 
-  } catch (error) {
-    console.error('Error creating quick reply:', error)
-    return NextResponse.json({ error: 'Failed to create quick reply' }, { status: 500 })
+    if (error) throw error;
+    return NextResponse.json({ quickReply: data });
+  } catch (error: any) {
+    console.error('Quick reply PUT error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+
+  if (!id) {
+    return NextResponse.json({ error: 'ID required' }, { status: 400 });
+  }
+
+  try {
+    const { error } = await supabase
+      .from('whatsapp_quick_replies')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organizationId);
+
+    if (error) throw error;
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Quick reply DELETE error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

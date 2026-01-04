@@ -1,124 +1,82 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 
-// GET - List activities for a contact
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
   const supabase = getSupabaseClient();
-  
   if (!supabase) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
-  const searchParams = request.nextUrl.searchParams;
-  const contactId = searchParams.get('contactId');
-  const organizationId = searchParams.get('organizationId');
-
-  if (!contactId || !organizationId) {
-    return NextResponse.json({ error: 'contactId and organizationId required' }, { status: 400 });
+  const { searchParams } = new URL(request.url);
+  const orgParam = searchParams.get('organizationId') || searchParams.get('organization_id');
+  if (orgParam && orgParam !== organizationId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const contactId = searchParams.get('contactId');
+  const limit = parseInt(searchParams.get('limit') || '50');
+
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('contact_activities')
       .select('*')
-      .eq('contact_id', contactId)
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(limit);
 
+    if (contactId) {
+      query = query.eq('contact_id', contactId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
 
     return NextResponse.json({ activities: data || [] });
   } catch (error: any) {
-    console.error('Error fetching activities:', error);
+    console.error('Contact Activities GET error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// POST - Create activity
 export async function POST(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
   const supabase = getSupabaseClient();
-  
   if (!supabase) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
   try {
     const body = await request.json();
-    const { contactId, organizationId, type, title, description, userId } = body;
+    const { contact_id, type, description, metadata } = body;
 
-    console.log('Creating activity:', { contactId, organizationId, type, title, userId });
-
-    if (!contactId || !organizationId || !type || !title) {
-      return NextResponse.json({ 
-        error: 'Missing required fields',
-        received: { contactId, organizationId, type, title }
-      }, { status: 400 });
+    if (!contact_id || !type) {
+      return NextResponse.json({ error: 'contact_id and type required' }, { status: 400 });
     }
-
-    // Validate userId is a proper UUID or null
-    const isValidUUID = (id: string | null | undefined): boolean => {
-      if (!id) return false
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      return uuidRegex.test(id)
-    }
-    
-    const validUserId = isValidUUID(userId) ? userId : null
 
     const { data, error } = await supabase
       .from('contact_activities')
       .insert({
-        contact_id: contactId,
         organization_id: organizationId,
-        user_id: validUserId,
+        contact_id,
         type,
-        title,
-        description: description || null,
+        description,
+        metadata: metadata || {},
+        user_id: auth.user.id,
       })
       .select()
       .single();
 
-    if (error) {
-      console.error('Supabase error:', error);
-      throw error;
-    }
-
-    console.log('Activity created:', data);
+    if (error) throw error;
     return NextResponse.json({ activity: data }, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating activity:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-// DELETE - Delete activity
-export async function DELETE(request: NextRequest) {
-  const supabase = getSupabaseClient();
-  
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
-
-  const searchParams = request.nextUrl.searchParams;
-  const id = searchParams.get('id');
-  const organizationId = searchParams.get('organizationId');
-
-  if (!id || !organizationId) {
-    return NextResponse.json({ error: 'id and organizationId required' }, { status: 400 });
-  }
-
-  try {
-    const { error } = await supabase
-      .from('contact_activities')
-      .delete()
-      .eq('id', id)
-      .eq('organization_id', organizationId);
-
-    if (error) throw error;
-
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error('Error deleting activity:', error);
+    console.error('Contact Activities POST error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
