@@ -81,7 +81,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         console.log('[AuthProvider] Auth state changed:', event);
 
-        if (event === 'SIGNED_OUT' || !session) {
+        // ✅ FIX: Só limpar stores quando EXPLICITAMENTE faz logout
+        // NÃO tratar INITIAL_SESSION sem session como logout!
+        if (event === 'SIGNED_OUT') {
           console.log('[AuthProvider] User signed out - clearing stores');
           
           setUser(null);
@@ -94,7 +96,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        // ✅ FIX: Ignorar INITIAL_SESSION - deixar initAuth() cuidar disso
+        if (event === 'INITIAL_SESSION') {
+          console.log('[AuthProvider] Initial session event - skipping (handled by initAuth)');
+          return;
+        }
+
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (!session) {
+            console.warn('[AuthProvider] SIGNED_IN/TOKEN_REFRESHED but no session');
+            return;
+          }
+          
           try {
             const { data: profile } = await supabaseClient
               .from('profiles')
