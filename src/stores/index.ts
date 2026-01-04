@@ -12,7 +12,6 @@ import type {
 
 // ===============================
 // STORE (SHOPIFY) STORE
-// ✅ SEM PERSIST - dados vêm do servidor
 // ===============================
 export interface ShopifyStore {
   id: string
@@ -30,7 +29,6 @@ interface StoreState {
   stores: ShopifyStore[]
   currentStore: ShopifyStore | null
   isLoading: boolean
-  error: string | null
   
   setStores: (stores: ShopifyStore[]) => void
   setCurrentStore: (store: ShopifyStore | null) => void
@@ -38,18 +36,16 @@ interface StoreState {
   updateStore: (id: string, data: Partial<ShopifyStore>) => void
   removeStore: (id: string) => void
   setLoading: (loading: boolean) => void
-  setError: (error: string | null) => void
   clearStores: () => void
 }
 
-// ✅ SEM PERSIST! Dados devem vir do servidor a cada login
-export const useStoreStore = create<StoreState>((set, get) => ({
+// ✅ SEM PERSIST - dados devem vir do servidor
+export const useStoreStore = create<StoreState>((set) => ({
   stores: [],
   currentStore: null,
   isLoading: false,
-  error: null,
   
-  setStores: (stores) => set({ stores, error: null }),
+  setStores: (stores) => set({ stores }),
   setCurrentStore: (currentStore) => set({ currentStore }),
   addStore: (store) => set((state) => ({ 
     stores: [...state.stores, store],
@@ -68,13 +64,11 @@ export const useStoreStore = create<StoreState>((set, get) => ({
       : state.currentStore,
   })),
   setLoading: (isLoading) => set({ isLoading }),
-  setError: (error) => set({ error }),
-  clearStores: () => set({ stores: [], currentStore: null, error: null, isLoading: false }),
+  clearStores: () => set({ stores: [], currentStore: null, isLoading: false }),
 }))
 
 // ===============================
 // AUTH STORE
-// ✅ SEM PERSIST - sessão gerenciada pelo Supabase
 // ===============================
 interface AuthState {
   user: User | null
@@ -90,37 +84,33 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   setUser: (user) => set({ user }),
   setLoading: (isLoading) => set({ isLoading }),
-  logout: () => {
-    useStoreStore.getState().clearStores()
-    useCRMStore.getState().clearAll()
-    useWhatsAppStore.getState().clearAll()
-    useAutomationStore.getState().clearAll()
-    set({ user: null, isLoading: false })
-  },
+  logout: () => set({ user: null, isLoading: false }),
   signOut: async () => {
     try {
-      useStoreStore.getState().clearStores()
-      useCRMStore.getState().clearAll()
-      useWhatsAppStore.getState().clearAll()
-      useAutomationStore.getState().clearAll()
-      set({ user: null, isLoading: false })
-    } catch (error) {
-      console.error('Logout error:', error)
+      await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      })
+    } catch (e) {
+      console.error('Logout error:', e)
     }
+    set({ user: null, isLoading: false })
   },
 }))
 
 // ===============================
-// UI STORE  
-// ✅ ESTE SIM pode ter persist (preferências de UI)
+// UI STORE
 // ===============================
 interface UIState {
   sidebarCollapsed: boolean
   currentPage: string
   searchQuery: string
+  theme: 'dark' | 'light'
   toggleSidebar: () => void
   setCurrentPage: (page: string) => void
   setSearchQuery: (query: string) => void
+  setTheme: (theme: 'dark' | 'light') => void
 }
 
 export const useUIStore = create<UIState>()(
@@ -129,185 +119,258 @@ export const useUIStore = create<UIState>()(
       sidebarCollapsed: false,
       currentPage: 'dashboard',
       searchQuery: '',
+      theme: 'dark',
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setCurrentPage: (currentPage) => set({ currentPage }),
       setSearchQuery: (searchQuery) => set({ searchQuery }),
+      setTheme: (theme) => set({ theme }),
     }),
     {
-      name: 'worder-ui-storage',
-      partialize: (state) => ({ 
-        sidebarCollapsed: state.sidebarCollapsed,
-      }),
+      name: 'worder-ui',
     }
   )
 )
 
 // ===============================
 // CRM STORE
-// ✅ SEM PERSIST - dados vêm do servidor
 // ===============================
 interface CRMState {
   pipelines: Pipeline[]
-  stages: PipelineStage[]
+  selectedPipeline: Pipeline | null
   deals: Deal[]
   contacts: Contact[]
-  currentPipeline: Pipeline | null
+  selectedContact: Contact | null
   isLoading: boolean
-  error: string | null
   
+  // Pipeline actions
   setPipelines: (pipelines: Pipeline[]) => void
-  setStages: (stages: PipelineStage[]) => void
+  setSelectedPipeline: (pipeline: Pipeline | null) => void
+  addPipeline: (pipeline: Pipeline) => void
+  updatePipeline: (id: string, data: Partial<Pipeline>) => void
+  deletePipeline: (id: string) => void
+  
+  // Stage actions (renamed from Column)
+  addStage: (pipelineId: string, stage: PipelineStage) => void
+  updateStage: (pipelineId: string, stageId: string, data: Partial<PipelineStage>) => void
+  deleteStage: (pipelineId: string, stageId: string) => void
+  reorderStages: (pipelineId: string, stages: PipelineStage[]) => void
+  
+  // Deal actions
   setDeals: (deals: Deal[]) => void
-  setContacts: (contacts: Contact[]) => void
-  setCurrentPipeline: (pipeline: Pipeline | null) => void
   addDeal: (deal: Deal) => void
   updateDeal: (id: string, data: Partial<Deal>) => void
+  deleteDeal: (id: string) => void
   moveDeal: (dealId: string, stageId: string, position: number) => void
-  removeDeal: (id: string) => void
+  
+  // Contact actions
+  setContacts: (contacts: Contact[]) => void
+  setSelectedContact: (contact: Contact | null) => void
   addContact: (contact: Contact) => void
   updateContact: (id: string, data: Partial<Contact>) => void
-  removeContact: (id: string) => void
+  deleteContact: (id: string) => void
+  
   setLoading: (loading: boolean) => void
-  setError: (error: string | null) => void
   clearAll: () => void
 }
 
 export const useCRMStore = create<CRMState>((set) => ({
   pipelines: [],
-  stages: [],
+  selectedPipeline: null,
   deals: [],
   contacts: [],
-  currentPipeline: null,
+  selectedContact: null,
   isLoading: false,
-  error: null,
   
+  // Pipeline actions
   setPipelines: (pipelines) => set({ pipelines }),
-  setStages: (stages) => set({ stages }),
+  setSelectedPipeline: (selectedPipeline) => set({ selectedPipeline }),
+  addPipeline: (pipeline) => set((state) => ({ pipelines: [...state.pipelines, pipeline] })),
+  updatePipeline: (id, data) => set((state) => ({
+    pipelines: state.pipelines.map((p) => (p.id === id ? { ...p, ...data } : p)),
+    selectedPipeline: state.selectedPipeline?.id === id 
+      ? { ...state.selectedPipeline, ...data } 
+      : state.selectedPipeline,
+  })),
+  deletePipeline: (id) => set((state) => ({
+    pipelines: state.pipelines.filter((p) => p.id !== id),
+    selectedPipeline: state.selectedPipeline?.id === id ? null : state.selectedPipeline,
+  })),
+  
+  // Stage actions
+  addStage: (pipelineId, stage) => set((state) => ({
+    pipelines: state.pipelines.map((p) => 
+      p.id === pipelineId ? { ...p, stages: [...(p.stages || []), stage] } : p
+    ),
+    selectedPipeline: state.selectedPipeline?.id === pipelineId 
+      ? { ...state.selectedPipeline, stages: [...(state.selectedPipeline.stages || []), stage] } 
+      : state.selectedPipeline,
+  })),
+  updateStage: (pipelineId, stageId, data) => set((state) => ({
+    pipelines: state.pipelines.map((p) => 
+      p.id === pipelineId 
+        ? { ...p, stages: (p.stages || []).map((s) => s.id === stageId ? { ...s, ...data } : s) } 
+        : p
+    ),
+  })),
+  deleteStage: (pipelineId, stageId) => set((state) => ({
+    pipelines: state.pipelines.map((p) => 
+      p.id === pipelineId 
+        ? { ...p, stages: (p.stages || []).filter((s) => s.id !== stageId) } 
+        : p
+    ),
+  })),
+  reorderStages: (pipelineId, stages) => set((state) => ({
+    pipelines: state.pipelines.map((p) => 
+      p.id === pipelineId ? { ...p, stages } : p
+    ),
+    selectedPipeline: state.selectedPipeline?.id === pipelineId 
+      ? { ...state.selectedPipeline, stages } 
+      : state.selectedPipeline,
+  })),
+  
+  // Deal actions
   setDeals: (deals) => set({ deals }),
-  setContacts: (contacts) => set({ contacts }),
-  setCurrentPipeline: (currentPipeline) => set({ currentPipeline }),
   addDeal: (deal) => set((state) => ({ deals: [...state.deals, deal] })),
   updateDeal: (id, data) => set((state) => ({
     deals: state.deals.map((d) => (d.id === id ? { ...d, ...data } : d)),
+  })),
+  deleteDeal: (id) => set((state) => ({
+    deals: state.deals.filter((d) => d.id !== id),
   })),
   moveDeal: (dealId, stageId, position) => set((state) => ({
     deals: state.deals.map((d) => 
       d.id === dealId ? { ...d, stage_id: stageId, position } : d
     ),
   })),
-  removeDeal: (id) => set((state) => ({
-    deals: state.deals.filter((d) => d.id !== id),
-  })),
+  
+  // Contact actions
+  setContacts: (contacts) => set({ contacts }),
+  setSelectedContact: (selectedContact) => set({ selectedContact }),
   addContact: (contact) => set((state) => ({ contacts: [...state.contacts, contact] })),
   updateContact: (id, data) => set((state) => ({
     contacts: state.contacts.map((c) => (c.id === id ? { ...c, ...data } : c)),
   })),
-  removeContact: (id) => set((state) => ({
+  deleteContact: (id) => set((state) => ({
     contacts: state.contacts.filter((c) => c.id !== id),
   })),
+  
   setLoading: (isLoading) => set({ isLoading }),
-  setError: (error) => set({ error }),
   clearAll: () => set({
     pipelines: [],
-    stages: [],
+    selectedPipeline: null,
     deals: [],
     contacts: [],
-    currentPipeline: null,
+    selectedContact: null,
     isLoading: false,
-    error: null,
   }),
 }))
 
 // ===============================
 // WHATSAPP STORE
-// ✅ SEM PERSIST - dados vêm do servidor
 // ===============================
 interface WhatsAppState {
   conversations: WhatsAppConversation[]
-  currentConversation: WhatsAppConversation | null
-  isConnected: boolean
+  selectedConversation: WhatsAppConversation | null
+  messages: Record<string, any[]>
   isLoading: boolean
-  error: string | null
+  isConnected: boolean
   
   setConversations: (conversations: WhatsAppConversation[]) => void
-  setCurrentConversation: (conversation: WhatsAppConversation | null) => void
+  setSelectedConversation: (conversation: WhatsAppConversation | null) => void
   addConversation: (conversation: WhatsAppConversation) => void
   updateConversation: (id: string, data: Partial<WhatsAppConversation>) => void
-  setConnected: (connected: boolean) => void
+  setMessages: (conversationId: string, messages: any[]) => void
+  addMessage: (conversationId: string, message: any) => void
   setLoading: (loading: boolean) => void
-  setError: (error: string | null) => void
+  setConnected: (connected: boolean) => void
   clearAll: () => void
 }
 
 export const useWhatsAppStore = create<WhatsAppState>((set) => ({
   conversations: [],
-  currentConversation: null,
-  isConnected: false,
+  selectedConversation: null,
+  messages: {},
   isLoading: false,
-  error: null,
+  isConnected: false,
   
   setConversations: (conversations) => set({ conversations }),
-  setCurrentConversation: (currentConversation) => set({ currentConversation }),
-  addConversation: (conversation) => set((state) => ({
-    conversations: [...state.conversations, conversation],
+  setSelectedConversation: (selectedConversation) => set({ selectedConversation }),
+  addConversation: (conversation) => set((state) => ({ 
+    conversations: [conversation, ...state.conversations] 
   })),
   updateConversation: (id, data) => set((state) => ({
     conversations: state.conversations.map((c) => (c.id === id ? { ...c, ...data } : c)),
+    selectedConversation: state.selectedConversation?.id === id 
+      ? { ...state.selectedConversation, ...data } 
+      : state.selectedConversation,
   })),
-  setConnected: (isConnected) => set({ isConnected }),
+  setMessages: (conversationId, messages) => set((state) => ({
+    messages: { ...state.messages, [conversationId]: messages },
+  })),
+  addMessage: (conversationId, message) => set((state) => ({
+    messages: { 
+      ...state.messages, 
+      [conversationId]: [...(state.messages[conversationId] || []), message] 
+    },
+  })),
   setLoading: (isLoading) => set({ isLoading }),
-  setError: (error) => set({ error }),
+  setConnected: (isConnected) => set({ isConnected }),
   clearAll: () => set({
     conversations: [],
-    currentConversation: null,
-    isConnected: false,
+    selectedConversation: null,
+    messages: {},
     isLoading: false,
-    error: null,
+    isConnected: false,
   }),
 }))
 
 // ===============================
 // AUTOMATION STORE
-// ✅ SEM PERSIST - dados vêm do servidor
 // ===============================
 interface AutomationState {
   automations: Automation[]
+  selectedAutomation: Automation | null
   isLoading: boolean
-  error: string | null
   
   setAutomations: (automations: Automation[]) => void
+  setSelectedAutomation: (automation: Automation | null) => void
   addAutomation: (automation: Automation) => void
   updateAutomation: (id: string, data: Partial<Automation>) => void
-  removeAutomation: (id: string) => void
+  deleteAutomation: (id: string) => void
   setLoading: (loading: boolean) => void
-  setError: (error: string | null) => void
   clearAll: () => void
 }
 
 export const useAutomationStore = create<AutomationState>((set) => ({
   automations: [],
+  selectedAutomation: null,
   isLoading: false,
-  error: null,
   
   setAutomations: (automations) => set({ automations }),
-  addAutomation: (automation) => set((state) => ({
-    automations: [...state.automations, automation],
+  setSelectedAutomation: (selectedAutomation) => set({ selectedAutomation }),
+  addAutomation: (automation) => set((state) => ({ 
+    automations: [...state.automations, automation] 
   })),
   updateAutomation: (id, data) => set((state) => ({
     automations: state.automations.map((a) => (a.id === id ? { ...a, ...data } : a)),
+    selectedAutomation: state.selectedAutomation?.id === id 
+      ? { ...state.selectedAutomation, ...data } 
+      : state.selectedAutomation,
   })),
-  removeAutomation: (id) => set((state) => ({
+  deleteAutomation: (id) => set((state) => ({
     automations: state.automations.filter((a) => a.id !== id),
+    selectedAutomation: state.selectedAutomation?.id === id ? null : state.selectedAutomation,
   })),
   setLoading: (isLoading) => set({ isLoading }),
-  setError: (error) => set({ error }),
   clearAll: () => set({
     automations: [],
+    selectedAutomation: null,
     isLoading: false,
-    error: null,
   }),
 }))
 
-// Re-export do inboxStore
+// ===============================
+// RE-EXPORT INBOX STORE
+// ===============================
 export { useInboxStore, useSelectedConversation, useFilteredConversations, useConversationMessages } from './inboxStore'
 export type { Conversation, Message, WhatsAppNumber } from './inboxStore'
