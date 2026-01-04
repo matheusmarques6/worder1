@@ -67,6 +67,7 @@ export function useFetch<T>(url: string, options?: RequestInit) {
 }
 
 // Analytics hook
+// ✅ AJUSTE 1: Removido organizationId da URL - API pega do JWT
 export function useAnalytics(type: string = 'overview', period: string = '30d') {
   const { user } = useAuthStore();
   const [data, setData] = useState<any>(null);
@@ -78,8 +79,9 @@ export function useAnalytics(type: string = 'overview', period: string = '30d') 
 
     try {
       setLoading(true);
+      // ✅ CORRIGIDO: Sem organizationId na URL
       const response = await fetch(
-        `/api/analytics?organizationId=${user.organization_id}&type=${type}&period=${period}`
+        `/api/analytics?type=${type}&period=${period}`
       );
       if (!response.ok) throw new Error('Failed to fetch analytics');
       const result = await response.json();
@@ -99,6 +101,7 @@ export function useAnalytics(type: string = 'overview', period: string = '30d') 
 }
 
 // Contacts hook com realtime
+// ✅ AJUSTE 1: Removido organizationId das URLs - API pega do JWT
 export function useContacts(options: {
   search?: string;
   tags?: string[];
@@ -117,8 +120,8 @@ export function useContacts(options: {
 
     try {
       if (showLoading) setLoading(true);
+      // ✅ CORRIGIDO: Sem organizationId no URLSearchParams
       const params = new URLSearchParams({
-        organizationId: user.organization_id,
         page: String(options.page || 1),
         limit: String(options.limit || 50),
       });
@@ -143,6 +146,7 @@ export function useContacts(options: {
 
   // =============================================
   // REALTIME - Escutar mudanças em contatos
+  // ✅ MANTER organization_id nos filtros Realtime (é client-side, OK)
   // =============================================
   useEffect(() => {
     if (!user?.organization_id) return;
@@ -216,16 +220,15 @@ export function useContacts(options: {
     };
   }, [user?.organization_id]);
 
-  // Operações - não precisam mais chamar fetchContacts() pois realtime atualiza
+  // Operações - ✅ CORRIGIDO: Sem organizationId no body (API pega do JWT)
   const createContact = async (data: any) => {
     const response = await fetch('/api/contacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ organizationId: user?.organization_id, ...data }),
+      body: JSON.stringify(data), // ✅ Sem organizationId
     });
     if (!response.ok) throw new Error('Failed to create contact');
     const result = await response.json();
-    // Realtime vai atualizar automaticamente
     return result.contact;
   };
 
@@ -238,7 +241,7 @@ export function useContacts(options: {
     const response = await fetch('/api/contacts', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, organizationId: user?.organization_id, ...data }),
+      body: JSON.stringify({ id, ...data }), // ✅ Sem organizationId
     });
     if (!response.ok) {
       await fetchContacts(false);
@@ -252,8 +255,9 @@ export function useContacts(options: {
     // Remoção otimista
     setContacts(prev => prev.filter(c => c.id !== id));
     
+    // ✅ CORRIGIDO: Sem organizationId na URL
     const response = await fetch(
-      `/api/contacts?id=${id}&organizationId=${user?.organization_id}`,
+      `/api/contacts?id=${id}`,
       { method: 'DELETE' }
     );
     if (!response.ok) {
@@ -279,6 +283,7 @@ export function useContacts(options: {
 const supabaseRealtime = supabase;
 
 // Deals hook com realtime
+// ✅ AJUSTE 1: Removido organizationId das URLs - API pega do JWT
 export function useDeals(pipelineId?: string) {
   const { user } = useAuthStore();
   const [deals, setDeals] = useState<any[]>([]);
@@ -294,8 +299,9 @@ export function useDeals(pipelineId?: string) {
     }
 
     try {
+      // ✅ CORRIGIDO: Sem organizationId na URL
       const response = await fetch(
-        `/api/deals?organizationId=${user.organization_id}&type=pipelines`
+        `/api/deals?type=pipelines`
       );
       if (!response.ok) throw new Error('Failed to fetch pipelines');
       const result = await response.json();
@@ -314,10 +320,12 @@ export function useDeals(pipelineId?: string) {
 
     try {
       if (showLoading) setLoading(true);
-      const params = new URLSearchParams({ organizationId: user.organization_id });
+      // ✅ CORRIGIDO: Sem organizationId no URLSearchParams
+      const params = new URLSearchParams();
       if (pipelineId) params.set('pipelineId', pipelineId);
 
-      const response = await fetch(`/api/deals?${params}`);
+      const url = params.toString() ? `/api/deals?${params}` : '/api/deals';
+      const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch deals');
       const result = await response.json();
       setDeals(result.deals || []);
@@ -337,6 +345,7 @@ export function useDeals(pipelineId?: string) {
 
   // =============================================
   // REALTIME - Escutar mudanças em deals
+  // ✅ MANTER organization_id nos filtros Realtime (é client-side, OK)
   // =============================================
   useEffect(() => {
     if (!user?.organization_id) return;
@@ -432,16 +441,15 @@ export function useDeals(pipelineId?: string) {
     };
   }, [user?.organization_id]);
 
-  // Operações - não precisam mais chamar fetchDeals() pois realtime atualiza
+  // Operações - ✅ CORRIGIDO: Sem organizationId no body/URL
   const createDeal = async (data: any) => {
     const response = await fetch('/api/deals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ organizationId: user?.organization_id, ...data }),
+      body: JSON.stringify(data), // ✅ Sem organizationId
     });
     if (!response.ok) throw new Error('Failed to create deal');
     const result = await response.json();
-    // Realtime vai atualizar automaticamente
     return result.deal;
   };
 
@@ -454,7 +462,7 @@ export function useDeals(pipelineId?: string) {
     const response = await fetch('/api/deals', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, organizationId: user?.organization_id, ...data }),
+      body: JSON.stringify({ id, ...data }), // ✅ Sem organizationId
     });
     if (!response.ok) {
       // Reverter em caso de erro
@@ -462,7 +470,6 @@ export function useDeals(pipelineId?: string) {
       throw new Error('Failed to update deal');
     }
     const result = await response.json();
-    // Realtime vai sincronizar com dados completos
     return result.deal;
   };
 
@@ -470,8 +477,9 @@ export function useDeals(pipelineId?: string) {
     // Remoção otimista local primeiro
     setDeals(prev => prev.filter(d => d.id !== id));
     
+    // ✅ CORRIGIDO: Sem organizationId na URL
     const response = await fetch(
-      `/api/deals?id=${id}&organizationId=${user?.organization_id}`,
+      `/api/deals?id=${id}`,
       { method: 'DELETE' }
     );
     if (!response.ok) {
@@ -479,7 +487,6 @@ export function useDeals(pipelineId?: string) {
       await fetchDeals(false);
       throw new Error('Failed to delete deal');
     }
-    // Realtime confirma a remoção
   };
 
   const moveDeal = async (dealId: string, stageId: string, position?: number) => {
@@ -497,11 +504,12 @@ export function useDeals(pipelineId?: string) {
     updateDeal,
     deleteDeal,
     moveDeal,
-    setDeals, // Expor para uso externo se necessário
+    setDeals,
   };
 }
 
 // Automations hook
+// ✅ AJUSTE 1: Removido organizationId das URLs - API pega do JWT
 export function useAutomations() {
   const { user } = useAuthStore();
   const [automations, setAutomations] = useState<any[]>([]);
@@ -513,9 +521,8 @@ export function useAutomations() {
 
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/automations?organizationId=${user.organization_id}`
-      );
+      // ✅ CORRIGIDO: Sem organizationId na URL
+      const response = await fetch(`/api/automations`);
       if (!response.ok) throw new Error('Failed to fetch automations');
       const result = await response.json();
       setAutomations(result.automations);
@@ -534,9 +541,9 @@ export function useAutomations() {
     const response = await fetch('/api/automations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // ✅ CORRIGIDO: Sem organizationId no body
       body: JSON.stringify({
         action: 'create',
-        organizationId: user?.organization_id,
         ...data,
       }),
     });
@@ -550,7 +557,8 @@ export function useAutomations() {
     const response = await fetch('/api/automations', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, organizationId: user?.organization_id, ...data }),
+      // ✅ CORRIGIDO: Sem organizationId no body
+      body: JSON.stringify({ id, ...data }),
     });
     if (!response.ok) throw new Error('Failed to update automation');
     const result = await response.json();
@@ -559,8 +567,9 @@ export function useAutomations() {
   };
 
   const deleteAutomation = async (id: string) => {
+    // ✅ CORRIGIDO: Sem organizationId na URL
     const response = await fetch(
-      `/api/automations?id=${id}&organizationId=${user?.organization_id}`,
+      `/api/automations?id=${id}`,
       { method: 'DELETE' }
     );
     if (!response.ok) throw new Error('Failed to delete automation');

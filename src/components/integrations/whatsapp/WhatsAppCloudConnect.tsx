@@ -70,7 +70,7 @@ export default function WhatsAppCloudConnect() {
       setLoading(true);
       
       const response = await fetch(
-        `/api/whatsapp/connect?organizationId=${user.organization_id}`
+        `/api/whatsapp/connect`
       );
 
       const data = await response.json();
@@ -118,7 +118,6 @@ export default function WhatsAppCloudConnect() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId: user.organization_id,
           phoneNumberId: phoneNumberId.trim(),
           wabaId: wabaId.trim() || undefined,
           accessToken: accessToken.trim(),
@@ -153,7 +152,7 @@ export default function WhatsAppCloudConnect() {
 
     try {
       const response = await fetch(
-        `/api/whatsapp/connect?organizationId=${user.organization_id}`,
+        `/api/whatsapp/connect`,
         { method: 'DELETE' }
       );
 

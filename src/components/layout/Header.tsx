@@ -515,7 +515,7 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
     
     try {
       const res = await fetch(
-        `/api/notifications?organizationId=${user.organization_id}&limit=15`
+        `/api/notifications?limit=15`
       );
       
       if (res.ok) {
@@ -550,7 +550,6 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId: user.organization_id,
           notificationIds: ids,
         }),
       });
@@ -572,7 +571,6 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId: user.organization_id,
           markAllRead: true,
         }),
       });

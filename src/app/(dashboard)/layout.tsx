@@ -145,7 +145,7 @@ export default function DashboardLayout({
   const [addStoreModalOpen, setAddStoreModalOpen] = useState(false)
   const pathname = usePathname()
   
-  const { stores, currentStore, setStores, setCurrentStore, addStore } = useStoreStore()
+  const { stores, currentStore, setStores, setCurrentStore, addStore, isLoading, setLoading } = useStoreStore()
   const { user, setUser } = useAuthStore()
 
   // ============================================
@@ -170,7 +170,7 @@ export default function DashboardLayout({
     
     try {
       const res = await fetch(
-        `/api/notifications?organizationId=${user.organization_id}&limit=15`
+        `/api/notifications?limit=15`
       )
       
       if (res.ok) {
@@ -216,7 +216,6 @@ export default function DashboardLayout({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId: user.organization_id,
           notificationIds: ids,
         }),
       })
@@ -238,7 +237,6 @@ export default function DashboardLayout({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId: user.organization_id,
           markAllRead: true,
         }),
       })
@@ -288,46 +286,7 @@ export default function DashboardLayout({
     }
   }
 
-  // Initialize user with default organization if not set
-  useEffect(() => {
-    const initializeUser = async () => {
-      if (!user || !user.organization_id) {
-        try {
-          const response = await fetch('/api/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get-or-create-org' }),
-          })
-          const result = await response.json()
-          
-          if (result.organization) {
-            setUser({
-              id: result.user?.id || 'default-user',
-              email: result.user?.email || 'demo@worder.com',
-              name: result.user?.name || 'Demo User',
-              organization_id: result.organization.id,
-              role: 'admin',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-          }
-        } catch (error) {
-          console.error('Error initializing user:', error)
-          setUser({
-            id: 'default-user',
-            email: 'demo@worder.com',
-            name: 'Demo User',
-            organization_id: 'default-org',
-            role: 'admin',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-        }
-      }
-    }
-    
-    initializeUser()
-  }, [user, setUser])
+  // ✅ FASE 4: initializeUser removido - AuthProvider gerencia sessão
 
   // Get store initials
   const getInitials = (name: string) => {
@@ -355,30 +314,65 @@ export default function DashboardLayout({
     setMobileOpen(false)
   }, [pathname])
 
-  // Load stores from database on mount
-  useEffect(() => {
-    const loadStores = async () => {
-      try {
-        const response = await fetch('/api/stores')
-        const result = await response.json()
-        if (result.success && result.stores?.length > 0) {
-          const formattedStores = result.stores.map((s: any) => ({
-            id: s.id,
-            name: s.shop_name || s.shop_domain,
-            domain: s.shop_domain,
-            isActive: s.is_active,
-          }))
-          setStores(formattedStores)
-          if (!currentStore && formattedStores.length > 0) {
-            setCurrentStore(formattedStores[0])
-          }
-        }
-      } catch (error) {
-        console.error('Error loading stores:', error)
-      }
+  // ✅ FASE 4: Load stores from database - DEPENDE DO USER
+  const loadStores = useCallback(async () => {
+    // Só buscar se tiver user autenticado com organization
+    if (!user?.organization_id) {
+      console.log('[DashboardLayout] No user/org - skipping stores load')
+      return
     }
+
+    try {
+      setLoading(true)
+      
+      // A API pega organizationId do JWT (getAuthClient)
+      const response = await fetch('/api/stores')
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.log('[DashboardLayout] Not authenticated - skipping stores')
+          return
+        }
+        throw new Error(`Failed to fetch stores: ${response.status}`)
+      }
+
+      const result = await response.json()
+
+      if (result.success && result.stores?.length > 0) {
+        const formattedStores = result.stores.map((s: any) => ({
+          id: s.id,
+          name: s.shop_name || s.shop_domain,
+          domain: s.shop_domain,
+          email: s.shop_email,
+          currency: s.currency,
+          isActive: s.is_active,
+          totalOrders: s.total_orders,
+          totalRevenue: s.total_revenue,
+          lastSyncAt: s.last_sync_at,
+        }))
+
+        setStores(formattedStores)
+
+        // Só setar currentStore se não tiver um selecionado
+        if (!currentStore && formattedStores.length > 0) {
+          setCurrentStore(formattedStores[0])
+        }
+      } else {
+        // Sem stores - limpar para não mostrar dados antigos
+        setStores([])
+      }
+    } catch (error) {
+      console.error('[DashboardLayout] Error loading stores:', error)
+      setStores([])
+    } finally {
+      setLoading(false)
+    }
+  }, [user?.organization_id, currentStore, setStores, setCurrentStore, setLoading])
+
+  // Trigger loadStores quando user mudar
+  useEffect(() => {
     loadStores()
-  }, [])
+  }, [loadStores])
 
   // Listen for openAddStoreModal event from other components
   useEffect(() => {

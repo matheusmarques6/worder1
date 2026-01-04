@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { AuthProvider } from '@/components/providers/AuthProvider'
 
 export const metadata: Metadata = {
   title: 'Worder - Email Marketing Analytics & CRM',
@@ -17,7 +18,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className="dark">
       <body className="font-sans bg-slate-950 text-white antialiased">
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   )

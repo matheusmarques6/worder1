@@ -1,45 +1,109 @@
-# 🔧 Arquivos Modificados - Migração RLS
+# 🚀 SYNC_FIX_COMPLETO - Deploy Instructions
 
-## O que foi feito
-- Corrigido erro de build (createClient no module level)
-- Implementado lazy loading para Supabase clients
-- Adicionado getAuthClient() para uso futuro com RLS
+## O que este ZIP contém
 
-## Como aplicar
+Todas as correções necessárias para resolver o problema de sincronização entre dispositivos.
 
-### Opção 1: Copiar pasta src
+### Arquivos incluídos:
+
+```
+src/
+├── stores/
+│   ├── index.ts              # ✅ Zustand SEM persist (dados de servidor)
+│   └── inboxStore.ts         # ✅ Com clearAll() para logout
+├── hooks/
+│   ├── index.ts              # ✅ Sem organizationId nas URLs
+│   └── usePipelines.ts       # ✅ Sem organizationId nas URLs
+├── components/
+│   ├── providers/
+│   │   └── AuthProvider.tsx  # 🆕 Gerencia onAuthStateChange
+│   ├── layout/
+│   │   ├── Header.tsx        # ✅ Sem organizationId nas URLs
+│   │   └── Sidebar.tsx       # ✅ Sem organizationId nas URLs
+│   ├── notifications/
+│   │   └── NotificationBell.tsx # ✅ Sem organizationId nas URLs
+│   └── integrations/
+│       ├── shopify/
+│       │   └── ShopifyConnect.tsx # ✅ Sem organizationId nas URLs
+│       └── whatsapp/
+│           └── WhatsAppCloudConnect.tsx # ✅ Sem organizationId nas URLs
+└── app/
+    ├── layout.tsx            # ✅ Com AuthProvider wrapper
+    ├── api/
+    │   ├── stores/
+    │   │   └── route.ts      # ✅ Com getAuthClient (era vulnerável!)
+    │   └── debug/
+    │       └── session/
+    │           └── route.ts  # 🆕 Endpoint de debug
+    └── (dashboard)/
+        └── layout.tsx        # ✅ Com todas as correções da Fase 1-4 + Ajuste 1
+```
+
+## Como fazer deploy
+
+### 1. Extrair e substituir
+
 ```bash
-# Na raiz do seu projeto
-cp -r arquivos-modificados/src/* src/
-npm install
+# Extrair o ZIP na raiz do projeto
+unzip SYNC_FIX_COMPLETO.zip -d /caminho/do/seu/projeto/
+```
+
+Isso irá substituir os arquivos existentes pelas versões corrigidas.
+
+### 2. Verificar build
+
+```bash
 npm run build
 ```
 
-### Opção 2: Copiar manualmente
-Copie cada arquivo para a localização correspondente no seu projeto.
+### 3. Deploy
 
-## Arquivos incluídos
+Faça deploy normalmente (Vercel, etc.)
 
-### Novos (criar)
-- `src/lib/supabase-admin.ts` - Cliente SERVICE_ROLE lazy
-- `src/lib/supabase-client.ts` - Cliente ANON_KEY lazy
-- `src/lib/api-utils.ts` - Atualizado com getAuthClient()
+## Correções aplicadas
 
-### Modificados
-- `src/hooks/` - 3 arquivos
-- `src/lib/ai/` - 2 arquivos  
-- `src/lib/whatsapp/` - 2 arquivos
-- `src/lib/services/` - 9 arquivos
-- `src/app/api/` - ~98 arquivos
+### Fase 1: Zustand sem persist
+- `useStoreStore` - SEM persist
+- `useCRMStore` - SEM persist  
+- `useWhatsAppStore` - SEM persist
+- `useAutomationStore` - SEM persist
+- `useUIStore` - COM persist (OK, é preferência de UI)
+- Todos os stores agora têm `clearAll()` chamado no logout
 
-## Verificação
-Após copiar, execute:
-```bash
-npm run build
+### Fase 4: Dashboard layout
+- ❌ Removido fallback "Demo User"
+- ✅ `loadStores` agora depende de `user?.organization_id`
+- ✅ Verifica auth antes de fazer fetch
+
+### Ajuste 1: organizationId removido das URLs
+- Todas as chamadas fetch agora NÃO passam organizationId
+- O backend obtém do JWT via `getAuthClient()`
+
+### Bug de segurança corrigido
+- API `/api/stores` estava retornando stores de TODOS os usuários
+- Agora filtra pela organização do usuário autenticado
+
+## Como testar
+
+### 1. Debug de sessão
+Acesse em ambos os dispositivos:
+```
+GET /api/debug/session
 ```
 
-O build deve passar sem erros.
+Deve retornar mesmo `userId`, `organizationId`, `storesCount`.
 
-## SQL (já executado)
-O RLS já foi habilitado no banco via SQL Editor.
-Não precisa fazer nada no Supabase.
+### 2. Teste de sincronização
+1. Limpar localStorage nos browsers
+2. Login no PC A
+3. Criar dado no PC A  
+4. Login no PC B (mesmo usuário)
+5. PC B deve ver o dado criado no PC A
+
+## Problemas?
+
+Se algo não funcionar após o deploy:
+
+1. Verifique se todas as APIs usam `getAuthClient()` e não `getSupabaseClient()`
+2. Verifique o console do browser por erros
+3. Use `/api/debug/session` para comparar entre dispositivos

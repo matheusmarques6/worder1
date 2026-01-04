@@ -130,7 +130,7 @@ export default function ShopifyConnect() {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/shopify/connect?organizationId=${user.organization_id}`);
+      const response = await fetch(`/api/shopify/connect`);
       const data = await response.json();
       
       if (response.ok && data.stores) {
@@ -252,7 +252,6 @@ export default function ShopifyConnect() {
           domain: trimmedDomain,
           accessToken: trimmedToken,
           apiSecret: trimmedSecret,
-          organizationId: user.organization_id,
         }),
       });
 

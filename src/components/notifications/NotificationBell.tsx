@@ -3,6 +3,7 @@
 // =============================================
 // Componente: Sininho de Notificações
 // src/components/notifications/NotificationBell.tsx
+// ✅ AJUSTE 1: Removido organizationId das URLs - API pega do JWT
 // =============================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -55,8 +56,9 @@ export default function NotificationBell() {
     if (!user?.organization_id) return;
     
     try {
+      // ✅ CORRIGIDO: Sem organizationId na URL
       const res = await fetch(
-        `/api/notifications?organizationId=${user.organization_id}&limit=${MAX_NOTIFICATIONS}`
+        `/api/notifications?limit=${MAX_NOTIFICATIONS}`
       );
       
       if (res.ok) {
@@ -91,11 +93,11 @@ export default function NotificationBell() {
     if (!user?.organization_id || ids.length === 0) return;
     
     try {
+      // ✅ CORRIGIDO: Sem organizationId no body
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId: user.organization_id,
           notificationIds: ids,
         }),
       });
@@ -113,11 +115,11 @@ export default function NotificationBell() {
     if (!user?.organization_id) return;
     
     try {
+      // ✅ CORRIGIDO: Sem organizationId no body
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId: user.organization_id,
           markAllRead: true,
         }),
       });

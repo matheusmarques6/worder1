@@ -123,6 +123,7 @@ interface InboxState {
   
   // Reset
   reset: () => void
+  clearAll: () => void
 }
 
 const initialState = {
@@ -301,9 +302,24 @@ export const useInboxStore = create<InboxState>()(
 
       // Reset
       reset: () => set(initialState),
+      
+      // ✅ NOVO: Limpar dados (mantém preferências de UI)
+      clearAll: () => set({
+        conversations: [],
+        messages: {},
+        whatsappNumbers: [],
+        agents: [],
+        selectedConversationId: null,
+        searchQuery: '',
+        isLoading: false,
+        isSending: false,
+        error: null,
+        // ✅ Mantém: selectedNumberId, statusFilter, agentFilter (preferências)
+      }),
     }),
     {
       name: 'inbox-storage',
+      // ✅ PARTIALIZE: Só persiste preferências de UI, NÃO dados do servidor
       partialize: (state) => ({
         selectedNumberId: state.selectedNumberId,
         statusFilter: state.statusFilter,

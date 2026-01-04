@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useAuthStore } from '@/stores';
 
+// ✅ AJUSTE 1: Removido organizationId das URLs/body - API pega do JWT
 export function usePipelines() {
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
@@ -22,9 +23,9 @@ export function usePipelines() {
       const response = await fetch('/api/deals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // ✅ CORRIGIDO: Sem organizationId no body
         body: JSON.stringify({
           action: 'create-pipeline',
-          organizationId: user.organization_id,
           ...data,
         }),
       });
@@ -59,10 +60,10 @@ export function usePipelines() {
       const response = await fetch('/api/deals', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        // ✅ CORRIGIDO: Sem organizationId no body
         body: JSON.stringify({
           type: 'pipeline',
           id,
-          organizationId: user.organization_id,
           ...data,
         }),
       });
@@ -90,8 +91,9 @@ export function usePipelines() {
     setError(null);
 
     try {
+      // ✅ CORRIGIDO: Sem organizationId na URL
       const response = await fetch(
-        `/api/deals?type=pipeline&id=${id}&organizationId=${user.organization_id}`,
+        `/api/deals?type=pipeline&id=${id}`,
         { method: 'DELETE' }
       );
 
@@ -185,8 +187,9 @@ export function usePipelines() {
     setError(null);
 
     try {
+      // ✅ CORRIGIDO: Sem organizationId na URL
       const response = await fetch(
-        `/api/deals?type=stage&id=${id}&organizationId=${user.organization_id}`,
+        `/api/deals?type=stage&id=${id}`,
         { method: 'DELETE' }
       );
 
