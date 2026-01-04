@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
 // =============================================
@@ -18,21 +17,58 @@ export interface AuthResult {
 }
 
 // =============================================
-// CLIENTE AUTENTICADO (RLS) - NOVO! USE ESTE!
+// CLIENTE ADMIN (SERVICE_ROLE)
+// =============================================
+
+let supabaseAdmin: SupabaseClient | null = null;
+
+function getSupabaseAdmin(): SupabaseClient | null {
+  if (!supabaseAdmin) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    if (url && key && !url.includes('placeholder')) {
+      supabaseAdmin = createClient(url, key, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      });
+    }
+  }
+  return supabaseAdmin;
+}
+
+// =============================================
+// CLIENTE AUTENTICADO - CORRIGIDO!
 // =============================================
 
 /**
  * Retorna cliente Supabase autenticado + dados do usuário.
- * RLS é aplicado automaticamente baseado no organization_id.
+ * Usa os cookies manuais (sb-access-token) setados pelo login.
  */
 export async function getAuthClient(): Promise<AuthResult | null> {
   try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      console.error('[Auth] Supabase not configured');
+      return null;
+    }
+
+    // Ler token do cookie manual
     const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    const accessToken = cookieStore.get('sb-access-token')?.value;
     
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (!accessToken) {
+      console.log('[Auth] No access token cookie');
+      return null;
+    }
+    
+    // Validar token e obter usuário
+    const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
     
     if (authError || !user) {
+      console.log('[Auth] Invalid token:', authError?.message);
       return null;
     }
     
@@ -72,16 +108,12 @@ export function authError(message: string = 'Unauthorized', status: number = 401
 
 // =============================================
 // CLIENTE ADMIN (SERVICE_ROLE) - LEGADO
-// Use APENAS para webhooks, cron jobs, etc
 // =============================================
 
-// Singleton Supabase client for API routes
 let supabaseClient: SupabaseClient | null = null;
 
 /**
  * @deprecated Para APIs normais, use getAuthClient() que respeita RLS.
- * Este método usa SERVICE_ROLE_KEY e bypassa RLS.
- * Manter apenas para webhooks, cron jobs, e endpoints que precisam de acesso admin.
  */
 export function getSupabaseClient(): SupabaseClient | null {
   if (!supabaseClient) {
@@ -102,7 +134,6 @@ export function getSupabaseClient(): SupabaseClient | null {
 
 /**
  * Higher-order function that wraps API handlers with Supabase client check.
- * Returns 503 if Supabase is not configured.
  */
 export function withSupabase<T extends any[]>(
   handler: (supabase: SupabaseClient, ...args: T) => Promise<NextResponse>
@@ -114,7 +145,7 @@ export function withSupabase<T extends any[]>(
       return NextResponse.json(
         { 
           error: 'Database not configured',
-          message: 'Please configure Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)'
+          message: 'Please configure Supabase environment variables'
         },
         { status: 503 }
       );
