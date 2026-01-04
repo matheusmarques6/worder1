@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+
+// =====================================================
+// SUPABASE CLIENT
+// =====================================================
+
+function getSupabase() {
+  return getSupabaseAdmin();
+}
 
 // =====================================================
 // POST - REPROCESSAR FONTE
@@ -9,19 +17,24 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string; sourceId: string } }
 ) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const { supabase, user } = auth;
-
   try {
+    const supabase = getSupabase()
     const { id: agentId, sourceId } = params
+    const body = await request.json()
 
-    // Verificar se fonte existe - RLS filtra automaticamente
+    const { organization_id } = body
+
+    if (!organization_id) {
+      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    }
+
+    // Verificar se fonte existe
     const { data: source, error: sourceError } = await supabase
       .from('ai_agent_sources')
       .select('*')
       .eq('id', sourceId)
       .eq('agent_id', agentId)
+      .eq('organization_id', organization_id)
       .single()
 
     if (sourceError || !source) {
@@ -58,7 +71,7 @@ export async function POST(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         source_id: sourceId,
-        organization_id: user.organization_id,
+        organization_id,
       }),
     }).catch(err => {
       console.error('Error triggering reprocess:', err)

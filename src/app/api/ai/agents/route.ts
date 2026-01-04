@@ -1,28 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { AIAgent, DEFAULT_PERSONA, DEFAULT_SETTINGS } from '@/lib/ai/types'
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+
+// =====================================================
+// SUPABASE CLIENT
+// =====================================================
+
+function getSupabase() {
+  return getSupabaseAdmin();
+}
 
 // =====================================================
 // GET - LISTAR AGENTES
 // =====================================================
 
 export async function GET(request: NextRequest) {
-  // Autenticação via RLS
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const { supabase, user } = auth;
-
   try {
-    // Parâmetros (organization_id vem do usuário autenticado)
+    const supabase = getSupabase()
+
+    // Parâmetros
     const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organization_id')
     const isActive = searchParams.get('is_active')
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    // Query - RLS filtra automaticamente por organization_id
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    }
+
+    // Query
     let query = supabase
       .from('ai_agents')
       .select('*', { count: 'exact' })
+      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -55,24 +66,24 @@ export async function GET(request: NextRequest) {
 // =====================================================
 
 export async function POST(request: NextRequest) {
-  // Autenticação via RLS
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const { supabase, user } = auth;
-
   try {
+    const supabase = getSupabase()
     const body = await request.json()
 
     // Validação
-    const { name, provider, model } = body
+    const { organization_id, name, provider, model } = body
+
+    if (!organization_id) {
+      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    }
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'name é obrigatório' }, { status: 400 })
     }
 
-    // Preparar dados - organization_id vem do usuário autenticado
+    // Preparar dados
     const agentData = {
-      organization_id: user.organization_id,
+      organization_id,
       name: name.trim(),
       description: body.description?.trim() || null,
       system_prompt: body.system_prompt?.trim() || null,

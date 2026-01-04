@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+
+// =====================================================
+// SUPABASE CLIENT
+// =====================================================
+
+function getSupabase() {
+  return getSupabaseAdmin();
+}
 
 // =====================================================
 // GET - LISTAR FONTES DO AGENTE
@@ -9,18 +17,23 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const { supabase } = auth;
-
   try {
+    const supabase = getSupabase()
     const agentId = params.id
 
-    // Buscar fontes - RLS filtra automaticamente
+    const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organization_id')
+
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    }
+
+    // Buscar fontes
     const { data: sources, error } = await supabase
       .from('ai_agent_sources')
       .select('*')
       .eq('agent_id', agentId)
+      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -54,17 +67,18 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const { supabase, user } = auth;
-
   try {
+    const supabase = getSupabase()
     const agentId = params.id
     const body = await request.json()
 
-    const { source_type, name } = body
+    const { organization_id, source_type, name } = body
 
     // Validações
+    if (!organization_id) {
+      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    }
+
     if (!source_type || !['url', 'text', 'products'].includes(source_type)) {
       return NextResponse.json({ error: 'source_type inválido' }, { status: 400 })
     }
@@ -73,20 +87,21 @@ export async function POST(
       return NextResponse.json({ error: 'name é obrigatório' }, { status: 400 })
     }
 
-    // Verificar se agente existe - RLS filtra automaticamente
+    // Verificar se agente existe
     const { data: agent, error: agentError } = await supabase
       .from('ai_agents')
       .select('id')
       .eq('id', agentId)
+      .eq('organization_id', organization_id)
       .single()
 
     if (agentError || !agent) {
       return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 })
     }
 
-    // Preparar dados da fonte - usa organization_id do usuário autenticado
+    // Preparar dados da fonte
     const sourceData: Record<string, any> = {
-      organization_id: user.organization_id,
+      organization_id,
       agent_id: agentId,
       source_type,
       name: name.trim(),
@@ -132,7 +147,9 @@ export async function POST(
 
     // Para URL e texto, iniciar processamento assíncrono
     if (source_type === 'url' || source_type === 'text') {
-      processSourceAsync(source.id, user.organization_id).catch(err => {
+      // Disparar processamento em background
+      // Em produção, isso seria um job na fila
+      processSourceAsync(source.id, organization_id).catch(err => {
         console.error('Error in async source processing:', err)
       })
     }
@@ -151,6 +168,7 @@ export async function POST(
 
 async function processSourceAsync(sourceId: string, organizationId: string) {
   try {
+    // Chamar endpoint de processamento
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     
     await fetch(`${baseUrl}/api/ai/process/document`, {

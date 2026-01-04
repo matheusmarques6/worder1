@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+
+// =====================================================
+// SUPABASE CLIENT
+// =====================================================
+
+function getSupabase() {
+  return getSupabaseAdmin();
+}
 
 // =====================================================
 // GET - LISTAR INTEGRAÇÕES DO AGENTE
@@ -9,18 +17,23 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const { supabase } = auth;
-
   try {
+    const supabase = getSupabase()
     const agentId = params.id
 
-    // Buscar integrações do agente - RLS filtra automaticamente
+    const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organization_id')
+
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    }
+
+    // Buscar integrações do agente
     const { data: integrations, error } = await supabase
       .from('ai_agent_integrations')
       .select('*')
       .eq('agent_id', agentId)
+      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -28,10 +41,11 @@ export async function GET(
       throw error
     }
 
-    // Buscar integrações disponíveis (configuradas no sistema) - RLS filtra
+    // Buscar integrações disponíveis (configuradas no sistema)
     const { data: availableIntegrations } = await supabase
       .from('integrations')
       .select('id, name, type, config')
+      .eq('organization_id', organizationId)
       .in('type', ['shopify', 'woocommerce', 'nuvemshop'])
       .eq('is_active', true)
 
@@ -54,26 +68,28 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const { supabase, user } = auth;
-
   try {
+    const supabase = getSupabase()
     const agentId = params.id
     const body = await request.json()
 
-    const { integration_id, integration_type } = body
+    const { organization_id, integration_id, integration_type } = body
 
     // Validações
+    if (!organization_id) {
+      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    }
+
     if (!integration_type || !['shopify', 'woocommerce', 'nuvemshop'].includes(integration_type)) {
       return NextResponse.json({ error: 'integration_type inválido' }, { status: 400 })
     }
 
-    // Verificar se agente existe - RLS filtra automaticamente
+    // Verificar se agente existe
     const { data: agent, error: agentError } = await supabase
       .from('ai_agents')
       .select('id')
       .eq('id', agentId)
+      .eq('organization_id', organization_id)
       .single()
 
     if (agentError || !agent) {
@@ -94,9 +110,9 @@ export async function POST(
       }, { status: 400 })
     }
 
-    // Criar integração - usa organization_id do usuário autenticado
+    // Criar integração
     const integrationData = {
-      organization_id: user.organization_id,
+      organization_id,
       agent_id: agentId,
       integration_id: integration_id || null,
       integration_type,
@@ -121,7 +137,7 @@ export async function POST(
 
     // Se sync_products está ativo, criar fonte de produtos
     if (integrationData.sync_products) {
-      await createProductSource(supabase, user.organization_id, agentId, integration.id, integration_type)
+      await createProductSource(supabase, organization_id, agentId, integration.id, integration_type)
     }
 
     return NextResponse.json({ integration }, { status: 201 })

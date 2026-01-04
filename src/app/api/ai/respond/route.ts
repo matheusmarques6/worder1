@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseRouteClient } from '@/lib/supabase-route';
-
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 
 async function getOrgId(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser()
@@ -16,7 +16,7 @@ async function getOrgId(supabase: any) {
 // POST - Gerar resposta de IA
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient()
+    const supabase = createRouteHandlerClient({ cookies })
     const orgId = await getOrgId(supabase)
     
     if (!orgId) {

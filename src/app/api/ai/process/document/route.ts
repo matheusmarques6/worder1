@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chunkText, cleanTextForIndexing, extractTextMetadata } from '@/lib/ai/processors/text-processor'
 import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
@@ -9,30 +9,36 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 // =====================================================
+// SUPABASE CLIENT
+// =====================================================
+
+function getSupabase() {
+  return getSupabaseAdmin();
+}
+
+// =====================================================
 // POST - PROCESSAR DOCUMENTO
 // =====================================================
 
 export async function POST(request: NextRequest) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const { supabase, user } = auth;
-
+  const supabase = getSupabase()
   let sourceId: string | null = null
 
   try {
     const body = await request.json()
     sourceId = body.source_id
-    const { file_content, mime_type } = body
+    const { organization_id, file_content, mime_type } = body
 
-    if (!sourceId) {
-      return NextResponse.json({ error: 'source_id é obrigatório' }, { status: 400 })
+    if (!sourceId || !organization_id) {
+      return NextResponse.json({ error: 'source_id e organization_id são obrigatórios' }, { status: 400 })
     }
 
-    // Buscar fonte - RLS filtra automaticamente
+    // Buscar fonte
     const { data: source, error: sourceError } = await supabase
       .from('ai_agent_sources')
       .select('*')
       .eq('id', sourceId)
+      .eq('organization_id', organization_id)
       .single()
 
     if (sourceError || !source) {
@@ -51,10 +57,13 @@ export async function POST(request: NextRequest) {
     let text = ''
 
     if (source.source_type === 'text') {
+      // Texto direto
       text = source.text_content || ''
     } else if (source.source_type === 'file' && file_content) {
+      // Arquivo enviado como base64
       text = await extractTextFromFile(file_content, mime_type || source.mime_type)
     } else if (source.source_type === 'url') {
+      // Crawl de URL
       text = await crawlUrl(source.url)
     } else {
       throw new Error(`Tipo de fonte não suportado: ${source.source_type}`)
@@ -93,9 +102,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`Generated ${embeddings.length} embeddings for source ${sourceId}`)
 
-    // Inserir chunks no banco - usa organization_id do usuário autenticado
+    // Inserir chunks no banco
     const chunkRecords = chunks.map((chunk, i) => ({
-      organization_id: user.organization_id,
+      organization_id,
       source_id: sourceId,
       agent_id: source.agent_id,
       content: chunk.content,
@@ -106,10 +115,10 @@ export async function POST(request: NextRequest) {
         source_name: source.name,
         source_type: source.source_type,
       },
-      embedding: `[${embeddings[i].join(',')}]`,
+      embedding: `[${embeddings[i].join(',')}]`, // Formato para pgvector
     }))
 
-    // Inserir em batches
+    // Inserir em batches para evitar timeout
     const batchSize = 50
     for (let i = 0; i < chunkRecords.length; i += batchSize) {
       const batch = chunkRecords.slice(i, i + batchSize)
@@ -188,16 +197,23 @@ async function extractTextFromFile(base64Content: string, mimeType: string): Pro
 }
 
 // =====================================================
-// EXTRAÇÃO DE PDF
+// EXTRAÇÃO DE PDF (Simplificada)
 // =====================================================
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  // Implementação simplificada - em produção usar pdf-parse ou similar
+  // Por enquanto, retornar erro indicando que precisa de biblioteca
+  
   try {
+    // Tentar usar pdf-parse se disponível
     const pdfParse = require('pdf-parse')
     const data = await pdfParse(buffer)
     return data.text
   } catch (e) {
+    // Se pdf-parse não estiver instalado, usar extração básica
     console.warn('pdf-parse not available, using basic extraction')
+    
+    // Extração muito básica de texto de PDF (não funciona bem para PDFs complexos)
     const text = buffer.toString('utf-8')
     const extracted = text.match(/\(([^)]+)\)/g) || []
     return extracted.map(s => s.slice(1, -1)).join(' ')
@@ -205,21 +221,25 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
 }
 
 // =====================================================
-// EXTRAÇÃO DE DOCX
+// EXTRAÇÃO DE DOCX (Simplificada)
 // =====================================================
 
 async function extractTextFromDOCX(buffer: Buffer): Promise<string> {
   try {
+    // Tentar usar mammoth se disponível
     const mammoth = require('mammoth')
     const result = await mammoth.extractRawText({ buffer })
     return result.value
   } catch (e) {
     console.warn('mammoth not available, using basic extraction')
     
+    // DOCX é um ZIP, tentar extrair document.xml
     try {
       const AdmZip = require('adm-zip')
       const zip = new AdmZip(buffer)
       const docXml = zip.readAsText('word/document.xml')
+      
+      // Extrair texto removendo XML tags
       return docXml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
     } catch (zipError) {
       throw new Error('Não foi possível extrair texto do DOCX')
@@ -228,7 +248,7 @@ async function extractTextFromDOCX(buffer: Buffer): Promise<string> {
 }
 
 // =====================================================
-// CRAWL DE URL
+// CRAWL DE URL (Simplificado)
 // =====================================================
 
 async function crawlUrl(url: string): Promise<string> {
@@ -245,6 +265,8 @@ async function crawlUrl(url: string): Promise<string> {
 
     const html = await response.text()
     
+    // Extração básica de texto do HTML
+    // Remover scripts e styles
     let text = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -252,11 +274,14 @@ async function crawlUrl(url: string): Promise<string> {
       .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
       .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
 
+    // Extrair título
     const titleMatch = text.match(/<title[^>]*>([^<]*)<\/title>/i)
     const title = titleMatch ? titleMatch[1].trim() : ''
 
+    // Remover todas as tags HTML
     text = text.replace(/<[^>]+>/g, ' ')
     
+    // Decodificar entidades HTML
     text = text
       .replace(/&nbsp;/g, ' ')
       .replace(/&amp;/g, '&')
@@ -265,8 +290,10 @@ async function crawlUrl(url: string): Promise<string> {
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
 
+    // Limpar espaços
     text = text.replace(/\s+/g, ' ').trim()
 
+    // Adicionar título no início se existir
     if (title) {
       text = `${title}\n\n${text}`
     }
@@ -276,3 +303,4 @@ async function crawlUrl(url: string): Promise<string> {
     throw new Error(`Erro ao acessar URL: ${error.message}`)
   }
 }
+

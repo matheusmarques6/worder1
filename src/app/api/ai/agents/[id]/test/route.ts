@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processWithAgent } from '@/lib/ai/engine'
 import { EngineMessage } from '@/lib/ai/types'
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+// =====================================================
+// SUPABASE CLIENT
+// =====================================================
+
+function getSupabase() {
+  return getSupabaseAdmin();
+}
 
 // =====================================================
 // POST - TESTAR AGENTE
@@ -15,26 +23,29 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const { supabase, user } = auth;
-
   try {
     const agentId = params.id
     const body = await request.json()
 
-    const { message, conversation_history = [] } = body
+    const { organization_id, message, conversation_history = [] } = body
 
     // Validações
+    if (!organization_id) {
+      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    }
+
     if (!message || !message.trim()) {
       return NextResponse.json({ error: 'message é obrigatório' }, { status: 400 })
     }
 
-    // Verificar se agente existe - RLS filtra automaticamente
+    const supabase = getSupabase()
+
+    // Verificar se agente existe
     const { data: agent, error: agentError } = await supabase
       .from('ai_agents')
       .select('id, name, is_active')
       .eq('id', agentId)
+      .eq('organization_id', organization_id)
       .single()
 
     if (agentError || !agent) {
@@ -47,18 +58,18 @@ export async function POST(
       content: msg.content,
     }))
 
-    // Processar mensagem - usa organization_id do usuário autenticado
+    // Processar mensagem
     const startTime = Date.now()
     
     const result = await processWithAgent(
       agentId,
-      user.organization_id,
+      organization_id,
       message.trim(),
       history,
       'test-conversation'
     )
 
-    // Buscar nomes das fontes usadas - RLS já filtra
+    // Buscar nomes das fontes usadas
     let sourceNames: string[] = []
     if (result.sources_used.length > 0) {
       const { data: sources } = await supabase
@@ -69,7 +80,7 @@ export async function POST(
       sourceNames = sources?.map(s => s.name) || []
     }
 
-    // Buscar nomes das ações disparadas - RLS já filtra
+    // Buscar nomes das ações disparadas
     let actionNames: string[] = []
     if (result.actions_triggered.length > 0) {
       const { data: actions } = await supabase
@@ -115,3 +126,4 @@ export async function POST(
     }, { status: 500 })
   }
 }
+
