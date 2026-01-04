@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseRouteClient } from '@/lib/supabase-route';
-
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 import { validatePassword } from '@/lib/password-validation';
 
 // POST - Alterar senha do usuário
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient();
+    const supabase = createRouteHandlerClient({ cookies });
     
     // Verificar usuário logado
     const { data: { user }, error: userError } = await supabase.auth.getUser();

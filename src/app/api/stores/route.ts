@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const accessToken = request.cookies.get('sb-access-token')?.value;
     
     if (!accessToken) {
-      console.log('[/api/stores] No access token - returning empty');
+      console.log('[/api/stores] No access token');
       return NextResponse.json({ success: true, stores: [], hasStores: false });
     }
 
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
     
     if (authError || !user) {
-      console.log('[/api/stores] Invalid token - returning empty');
+      console.log('[/api/stores] Invalid token');
       return NextResponse.json({ success: true, stores: [], hasStores: false });
     }
 
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     console.log('[/api/stores] Fetching stores for org:', profile.organization_id);
 
-    // Buscar lojas da organização - APENAS colunas que existem
+    // ✅ CORREÇÃO: Buscar lojas APENAS da organização do usuário
     const { data: stores, error } = await supabase
       .from('shopify_stores')
       .select('id, shop_domain, shop_name, shop_email, is_active, last_sync_at, organization_id')
