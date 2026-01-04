@@ -1,32 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (url && key) {
+    return createClient(url, key);
+  }
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createSupabaseServerClient();
-
-    // Verificar usuário autenticado
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const supabase = getSupabaseAdmin();
     
-    if (authError || !user) {
-      console.log('[/api/stores] No authenticated user');
+    if (!supabase) {
+      return NextResponse.json({ success: false, stores: [], error: 'Database not configured' });
+    }
+
+    // Pegar token do cookie
+    const accessToken = request.cookies.get('sb-access-token')?.value;
+    
+    if (!accessToken) {
+      console.log('[/api/stores] No access token');
       return NextResponse.json(
         { success: false, stores: [], error: 'Not authenticated' },
         { status: 401 }
       );
     }
 
+    // Verificar usuário pelo token
+    const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+    
+    if (authError || !user) {
+      console.log('[/api/stores] Invalid token');
+      return NextResponse.json(
+        { success: false, stores: [], error: 'Invalid session' },
+        { status: 401 }
+      );
+    }
+
     // Buscar organization_id do usuário
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from('profiles')
       .select('organization_id')
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profile?.organization_id) {
-      console.log('[/api/stores] No organization found for user:', user.id);
+    if (!profile?.organization_id) {
+      console.log('[/api/stores] No organization for user:', user.id);
       return NextResponse.json(
         { success: false, stores: [], error: 'No organization' },
         { status: 401 }
@@ -35,16 +60,16 @@ export async function GET(request: NextRequest) {
 
     console.log('[/api/stores] Fetching stores for org:', profile.organization_id);
 
-    // Buscar lojas da organização do usuário
+    // Buscar lojas da organização
     const { data: stores, error } = await supabase
       .from('shopify_stores')
-      .select('id, shop_domain, shop_name, shop_email, is_active, last_sync_at, total_orders, total_revenue, organization_id')
+      .select('id, shop_domain, shop_name, shop_email, is_active, last_sync_at, total_orders, total_revenue')
       .eq('organization_id', profile.organization_id)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('[/api/stores] Error fetching stores:', error.message);
+      console.error('[/api/stores] Error:', error.message);
       return NextResponse.json({ success: false, stores: [], error: error.message });
     }
 
@@ -53,8 +78,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       stores: stores || [],
-      hasStores: (stores?.length || 0) > 0,
-      organizationId: profile.organization_id
+      hasStores: (stores?.length || 0) > 0
     });
   } catch (error: any) {
     console.error('[/api/stores] Error:', error.message);

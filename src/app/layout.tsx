@@ -1,13 +1,12 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
 import './globals.css'
-import { AuthProvider } from '@/components/providers/AuthProvider'
-
-const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Worder - CRM & Marketing Automation',
-  description: 'Plataforma completa de CRM e automação de marketing',
+  title: 'Worder - Email Marketing Analytics & CRM',
+  description: 'Track your email marketing ROI, manage customers, and automate communications',
+  icons: {
+    icon: '/favicon.ico',
+  },
 }
 
 export default function RootLayout({
@@ -16,11 +15,9 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="pt-BR">
-      <body className={inter.className}>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+    <html lang="pt-BR" className="dark">
+      <body className="font-sans bg-slate-950 text-white antialiased">
+        {children}
       </body>
     </html>
   )
