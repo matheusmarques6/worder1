@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseClient } from '@/lib/api-utils';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
-// Admin client para resetar senhas (PRECISA service role key)
-function getAdminClient() {
+// Module-level lazy client
+let _supabase: SupabaseClient | null = null;
+function getDb(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = getSupabaseClient();
+    if (!_supabase) throw new Error('Database not configured');
+  }
+  return _supabase;
+}
+
+const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    return (getDb() as any)[prop];
+  }
+});
+
+// Admin client para resetar senhas
+function getAdminClient(): SupabaseClient {
   return getSupabaseAdmin();
 }
 
@@ -31,23 +48,31 @@ function generateStrongPassword(length: number = 12): string {
 
 // POST - Reset password
 export async function POST(request: NextRequest) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const { supabase } = auth;
+  try {
+    getDb();
+  } catch {
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+  }
 
   try {
     const body = await request.json();
-    const { agent_id } = body;
+    const { agent_id, organization_id, organizationId } = body;
+    const orgId = organization_id || organizationId;
 
     if (!agent_id) {
       return NextResponse.json({ error: 'agent_id is required' }, { status: 400 });
     }
 
-    // Buscar agente - RLS filtra automaticamente
+    if (!orgId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
+    }
+
+    // Buscar agente
     const { data: agent, error: agentError } = await supabase
       .from('agents')
       .select('id, user_id, type, email')
       .eq('id', agent_id)
+      .eq('organization_id', orgId)
       .single();
 
     if (agentError || !agent) {
@@ -62,7 +87,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Agent does not have an associated user account' }, { status: 400 });
     }
 
-    // Get admin client para operação de auth
+    // Get admin client
     const adminClient = getAdminClient();
     if (!adminClient) {
       return NextResponse.json({ 
@@ -73,7 +98,7 @@ export async function POST(request: NextRequest) {
     // Gerar nova senha
     const newPassword = generateStrongPassword(12);
 
-    // Atualizar senha no Auth - PRECISA admin client
+    // Atualizar senha no Auth
     const { error: updateError } = await adminClient.auth.admin.updateUserById(
       agent.user_id,
       { password: newPassword }
@@ -86,7 +111,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Marcar que usuário deve trocar a senha - RLS filtra
+    // Marcar que usuário deve trocar a senha
     await supabase
       .from('profiles')
       .update({ 

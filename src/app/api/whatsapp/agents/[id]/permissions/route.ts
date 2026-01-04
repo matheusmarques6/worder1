@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseRouteClient } from '@/lib/supabase-route';
-
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 
 async function getOrgId(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser()
@@ -19,7 +19,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createSupabaseRouteClient()
+    const supabase = createRouteHandlerClient({ cookies })
     const orgId = await getOrgId(supabase)
     
     if (!orgId) {
@@ -99,7 +99,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createSupabaseRouteClient()
+    const supabase = createRouteHandlerClient({ cookies })
     const orgId = await getOrgId(supabase)
     
     if (!orgId) {

@@ -1,22 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
-import { getAuthClient, authError } from '@/lib/api-utils';
 
 // GET /api/whatsapp/campaigns - Listar campanhas
 export async function GET(request: NextRequest) {
-  // ✅ SEGURANÇA: Auth obrigatório
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const organizationId = auth.user.organization_id;
-
-  // ✅ SEGURANÇA: Rejeitar se tentar acessar outra org
-  const { searchParams } = new URL(request.url);
-  const orgParam = searchParams.get('organizationId') || searchParams.get('organization_id');
-  if (orgParam && orgParam !== organizationId) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
   try {
+    const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organizationId') || 'org-placeholder'
     const status = searchParams.get('status')
     const type = searchParams.get('type')
     const search = searchParams.get('search')
@@ -69,15 +58,10 @@ export async function GET(request: NextRequest) {
 
 // POST /api/whatsapp/campaigns - Criar campanha
 export async function POST(request: NextRequest) {
-  // ✅ SEGURANÇA: Auth obrigatório
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const organizationId = auth.user.organization_id;
-
   try {
     const body = await request.json()
     const {
-      name, description, type = 'broadcast',
+      organizationId = 'org-placeholder', name, description, type = 'broadcast',
       template_id, template_name, template_variables, media_url, media_type,
       audience_type = 'all', audience_tags, audience_segment_id, audience_phonebook_id, audience_filters,
       imported_contacts, scheduled_at, timezone = 'America/Sao_Paulo',
