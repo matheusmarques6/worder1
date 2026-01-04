@@ -162,6 +162,7 @@ interface CRMState {
   setCurrentPipeline: (pipeline: Pipeline | null) => void
   addDeal: (deal: Deal) => void
   updateDeal: (id: string, data: Partial<Deal>) => void
+  moveDeal: (dealId: string, stageId: string, position: number) => void
   removeDeal: (id: string) => void
   addContact: (contact: Contact) => void
   updateContact: (id: string, data: Partial<Contact>) => void
@@ -188,6 +189,11 @@ export const useCRMStore = create<CRMState>((set) => ({
   addDeal: (deal) => set((state) => ({ deals: [...state.deals, deal] })),
   updateDeal: (id, data) => set((state) => ({
     deals: state.deals.map((d) => (d.id === id ? { ...d, ...data } : d)),
+  })),
+  moveDeal: (dealId, stageId, position) => set((state) => ({
+    deals: state.deals.map((d) => 
+      d.id === dealId ? { ...d, stage_id: stageId, position } : d
+    ),
   })),
   removeDeal: (id) => set((state) => ({
     deals: state.deals.filter((d) => d.id !== id),
