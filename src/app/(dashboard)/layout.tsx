@@ -369,8 +369,17 @@ export default function DashboardLayout({
             isActive: s.is_active,
           }))
           setStores(formattedStores)
-          if (!currentStore && formattedStores.length > 0) {
-            setCurrentStore(formattedStores[0])
+          
+          // ✅ CORREÇÃO: Verificar se currentStore está na lista de lojas válidas
+          // Se não estiver (pode ser de outra org), setar a primeira loja válida
+          if (formattedStores.length > 0) {
+            const currentStoreIsValid = currentStore && formattedStores.some((s: any) => s.id === currentStore.id)
+            if (!currentStoreIsValid) {
+              setCurrentStore(formattedStores[0])
+            }
+          } else {
+            // Sem lojas, limpar currentStore
+            setCurrentStore(null)
           }
         }
       } catch (error) {
