@@ -134,10 +134,10 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    EventBus.getInstance().emit({
-      type: EventType.CONTACT_CREATED,
-      organizationId,
-      data: { contact },
+    EventBus.emit(EventType.CONTACT_CREATED, {
+      organization_id: organizationId,
+      contact_id: contact.id,
+      email: contact.email,
     });
 
     return NextResponse.json({ contact }, { status: 201 });
@@ -176,10 +176,10 @@ export async function PUT(request: NextRequest) {
 
     if (error) throw error;
 
-    EventBus.getInstance().emit({
-      type: EventType.CONTACT_UPDATED,
-      organizationId,
-      data: { contact },
+    EventBus.emit(EventType.CONTACT_UPDATED, {
+      organization_id: organizationId,
+      contact_id: contact.id,
+      email: contact.email,
     });
 
     return NextResponse.json({ contact });
@@ -213,10 +213,9 @@ export async function DELETE(request: NextRequest) {
 
     if (error) throw error;
 
-    EventBus.getInstance().emit({
-      type: EventType.CONTACT_DELETED,
-      organizationId,
-      data: { contactId: id },
+    EventBus.emit(EventType.CONTACT_DELETED, {
+      organization_id: organizationId,
+      contact_id: id,
     });
 
     return NextResponse.json({ success: true });
