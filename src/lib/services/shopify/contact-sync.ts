@@ -327,6 +327,7 @@ async function createNewContact(
   // Esses valores serão incrementados por updateContactOrderStats() a cada pedido
   const contactData: Record<string, any> = {
     organization_id: store.organization_id,
+    store_id: store.id, // ✅ CRÍTICO: Salvar store_id para multi-tenant
     first_name: data.firstName || null,
     last_name: data.lastName || null,
     email: data.email,

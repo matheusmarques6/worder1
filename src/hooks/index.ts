@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useStoreStore } from '@/stores'; // ✅ ADICIONADO useStoreStore
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabaseClient as supabase } from '@/lib/supabase-client';
 
@@ -101,29 +101,42 @@ export function useAnalytics(type: string = 'overview', period: string = '30d') 
 }
 
 // Contacts hook com realtime
-// ✅ AJUSTE 1: Removido organizationId das URLs - API pega do JWT
+// ✅ CORRIGIDO: Agora filtra por storeId (multi-tenant por loja)
 export function useContacts(options: {
   search?: string;
   tags?: string[];
   page?: number;
   limit?: number;
+  storeId?: string; // ✅ NOVO: Filtro por loja
 } = {}) {
   const { user } = useAuthStore();
+  const { currentStore } = useStoreStore(); // ✅ NOVO: Pegar loja selecionada
   const [contacts, setContacts] = useState<any[]>([]);
   const [pagination, setPagination] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
+  // ✅ NOVO: Usar storeId do parâmetro ou do store global
+  const effectiveStoreId = options.storeId || currentStore?.id;
+
   const fetchContacts = useCallback(async (showLoading = true) => {
     if (!user?.organization_id) return;
+    
+    // ✅ NOVO: Não buscar se não tiver loja selecionada
+    if (!effectiveStoreId) {
+      setContacts([]);
+      setPagination(null);
+      setLoading(false);
+      return;
+    }
 
     try {
       if (showLoading) setLoading(true);
-      // ✅ CORRIGIDO: Sem organizationId no URLSearchParams
       const params = new URLSearchParams({
         page: String(options.page || 1),
         limit: String(options.limit || 50),
+        storeId: effectiveStoreId, // ✅ NOVO: Enviar storeId
       });
       if (options.search) params.set('search', options.search);
       if (options.tags?.length) params.set('tags', options.tags.join(','));
@@ -138,7 +151,7 @@ export function useContacts(options: {
     } finally {
       setLoading(false);
     }
-  }, [user?.organization_id, options.search, options.tags, options.page, options.limit]);
+  }, [user?.organization_id, effectiveStoreId, options.search, options.tags, options.page, options.limit]);
 
   useEffect(() => {
     fetchContacts();
@@ -220,12 +233,15 @@ export function useContacts(options: {
     };
   }, [user?.organization_id]);
 
-  // Operações - ✅ CORRIGIDO: Sem organizationId no body (API pega do JWT)
+  // Operações - ✅ CORRIGIDO: Agora inclui store_id
   const createContact = async (data: any) => {
     const response = await fetch('/api/contacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data), // ✅ Sem organizationId
+      body: JSON.stringify({ 
+        ...data, 
+        store_id: effectiveStoreId, // ✅ NOVO: Incluir store_id
+      }),
     });
     if (!response.ok) throw new Error('Failed to create contact');
     const result = await response.json();
@@ -283,25 +299,35 @@ export function useContacts(options: {
 const supabaseRealtime = supabase;
 
 // Deals hook com realtime
-// ✅ AJUSTE 1: Removido organizationId das URLs - API pega do JWT
-export function useDeals(pipelineId?: string) {
+// ✅ CORRIGIDO: Agora filtra por storeId (multi-tenant por loja)
+export function useDeals(pipelineId?: string, storeIdOverride?: string) {
   const { user } = useAuthStore();
+  const { currentStore } = useStoreStore(); // ✅ NOVO
   const [deals, setDeals] = useState<any[]>([]);
   const [pipelines, setPipelines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
+  // ✅ NOVO: Usar storeId do parâmetro ou do store global
+  const effectiveStoreId = storeIdOverride || currentStore?.id;
+
   const fetchPipelines = useCallback(async () => {
     if (!user?.organization_id) {
       setLoading(false);
       return;
     }
+    
+    // ✅ NOVO: Não buscar se não tiver loja selecionada
+    if (!effectiveStoreId) {
+      setPipelines([]);
+      return;
+    }
 
     try {
-      // ✅ CORRIGIDO: Sem organizationId na URL
+      // ✅ CORRIGIDO: Incluir storeId na URL
       const response = await fetch(
-        `/api/deals?type=pipelines`
+        `/api/deals?type=pipelines&storeId=${effectiveStoreId}`
       );
       if (!response.ok) throw new Error('Failed to fetch pipelines');
       const result = await response.json();
@@ -310,21 +336,30 @@ export function useDeals(pipelineId?: string) {
       console.error('Error fetching pipelines:', e);
       setError(e instanceof Error ? e : new Error('An error occurred'));
     }
-  }, [user?.organization_id]);
+  }, [user?.organization_id, effectiveStoreId]);
 
   const fetchDeals = useCallback(async (showLoading = true) => {
     if (!user?.organization_id) {
       setLoading(false);
       return;
     }
+    
+    // ✅ NOVO: Não buscar se não tiver loja selecionada
+    if (!effectiveStoreId) {
+      setDeals([]);
+      setLoading(false);
+      return;
+    }
 
     try {
       if (showLoading) setLoading(true);
-      // ✅ CORRIGIDO: Sem organizationId no URLSearchParams
-      const params = new URLSearchParams();
+      // ✅ CORRIGIDO: Incluir storeId no URLSearchParams
+      const params = new URLSearchParams({
+        storeId: effectiveStoreId, // ✅ NOVO
+      });
       if (pipelineId) params.set('pipelineId', pipelineId);
 
-      const url = params.toString() ? `/api/deals?${params}` : '/api/deals';
+      const url = `/api/deals?${params}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch deals');
       const result = await response.json();
@@ -335,7 +370,7 @@ export function useDeals(pipelineId?: string) {
     } finally {
       setLoading(false);
     }
-  }, [user?.organization_id, pipelineId]);
+  }, [user?.organization_id, effectiveStoreId, pipelineId]);
 
   // Fetch inicial
   useEffect(() => {
@@ -441,12 +476,15 @@ export function useDeals(pipelineId?: string) {
     };
   }, [user?.organization_id]);
 
-  // Operações - ✅ CORRIGIDO: Sem organizationId no body/URL
+  // Operações - ✅ CORRIGIDO: Agora inclui store_id
   const createDeal = async (data: any) => {
     const response = await fetch('/api/deals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data), // ✅ Sem organizationId
+      body: JSON.stringify({ 
+        ...data,
+        store_id: effectiveStoreId, // ✅ NOVO: Incluir store_id
+      }),
     });
     if (!response.ok) throw new Error('Failed to create deal');
     const result = await response.json();

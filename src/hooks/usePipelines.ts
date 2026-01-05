@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useStoreStore } from '@/stores'; // ✅ ADICIONADO useStoreStore
 
-// ✅ AJUSTE 1: Removido organizationId das URLs/body - API pega do JWT
+// ✅ CORRIGIDO: Agora inclui store_id (multi-tenant por loja)
 export function usePipelines() {
   const { user } = useAuthStore();
+  const { currentStore } = useStoreStore(); // ✅ NOVO
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -15,6 +16,7 @@ export function usePipelines() {
     stages: { name: string; color: string }[];
   }) => {
     if (!user?.organization_id) throw new Error('Organization not found');
+    if (!currentStore?.id) throw new Error('Selecione uma loja primeiro'); // ✅ NOVO
 
     setLoading(true);
     setError(null);
@@ -23,9 +25,10 @@ export function usePipelines() {
       const response = await fetch('/api/deals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // ✅ CORRIGIDO: Sem organizationId no body
+        // ✅ CORRIGIDO: Inclui store_id no body
         body: JSON.stringify({
           action: 'create-pipeline',
+          store_id: currentStore.id, // ✅ NOVO
           ...data,
         }),
       });
@@ -44,7 +47,7 @@ export function usePipelines() {
     } finally {
       setLoading(false);
     }
-  }, [user?.organization_id]);
+  }, [user?.organization_id, currentStore?.id]);
 
   const updatePipeline = useCallback(async (id: string, data: {
     name?: string;

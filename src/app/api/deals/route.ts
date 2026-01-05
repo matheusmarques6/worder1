@@ -22,10 +22,18 @@ export async function GET(request: NextRequest) {
 
   try {
     if (type === 'pipelines') {
-      const { data: pipelines, error: pipelineError } = await supabase
+      // ✅ CORRIGIDO: Filtrar pipelines por store_id
+      let pipelinesQuery = supabase
         .from('pipelines')
         .select('*')
         .order('position');
+      
+      // ✅ NOVO: Filtrar por loja se fornecido
+      if (storeId) {
+        pipelinesQuery = pipelinesQuery.eq('store_id', storeId);
+      }
+      
+      const { data: pipelines, error: pipelineError } = await pipelinesQuery;
 
       if (pipelineError) throw pipelineError;
 
@@ -337,7 +345,7 @@ export async function DELETE(request: NextRequest) {
 
 // Helper functions with supabase client passed in
 async function createPipeline(supabase: any, organizationId: string, data: any) {
-  const { name, description, color, stages } = data;
+  const { name, description, color, stages, store_id } = data; // ✅ ADICIONADO store_id
 
   const { data: existingPipelines } = await supabase
     .from('pipelines')
@@ -351,6 +359,7 @@ async function createPipeline(supabase: any, organizationId: string, data: any) 
     .from('pipelines')
     .insert({
       organization_id: organizationId,
+      store_id: store_id || null, // ✅ ADICIONADO store_id
       name,
       description,
       color: color || '#f97316',

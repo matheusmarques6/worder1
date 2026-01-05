@@ -36,17 +36,44 @@ interface StoreState {
   updateStore: (id: string, data: Partial<ShopifyStore>) => void
   removeStore: (id: string) => void
   setLoading: (loading: boolean) => void
+  clearStores: () => void
 }
 
 export const useStoreStore = create<StoreState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       stores: [],
       currentStore: null,
       isLoading: false,
       
       setStores: (stores) => set({ stores }),
-      setCurrentStore: (currentStore) => set({ currentStore }),
+      
+      // ✅ CORRIGIDO: Ao trocar de loja, limpar dados dos outros stores
+      setCurrentStore: (newStore) => {
+        const previousStore = get().currentStore;
+        
+        // Se mudou de loja (e não é a mesma), limpar todos os dados
+        if (previousStore?.id !== newStore?.id) {
+          console.log(`[Store] Trocando de loja: ${previousStore?.name || 'nenhuma'} → ${newStore?.name || 'nenhuma'}`);
+          
+          // Limpar CRM Store (contatos, deals, pipelines)
+          useCRMStore.getState().clearAll();
+          
+          // Limpar WhatsApp Store
+          useWhatsAppStore.getState().clearAll();
+          
+          // Limpar Automation Store  
+          useAutomationStore.getState().clearAll();
+          
+          // Limpar Inbox Store (importar dinamicamente para evitar circular)
+          import('./inboxStore').then(({ useInboxStore }) => {
+            useInboxStore.getState().clearAll();
+          });
+        }
+        
+        set({ currentStore: newStore });
+      },
+      
       addStore: (store) => set((state) => ({ 
         stores: [...state.stores, store],
         currentStore: state.currentStore || store, // Auto-select if first store
@@ -64,6 +91,7 @@ export const useStoreStore = create<StoreState>()(
           : state.currentStore,
       })),
       setLoading: (isLoading) => set({ isLoading }),
+      clearStores: () => set({ stores: [], currentStore: null, isLoading: false }),
     }),
     {
       name: 'worder-stores',
@@ -77,8 +105,10 @@ export const useStoreStore = create<StoreState>()(
 interface AuthState {
   user: User | null
   isLoading: boolean
+  error: string | null
   setUser: (user: User | null) => void
   setLoading: (loading: boolean) => void
+  setError: (error: string | null) => void
   logout: () => void
   signOut: () => Promise<void>
 }
@@ -86,9 +116,22 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoading: true,
+  error: null,
   setUser: (user) => set({ user }),
   setLoading: (isLoading) => set({ isLoading }),
-  logout: () => set({ user: null, isLoading: false }),
+  setError: (error) => set({ error }),
+  logout: () => {
+    // ✅ CRÍTICO: Limpar TODOS os stores ao deslogar
+    useStoreStore.getState().clearStores()
+    useCRMStore.getState().clearAll()
+    useWhatsAppStore.getState().clearAll()
+    useAutomationStore.getState().clearAll()
+    // Limpar Inbox Store
+    import('./inboxStore').then(({ useInboxStore }) => {
+      useInboxStore.getState().clearAll();
+    });
+    set({ user: null, isLoading: false, error: null })
+  },
   signOut: async () => {
     try {
       await fetch('/api/auth', {
@@ -99,7 +142,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (e) {
       console.error('Logout error:', e)
     }
-    set({ user: null, isLoading: false })
+    // ✅ CRÍTICO: Limpar TODOS os stores ao deslogar
+    useStoreStore.getState().clearStores()
+    useCRMStore.getState().clearAll()
+    useWhatsAppStore.getState().clearAll()
+    useAutomationStore.getState().clearAll()
+    import('./inboxStore').then(({ useInboxStore }) => {
+      useInboxStore.getState().clearAll();
+    });
+    set({ user: null, isLoading: false, error: null })
   },
 }))
 
@@ -174,6 +225,9 @@ interface CRMState {
   deleteContact: (id: string) => void
   
   setLoading: (loading: boolean) => void
+  
+  // ✅ NOVO: Limpar tudo ao trocar de loja
+  clearAll: () => void
 }
 
 export const useCRMStore = create<CRMState>((set) => ({
@@ -258,6 +312,16 @@ export const useCRMStore = create<CRMState>((set) => ({
   })),
   
   setLoading: (isLoading) => set({ isLoading }),
+  
+  // ✅ NOVO: Limpar tudo
+  clearAll: () => set({
+    pipelines: [],
+    selectedPipeline: null,
+    deals: [],
+    contacts: [],
+    selectedContact: null,
+    isLoading: false,
+  }),
 }))
 
 // ===============================
@@ -278,6 +342,9 @@ interface WhatsAppState {
   addMessage: (conversationId: string, message: any) => void
   setLoading: (loading: boolean) => void
   setConnected: (connected: boolean) => void
+  
+  // ✅ NOVO: Limpar tudo ao trocar de loja
+  clearAll: () => void
 }
 
 export const useWhatsAppStore = create<WhatsAppState>((set) => ({
@@ -309,6 +376,15 @@ export const useWhatsAppStore = create<WhatsAppState>((set) => ({
   })),
   setLoading: (isLoading) => set({ isLoading }),
   setConnected: (isConnected) => set({ isConnected }),
+  
+  // ✅ NOVO: Limpar tudo
+  clearAll: () => set({
+    conversations: [],
+    selectedConversation: null,
+    messages: {},
+    isLoading: false,
+    isConnected: false,
+  }),
 }))
 
 // ===============================
@@ -325,6 +401,9 @@ interface AutomationState {
   updateAutomation: (id: string, data: Partial<Automation>) => void
   deleteAutomation: (id: string) => void
   setLoading: (loading: boolean) => void
+  
+  // ✅ NOVO: Limpar tudo ao trocar de loja
+  clearAll: () => void
 }
 
 export const useAutomationStore = create<AutomationState>((set) => ({
@@ -348,6 +427,13 @@ export const useAutomationStore = create<AutomationState>((set) => ({
     selectedAutomation: state.selectedAutomation?.id === id ? null : state.selectedAutomation,
   })),
   setLoading: (isLoading) => set({ isLoading }),
+  
+  // ✅ NOVO: Limpar tudo
+  clearAll: () => set({
+    automations: [],
+    selectedAutomation: null,
+    isLoading: false,
+  }),
 }))
 
 // ===============================
