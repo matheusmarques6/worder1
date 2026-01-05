@@ -1,6 +1,6 @@
 // =============================================
 // API: Import Existing Customers from Shopify
-// VERSÃO OTIMIZADA - Baseada em pesquisa de melhores práticas
+// ✅ ATUALIZADO: Salva store_id nos contatos
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,13 +8,10 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300; // 5 minutos - Vercel Pro
+export const maxDuration = 300;
 
 const SHOPIFY_API_VERSION = '2024-10';
 
-// =============================================
-// Configurações de Performance
-// =============================================
 const CONFIG = {
   SHOPIFY_DELAY_MS: 150,
   BATCH_INSERT_SIZE: 500,
@@ -25,9 +22,6 @@ const CONFIG = {
   PARALLEL_UPDATES: 50,
 };
 
-// =============================================
-// Helper: JSON Response
-// =============================================
 function jsonResponse(data: any, status = 200) {
   return new NextResponse(JSON.stringify(data), {
     status,
@@ -35,21 +29,11 @@ function jsonResponse(data: any, status = 200) {
   });
 }
 
-// =============================================
-// Helper: Sanitizar strings
-// =============================================
 function sanitizeString(value: string | null | undefined): string | null {
   if (!value) return null;
-  return value
-    .replace(/<[^>]*>/g, '')
-    .replace(/[<>"'&]/g, '')
-    .trim()
-    .substring(0, 255);
+  return value.replace(/<[^>]*>/g, '').replace(/[<>"'&]/g, '').trim().substring(0, 255);
 }
 
-// =============================================
-// Helper: Normalizar telefone (formato E.164)
-// =============================================
 function normalizePhone(phone: string | null | undefined): string | null {
   if (!phone) return null;
   const digits = phone.replace(/\D/g, '');
@@ -59,9 +43,6 @@ function normalizePhone(phone: string | null | undefined): string | null {
   return `+${digits}`;
 }
 
-// =============================================
-// Helper: Normalizar email
-// =============================================
 function normalizeEmail(email: string | null | undefined): string | null {
   if (!email) return null;
   const normalized = email.toLowerCase().trim();
@@ -69,9 +50,6 @@ function normalizeEmail(email: string | null | undefined): string | null {
   return normalized;
 }
 
-// =============================================
-// Helper: Buscar clientes do Shopify com paginação
-// =============================================
 async function fetchShopifyCustomers(
   shopDomain: string, 
   accessToken: string,
@@ -125,9 +103,6 @@ async function fetchShopifyCustomers(
   return allCustomers;
 }
 
-// =============================================
-// Helper: Buscar filtros disponíveis
-// =============================================
 async function fetchCustomerFilters(shopDomain: string, accessToken: string) {
   const tagCounts = new Map<string, number>();
   const emailStatusCounts = new Map<string, number>();
@@ -165,16 +140,19 @@ async function fetchCustomerFilters(shopDomain: string, accessToken: string) {
   };
 }
 
-// =============================================
-// Helper: Pré-carregar contatos existentes
-// =============================================
-async function loadExistingContacts(supabase: SupabaseClient, organizationId: string) {
-  console.log(`[DB] Loading existing contacts for org ${organizationId}`);
+// ✅ ATUALIZADO: Agora também filtra por store_id
+async function loadExistingContacts(supabase: SupabaseClient, organizationId: string, storeId?: string) {
+  console.log(`[DB] Loading existing contacts for org ${organizationId}${storeId ? `, store ${storeId}` : ''}`);
   
-  const { data: contacts, error } = await supabase
+  let query = supabase
     .from('contacts')
-    .select('id, email, phone, first_name, last_name, tags, shopify_customer_id')
+    .select('id, email, phone, first_name, last_name, tags, shopify_customer_id, store_id')
     .eq('organization_id', organizationId);
+  
+  // Se storeId fornecido, filtrar também por store ou contatos sem store
+  // (para poder atualizar contatos antigos que não tinham store_id)
+  
+  const { data: contacts, error } = await query;
   
   if (error) {
     console.error('[DB] Error loading contacts:', error);
@@ -195,9 +173,6 @@ async function loadExistingContacts(supabase: SupabaseClient, organizationId: st
   return { byEmail, byPhone, byShopifyId };
 }
 
-// =============================================
-// Helper: Bulk insert com retry
-// =============================================
 async function bulkInsertContacts(supabase: SupabaseClient, contacts: any[], batchSize = CONFIG.BATCH_INSERT_SIZE) {
   const inserted: any[] = [];
   const errors: string[] = [];
@@ -218,9 +193,6 @@ async function bulkInsertContacts(supabase: SupabaseClient, contacts: any[], bat
   return { inserted, errors };
 }
 
-// =============================================
-// Helper: Parallel updates
-// =============================================
 async function parallelUpdateContacts(supabase: SupabaseClient, updates: { id: string; data: any }[], concurrency = CONFIG.PARALLEL_UPDATES) {
   let updated = 0;
   const errors: string[] = [];
@@ -244,9 +216,6 @@ async function parallelUpdateContacts(supabase: SupabaseClient, updates: { id: s
   return { updated, errors };
 }
 
-// =============================================
-// Helper: Bulk insert deals
-// =============================================
 async function bulkInsertDeals(supabase: SupabaseClient, deals: any[], batchSize = CONFIG.BATCH_DEAL_SIZE) {
   let inserted = 0;
   for (let i = 0; i < deals.length; i += batchSize) {
@@ -257,9 +226,7 @@ async function bulkInsertDeals(supabase: SupabaseClient, deals: any[], batchSize
   return inserted;
 }
 
-// =============================================
 // GET: Buscar contagem e filtros disponíveis
-// =============================================
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
@@ -274,7 +241,6 @@ export async function GET(request: NextRequest) {
       return jsonResponse({ success: false, error: 'storeId required' }, 400);
     }
 
-    // RLS filtra automaticamente
     const { data: store, error } = await supabase
       .from('shopify_stores')
       .select('shop_domain, access_token, shop_name')
@@ -328,9 +294,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// =============================================
 // POST: Executar importação otimizada
-// =============================================
 export async function POST(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
@@ -355,7 +319,6 @@ export async function POST(request: NextRequest) {
       return jsonResponse({ success: false, error: 'storeId required' }, 400);
     }
 
-    // RLS filtra automaticamente
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
       .select('*')
@@ -366,7 +329,7 @@ export async function POST(request: NextRequest) {
       return jsonResponse({ success: false, error: 'Store not found' }, 404);
     }
 
-    console.log(`[Import] Starting for ${store.shop_domain}`);
+    console.log(`[Import] Starting for ${store.shop_domain} (store_id: ${storeId})`);
     console.log(`[Import] Filters - Tags: ${filterByTags.length}, Email: ${filterByEmailStatus.length}`);
 
     // FASE 1: Buscar clientes do Shopify
@@ -406,8 +369,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // FASE 2: Pré-carregar contatos existentes - usa organization_id da store
-    const existingContacts = await loadExistingContacts(supabase, store.organization_id);
+    // FASE 2: Pré-carregar contatos existentes
+    const existingContacts = await loadExistingContacts(supabase, store.organization_id, storeId);
 
     // FASE 3: Separar novos vs existentes
     const contactTags = Array.from(new Set([...(store.auto_tags || ['shopify']), ...tags, 'shopify-import']));
@@ -435,6 +398,8 @@ export async function POST(request: NextRequest) {
           shopify_customer_id: shopifyId,
           total_orders: customer.orders_count || 0,
           total_spent: parseFloat(customer.total_spent || '0'),
+          // ✅ ATUALIZADO: Atualizar store_id se não tiver
+          store_id: existing.store_id || storeId,
         };
         
         if (!existing.first_name && firstName) updateData.first_name = firstName;
@@ -446,14 +411,24 @@ export async function POST(request: NextRequest) {
         toUpdate.push({ id: existing.id, data: updateData });
         shopifyIdToContactId.set(shopifyId, existing.id);
       } else {
+        // ✅ CORREÇÃO: Adicionar store_id nos novos contatos
         toCreate.push({
           organization_id: store.organization_id,
-          first_name: firstName, last_name: lastName, email, phone,
-          source: 'shopify', shopify_customer_id: shopifyId,
+          store_id: storeId, // ✅ NOVO: Vincular à loja
+          first_name: firstName, 
+          last_name: lastName, 
+          email, 
+          phone,
+          source: 'shopify', 
+          shopify_customer_id: shopifyId,
           total_orders: customer.orders_count || 0,
           total_spent: parseFloat(customer.total_spent || '0'),
           tags: contactTags,
-          custom_fields: { shopify_store: store.shop_domain, imported_at: new Date().toISOString() },
+          custom_fields: { 
+            shopify_store: store.shop_domain, 
+            shopify_store_id: storeId, // ✅ NOVO: Guardar referência
+            imported_at: new Date().toISOString() 
+          },
         });
       }
     }
@@ -491,9 +466,14 @@ export async function POST(request: NextRequest) {
           const dealName = [firstName, lastName].filter(Boolean).join(' ') || 'Cliente Shopify';
           dealsToCreate.push({
             organization_id: store.organization_id,
-            contact_id: contactId, pipeline_id: pipelineId, stage_id: stageId,
-            title: `${dealName} - Shopify`, value: parseFloat(customer.total_spent || '0'),
-            currency: 'BRL', tags: ['shopify-import'],
+            store_id: storeId, // ✅ NOVO: Vincular deal à loja também
+            contact_id: contactId, 
+            pipeline_id: pipelineId, 
+            stage_id: stageId,
+            title: `${dealName} - Shopify`, 
+            value: parseFloat(customer.total_spent || '0'),
+            currency: 'BRL', 
+            tags: ['shopify-import'],
           });
         }
       }
@@ -503,7 +483,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // FASE 7: Atualizar estatísticas da loja - RLS filtra automaticamente
+    // FASE 7: Atualizar estatísticas da loja
     await supabase
       .from('shopify_stores')
       .update({
