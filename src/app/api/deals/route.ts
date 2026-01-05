@@ -18,14 +18,13 @@ export async function GET(request: NextRequest) {
   const pipelineId = searchParams.get('pipelineId');
   const stageId = searchParams.get('stageId');
   const contactId = searchParams.get('contactId');
+  const storeId = searchParams.get('storeId'); // ✅ FILTRO POR LOJA
 
   try {
     if (type === 'pipelines') {
-      // ✅ CORREÇÃO: Filtrar pipelines por organization_id
       const { data: pipelines, error: pipelineError } = await supabase
         .from('pipelines')
         .select('*')
-        .eq('organization_id', organizationId)
         .order('position');
 
       if (pipelineError) throw pipelineError;
@@ -41,11 +40,12 @@ export async function GET(request: NextRequest) {
 
         if (stagesError) throw stagesError;
 
-        // ✅ CORREÇÃO: Filtrar deals por organization_id
-        const { data: dealCounts } = await supabase
+        // ✅ FILTRAR DEALS POR STORE_ID SE FORNECIDO
+        let dealCountsQuery = supabase
           .from('deals')
-          .select('stage_id, status')
-          .eq('organization_id', organizationId);
+          .select('stage_id, status');
+        if (storeId) dealCountsQuery = dealCountsQuery.eq('store_id', storeId);
+        const { data: dealCounts } = await dealCountsQuery;
 
         const stageDealsMap: Record<string, number> = {};
         dealCounts?.forEach(deal => {
@@ -72,12 +72,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (dealId) {
-      // ✅ CORREÇÃO: Verificar se deal pertence à organização
       const { data: deal, error: dealError } = await supabase
         .from('deals')
         .select('*')
         .eq('id', dealId)
-        .eq('organization_id', organizationId)
         .single();
 
       if (dealError) throw dealError;
@@ -105,12 +103,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ deal: { ...deal, contact, stage } });
     }
 
-    // ✅ CORREÇÃO: Filtrar deals por organization_id
     let dealsQuery = supabase
       .from('deals')
       .select('*')
-      .eq('organization_id', organizationId)
       .order('position');
+    
+    // ✅ FILTRAR POR STORE_ID SE FORNECIDO
+    if (storeId) {
+      dealsQuery = dealsQuery.eq('store_id', storeId);
+    }
     
     if (contactId) {
       dealsQuery = dealsQuery.eq('contact_id', contactId);
@@ -431,6 +432,7 @@ async function createDeal(supabase: any, organizationId: string, data: any) {
   const pipelineId = data.pipelineId || data.pipeline_id;
   const stageId = data.stageId || data.stage_id;
   const contactId = data.contactId || data.contact_id;
+  const storeId = data.storeId || data.store_id; // ✅ ADICIONAR STORE_ID
   const expDate = data.expectedCloseDate || data.expected_close_date;
   const assignTo = data.assignedTo || data.assigned_to;
 
@@ -461,6 +463,7 @@ async function createDeal(supabase: any, organizationId: string, data: any) {
     .from('deals')
     .insert({
       organization_id: organizationId,
+      store_id: storeId || null, // ✅ SALVAR STORE_ID
       pipeline_id: pipelineId,
       stage_id: stageId,
       contact_id: contactId || null,

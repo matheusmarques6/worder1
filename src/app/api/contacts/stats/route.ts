@@ -1,7 +1,3 @@
-// =============================================
-// Contact Stats API - COM FILTRO POR LOJA
-// =============================================
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 
@@ -13,7 +9,7 @@ export async function GET(request: NextRequest) {
   const { supabase, user } = auth;
   const organizationId = user.organization_id;
 
-  // ✅ NOVO: Filtro por loja
+  // ✅ FILTRO POR LOJA
   const { searchParams } = new URL(request.url);
   const storeId = searchParams.get('storeId');
 
@@ -21,66 +17,54 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    // Base query builder
-    const buildQuery = () => {
-      let q = supabase.from('contacts').select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId);
-      if (storeId) q = q.eq('store_id', storeId);
-      return q;
-    };
-
     // Total de contatos
-    const { count: totalContacts } = await buildQuery();
+    let totalQuery = supabase
+      .from('contacts')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', organizationId);
+    if (storeId) totalQuery = totalQuery.eq('store_id', storeId);
+    const { count: totalContacts } = await totalQuery;
 
     // Novos este mês
-    const { count: newThisMonth } = await (() => {
-      let q = supabase.from('contacts').select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId)
-        .gte('created_at', firstDayOfMonth);
-      if (storeId) q = q.eq('store_id', storeId);
-      return q;
-    })();
+    let newQuery = supabase
+      .from('contacts')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .gte('created_at', firstDayOfMonth);
+    if (storeId) newQuery = newQuery.eq('store_id', storeId);
+    const { count: newThisMonth } = await newQuery;
 
     // Com pedidos
-    const { count: withOrders } = await (() => {
-      let q = supabase.from('contacts').select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId)
-        .gt('total_orders', 0);
-      if (storeId) q = q.eq('store_id', storeId);
-      return q;
-    })();
+    let ordersQuery = supabase
+      .from('contacts')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .gt('total_orders', 0);
+    if (storeId) ordersQuery = ordersQuery.eq('store_id', storeId);
+    const { count: withOrders } = await ordersQuery;
 
     // Valor total
     let totalValue = 0;
-    const { data: rpcData, error: rpcError } = await supabase
-      .rpc('get_contacts_total_spent', { 
-        p_organization_id: organizationId,
-        p_store_id: storeId || null 
-      });
+    let offset = 0;
+    const batchSize = 1000;
+    let hasMore = true;
     
-    if (!rpcError && rpcData !== null) {
-      totalValue = Number(rpcData) || 0;
-    } else {
-      // Fallback
-      let offset = 0;
-      const batchSize = 1000;
-      let hasMore = true;
+    while (hasMore) {
+      let valueQuery = supabase
+        .from('contacts')
+        .select('total_spent')
+        .eq('organization_id', organizationId)
+        .range(offset, offset + batchSize - 1);
+      if (storeId) valueQuery = valueQuery.eq('store_id', storeId);
       
-      while (hasMore) {
-        let q = supabase.from('contacts').select('total_spent')
-          .eq('organization_id', organizationId)
-          .range(offset, offset + batchSize - 1);
-        if (storeId) q = q.eq('store_id', storeId);
-        
-        const { data: batchData } = await q;
-        
-        if (batchData && batchData.length > 0) {
-          totalValue += batchData.reduce((sum, c) => sum + (Number(c.total_spent) || 0), 0);
-          offset += batchSize;
-          hasMore = batchData.length === batchSize;
-        } else {
-          hasMore = false;
-        }
+      const { data: batchData } = await valueQuery;
+      
+      if (batchData && batchData.length > 0) {
+        totalValue += batchData.reduce((sum, c) => sum + (Number(c.total_spent) || 0), 0);
+        offset += batchSize;
+        hasMore = batchData.length === batchSize;
+      } else {
+        hasMore = false;
       }
     }
 

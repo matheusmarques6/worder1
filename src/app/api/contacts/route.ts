@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '50');
   
-  // ✅ NOVO: Filtro por loja
+  // ✅ FILTRO POR LOJA
   const storeId = searchParams.get('storeId');
 
   try {
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
 
-    // ✅ NOVO: Filtrar por store_id se fornecido
+    // ✅ FILTRAR POR STORE_ID SE FORNECIDO
     if (storeId) {
       query = query.eq('store_id', storeId);
     }
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       .from('contacts')
       .insert({
         organization_id: organizationId,
-        store_id: store_id || null, // ✅ NOVO: Salvar store_id
+        store_id: store_id || null, // ✅ SALVAR STORE_ID
         email,
         phone,
         first_name,
@@ -134,7 +134,6 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    // Emit event
     EventBus.getInstance().emit({
       type: EventType.CONTACT_CREATED,
       organizationId,
@@ -164,7 +163,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Contact ID required' }, { status: 400 });
     }
 
-    // Remove fields that shouldn't be updated directly
     delete updates.organization_id;
     delete updates.created_at;
 
