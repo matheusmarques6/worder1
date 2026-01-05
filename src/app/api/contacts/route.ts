@@ -138,6 +138,7 @@ export async function POST(request: NextRequest) {
       organization_id: organizationId,
       contact_id: contact.id,
       email: contact.email,
+      data: { contact },
     });
 
     return NextResponse.json({ contact }, { status: 201 });
@@ -180,6 +181,7 @@ export async function PUT(request: NextRequest) {
       organization_id: organizationId,
       contact_id: contact.id,
       email: contact.email,
+      data: { contact },
     });
 
     return NextResponse.json({ contact });
@@ -216,6 +218,7 @@ export async function DELETE(request: NextRequest) {
     EventBus.emit(EventType.CONTACT_DELETED, {
       organization_id: organizationId,
       contact_id: id,
+      data: { contactId: id },
     });
 
     return NextResponse.json({ success: true });
