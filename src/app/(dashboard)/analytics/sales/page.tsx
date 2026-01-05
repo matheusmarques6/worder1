@@ -203,6 +203,7 @@ function KPICard({
   }
 
   const formatValue = () => {
+    if (value === undefined || value === null) return "-";
     switch (format) {
       case 'currency': return formatCurrency(value)
       case 'percent': return `${value.toFixed(1)}%`
