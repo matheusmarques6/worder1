@@ -65,9 +65,9 @@ export const useStoreStore = create<StoreState>()(
           // Limpar Automation Store  
           useAutomationStore.getState().clearAll();
           
-          // Limpar Inbox Store (importar dinamicamente para evitar circular)
+        // Limpar Inbox Store (importar dinamicamente para evitar circular)
           import('./inboxStore').then(({ useInboxStore }) => {
-            useInboxStore.getState().clearAll();
+            useInboxStore.getState().reset();
           });
         }
         
@@ -128,7 +128,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     useAutomationStore.getState().clearAll()
     // Limpar Inbox Store
     import('./inboxStore').then(({ useInboxStore }) => {
-      useInboxStore.getState().clearAll();
+      useInboxStore.getState().reset();
     });
     set({ user: null, isLoading: false, error: null })
   },
@@ -148,7 +148,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     useWhatsAppStore.getState().clearAll()
     useAutomationStore.getState().clearAll()
     import('./inboxStore').then(({ useInboxStore }) => {
-      useInboxStore.getState().clearAll();
+      useInboxStore.getState().reset();
     });
     set({ user: null, isLoading: false, error: null })
   },
