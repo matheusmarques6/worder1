@@ -26,6 +26,7 @@ export interface OAuthStateData {
   provider: 'meta' | 'tiktok' | 'google' | 'shopify';
   createdAt: number;
   nonce: string;
+  storeId?: string; // Loja Shopify vinculada (para isolamento por loja)
 }
 
 // ============================================
@@ -45,12 +46,14 @@ const STATE_SECRET = process.env.OAUTH_STATE_SECRET || process.env.NEXTAUTH_SECR
  * @param organizationId - ID da organização
  * @param userId - ID do usuário que iniciou o fluxo
  * @param provider - Provider OAuth (meta, tiktok, etc)
+ * @param storeId - ID da loja (opcional, para isolamento por loja)
  * @returns State codificado para uso na URL
  */
 export function generateOAuthState(
   organizationId: string,
   userId: string,
-  provider: OAuthStateData['provider']
+  provider: OAuthStateData['provider'],
+  storeId?: string
 ): string {
   const nonce = randomBytes(16).toString('hex');
   const createdAt = Date.now();
@@ -61,6 +64,7 @@ export function generateOAuthState(
     provider,
     createdAt,
     nonce,
+    storeId,
   };
   
   // Codificar dados

@@ -33,11 +33,29 @@ export async function GET(request: NextRequest) {
   
   // Generate OAuth URL (com state seguro!)
   if (action === 'auth_url') {
+    const storeId = request.nextUrl.searchParams.get('store_id');
+    
+    // Validar que store_id pertence à organização
+    if (storeId) {
+      const { data: store, error: storeError } = await supabase
+        .from('shopify_stores')
+        .select('id')
+        .eq('id', storeId)
+        .eq('organization_id', organizationId)
+        .single();
+      
+      if (storeError || !store) {
+        return NextResponse.json({ 
+          error: 'Store not found or access denied' 
+        }, { status: 403 });
+      }
+    }
+    
     const clientId = process.env.META_APP_ID;
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/meta/callback`;
     
-    // GERAR STATE SEGURO (assinado e com expiração)
-    const state = generateOAuthState(organizationId, user.id, 'meta');
+    // GERAR STATE SEGURO (assinado e com expiração) - inclui store_id!
+    const state = generateOAuthState(organizationId, user.id, 'meta', storeId || undefined);
     
     const scopes = [
       'ads_read',
@@ -58,9 +76,19 @@ export async function GET(request: NextRequest) {
   
   // Get connected accounts (RLS filtra automaticamente)
   if (action === 'accounts') {
-    const { data: accounts } = await supabase
+    const storeId = request.nextUrl.searchParams.get('store_id');
+    
+    let query = supabase
       .from('meta_accounts')
-      .select('*');
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    // Se store_id foi fornecido, filtrar por loja
+    if (storeId) {
+      query = query.eq('store_id', storeId);
+    }
+    
+    const { data: accounts } = await query;
     
     return NextResponse.json({ accounts: accounts || [] });
   }
@@ -106,7 +134,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { action, adAccountId, accessToken } = body;
+    const { action, adAccountId, accessToken, storeId } = body;
     
     // Connect new ad account
     if (action === 'connect') {
@@ -114,14 +142,28 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
       }
       
+      // Se storeId foi fornecido, validar que pertence à organização
+      if (storeId) {
+        const { data: store, error: storeError } = await supabase
+          .from('shopify_stores')
+          .select('id')
+          .eq('id', storeId)
+          .eq('organization_id', organizationId)
+          .single();
+        
+        if (storeError || !store) {
+          return NextResponse.json({ error: 'Store not found or access denied' }, { status: 403 });
+        }
+      }
+      
       // Get ad account info
       const accountInfo = await metaFetch(accessToken, `/act_${adAccountId}`, {
         fields: 'id,name,account_id,currency,timezone_name,business'
       });
       
-      // Save to database (RLS filtra automaticamente)
-      const { error } = await supabase.from('meta_accounts').upsert({
-        organization_id: organizationId, // Do user autenticado
+      // Preparar dados para salvar
+      const accountData: any = {
+        organization_id: organizationId,
         access_token: accessToken,
         ad_account_id: adAccountId,
         ad_account_name: accountInfo.name,
@@ -130,24 +172,48 @@ export async function POST(request: NextRequest) {
         currency: accountInfo.currency,
         timezone: accountInfo.timezone_name,
         is_active: true,
+        status: 'connected',
         last_sync_at: new Date().toISOString(),
-      }, { onConflict: 'organization_id,ad_account_id' });
+      };
+      
+      // Adicionar store_id se fornecido
+      if (storeId) {
+        accountData.store_id = storeId;
+      }
+      
+      // Definir constraint baseado em se tem store_id
+      const conflictKey = storeId ? 'store_id,ad_account_id' : 'organization_id,ad_account_id';
+      
+      // Save to database
+      const { error } = await supabase.from('meta_accounts').upsert(
+        accountData, 
+        { onConflict: conflictKey }
+      );
       
       if (error) throw error;
       
       // Trigger initial sync
-      await syncMetaData(supabase, organizationId, adAccountId, accessToken);
+      await syncMetaData(supabase, organizationId, adAccountId, accessToken, storeId);
       
       return NextResponse.json({ success: true, account: accountInfo });
     }
     
     // Sync data
     if (action === 'sync') {
+      const { storeId: syncStoreId } = body;
+      
       // Get all connected accounts (RLS filtra automaticamente)
-      const { data: accounts } = await supabase
+      let accountsQuery = supabase
         .from('meta_accounts')
         .select('*')
         .eq('is_active', true);
+      
+      // Se store_id fornecido, filtrar por loja
+      if (syncStoreId) {
+        accountsQuery = accountsQuery.eq('store_id', syncStoreId);
+      }
+      
+      const { data: accounts } = await accountsQuery;
       
       if (!accounts?.length) {
         return NextResponse.json({ error: 'No Meta accounts connected' }, { status: 404 });
@@ -155,7 +221,7 @@ export async function POST(request: NextRequest) {
       
       // Sync each account
       for (const account of accounts) {
-        await syncMetaData(supabase, organizationId, account.ad_account_id, account.access_token);
+        await syncMetaData(supabase, organizationId, account.ad_account_id, account.access_token, account.store_id);
       }
       
       return NextResponse.json({ success: true });
@@ -189,33 +255,40 @@ export async function DELETE(request: NextRequest) {
 }
 
 // Sync Meta data
-async function syncMetaData(supabase: any, organizationId: string, adAccountId: string, accessToken: string) {
+async function syncMetaData(supabase: any, organizationId: string, adAccountId: string, accessToken: string, storeId?: string) {
   try {
     // Sync campaigns
-    await syncCampaigns(supabase, organizationId, adAccountId, accessToken);
+    await syncCampaigns(supabase, organizationId, adAccountId, accessToken, storeId);
     
     // Sync insights for last 30 days
-    await syncInsights(supabase, organizationId, adAccountId, accessToken, 30);
+    await syncInsights(supabase, organizationId, adAccountId, accessToken, 30, storeId);
     
     // Update last sync timestamp
-    await supabase
+    let updateQuery = supabase
       .from('meta_accounts')
       .update({ last_sync_at: new Date().toISOString() })
       .eq('ad_account_id', adAccountId);
+    
+    // Se tiver store_id, filtrar por ele também
+    if (storeId) {
+      updateQuery = updateQuery.eq('store_id', storeId);
+    }
+    
+    await updateQuery;
   } catch (error) {
     console.error('Meta sync error:', error);
     throw error;
   }
 }
 
-async function syncCampaigns(supabase: any, organizationId: string, adAccountId: string, accessToken: string) {
+async function syncCampaigns(supabase: any, organizationId: string, adAccountId: string, accessToken: string, storeId?: string) {
   const campaigns = await metaFetch(accessToken, `/act_${adAccountId}/campaigns`, {
     fields: 'id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time,created_time,updated_time',
     limit: '500'
   });
   
   for (const campaign of campaigns.data || []) {
-    await supabase.from('meta_campaigns').upsert({
+    const campaignData: any = {
       organization_id: organizationId,
       campaign_id: campaign.id,
       name: campaign.name,
@@ -227,11 +300,19 @@ async function syncCampaigns(supabase: any, organizationId: string, adAccountId:
       stop_time: campaign.stop_time,
       created_time: campaign.created_time,
       updated_time: campaign.updated_time,
-    }, { onConflict: 'organization_id,campaign_id' });
+    };
+    
+    if (storeId) {
+      campaignData.store_id = storeId;
+    }
+    
+    await supabase.from('meta_campaigns').upsert(campaignData, { 
+      onConflict: 'organization_id,campaign_id' 
+    });
   }
 }
 
-async function syncInsights(supabase: any, organizationId: string, adAccountId: string, accessToken: string, days: number) {
+async function syncInsights(supabase: any, organizationId: string, adAccountId: string, accessToken: string, days: number, storeId?: string) {
   const endDate = new Date();
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
@@ -262,7 +343,7 @@ async function syncInsights(supabase: any, organizationId: string, adAccountId: 
     const spend = parseFloat(insight.spend || '0');
     const roas = spend > 0 ? parseFloat(conversionValue) / spend : 0;
     
-    await supabase.from('meta_insights').upsert({
+    const insightData: any = {
       organization_id: organizationId,
       date: insight.date_start,
       level: 'account',
@@ -279,7 +360,15 @@ async function syncInsights(supabase: any, organizationId: string, adAccountId: 
       cost_per_conversion: parseInt(conversions) > 0 ? spend / parseInt(conversions) : 0,
       roas: roas,
       actions: insight.actions,
-    }, { onConflict: 'organization_id,date,level,campaign_id,adset_id,ad_id' });
+    };
+    
+    if (storeId) {
+      insightData.store_id = storeId;
+    }
+    
+    await supabase.from('meta_insights').upsert(insightData, { 
+      onConflict: 'organization_id,date,level,campaign_id,adset_id,ad_id' 
+    });
   }
   
   // Also get campaign-level insights
@@ -301,7 +390,7 @@ async function syncInsights(supabase: any, organizationId: string, adAccountId: 
     
     const spend = parseFloat(insight.spend || '0');
     
-    await supabase.from('meta_insights').upsert({
+    const campaignInsightData: any = {
       organization_id: organizationId,
       date: insight.date_start,
       campaign_id: insight.campaign_id,
@@ -312,6 +401,14 @@ async function syncInsights(supabase: any, organizationId: string, adAccountId: 
       conversions: parseInt(conversions),
       conversion_value: parseFloat(conversionValue),
       roas: spend > 0 ? parseFloat(conversionValue) / spend : 0,
-    }, { onConflict: 'organization_id,date,level,campaign_id,adset_id,ad_id' });
+    };
+    
+    if (storeId) {
+      campaignInsightData.store_id = storeId;
+    }
+    
+    await supabase.from('meta_insights').upsert(campaignInsightData, { 
+      onConflict: 'organization_id,date,level,campaign_id,adset_id,ad_id' 
+    });
   }
 }
