@@ -522,11 +522,13 @@ export function useAgentsList(organizationId: string): UseAgentsListReturn {
     }
   }, [agents, organizationId])
 
+  // ✅ PROTEÇÃO: Garantir que agents é array
+  const safeAgents = Array.isArray(agents) ? agents : []
   const stats = {
-    total: agents.length,
-    active: agents.filter(a => a.is_active).length,
-    totalMessages: agents.reduce((sum, a) => sum + (a.total_messages || 0), 0),
-    totalConversations: agents.reduce((sum, a) => sum + (a.total_conversations || 0), 0),
+    total: safeAgents.length,
+    active: safeAgents.filter(a => a.is_active).length,
+    totalMessages: safeAgents.reduce((sum, a) => sum + (a.total_messages || 0), 0),
+    totalConversations: safeAgents.reduce((sum, a) => sum + (a.total_conversations || 0), 0),
   }
 
   return {

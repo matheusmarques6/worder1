@@ -193,7 +193,9 @@ function KanbanColumn({
     transition,
   }
 
-  const totalValue = deals.reduce((sum, deal) => sum + deal.value, 0)
+  // ✅ PROTEÇÃO: Garantir que deals é array antes de usar reduce
+  const safeDeals = Array.isArray(deals) ? deals : []
+  const totalValue = safeDeals.reduce((sum, deal) => sum + (deal.value || 0), 0)
 
   return (
     <motion.div
@@ -223,7 +225,7 @@ function KanbanColumn({
           <div>
             <h3 className="font-semibold text-dark-100">{column.name}</h3>
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-dark-500">{deals.length} deals</span>
+              <span className="text-dark-500">{safeDeals.length} deals</span>
               <span className="text-dark-600">•</span>
               <span className="text-success-400 font-medium">
                 {formatCurrency(totalValue)}

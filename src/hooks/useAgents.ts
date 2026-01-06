@@ -136,12 +136,14 @@ export function useAgents(): UseAgentsReturn {
   const humanAgents = agents.filter(a => a.type === 'human')
   const aiAgents = agents.filter(a => a.type === 'ai')
   
+  // ✅ PROTEÇÃO: Garantir que agents é array
+  const safeAgents = Array.isArray(agents) ? agents : []
   const stats = {
-    total: agents.length,
+    total: safeAgents.length,
     humans: humanAgents.length,
     ais: aiAgents.length,
-    online: agents.filter(a => a.status === 'online' && a.is_active).length,
-    activeChats: agents.reduce((sum, a) => sum + (a.stats?.active_chats || 0), 0),
+    online: safeAgents.filter(a => a.status === 'online' && a.is_active).length,
+    activeChats: safeAgents.reduce((sum, a) => sum + (a.stats?.active_chats || 0), 0),
   }
 
   // Create agent

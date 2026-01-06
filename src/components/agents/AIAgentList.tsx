@@ -104,8 +104,11 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
     }
   }
 
+  // ✅ PROTEÇÃO: Garantir que agents é array
+  const safeAgents = Array.isArray(agents) ? agents : []
+
   // Filter agents
-  const filteredAgents = agents.filter(agent => {
+  const filteredAgents = safeAgents.filter(agent => {
     const matchesSearch = agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          agent.description?.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesFilter = filterStatus === 'all' || 
@@ -115,9 +118,9 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
   })
 
   // Stats
-  const activeAgents = agents.filter(a => a.is_active).length
-  const totalMessages = agents.reduce((sum, a) => sum + (a.total_messages || 0), 0)
-  const totalConversations = agents.reduce((sum, a) => sum + (a.total_conversations || 0), 0)
+  const activeAgents = safeAgents.filter(a => a.is_active).length
+  const totalMessages = safeAgents.reduce((sum, a) => sum + (a.total_messages || 0), 0)
+  const totalConversations = safeAgents.reduce((sum, a) => sum + (a.total_conversations || 0), 0)
 
   return (
     <div className="h-full flex flex-col">

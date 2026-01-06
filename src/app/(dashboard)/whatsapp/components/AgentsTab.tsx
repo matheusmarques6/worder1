@@ -198,8 +198,11 @@ export default function AgentsTab() {
     }
   }
 
+  // ✅ PROTEÇÃO: Garantir que agents é array
+  const safeAgents = Array.isArray(agents) ? agents : []
+
   // Filter agents
-  const filteredAgents = agents.filter((agent) => {
+  const filteredAgents = safeAgents.filter((agent) => {
     const matchesSearch = 
       agent.name.toLowerCase().includes(search.toLowerCase()) ||
       agent.email?.toLowerCase().includes(search.toLowerCase())
@@ -213,11 +216,11 @@ export default function AgentsTab() {
 
   // Stats
   const stats = {
-    total: agents.length,
-    humans: agents.filter(a => a.type === 'human').length,
-    ais: agents.filter(a => a.type === 'ai').length,
-    online: agents.filter(a => a.status === 'online' && a.is_active).length,
-    activeChats: agents.reduce((sum, a) => sum + (a.stats?.active_chats || 0), 0),
+    total: safeAgents.length,
+    humans: safeAgents.filter(a => a.type === 'human').length,
+    ais: safeAgents.filter(a => a.type === 'ai').length,
+    online: safeAgents.filter(a => a.status === 'online' && a.is_active).length,
+    activeChats: safeAgents.reduce((sum, a) => sum + (a.stats?.active_chats || 0), 0),
   }
 
   return (

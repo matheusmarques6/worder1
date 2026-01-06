@@ -202,8 +202,10 @@ interface KanbanColumnProps {
 function KanbanColumn({ stage, deals, onAddDeal, onDealClick, onEditStage }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
   
-  const totalValue = deals.reduce((sum, deal) => sum + deal.value, 0)
-  const weightedValue = deals.reduce((sum, deal) => sum + (deal.value * deal.probability / 100), 0)
+  // ✅ PROTEÇÃO: Garantir que deals é array antes de usar reduce
+  const safeDeals = Array.isArray(deals) ? deals : []
+  const totalValue = safeDeals.reduce((sum, deal) => sum + (deal.value || 0), 0)
+  const weightedValue = safeDeals.reduce((sum, deal) => sum + ((deal.value || 0) * (deal.probability || 0) / 100), 0)
 
   return (
     <div className="flex-shrink-0 w-80">
@@ -225,7 +227,7 @@ function KanbanColumn({ stage, deals, onAddDeal, onDealClick, onEditStage }: Kan
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
               <h3 className="font-semibold text-white group-hover:text-primary-300 transition-colors">{stage.name}</h3>
               <span className="px-2 py-0.5 rounded-full bg-dark-800/50 text-xs text-dark-400">
-                {deals.length}
+                {safeDeals.length}
               </span>
               <Pencil className="w-3 h-3 text-dark-500 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
@@ -247,13 +249,13 @@ function KanbanColumn({ stage, deals, onAddDeal, onDealClick, onEditStage }: Kan
 
         {/* Deals */}
         <div className="flex-1 p-2 space-y-2 overflow-y-auto custom-scrollbar min-h-[200px]">
-          <SortableContext items={deals.map(d => d.id)} strategy={verticalListSortingStrategy}>
-            {deals.map(deal => (
+          <SortableContext items={safeDeals.map(d => d.id)} strategy={verticalListSortingStrategy}>
+            {safeDeals.map(deal => (
               <SortableDeal key={deal.id} deal={deal} onDealClick={onDealClick} />
             ))}
           </SortableContext>
           
-          {deals.length === 0 && (
+          {safeDeals.length === 0 && (
             <div className="p-4 text-center">
               <p className="text-sm text-dark-500">Arraste deals para cá</p>
             </div>
@@ -626,11 +628,14 @@ export default function CRMPage() {
   }
 
   // Calculate pipeline stats - FILTRAR PELA PIPELINE ATIVA
-  const pipelineStageIds = new Set(stages.map(s => s.id))
-  const pipelineDeals = deals.filter(d => pipelineStageIds.has(d.stage_id))
+  // ✅ PROTEÇÃO: Garantir arrays antes de usar métodos
+  const safeStages = Array.isArray(stages) ? stages : []
+  const safeAllDeals = Array.isArray(deals) ? deals : []
+  const pipelineStageIds = new Set(safeStages.map(s => s.id))
+  const pipelineDeals = safeAllDeals.filter(d => pipelineStageIds.has(d.stage_id))
   const uniqueContacts = new Set(pipelineDeals.filter(d => d.contact_id).map(d => d.contact_id)).size
   const pipelineStats = {
-    weightedValue: pipelineDeals.reduce((sum, d) => sum + (d.value * d.probability / 100), 0),
+    weightedValue: pipelineDeals.reduce((sum, d) => sum + ((d.value || 0) * (d.probability || 0) / 100), 0),
     totalDeals: pipelineDeals.length,
     totalContacts: uniqueContacts,
   }
