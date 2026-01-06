@@ -147,7 +147,9 @@ export function AccountSelector({
                       </div>
                     </div>
                     {account.warnings?.token_expiring_soon && (
-                      <AlertCircle className="w-4 h-4 text-yellow-500 flex-shrink-0" title="Token expirando em breve" />
+                      <span title="Token expirando em breve">
+                        <AlertCircle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                      </span>
                     )}
                   </button>
                 ))}
