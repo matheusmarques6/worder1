@@ -4,7 +4,7 @@
  * Funções utilitárias para interagir com a Graph API do Facebook/Meta
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { createServerClient } from '@/lib/supabase';
 
 // ============================================
 // CONSTANTES
@@ -284,7 +284,11 @@ export async function validateStoreAccess(
   storeId: string,
   organizationId: string
 ): Promise<{ valid: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = createServerClient();
+  
+  if (!supabase) {
+    return { valid: false, error: 'Database connection not available' };
+  }
 
   const { data: store, error } = await supabase
     .from('shopify_stores')
@@ -307,7 +311,11 @@ export async function getActiveMetaAccounts(
   storeId: string,
   accountIds?: string[]
 ): Promise<MetaAccount[]> {
-  const supabase = await createClient();
+  const supabase = createServerClient();
+  
+  if (!supabase) {
+    throw new Error('Database connection not available');
+  }
 
   let query = supabase
     .from('meta_accounts')
