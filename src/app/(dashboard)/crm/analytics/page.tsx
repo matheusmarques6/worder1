@@ -339,11 +339,21 @@ function PipelineSelector({
 
 // Commit Level Cards
 function CommitLevelSection({ data }: { data: CommitLevel[] }) {
-  const total = data.reduce((sum, d) => sum + d.value, 0)
+  // ✅ PROTEÇÃO: Garantir que data é array
+  const safeData = Array.isArray(data) ? data : []
+  const total = safeData.reduce((sum, d) => sum + (d.value || 0), 0)
+
+  if (safeData.length === 0) {
+    return (
+      <div className="bg-dark-800/30 border border-dark-700/30 rounded-xl p-4 text-center text-dark-400">
+        Sem dados de forecast
+      </div>
+    )
+  }
 
   return (
     <div className="grid grid-cols-4 gap-4">
-      {data.map(level => (
+      {safeData.map(level => (
         <motion.div
           key={level.level}
           initial={{ opacity: 0, scale: 0.95 }}
@@ -374,14 +384,17 @@ function CommitLevelSection({ data }: { data: CommitLevel[] }) {
 
 // Pipeline Comparison Table
 function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
-  if (!data || data.length === 0) return null
+  // ✅ PROTEÇÃO: Garantir que data é array
+  const safeData = Array.isArray(data) ? data : []
+  
+  if (safeData.length === 0) return null
 
   const totals = {
-    totalValue: data.reduce((sum, p) => sum + p.metrics.totalValue, 0),
-    wonValue: data.reduce((sum, p) => sum + p.metrics.wonValue, 0),
-    totalDeals: data.reduce((sum, p) => sum + p.metrics.totalDeals, 0),
-    wonDeals: data.reduce((sum, p) => sum + p.metrics.wonDeals, 0),
-    lostDeals: data.reduce((sum, p) => sum + p.metrics.lostDeals, 0),
+    totalValue: safeData.reduce((sum, p) => sum + (p.metrics?.totalValue || 0), 0),
+    wonValue: safeData.reduce((sum, p) => sum + (p.metrics?.wonValue || 0), 0),
+    totalDeals: safeData.reduce((sum, p) => sum + (p.metrics?.totalDeals || 0), 0),
+    wonDeals: safeData.reduce((sum, p) => sum + (p.metrics?.wonDeals || 0), 0),
+    lostDeals: safeData.reduce((sum, p) => sum + (p.metrics?.lostDeals || 0), 0),
   }
   const avgWinRate = totals.wonDeals + totals.lostDeals > 0 
     ? (totals.wonDeals / (totals.wonDeals + totals.lostDeals)) * 100 
@@ -405,7 +418,7 @@ function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
             </tr>
           </thead>
           <tbody>
-            {data.map((pipeline, index) => (
+            {safeData.map((pipeline, index) => (
               <tr key={pipeline.id} className="border-b border-dark-700/30 hover:bg-dark-700/20">
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2">

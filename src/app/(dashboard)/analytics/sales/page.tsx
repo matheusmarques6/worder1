@@ -340,11 +340,21 @@ function PipelineSelector({
 
 // Commit Level Cards
 function CommitLevelSection({ data }: { data: CommitLevel[] }) {
-  const total = data.reduce((sum, d) => sum + d.value, 0)
+  // ✅ PROTEÇÃO: Garantir que data é array
+  const safeData = Array.isArray(data) ? data : []
+  const total = safeData.reduce((sum, d) => sum + (d.value || 0), 0)
+
+  if (safeData.length === 0) {
+    return (
+      <div className="bg-dark-800/30 border border-dark-700/30 rounded-xl p-4 text-center text-dark-400">
+        Sem dados de forecast
+      </div>
+    )
+  }
 
   return (
     <div className="grid grid-cols-4 gap-4">
-      {data.map(level => (
+      {safeData.map(level => (
         <motion.div
           key={level.level}
           initial={{ opacity: 0, scale: 0.95 }}
@@ -375,14 +385,17 @@ function CommitLevelSection({ data }: { data: CommitLevel[] }) {
 
 // Pipeline Comparison Table
 function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
-  if (!data || data.length === 0) return null
+  // ✅ PROTEÇÃO: Garantir que data é array
+  const safeData = Array.isArray(data) ? data : []
+  
+  if (safeData.length === 0) return null
 
   const totals = {
-    totalValue: data.reduce((sum, p) => sum + p.metrics.totalValue, 0),
-    wonValue: data.reduce((sum, p) => sum + p.metrics.wonValue, 0),
-    totalDeals: data.reduce((sum, p) => sum + p.metrics.totalDeals, 0),
-    wonDeals: data.reduce((sum, p) => sum + p.metrics.wonDeals, 0),
-    lostDeals: data.reduce((sum, p) => sum + p.metrics.lostDeals, 0),
+    totalValue: safeData.reduce((sum, p) => sum + (p.metrics?.totalValue || 0), 0),
+    wonValue: safeData.reduce((sum, p) => sum + (p.metrics?.wonValue || 0), 0),
+    totalDeals: safeData.reduce((sum, p) => sum + (p.metrics?.totalDeals || 0), 0),
+    wonDeals: safeData.reduce((sum, p) => sum + (p.metrics?.wonDeals || 0), 0),
+    lostDeals: safeData.reduce((sum, p) => sum + (p.metrics?.lostDeals || 0), 0),
   }
   const avgWinRate = totals.wonDeals + totals.lostDeals > 0 
     ? (totals.wonDeals / (totals.wonDeals + totals.lostDeals)) * 100 
@@ -406,7 +419,7 @@ function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
             </tr>
           </thead>
           <tbody>
-            {data.map((pipeline, index) => (
+            {safeData.map((pipeline, index) => (
               <tr key={pipeline.id} className="border-b border-dark-700/30 hover:bg-dark-700/20">
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2">
@@ -458,18 +471,21 @@ function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
 
 // Pipeline Charts
 function PipelineCharts({ data }: { data: PipelineMetrics[] }) {
-  if (!data || data.length === 0) return null
+  // ✅ PROTEÇÃO: Garantir que data é array
+  const safeData = Array.isArray(data) ? data : []
+  
+  if (safeData.length === 0) return null
 
-  const barData = data.map(p => ({
-    name: p.name,
-    value: p.metrics.totalValue,
-    color: p.color,
+  const barData = safeData.map(p => ({
+    name: p.name || 'Sem nome',
+    value: p.metrics?.totalValue || 0,
+    color: p.color || '#6366f1',
   }))
 
-  const pieData = data.map(p => ({
-    name: p.name,
-    value: p.metrics.totalDeals,
-    color: p.color,
+  const pieData = safeData.map(p => ({
+    name: p.name || 'Sem nome',
+    value: p.metrics?.totalDeals || 0,
+    color: p.color || '#6366f1',
   }))
 
   return (
@@ -528,7 +544,10 @@ function PipelineCharts({ data }: { data: PipelineMetrics[] }) {
 
 // Funnel Component
 function SalesFunnel({ data }: { data: FunnelStage[] }) {
-  if (!data || data.length === 0) {
+  // ✅ PROTEÇÃO: Garantir que data é array
+  const safeData = Array.isArray(data) ? data : []
+  
+  if (safeData.length === 0) {
     return (
       <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
         <h3 className="text-lg font-semibold text-white mb-4">Funil de Vendas</h3>
@@ -537,13 +556,13 @@ function SalesFunnel({ data }: { data: FunnelStage[] }) {
     )
   }
 
-  const maxValue = Math.max(...data.map(s => s.value))
+  const maxValue = Math.max(...safeData.map(s => s.value || 0))
 
   return (
     <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
       <h3 className="text-lg font-semibold text-white mb-4">Funil de Vendas</h3>
       <div className="space-y-3">
-        {data.map((stage, index) => (
+        {safeData.map((stage, index) => (
           <div key={stage.id} className="group">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
@@ -627,7 +646,10 @@ function TimelineChart({ data }: { data: any[] }) {
 
 // Velocity by Stage
 function VelocitySection({ data }: { data: VelocityStage[] }) {
-  if (!data || data.length === 0) {
+  // ✅ PROTEÇÃO: Garantir que data é array
+  const safeData = Array.isArray(data) ? data : []
+  
+  if (safeData.length === 0) {
     return (
       <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
         <h3 className="text-lg font-semibold text-white mb-4">Velocidade por Estágio</h3>
@@ -640,13 +662,13 @@ function VelocitySection({ data }: { data: VelocityStage[] }) {
     )
   }
 
-  const maxDays = Math.max(...data.map(v => v.avgDays))
+  const maxDays = Math.max(...safeData.map(v => v.avgDays || 0))
 
   return (
     <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
       <h3 className="text-lg font-semibold text-white mb-4">Velocidade por Estágio</h3>
       <div className="space-y-3">
-        {data.map((stage, index) => (
+        {safeData.map((stage, index) => (
           <div key={stage.stageId}>
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm text-white">{stage.stageName}</span>
