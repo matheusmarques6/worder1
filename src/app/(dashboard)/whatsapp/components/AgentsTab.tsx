@@ -33,7 +33,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores' // ✅ MODIFICADO
 import { CreateAgentWizard } from '@/components/agents/CreateAgentWizard'
 import { EditAgentModal } from '@/components/agents/EditAgentModal'
 
@@ -98,7 +98,9 @@ const typeConfig = {
 export default function AgentsTab() {
   // Auth
   const { user } = useAuthStore()
+  const { currentStore } = useStoreStore() // ✅ NOVO
   const organizationId = user?.organization_id
+  const storeId = currentStore?.id // ✅ NOVO
 
   // State
   const [agents, setAgents] = useState<Agent[]>([])
@@ -112,10 +114,16 @@ export default function AgentsTab() {
 
   // Fetch agents
   const fetchAgents = async () => {
-    if (!organizationId) return
+    // ✅ MODIFICADO: Verificar storeId também
+    if (!organizationId || !storeId) {
+      setAgents([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
-      const res = await fetch(`/api/whatsapp/agents?organization_id=${organizationId}&include_stats=true`)
+      // ✅ MODIFICADO: Incluir storeId na URL
+      const res = await fetch(`/api/whatsapp/agents?organization_id=${organizationId}&storeId=${storeId}&include_stats=true`)
       const data = await res.json()
       setAgents(data.agents || [])
     } catch (error) {
@@ -149,13 +157,14 @@ export default function AgentsTab() {
     }
   }
 
+  // ✅ MODIFICADO: Recarregar quando storeId mudar
   useEffect(() => {
-    if (organizationId) {
+    if (organizationId && storeId) {
       fetchAgents()
       fetchModels()
       fetchApiKeys()
     }
-  }, [organizationId])
+  }, [organizationId, storeId])
 
   // Toggle agent status
   const handleToggleStatus = async (agent: Agent) => {
@@ -399,9 +408,10 @@ export default function AgentsTab() {
 
       {/* Create Modal */}
       <AnimatePresence>
-        {showCreateModal && organizationId && (
+        {showCreateModal && organizationId && storeId && (
           <CreateAgentWizard
             organizationId={organizationId}
+            storeId={storeId} // ✅ NOVO
             onClose={() => setShowCreateModal(false)}
             onSuccess={() => {
               setShowCreateModal(false)

@@ -53,6 +53,7 @@ interface ApiKey {
 
 interface CreateAgentWizardProps {
   organizationId: string
+  storeId?: string // ✅ NOVO
   onClose: () => void
   onSuccess: () => void
   aiModels: AIModel[]
@@ -69,6 +70,7 @@ type AIStep = typeof AI_STEPS[number]
 
 export function CreateAgentWizard({
   organizationId,
+  storeId, // ✅ NOVO
   onClose,
   onSuccess,
   aiModels,
@@ -249,6 +251,7 @@ export function CreateAgentWizard({
     try {
       const payload: any = {
         organization_id: organizationId,
+        store_id: storeId, // ✅ NOVO
         type: agentType,
         name: agentType === 'human' ? humanForm.name : aiForm.name,
       }

@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams;
   const orgId = searchParams.get('organization_id') || searchParams.get('organizationId');
+  const storeId = searchParams.get('store_id') || searchParams.get('storeId'); // ✅ NOVO
   
   if (!orgId) {
     return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
@@ -90,19 +91,31 @@ export async function GET(request: NextRequest) {
     const typeFilter = searchParams.get('type');
 
     // Primeiro tenta a nova tabela 'agents'
-    let { data, error } = await supabase
+    let query = supabase
       .from('agents')
       .select('*')
-      .eq('organization_id', orgId)
-      .order('created_at', { ascending: false });
+      .eq('organization_id', orgId);
+    
+    // ✅ NOVO: Filtrar por store_id se fornecido
+    if (storeId) {
+      query = query.eq('store_id', storeId);
+    }
+    
+    let { data, error } = await query.order('created_at', { ascending: false });
 
     // Se a nova tabela não existe, usa a antiga
     if (error && error.code === '42P01') {
-      const result = await supabase
+      let oldQuery = supabase
         .from('whatsapp_agents')
         .select('*, user:profiles(first_name, last_name, avatar_url)')
-        .eq('organization_id', orgId)
-        .order('created_at', { ascending: false });
+        .eq('organization_id', orgId);
+      
+      // ✅ NOVO: Filtrar por store_id se fornecido
+      if (storeId) {
+        oldQuery = oldQuery.eq('store_id', storeId);
+      }
+      
+      const result = await oldQuery.order('created_at', { ascending: false });
       
       data = result.data;
       error = result.error;
@@ -423,7 +436,9 @@ export async function POST(request: NextRequest) {
       }
 
       // Criar agente vinculado ao usuário
-      const agentData = {
+      // ✅ NOVO: Incluir store_id se fornecido
+      const storeId = body.store_id || body.storeId;
+      const agentData: any = {
         organization_id: orgId,
         user_id: authUserId,
         type: 'human',
@@ -436,6 +451,11 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
+      
+      // ✅ NOVO: Adicionar store_id se existir
+      if (storeId) {
+        agentData.store_id = storeId;
+      }
 
       let { data: agent, error: agentError } = await supabase
         .from('agents')
@@ -445,17 +465,24 @@ export async function POST(request: NextRequest) {
 
       // Se a tabela agents não existe, usar a antiga
       if (agentError && agentError.code === '42P01') {
+        const oldAgentData: any = {
+          organization_id: orgId,
+          user_id: authUserId,
+          name,
+          email,
+          role,
+          is_active: true,
+          is_available: false,
+        };
+        
+        // ✅ NOVO: Adicionar store_id se existir
+        if (storeId) {
+          oldAgentData.store_id = storeId;
+        }
+        
         const result = await supabase
           .from('whatsapp_agents')
-          .insert({
-            organization_id: orgId,
-            user_id: authUserId,
-            name,
-            email,
-            role,
-            is_active: true,
-            is_available: false,
-          })
+          .insert(oldAgentData)
           .select()
           .single();
         
@@ -550,7 +577,10 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      const agentData = {
+      // ✅ NOVO: Pegar store_id do body
+      const storeIdAI = body.store_id || body.storeId;
+      
+      const agentData: any = {
         organization_id: orgId,
         type: 'ai',
         name,
@@ -563,6 +593,11 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
+      
+      // ✅ NOVO: Adicionar store_id se existir
+      if (storeIdAI) {
+        agentData.store_id = storeIdAI;
+      }
 
       let { data: agent, error: agentError } = await supabase
         .from('agents')
@@ -572,15 +607,22 @@ export async function POST(request: NextRequest) {
 
       // Se a tabela agents não existe, usar a antiga
       if (agentError && agentError.code === '42P01') {
+        const oldAgentDataAI: any = {
+          organization_id: orgId,
+          name,
+          type: 'ai',
+          is_active: true,
+          is_available: true,
+        };
+        
+        // ✅ NOVO: Adicionar store_id se existir
+        if (storeIdAI) {
+          oldAgentDataAI.store_id = storeIdAI;
+        }
+        
         const result = await supabase
           .from('whatsapp_agents')
-          .insert({
-            organization_id: orgId,
-            name,
-            type: 'ai',
-            is_active: true,
-            is_available: true,
-          })
+          .insert(oldAgentDataAI)
           .select()
           .single();
         

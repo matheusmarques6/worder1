@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useStoreStore } from '@/stores' // ✅ NOVO
 
 // Types
 export interface Agent {
   id: string
   organization_id: string
+  store_id?: string // ✅ NOVO
   type: 'human' | 'ai'
   name: string
   email?: string
@@ -102,17 +104,29 @@ interface UseAgentsReturn {
 }
 
 export function useAgents(): UseAgentsReturn {
+  const { currentStore } = useStoreStore() // ✅ NOVO
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // ✅ NOVO: storeId atual
+  const storeId = currentStore?.id
+
   // Fetch agents
   const fetchAgents = useCallback(async () => {
+    // ✅ NOVO: Não buscar se não tiver loja selecionada
+    if (!storeId) {
+      setAgents([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError(null)
 
     try {
-      const res = await fetch('/api/whatsapp/agents?include_stats=true')
+      // ✅ CORRIGIDO: Incluir storeId na URL
+      const res = await fetch(`/api/whatsapp/agents?include_stats=true&storeId=${storeId}`)
       const data = await res.json()
 
       if (!res.ok) {
@@ -126,8 +140,9 @@ export function useAgents(): UseAgentsReturn {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [storeId]) // ✅ NOVO: Dependência do storeId
 
+  // ✅ NOVO: Recarregar quando loja mudar
   useEffect(() => {
     fetchAgents()
   }, [fetchAgents])
@@ -148,10 +163,11 @@ export function useAgents(): UseAgentsReturn {
 
   // Create agent
   const createAgent = async (data: CreateAgentData): Promise<Agent> => {
+    // ✅ NOVO: Incluir store_id ao criar agente
     const res = await fetch('/api/whatsapp/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, store_id: storeId }),
     })
 
     const result = await res.json()
