@@ -222,14 +222,21 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const period = searchParams.get('period') || '7d';
+    const storeId = searchParams.get('storeId'); // ✅ NOVO
     const { startDate, endDate, startISO, endISO } = getDateRange(period);
 
-    // Get store credentials
-    const { data: stores, error: storesError } = await supabase
+    // Get store credentials - ✅ MODIFICADO: Filtrar por storeId
+    let storeQuery = supabase
       .from('shopify_stores')
       .select('id, shop_domain, access_token, shop_name')
-      .eq('is_active', true)
-      .limit(1);
+      .eq('is_active', true);
+    
+    // ✅ NOVO: Filtrar por storeId se fornecido
+    if (storeId) {
+      storeQuery = storeQuery.eq('id', storeId);
+    }
+    
+    const { data: stores, error: storesError } = await storeQuery.limit(1);
 
     if (storesError || !stores || stores.length === 0) {
       return NextResponse.json({

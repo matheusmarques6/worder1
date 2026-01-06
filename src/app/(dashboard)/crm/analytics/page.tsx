@@ -37,7 +37,7 @@ import {
   Area,
   AreaChart,
 } from 'recharts'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores' // ✅ MODIFICADO
 
 // ==========================================
 // TYPES
@@ -786,7 +786,9 @@ function InsightsSection({ insights }: { insights: Insight[] }) {
 // ==========================================
 export default function AnalyticsPage() {
   const { user } = useAuthStore()
+  const { currentStore } = useStoreStore() // ✅ NOVO
   const organizationId = user?.organization_id
+  const storeId = currentStore?.id // ✅ NOVO
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -805,7 +807,12 @@ export default function AnalyticsPage() {
   ]
 
   const fetchData = useCallback(async () => {
-    if (!organizationId) return
+    // ✅ MODIFICADO: Verificar storeId também
+    if (!organizationId || !storeId) {
+      setData(null)
+      setLoading(false)
+      return
+    }
 
     setLoading(true)
     setError(null)
@@ -813,6 +820,7 @@ export default function AnalyticsPage() {
     try {
       const params = new URLSearchParams({
         organizationId,
+        storeId, // ✅ NOVO
         period,
         includeComparison: 'true',
       })
@@ -834,16 +842,17 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false)
     }
-  }, [organizationId, period, selectedPipelineIds])
+  }, [organizationId, storeId, period, selectedPipelineIds]) // ✅ MODIFICADO
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
-  if (!organizationId) {
+  // ✅ NOVO: Verificar loja selecionada
+  if (!organizationId || !storeId) {
     return (
       <div className="flex items-center justify-center h-96">
-        <p className="text-dark-400">Faça login para ver analytics</p>
+        <p className="text-dark-400">Selecione uma loja para ver analytics</p>
       </div>
     )
   }

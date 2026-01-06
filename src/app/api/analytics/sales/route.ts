@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
   const period = searchParams.get('period') || 'month'
   const pipelineIds = searchParams.get('pipelineIds')
   const includeComparison = searchParams.get('includeComparison') === 'true'
+  const storeId = searchParams.get('storeId') // ✅ NOVO
 
   try {
     const now = new Date()
@@ -60,13 +61,19 @@ export async function GET(request: NextRequest) {
 
     const selectedPipelineIds = pipelineIds ? pipelineIds.split(',').filter(Boolean) : []
 
-    // 1. FETCH PIPELINES - RLS filtra automaticamente
-    const { data: pipelines } = await supabase
+    // 1. FETCH PIPELINES - ✅ MODIFICADO: Filtrar por store_id
+    let pipelinesQuery = supabase
       .from('pipelines')
       .select('id, name, color')
       .order('position', { ascending: true })
+    
+    if (storeId) {
+      pipelinesQuery = pipelinesQuery.eq('store_id', storeId)
+    }
+    
+    const { data: pipelines } = await pipelinesQuery
 
-    // 2. FETCH ALL DEALS - RLS filtra automaticamente
+    // 2. FETCH ALL DEALS - ✅ MODIFICADO: Filtrar por store_id
     let dealsQuery = supabase
       .from('deals')
       .select(`
@@ -75,6 +82,11 @@ export async function GET(request: NextRequest) {
         stage:pipeline_stages(id, name, color, probability, position),
         contact:contacts(id, first_name, last_name, email)
       `)
+
+    // ✅ NOVO: Filtrar por store_id
+    if (storeId) {
+      dealsQuery = dealsQuery.eq('store_id', storeId)
+    }
 
     if (selectedPipelineIds.length > 0) {
       dealsQuery = dealsQuery.in('pipeline_id', selectedPipelineIds)
@@ -85,12 +97,17 @@ export async function GET(request: NextRequest) {
 
     const deals = allDeals || []
 
-    // 3. FETCH PREVIOUS PERIOD DEALS - RLS filtra automaticamente
+    // 3. FETCH PREVIOUS PERIOD DEALS - ✅ MODIFICADO: Filtrar por store_id
     let previousDealsQuery = supabase
       .from('deals')
       .select('id, value, status, won_at, lost_at, created_at')
       .gte('created_at', previousStartDate.toISOString())
       .lte('created_at', previousEndDate.toISOString())
+
+    // ✅ NOVO: Filtrar por store_id
+    if (storeId) {
+      previousDealsQuery = previousDealsQuery.eq('store_id', storeId)
+    }
 
     if (selectedPipelineIds.length > 0) {
       previousDealsQuery = previousDealsQuery.in('pipeline_id', selectedPipelineIds)

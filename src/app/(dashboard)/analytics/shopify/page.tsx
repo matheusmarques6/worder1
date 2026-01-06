@@ -37,6 +37,7 @@ import {
   Cell,
   Legend,
 } from 'recharts'
+import { useStoreStore } from '@/stores' // ✅ NOVO
 
 // Types
 interface ShopifyAnalytics {
@@ -170,6 +171,8 @@ const DetailRow = ({
 )
 
 export default function ShopifyAnalyticsPage() {
+  const { currentStore } = useStoreStore() // ✅ NOVO
+  const storeId = currentStore?.id // ✅ NOVO
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState('7d')
@@ -186,10 +189,17 @@ export default function ShopifyAnalyticsPage() {
   ]
 
   const fetchData = async () => {
+    // ✅ NOVO: Verificar se tem loja selecionada
+    if (!storeId) {
+      setIsLoading(false)
+      setHasStore(false)
+      return
+    }
+    
     setError(null)
     try {
-      // Fetch data directly from Shopify API
-      const response = await fetch(`/api/analytics/shopify?period=${selectedPeriod}`)
+      // Fetch data directly from Shopify API - ✅ MODIFICADO: Incluir storeId
+      const response = await fetch(`/api/analytics/shopify?period=${selectedPeriod}&storeId=${storeId}`)
       const result = await response.json()
       
       if (result.success) {
@@ -209,9 +219,10 @@ export default function ShopifyAnalyticsPage() {
     }
   }
 
+  // ✅ MODIFICADO: Recarregar quando loja mudar
   useEffect(() => {
     fetchData()
-  }, [selectedPeriod])
+  }, [selectedPeriod, storeId])
 
   const handleRefresh = () => {
     setIsRefreshing(true)
