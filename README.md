@@ -1,32 +1,36 @@
-# Correção Multi-Tenant: Analytics + Agentes
+# Correção Completa: Multi-Tenant para TUDO
 
-## 🎯 Problema
-Os dados de Analytics estão misturados entre lojas. San Martin mostra dados de Oak Vintage.
+## 🎯 O que foi corrigido
 
-## ✅ O que foi corrigido
+**TUDO agora é separado por loja!**
 
-### 1. Analytics de Vendas (`/analytics/sales`)
-- **API**: Agora filtra pipelines e deals por `store_id`
-- **Página**: Passa `storeId` da loja atual para a API
-- **Recarrega**: Automaticamente quando troca de loja
+Quando você selecionar San Martin, verá apenas dados de San Martin.
+Quando selecionar Oak Vintage, verá apenas dados de Oak Vintage.
 
-### 2. Analytics do CRM (`/crm/analytics`)
-- **Página**: Passa `storeId` para a API
-- **Recarrega**: Automaticamente quando troca de loja
+---
 
-### 3. Analytics Shopify (`/analytics/shopify`)
-- **API**: Agora busca dados apenas da loja selecionada
-- **Página**: Passa `storeId` para a API
-- **Recarrega**: Automaticamente quando troca de loja
+## ✅ Correções Incluídas
+
+### 1. Configurações / Integrações
+- Facebook Ads → por loja
+- Google Ads → por loja
+- TikTok Ads → por loja
+- Shopify → por loja (já era)
+- Klaviyo → por loja
+- WhatsApp → por loja
+
+### 2. Analytics
+- Analytics de Vendas → por loja
+- Analytics Shopify → por loja
+- Analytics CRM → por loja
+
+### 3. CRM
+- Pipelines → por loja
+- Deals → por loja
+- Contatos → por loja
 
 ### 4. Agentes WhatsApp
-- **API**: Filtra agentes por `store_id`
-- **Hook**: Passa `storeId` nas requisições
-- **Criação**: Novos agentes salvos com `store_id` correto
-
-### 5. Proteções de Array
-- Todas as funções com `.reduce()`, `.map()`, `.filter()` protegidas
-- Evita erro "Application error" durante carregamento
+- Agentes → por loja
 
 ---
 
@@ -36,72 +40,94 @@ Os dados de Analytics estão misturados entre lojas. San Martin mostra dados de 
 src/
 ├── app/
 │   ├── (dashboard)/
+│   │   ├── settings/
+│   │   │   └── page.tsx                  ✅ Filtrar integrações por loja
 │   │   ├── analytics/
-│   │   │   ├── sales/page.tsx          ✅ Filtro por loja
-│   │   │   └── shopify/page.tsx        ✅ Filtro por loja
+│   │   │   ├── sales/page.tsx            ✅ Filtrar por loja
+│   │   │   └── shopify/page.tsx          ✅ Filtrar por loja
 │   │   ├── crm/
-│   │   │   ├── analytics/page.tsx      ✅ Filtro por loja
-│   │   │   └── page.tsx                ✅ Proteção array
+│   │   │   ├── analytics/page.tsx        ✅ Filtrar por loja
+│   │   │   └── page.tsx                  ✅ Filtrar por loja
 │   │   └── whatsapp/components/
-│   │       └── AgentsTab.tsx           ✅ Filtro por loja
+│   │       └── AgentsTab.tsx             ✅ Filtrar por loja
 │   └── api/
+│       ├── integrations/status/
+│       │   └── route.ts                  ✅ Filtrar TODAS integrações
 │       ├── analytics/
-│       │   ├── sales/route.ts          ✅ Filtro por storeId
-│       │   └── shopify/route.ts        ✅ Filtro por storeId
-│       └── whatsapp/agents/route.ts    ✅ Filtro por storeId
+│       │   ├── sales/route.ts            ✅ Filtrar por storeId
+│       │   └── shopify/route.ts          ✅ Filtrar por storeId
+│       └── whatsapp/agents/
+│           └── route.ts                  ✅ Filtrar por storeId
 ├── components/
-│   ├── crm/index.tsx                   ✅ Proteção array
+│   ├── crm/index.tsx                     ✅ Proteção array
 │   └── agents/
-│       ├── CreateAgentWizard.tsx       ✅ store_id
-│       └── AIAgentList.tsx             ✅ Proteção array
+│       ├── CreateAgentWizard.tsx         ✅ store_id
+│       └── AIAgentList.tsx               ✅ Proteção array
 └── hooks/
-    ├── useAgents.ts                    ✅ Filtro por loja
-    └── useAgent.ts                     ✅ Proteção array
+    ├── useAgents.ts                      ✅ Filtrar por loja
+    └── useAgent.ts                       ✅ Proteção array
 
-MIGRACAO-AGENTES.sql                    SQL para adicionar store_id
+MIGRACAO-INTEGRACOES.sql                  SQL para adicionar store_id
 ```
 
 ---
 
 ## 🚀 Instalação
 
-### Passo 1: Execute o SQL (se ainda não fez)
+### Passo 1: Execute o SQL no Supabase
+
+Copie e execute no SQL Editor do Supabase:
 
 ```sql
--- Adicionar store_id nas tabelas de agentes
+-- KLAVIYO
+ALTER TABLE klaviyo_accounts ADD COLUMN IF NOT EXISTS store_id UUID REFERENCES shopify_stores(id);
+
+-- FACEBOOK
+ALTER TABLE meta_ad_accounts ADD COLUMN IF NOT EXISTS store_id UUID REFERENCES shopify_stores(id);
+
+-- GOOGLE
+ALTER TABLE google_ad_accounts ADD COLUMN IF NOT EXISTS store_id UUID REFERENCES shopify_stores(id);
+
+-- TIKTOK
+ALTER TABLE tiktok_ad_accounts ADD COLUMN IF NOT EXISTS store_id UUID REFERENCES shopify_stores(id);
+
+-- WHATSAPP
+ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS store_id UUID REFERENCES shopify_stores(id);
+ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS store_id UUID REFERENCES shopify_stores(id);
+
+-- AGENTES
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS store_id UUID REFERENCES shopify_stores(id);
 ALTER TABLE whatsapp_agents ADD COLUMN IF NOT EXISTS store_id UUID REFERENCES shopify_stores(id);
 
--- Criar índices
-CREATE INDEX IF NOT EXISTS idx_agents_store_id ON agents(store_id);
-CREATE INDEX IF NOT EXISTS idx_whatsapp_agents_store_id ON whatsapp_agents(store_id);
-
--- Migrar dados para Oak Vintage (substitua pelo ID correto)
+-- MIGRAR DADOS PARA OAK VINTAGE
+UPDATE klaviyo_accounts SET store_id = 'b90b4c4b-e940-41f2-889b-e3dc2235cd0a' WHERE store_id IS NULL;
+UPDATE meta_ad_accounts SET store_id = 'b90b4c4b-e940-41f2-889b-e3dc2235cd0a' WHERE store_id IS NULL;
+UPDATE google_ad_accounts SET store_id = 'b90b4c4b-e940-41f2-889b-e3dc2235cd0a' WHERE store_id IS NULL;
+UPDATE tiktok_ad_accounts SET store_id = 'b90b4c4b-e940-41f2-889b-e3dc2235cd0a' WHERE store_id IS NULL;
+UPDATE whatsapp_configs SET store_id = 'b90b4c4b-e940-41f2-889b-e3dc2235cd0a' WHERE store_id IS NULL;
+UPDATE whatsapp_accounts SET store_id = 'b90b4c4b-e940-41f2-889b-e3dc2235cd0a' WHERE store_id IS NULL;
 UPDATE agents SET store_id = 'b90b4c4b-e940-41f2-889b-e3dc2235cd0a' WHERE store_id IS NULL;
 UPDATE whatsapp_agents SET store_id = 'b90b4c4b-e940-41f2-889b-e3dc2235cd0a' WHERE store_id IS NULL;
 ```
 
 ### Passo 2: Substitua os arquivos
 
-Extraia o ZIP e copie a pasta `src` para o seu projeto, substituindo os arquivos existentes.
+Extraia o ZIP e copie a pasta `src` para o seu projeto.
 
 ### Passo 3: Deploy
 
 ```bash
 git add .
-git commit -m "fix: separar analytics e agentes por loja"
+git commit -m "fix: separar TUDO por loja"
 git push
 ```
 
 ---
 
-## ✅ Resultado Esperado
+## ✅ Resultado Final
 
-| Loja | Vê apenas |
-|------|-----------|
-| **Oak Vintage** | Dados de Oak Vintage |
-| **San Martin** | Dados de San Martin |
-
-- Analytics recarrega ao trocar de loja
-- Sem mais dados misturados
-- Sem mais erros de "Application error"
+| Loja Selecionada | O que vê |
+|------------------|----------|
+| **Oak Vintage** | Apenas integrações, dados, agentes de Oak Vintage |
+| **San Martin** | Apenas integrações, dados, agentes de San Martin |
+| **Nova Loja** | Começa vazia, sem dados de outras lojas |

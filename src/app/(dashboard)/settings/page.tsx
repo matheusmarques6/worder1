@@ -483,8 +483,9 @@ export default function SettingsPage() {
   const [savingKey, setSavingKey] = useState(false);
   const [keyError, setKeyError] = useState('');
   
-  const { stores } = useStoreStore();
+  const { stores, currentStore } = useStoreStore(); // ✅ MODIFICADO: Adicionar currentStore
   const { user } = useAuthStore();
+  const storeId = currentStore?.id; // ✅ NOVO
 
   // Update tab when URL changes
   useEffect(() => {
@@ -500,13 +501,20 @@ export default function SettingsPage() {
     }
   }, [configFromUrl]);
 
-  // Fetch integrations status
+  // Fetch integrations status - ✅ MODIFICADO: Filtrar por storeId
   const fetchIntegrations = useCallback(async () => {
+    // ✅ NOVO: Não buscar se não tiver loja selecionada
+    if (!storeId) {
+      setIntegrations([]);
+      setIsLoading(false);
+      return;
+    }
+    
     try {
       setIsLoading(true);
       
-      // Fetch real status from API
-      const response = await fetch('/api/integrations/status');
+      // Fetch real status from API - ✅ MODIFICADO: Incluir storeId
+      const response = await fetch(`/api/integrations/status?storeId=${storeId}`);
       const data = await response.json();
       
       const status = data.integrations || {};
@@ -590,7 +598,7 @@ export default function SettingsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [stores]);
+  }, [stores, storeId]); // ✅ MODIFICADO: Adicionar storeId
 
   useEffect(() => {
     fetchIntegrations();

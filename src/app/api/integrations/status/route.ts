@@ -86,8 +86,11 @@ function getHealthStatus(connectionStatus: string | null): string {
 
 export async function GET(request: NextRequest) {
   try {
-    // Check Shopify stores - CORRIGIDO: usa 'status' em vez de 'is_active'
-    const { data: shopifyStores } = await supabase
+    const searchParams = request.nextUrl.searchParams;
+    const storeId = searchParams.get('storeId'); // ✅ NOVO: Filtrar por loja
+
+    // Check Shopify stores - ✅ MODIFICADO: Filtrar por storeId
+    let shopifyQuery = supabase
       .from('shopify_stores')
       .select(`
         id, 
@@ -103,54 +106,83 @@ export async function GET(request: NextRequest) {
         total_revenue, 
         last_sync_at, 
         created_at
-      `)
-      .or('status.eq.active,status.is.null') as { data: ShopifyStoreRow[] | null };
+      `);
+    
+    // ✅ NOVO: Se storeId fornecido, buscar apenas essa loja
+    if (storeId) {
+      shopifyQuery = shopifyQuery.eq('id', storeId);
+    } else {
+      shopifyQuery = shopifyQuery.or('status.eq.active,status.is.null');
+    }
+    
+    const { data: shopifyStores } = await shopifyQuery as { data: ShopifyStoreRow[] | null };
 
-    // Check Klaviyo
+    // Check Klaviyo - ✅ MODIFICADO: Filtrar por store_id
     let klaviyoAccount: KlaviyoAccountRow | null = null;
     try {
-      const { data: klaviyoAccounts } = await supabase
+      let klaviyoQuery = supabase
         .from('klaviyo_accounts')
         .select('*')
-        .eq('is_active', true)
-        .limit(1) as { data: KlaviyoAccountRow[] | null };
+        .eq('is_active', true);
+      
+      // ✅ NOVO: Filtrar por store_id se fornecido
+      if (storeId) {
+        klaviyoQuery = klaviyoQuery.eq('store_id', storeId);
+      }
+      
+      const { data: klaviyoAccounts } = await klaviyoQuery.limit(1) as { data: KlaviyoAccountRow[] | null };
       
       klaviyoAccount = klaviyoAccounts && klaviyoAccounts.length > 0 ? klaviyoAccounts[0] : null;
     } catch (e) {
       console.error('[Integration Status] Klaviyo error:', e);
     }
 
-    // Check Meta (Facebook)
-    const { data: metaAccounts } = await supabase
+    // Check Meta (Facebook) - ✅ MODIFICADO: Filtrar por store_id
+    let metaQuery = supabase
       .from('meta_ad_accounts')
       .select('id, account_name, is_active, last_sync_at')
-      .eq('is_active', true)
-      .limit(1) as { data: AdAccountRow[] | null };
+      .eq('is_active', true);
+    
+    if (storeId) {
+      metaQuery = metaQuery.eq('store_id', storeId);
+    }
+    
+    const { data: metaAccounts } = await metaQuery.limit(1) as { data: AdAccountRow[] | null };
     
     const metaAccount = metaAccounts && metaAccounts.length > 0 ? metaAccounts[0] : null;
 
-    // Check Google
-    const { data: googleAccounts } = await supabase
+    // Check Google - ✅ MODIFICADO: Filtrar por store_id
+    let googleQuery = supabase
       .from('google_ad_accounts')
       .select('id, account_name, is_active, last_sync_at')
-      .eq('is_active', true)
-      .limit(1) as { data: AdAccountRow[] | null };
+      .eq('is_active', true);
+    
+    if (storeId) {
+      googleQuery = googleQuery.eq('store_id', storeId);
+    }
+    
+    const { data: googleAccounts } = await googleQuery.limit(1) as { data: AdAccountRow[] | null };
     
     const googleAccount = googleAccounts && googleAccounts.length > 0 ? googleAccounts[0] : null;
 
-    // Check TikTok
-    const { data: tiktokAccounts } = await supabase
+    // Check TikTok - ✅ MODIFICADO: Filtrar por store_id
+    let tiktokQuery = supabase
       .from('tiktok_ad_accounts')
       .select('id, advertiser_name, is_active, last_sync_at')
-      .eq('is_active', true)
-      .limit(1) as { data: AdAccountRow[] | null };
+      .eq('is_active', true);
+    
+    if (storeId) {
+      tiktokQuery = tiktokQuery.eq('store_id', storeId);
+    }
+    
+    const { data: tiktokAccounts } = await tiktokQuery.limit(1) as { data: AdAccountRow[] | null };
     
     const tiktokAccount = tiktokAccounts && tiktokAccounts.length > 0 ? tiktokAccounts[0] : null;
 
-    // Check WhatsApp - CORRIGIDO: inclui connection_status
+    // Check WhatsApp - ✅ MODIFICADO: Filtrar por store_id
     let whatsappConfig: WhatsAppConfigRow | null = null;
     try {
-      const { data: whatsappConfigs } = await supabase
+      let whatsappQuery = supabase
         .from('whatsapp_configs')
         .select(`
           id, 
@@ -163,17 +195,29 @@ export async function GET(request: NextRequest) {
           health_checked_at,
           created_at
         `)
-        .eq('is_active', true)
-        .limit(1) as { data: WhatsAppConfigRow[] | null };
+        .eq('is_active', true);
+      
+      // ✅ NOVO: Filtrar por store_id se fornecido
+      if (storeId) {
+        whatsappQuery = whatsappQuery.eq('store_id', storeId);
+      }
+      
+      const { data: whatsappConfigs } = await whatsappQuery.limit(1) as { data: WhatsAppConfigRow[] | null };
       
       whatsappConfig = whatsappConfigs && whatsappConfigs.length > 0 ? whatsappConfigs[0] : null;
     } catch (e) {
       // Tabela pode não existir, tentar whatsapp_accounts
-      const { data: whatsappAccounts } = await supabase
+      let whatsappAccountsQuery = supabase
         .from('whatsapp_accounts')
         .select('id, phone_number, is_active, created_at')
-        .eq('is_active', true)
-        .limit(1) as { data: WhatsAppConfigRow[] | null };
+        .eq('is_active', true);
+      
+      // ✅ NOVO: Filtrar por store_id se fornecido
+      if (storeId) {
+        whatsappAccountsQuery = whatsappAccountsQuery.eq('store_id', storeId);
+      }
+      
+      const { data: whatsappAccounts } = await whatsappAccountsQuery.limit(1) as { data: WhatsAppConfigRow[] | null };
       
       whatsappConfig = whatsappAccounts && whatsappAccounts.length > 0 ? whatsappAccounts[0] : null;
     }
