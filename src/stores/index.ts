@@ -449,3 +449,9 @@ export const useAutomationStore = create<AutomationState>((set) => ({
 // ===============================
 export { useInboxStore, useSelectedConversation, useFilteredConversations, useConversationMessages } from './inboxStore'
 export type { Conversation, Message, WhatsAppNumber } from './inboxStore'
+
+// ===============================
+// RE-EXPORT FLOW STORE
+// ===============================
+export { useFlowStore, useSelectedNode, useNodeById, useTriggerNodes, useIsValidFlow } from './flowStore'
+export type { FlowNode, FlowNodeData, FlowEdge, NodeCategory, NodeStatus, TestExecution, ExecutionStep } from './flowStore'
