@@ -433,6 +433,7 @@ export function useDeals(pipelineId?: string, storeIdOverride?: string) {
         async (payload) => {
           console.log('✏️ [Realtime] Deal updated:', payload.new);
           const updatedDeal = payload.new as any;
+          
           // Buscar deal completo
           const { data: fullDeal } = await supabaseRealtime
             .from('deals')
@@ -445,9 +446,16 @@ export function useDeals(pipelineId?: string, storeIdOverride?: string) {
             .single();
           
           if (fullDeal) {
-            setDeals(prev => prev.map(d => 
-              d.id === fullDeal.id ? fullDeal : d
-            ));
+            // ✅ Usar callback para acessar estado atual e evitar sobrescrever updates locais
+            setDeals(prev => {
+              const currentDeal = prev.find(d => d.id === fullDeal.id);
+              // Se o deal tem flag _localUpdate, ignorar o realtime update
+              if (currentDeal && (currentDeal as any)._localUpdate) {
+                console.log('⏭️ [Realtime] Skipping - local update in progress for', fullDeal.id);
+                return prev;
+              }
+              return prev.map(d => d.id === fullDeal.id ? fullDeal : d);
+            });
           }
         }
       )
@@ -493,22 +501,38 @@ export function useDeals(pipelineId?: string, storeIdOverride?: string) {
 
   const updateDeal = async (id: string, data: any) => {
     // Atualização otimista local primeiro
+    const previousDeals = [...deals]; // Guardar estado anterior para rollback
+    
     setDeals(prev => prev.map(d => 
-      d.id === id ? { ...d, ...data } : d
+      d.id === id ? { ...d, ...data, _localUpdate: true } : d
     ));
     
-    const response = await fetch('/api/deals', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...data }), // ✅ Sem organizationId
-    });
-    if (!response.ok) {
-      // Reverter em caso de erro
-      await fetchDeals(false);
-      throw new Error('Failed to update deal');
+    try {
+      const response = await fetch('/api/deals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...data }),
+      });
+      
+      if (!response.ok) {
+        // Reverter em caso de erro
+        setDeals(previousDeals);
+        throw new Error('Failed to update deal');
+      }
+      
+      const result = await response.json();
+      
+      // Atualizar com dados do servidor (remove flag _localUpdate)
+      setDeals(prev => prev.map(d => 
+        d.id === id ? { ...result.deal, _localUpdate: undefined } : d
+      ));
+      
+      return result.deal;
+    } catch (error) {
+      // Reverter em caso de qualquer erro
+      setDeals(previousDeals);
+      throw error;
     }
-    const result = await response.json();
-    return result.deal;
   };
 
   const deleteDeal = async (id: string) => {

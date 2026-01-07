@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   DndContext,
   DragOverlay,
-  closestCorners,
+  pointerWithin,
+  closestCenter,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -14,6 +15,7 @@ import {
   DragEndEvent,
   DragOverEvent,
   useDroppable,
+  CollisionDetection,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -59,6 +61,21 @@ const getInitials = (firstName?: string, lastName?: string) => {
   const first = firstName?.[0] || ''
   const last = lastName?.[0] || ''
   return (first + last).toUpperCase() || '?'
+}
+
+// ==========================================
+// CUSTOM COLLISION DETECTION
+// Usa closestCenter que funciona melhor com múltiplos itens
+// ==========================================
+const customCollisionDetection: CollisionDetection = (args) => {
+  // Primeiro tenta pointerWithin para detecção precisa
+  const pointerCollisions = pointerWithin(args)
+  if (pointerCollisions.length > 0) {
+    return pointerCollisions
+  }
+  
+  // Fallback para closestCenter
+  return closestCenter(args)
 }
 
 // ==========================================
@@ -373,6 +390,7 @@ export default function CRMPage() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeDeal, setActiveDeal] = useState<Deal | null>(null)
+  const [isMovingDeal, setIsMovingDeal] = useState(false) // ✅ NOVO: Controlar movimento em progresso
   const [showEditStageModal, setShowEditStageModal] = useState(false)
   const [editingStage, setEditingStage] = useState<PipelineStage | null>(null)
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
@@ -491,17 +509,67 @@ export default function CRMPage() {
     
     if (!over) return
     
+    // ✅ Evitar movimentos duplicados
+    if (isMovingDeal) {
+      console.log('[DnD] Movement already in progress, ignoring...')
+      return
+    }
+    
     const dealId = active.id as string
     const overId = over.id as string
     
-    // Check if dropped on a stage
-    const targetStage = stages.find(s => s.id === overId)
-    if (targetStage) {
-      const deal = deals.find(d => d.id === dealId)
-      if (deal && deal.stage_id !== targetStage.id) {
-        await moveDeal(dealId, targetStage.id)
+    // Se soltou no mesmo lugar, ignorar
+    if (dealId === overId) return
+    
+    // Encontrar o deal que está sendo arrastado
+    const draggedDeal = deals.find(d => d.id === dealId)
+    if (!draggedDeal) return
+    
+    // Função auxiliar para mover deal com controle de loading
+    const executeMove = async (targetStageId: string, targetName: string) => {
+      if (draggedDeal.stage_id === targetStageId) {
+        console.log(`[DnD] Deal already in stage ${targetName}, skipping move`)
+        return
+      }
+      
+      try {
+        setIsMovingDeal(true)
+        console.log(`[DnD] Moving deal "${draggedDeal.title}" to stage "${targetName}"`)
+        await moveDeal(dealId, targetStageId)
+        console.log(`[DnD] Move completed successfully`)
+      } catch (err) {
+        console.error('[DnD] Move failed:', err)
+      } finally {
+        setIsMovingDeal(false)
       }
     }
+    
+    // Primeiro: verificar se soltou em um estágio (coluna)
+    const targetStage = stages.find(s => s.id === overId)
+    if (targetStage) {
+      await executeMove(targetStage.id, targetStage.name)
+      return
+    }
+    
+    // Segundo: verificar se soltou em outro deal
+    const targetDeal = deals.find(d => d.id === overId)
+    if (targetDeal) {
+      const stage = stages.find(s => s.id === targetDeal.stage_id)
+      await executeMove(targetDeal.stage_id, stage?.name || 'unknown')
+      return
+    }
+    
+    // Terceiro: fallback - buscar estágio pelo deal target
+    console.log(`[DnD] Unknown target: ${overId}, trying fallback lookup...`)
+    for (const stage of stages) {
+      const stageDeals = deals.filter(d => d.stage_id === stage.id)
+      if (stageDeals.some(d => d.id === overId)) {
+        await executeMove(stage.id, stage.name)
+        return
+      }
+    }
+    
+    console.log(`[DnD] Could not determine target stage for ${overId}`)
   }
 
   // Pipeline handlers
@@ -1013,7 +1081,7 @@ export default function CRMPage() {
       <div className="flex-1 overflow-x-auto pb-4">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={customCollisionDetection}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
