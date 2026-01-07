@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       case 'update-password':
         return await handleUpdatePassword(client, data);
       case 'get-or-create-org':
-        return await handleGetOrCreateOrg(client);
+        return await handleGetOrCreateOrg(client, request);
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
@@ -291,35 +291,40 @@ async function handleUpdatePassword(
 }
 
 // Get or create default organization
-async function handleGetOrCreateOrg(supabase: SupabaseClient) {
+async function handleGetOrCreateOrg(supabase: SupabaseClient, request: NextRequest) {
   try {
-    // First, try to get the authenticated user
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    // IMPORTANT: Read the access token from cookies to get authenticated user
+    const accessToken = request.cookies.get('sb-access-token')?.value;
     
-    if (authUser) {
-      // User is authenticated - return their real data
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*, organization:organizations(*)')
-        .eq('id', authUser.id)
-        .single();
+    if (accessToken) {
+      // Try to get user with the token
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(accessToken);
+      
+      if (authUser && !authError) {
+        // User is authenticated - return their real data
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*, organization:organizations(*)')
+          .eq('id', authUser.id)
+          .single();
 
-      return NextResponse.json({
-        organization: profile?.organization || { id: authUser.user_metadata?.organization_id || 'default-org' },
-        user: {
-          id: authUser.id,
-          email: authUser.email,
-          name: profile?.first_name && profile?.last_name 
-            ? `${profile.first_name} ${profile.last_name}` 
-            : authUser.user_metadata?.name || profile?.first_name || 'User',
-          first_name: profile?.first_name || authUser.user_metadata?.name?.split(' ')[0],
-          last_name: profile?.last_name || '',
-          avatar_url: profile?.avatar_url || authUser.user_metadata?.avatar_url,
-          role: profile?.role || 'user',
-          organization_id: profile?.organization_id || authUser.user_metadata?.organization_id,
-          user_metadata: authUser.user_metadata, // IMPORTANT: Preserve is_agent, agent_id, etc.
-        },
-      });
+        return NextResponse.json({
+          organization: profile?.organization || { id: authUser.user_metadata?.organization_id || 'default-org' },
+          user: {
+            id: authUser.id,
+            email: authUser.email,
+            name: profile?.first_name && profile?.last_name 
+              ? `${profile.first_name} ${profile.last_name}` 
+              : authUser.user_metadata?.name || profile?.first_name || 'User',
+            first_name: profile?.first_name || authUser.user_metadata?.name?.split(' ')[0],
+            last_name: profile?.last_name || '',
+            avatar_url: profile?.avatar_url || authUser.user_metadata?.avatar_url,
+            role: profile?.role || 'user',
+            organization_id: profile?.organization_id || authUser.user_metadata?.organization_id,
+            user_metadata: authUser.user_metadata,
+          },
+        });
+      }
     }
 
     // No authenticated user - try to get existing organization for demo
