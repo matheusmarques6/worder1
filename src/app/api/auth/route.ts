@@ -309,10 +309,14 @@ async function handleGetOrCreateOrg(supabase: SupabaseClient) {
         user: {
           id: authUser.id,
           email: authUser.email,
-          name: authUser.user_metadata?.name || profile?.first_name || 'User',
+          name: profile?.first_name && profile?.last_name 
+            ? `${profile.first_name} ${profile.last_name}` 
+            : authUser.user_metadata?.name || profile?.first_name || 'User',
           first_name: profile?.first_name || authUser.user_metadata?.name?.split(' ')[0],
           last_name: profile?.last_name || '',
+          avatar_url: profile?.avatar_url || authUser.user_metadata?.avatar_url,
           role: profile?.role || 'user',
+          organization_id: profile?.organization_id || authUser.user_metadata?.organization_id,
           user_metadata: authUser.user_metadata, // IMPORTANT: Preserve is_agent, agent_id, etc.
         },
       });

@@ -675,7 +675,22 @@ export function useAuth() {
         throw new Error(result.error || 'Login failed');
       }
 
-      setUser(result.profile);
+      // Transform profile to match User interface
+      const userFromProfile = {
+        id: result.profile?.id || result.user?.id,
+        email: result.profile?.email || result.user?.email,
+        name: result.profile?.first_name && result.profile?.last_name
+          ? `${result.profile.first_name} ${result.profile.last_name}`
+          : result.profile?.first_name || result.user?.email?.split('@')[0] || 'Usuário',
+        avatar_url: result.profile?.avatar_url,
+        organization_id: result.profile?.organization_id,
+        role: result.profile?.role || 'admin',
+        user_metadata: result.user?.user_metadata,
+        created_at: result.profile?.created_at || new Date().toISOString(),
+        updated_at: result.profile?.updated_at || new Date().toISOString(),
+      };
+      
+      setUser(userFromProfile);
       return result;
     } catch (e) {
       const error = e instanceof Error ? e : new Error('An error occurred');

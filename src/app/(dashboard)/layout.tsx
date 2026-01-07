@@ -305,9 +305,11 @@ export default function DashboardLayout({
             setUser({
               id: result.user?.id || 'default-user',
               email: result.user?.email || 'demo@worder.com',
-              name: result.user?.name || 'Demo User',
-              organization_id: result.organization.id,
-              role: 'admin',
+              name: result.user?.name || `${result.user?.first_name || ''} ${result.user?.last_name || ''}`.trim() || 'Usuário',
+              avatar_url: result.user?.avatar_url,
+              organization_id: result.user?.organization_id || result.organization.id,
+              role: result.user?.role || 'admin',
+              user_metadata: result.user?.user_metadata,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             })
@@ -317,12 +319,13 @@ export default function DashboardLayout({
           setUser({
             id: 'default-user',
             email: 'demo@worder.com',
-            name: 'Demo User',
+            name: 'Usuário',
             organization_id: 'default-org',
             role: 'admin',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
+        }
         }
       }
     }

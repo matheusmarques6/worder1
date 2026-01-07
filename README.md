@@ -1,10 +1,35 @@
-# 🔧 Correção: Menu do Usuário no Sidebar
+# 🔧 Correção: Dados do Usuário (Demo User → Nome Real)
 
 ## ❌ Problema
-O menu do usuário estava no Header, mas o botão visível estava no **Sidebar**.
+O sistema mostrava "Demo User" em vez do nome real do usuário porque:
+1. A API `get-or-create-org` não retornava `avatar_url` nem o `name` formatado
+2. O layout usava fallback "Demo User" em vez de dados reais
+3. O hook de login não transformava `first_name`/`last_name` em `name`
 
-## ✅ Solução
-Adicionei o menu dropdown completo no **Sidebar.tsx** (local correto).
+## ✅ Correções Aplicadas
+
+### 1. `src/app/api/auth/route.ts`
+- Adicionado `avatar_url` ao retorno do usuário
+- Adicionado `organization_id` ao retorno
+- Corrigido `name` para concatenar `first_name` + `last_name`
+
+### 2. `src/app/(dashboard)/layout.tsx`
+- Removido fallback "Demo User" → agora usa "Usuário"
+- Adicionado `avatar_url` ao setUser
+- Adicionado `organization_id` e `user_metadata`
+
+### 3. `src/hooks/index.ts`
+- Corrigido hook de login para transformar profile em User
+- Agora concatena `first_name` + `last_name` → `name`
+- Preserva `avatar_url` e `user_metadata`
+
+### 4. `src/components/layout/Sidebar.tsx`
+- Menu dropdown do usuário com foto real
+- Lista de agentes online/offline
+- Logout funcional
+
+### 5. `src/app/api/agents/status/route.ts`
+- Nova API para listar status dos agentes
 
 ---
 
@@ -12,71 +37,42 @@ Adicionei o menu dropdown completo no **Sidebar.tsx** (local correto).
 
 ```
 src/
-├── components/
-│   └── layout/
-│       └── Sidebar.tsx         ← MODIFICADO (menu dropdown completo)
 ├── app/
-│   └── api/
-│       └── agents/
-│           └── status/
-│               └── route.ts    ← NOVO (API de status dos agentes)
-└── hooks/
-    └── useHeartbeat.ts         ← NOVO (heartbeat para agentes)
+│   ├── api/
+│   │   ├── auth/route.ts          ← CORRIGIDO
+│   │   └── agents/status/route.ts ← NOVO
+│   └── (dashboard)/layout.tsx     ← CORRIGIDO
+├── components/layout/Sidebar.tsx  ← CORRIGIDO  
+└── hooks/index.ts                 ← CORRIGIDO
 ```
 
 ---
 
 ## 🚀 Instalação
 
-### Passo 1: Execute o SQL no Supabase
-
+### 1. SQL (se ainda não executou)
 ```sql
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP;
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'offline';
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 ```
 
-### Passo 2: Substitua os arquivos e deploy
+### 2. Substitua os arquivos e faça deploy
 
 ```bash
 git add .
-git commit -m "feat: menu dropdown do usuário com agentes online"
+git commit -m "fix: dados do usuário - nome e avatar reais"
 git push
 ```
 
 ---
 
-## 🎨 Visual do Menu
+## 🎯 Resultado Esperado
 
-```
-┌─────────────────────────────────┐
-│  [📷 Foto] Convertfy Convertfy  │
-│           acessos@convertfy.me  │
-│           🏷️ Administrador      │
-│  ───────────────────────────────│
-│  👥 Agentes (2 online)          │
-│     🟢 João Silva               │
-│     ⚫ Pedro Costa              │
-│  ───────────────────────────────│
-│  👤 Meu Perfil                  │
-│  🏪 Configurações da Loja       │
-│  ⚙️ Integrações                 │
-│  ───────────────────────────────│
-│  🚪 Sair                        │
-└─────────────────────────────────┘
-```
+Antes: `Demo User` com iniciais "DU"
+Depois: `Convertfy Convertfy` com foto real do perfil
 
----
-
-## ✅ Funcionalidades
-
-| Funcionalidade | Status |
-|----------------|--------|
-| Avatar real (foto do perfil) | ✅ |
-| Menu clicável | ✅ |
-| Nome e cargo | ✅ |
-| Lista de agentes online/offline | ✅ |
-| Link para Meu Perfil | ✅ |
-| Link para Configurações | ✅ |
-| Link para Integrações | ✅ |
-| Logout funcional | ✅ |
+O nome agora vem de:
+1. `profiles.first_name` + `profiles.last_name` (prioridade)
+2. `auth.user_metadata.name` (fallback)
+3. Parte do email antes do @ (último fallback)
