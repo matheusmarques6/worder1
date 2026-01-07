@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
@@ -431,6 +432,7 @@ export function Header() {
 
   // User menu state
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const [agents, setAgents] = useState<Array<{
     id: string
     name: string
@@ -440,6 +442,12 @@ export function Header() {
   const [loadingAgents, setLoadingAgents] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  // Set mounted on client side (required for Portal)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Fetch agents when menu opens
   const fetchAgents = useCallback(async () => {
@@ -828,8 +836,9 @@ export function Header() {
         </div>
 
         {/* User Avatar with Dropdown Menu */}
-        <div ref={userMenuRef} className="relative flex items-center gap-3 pl-4 border-l border-dark-700">
+        <div className="relative flex items-center gap-3 pl-4 border-l border-dark-700">
           <button
+            ref={buttonRef}
             onClick={() => setUserMenuOpen(!userMenuOpen)}
             className="flex items-center gap-3 p-1 rounded-lg hover:bg-dark-800/50 transition-colors"
           >
@@ -856,22 +865,24 @@ export function Header() {
             )} />
           </button>
 
-          {/* User Menu Dropdown */}
-          <AnimatePresence>
-            {userMenuOpen && (
-              <>
-                {/* Backdrop para fechar ao clicar fora */}
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setUserMenuOpen(false)} 
-                />
-                <motion.div
-                  initial={{ opacity: 0, y: -10, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -10, scale: 0.96 }}
-                  transition={{ duration: 0.15 }}
-                  className="fixed right-6 top-16 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-2xl z-50 overflow-hidden"
-                >
+          {/* User Menu Dropdown - Rendered via Portal */}
+          {mounted && userMenuOpen && createPortal(
+            <div className="fixed inset-0 z-[9999]">
+              {/* Backdrop */}
+              <div 
+                className="absolute inset-0" 
+                onClick={() => setUserMenuOpen(false)} 
+              />
+              {/* Menu */}
+              <motion.div
+                ref={userMenuRef}
+                initial={{ opacity: 0, y: -10, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.96 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-6 top-16 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-2xl overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {/* User Info Header */}
                 <div className="p-4 border-b border-dark-700">
                   <div className="flex items-center gap-3">
@@ -997,9 +1008,9 @@ export function Header() {
                   </button>
                 </div>
               </motion.div>
-              </>
-            )}
-          </AnimatePresence>
+            </div>,
+            document.body
+          )}
         </div>
       </div>
     </header>
