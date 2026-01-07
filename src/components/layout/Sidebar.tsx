@@ -859,13 +859,19 @@ export function Header() {
           {/* User Menu Dropdown */}
           <AnimatePresence>
             {userMenuOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-50 overflow-hidden"
-              >
+              <>
+                {/* Backdrop para fechar ao clicar fora */}
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setUserMenuOpen(false)} 
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: -10, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                  className="fixed right-6 top-16 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-2xl z-50 overflow-hidden"
+                >
                 {/* User Info Header */}
                 <div className="p-4 border-b border-dark-700">
                   <div className="flex items-center gap-3">
@@ -991,6 +997,7 @@ export function Header() {
                   </button>
                 </div>
               </motion.div>
+              </>
             )}
           </AnimatePresence>
         </div>
