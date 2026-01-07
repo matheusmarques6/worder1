@@ -20,6 +20,7 @@ export interface FlowNodeData {
   status?: NodeStatus;
   statusMessage?: string;
   executionTime?: number;
+  [key: string]: unknown; // Index signature for React Flow compatibility
 }
 
 export type FlowNode = Node<FlowNodeData>;
