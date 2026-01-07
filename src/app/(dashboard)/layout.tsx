@@ -326,7 +326,6 @@ export default function DashboardLayout({
             updated_at: new Date().toISOString(),
           })
         }
-        }
       }
     }
     
