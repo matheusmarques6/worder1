@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -26,10 +26,17 @@ import {
   Store,
   CheckCircle,
   Info,
+  Camera,
+  Mail,
+  Phone,
+  Lock,
+  Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStoreStore, useAuthStore } from '@/stores';
 import WhatsAppConnectModal from '@/components/whatsapp/WhatsAppConnectModal';
+import { useProfile } from '@/hooks/useProfile';
+import { PhoneInput } from '@/components/ui/PhoneInput';
 
 // Types
 interface Integration {
@@ -946,59 +953,7 @@ export default function SettingsPage() {
 
             {/* Profile Tab */}
             {activeTab === 'profile' && (
-              <motion.div
-                key="profile"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="space-y-6"
-              >
-                <div className="p-6 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                  <h2 className="text-lg font-semibold text-white mb-6">Informações Pessoais</h2>
-                  
-                  <div className="flex items-center gap-6 mb-6">
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-2xl font-bold">
-                      JD
-                    </div>
-                    <div>
-                      <button className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg text-sm font-medium transition-colors">
-                        Alterar foto
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm text-dark-400 mb-2">Nome</label>
-                      <input
-                        type="text"
-                        defaultValue="João"
-                        className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-xl text-white focus:outline-none focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-dark-400 mb-2">Sobrenome</label>
-                      <input
-                        type="text"
-                        defaultValue="Demo"
-                        className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-xl text-white focus:outline-none focus:border-primary-500"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm text-dark-400 mb-2">Email</label>
-                      <input
-                        type="email"
-                        defaultValue="joao@demo.com"
-                        className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-xl text-white focus:outline-none focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-                  
-                  <button className="mt-6 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-medium transition-colors">
-                    Salvar Alterações
-                  </button>
-                </div>
-              </motion.div>
+              <ProfileTab />
             )}
 
             {/* Store Tab */}
@@ -1393,5 +1348,346 @@ export default function SettingsPage() {
         />
       )}
     </div>
+  );
+}
+
+// ==========================================
+// PROFILE TAB COMPONENT
+// ==========================================
+function ProfileTab() {
+  const { profile, loading, error, updateProfile, uploadAvatar, removeAvatar, requestPasswordReset } = useProfile();
+  const { user } = useAuthStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Form state
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  // Carregar dados do perfil no form
+  useEffect(() => {
+    if (profile) {
+      setFirstName(profile.first_name || '');
+      setLastName(profile.last_name || '');
+      setPhone(profile.phone || '');
+    }
+  }, [profile]);
+
+  // Obter iniciais para avatar
+  const getInitials = () => {
+    const first = firstName || profile?.first_name || user?.name?.split(' ')[0] || '';
+    const last = lastName || profile?.last_name || user?.name?.split(' ').slice(1).join(' ') || '';
+    return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase() || 'U';
+  };
+
+  // Obter label do cargo
+  const getRoleLabel = (role?: string) => {
+    switch (role) {
+      case 'admin': return 'Administrador';
+      case 'manager': return 'Gerente';
+      case 'agent': return 'Agente';
+      default: return 'Administrador';
+    }
+  };
+
+  // Salvar alterações
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    
+    const success = await updateProfile({
+      first_name: firstName,
+      last_name: lastName,
+      phone: phone,
+    });
+
+    if (success) {
+      setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' });
+    } else {
+      setMessage({ type: 'error', text: error || 'Erro ao salvar perfil' });
+    }
+    
+    setSaving(false);
+    
+    // Limpar mensagem após 3 segundos
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  // Upload de avatar
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingAvatar(true);
+    setMessage(null);
+
+    const url = await uploadAvatar(file);
+
+    if (url) {
+      setMessage({ type: 'success', text: 'Foto atualizada com sucesso!' });
+    } else {
+      setMessage({ type: 'error', text: error || 'Erro ao fazer upload da foto' });
+    }
+
+    setUploadingAvatar(false);
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  // Remover avatar
+  const handleRemoveAvatar = async () => {
+    if (!confirm('Tem certeza que deseja remover sua foto?')) return;
+
+    setUploadingAvatar(true);
+    setMessage(null);
+
+    const success = await removeAvatar();
+
+    if (success) {
+      setMessage({ type: 'success', text: 'Foto removida com sucesso!' });
+    } else {
+      setMessage({ type: 'error', text: error || 'Erro ao remover foto' });
+    }
+
+    setUploadingAvatar(false);
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  // Solicitar reset de senha
+  const handlePasswordReset = async () => {
+    if (!confirm('Enviaremos um email para você redefinir sua senha. Continuar?')) return;
+
+    setSendingReset(true);
+    setMessage(null);
+
+    const success = await requestPasswordReset();
+
+    if (success) {
+      setMessage({ type: 'success', text: 'Email de recuperação enviado! Verifique sua caixa de entrada.' });
+    } else {
+      setMessage({ type: 'error', text: error || 'Erro ao enviar email' });
+    }
+
+    setSendingReset(false);
+    setTimeout(() => setMessage(null), 5000);
+  };
+
+  if (loading && !profile) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      key="profile"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="space-y-6"
+    >
+      {/* Mensagem de feedback */}
+      <AnimatePresence>
+        {message && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={cn(
+              'p-4 rounded-xl flex items-center gap-3',
+              message.type === 'success' 
+                ? 'bg-green-500/20 border border-green-500/30 text-green-400'
+                : 'bg-red-500/20 border border-red-500/30 text-red-400'
+            )}
+          >
+            {message.type === 'success' ? (
+              <CheckCircle className="w-5 h-5 flex-shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            )}
+            <span>{message.text}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Informações Pessoais */}
+      <div className="p-6 bg-dark-800/50 rounded-xl border border-dark-700/50">
+        <h2 className="text-lg font-semibold text-white mb-6">Informações Pessoais</h2>
+        
+        {/* Avatar */}
+        <div className="flex items-center gap-6 mb-6">
+          <div className="relative group">
+            {profile?.avatar_url ? (
+              <img 
+                src={profile.avatar_url} 
+                alt="Avatar"
+                className="w-20 h-20 rounded-full object-cover border-2 border-dark-600"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-2xl font-bold">
+                {getInitials()}
+              </div>
+            )}
+            
+            {uploadingAvatar && (
+              <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-white" />
+              </div>
+            )}
+          </div>
+          
+          <div className="flex flex-col gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              <Camera className="w-4 h-4" />
+              Alterar foto
+            </button>
+            {profile?.avatar_url && (
+              <button 
+                onClick={handleRemoveAvatar}
+                disabled={uploadingAvatar}
+                className="px-4 py-2 text-red-400 hover:text-red-300 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                Remover foto
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {/* Campos do formulário */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-dark-400 mb-2">Nome</label>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="Seu nome"
+              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-xl text-white focus:outline-none focus:border-primary-500 placeholder:text-dark-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-dark-400 mb-2">Sobrenome</label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Seu sobrenome"
+              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-xl text-white focus:outline-none focus:border-primary-500 placeholder:text-dark-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-dark-400 mb-2">
+              <Mail className="w-4 h-4 inline mr-1" />
+              Email
+            </label>
+            <input
+              type="email"
+              value={profile?.email || user?.email || ''}
+              disabled
+              className="w-full px-4 py-2 bg-dark-800 border border-dark-700 rounded-xl text-dark-400 cursor-not-allowed"
+            />
+            <p className="text-xs text-dark-500 mt-1">O email não pode ser alterado</p>
+          </div>
+          <div>
+            <label className="block text-sm text-dark-400 mb-2">
+              <Phone className="w-4 h-4 inline mr-1" />
+              Telefone
+            </label>
+            <PhoneInput
+              value={phone}
+              onChange={setPhone}
+              className="w-full"
+            />
+          </div>
+        </div>
+        
+        {/* Cargo */}
+        <div className="mt-4 p-4 bg-dark-700/50 rounded-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Shield className="w-5 h-5 text-primary-400" />
+              <div>
+                <p className="text-sm text-dark-400">Cargo</p>
+                <p className="text-white font-medium">{getRoleLabel(profile?.role)}</p>
+              </div>
+            </div>
+            <span className={cn(
+              'px-3 py-1 rounded-full text-xs font-medium',
+              profile?.role === 'admin' && 'bg-primary-500/20 text-primary-400',
+              profile?.role === 'manager' && 'bg-blue-500/20 text-blue-400',
+              profile?.role === 'agent' && 'bg-green-500/20 text-green-400',
+            )}>
+              {getRoleLabel(profile?.role)}
+            </span>
+          </div>
+        </div>
+        
+        <button 
+          onClick={handleSave}
+          disabled={saving}
+          className="mt-6 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+        >
+          {saving ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Salvando...
+            </>
+          ) : (
+            <>
+              <Check className="w-4 h-4" />
+              Salvar Alterações
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Segurança */}
+      <div className="p-6 bg-dark-800/50 rounded-xl border border-dark-700/50">
+        <h2 className="text-lg font-semibold text-white mb-4">Segurança</h2>
+        
+        <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-xl">
+          <div className="flex items-center gap-3">
+            <Lock className="w-5 h-5 text-dark-400" />
+            <div>
+              <p className="text-white font-medium">Senha</p>
+              <p className="text-sm text-dark-400">Altere sua senha de acesso</p>
+            </div>
+          </div>
+          <button
+            onClick={handlePasswordReset}
+            disabled={sendingReset}
+            className="px-4 py-2 bg-dark-600 hover:bg-dark-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {sendingReset ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              <>
+                <Mail className="w-4 h-4" />
+                Enviar email de recuperação
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </motion.div>
   );
 }

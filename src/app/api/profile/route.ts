@@ -20,6 +20,53 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
+    // Se perfil não existe, criar um básico
+    if (profileError && profileError.code === 'PGRST116') {
+      // Extrair nome do user_metadata
+      const firstName = user.user_metadata?.first_name || user.user_metadata?.name?.split(' ')[0] || '';
+      const lastName = user.user_metadata?.last_name || user.user_metadata?.name?.split(' ').slice(1).join(' ') || '';
+      
+      // Criar perfil
+      const { data: newProfile, error: createError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          organization_id: user.user_metadata?.organization_id,
+          first_name: firstName,
+          last_name: lastName,
+          role: user.user_metadata?.role || 'admin',
+          phone: user.phone || user.user_metadata?.phone || '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating profile:', createError);
+        // Retornar dados do user_metadata se não conseguir criar
+        return NextResponse.json({ 
+          profile: {
+            id: user.id,
+            email: user.email,
+            first_name: firstName,
+            last_name: lastName,
+            role: user.user_metadata?.role || 'admin',
+            phone: user.phone || '',
+            avatar_url: user.user_metadata?.avatar_url || null,
+            organization_id: user.user_metadata?.organization_id,
+          }
+        });
+      }
+
+      return NextResponse.json({ 
+        profile: {
+          ...newProfile,
+          email: user.email,
+        }
+      });
+    }
+
     if (profileError) {
       console.error('Error fetching profile:', profileError);
       return NextResponse.json({ error: profileError.message }, { status: 500 });
@@ -35,6 +82,44 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Profile GET error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// POST - Ações especiais (reset password)
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = createRouteHandlerClient({ cookies });
+    const body = await request.json();
+    const { action, email } = body;
+
+    if (action === 'reset-password') {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userEmail = email || user?.email;
+
+      if (!userEmail) {
+        return NextResponse.json({ error: 'Email é obrigatório' }, { status: 400 });
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password`,
+      });
+
+      if (error) {
+        console.error('Reset password error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Email de recuperação enviado com sucesso'
+      });
+    }
+
+    return NextResponse.json({ error: 'Ação inválida' }, { status: 400 });
+
+  } catch (error: any) {
+    console.error('Profile POST error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
