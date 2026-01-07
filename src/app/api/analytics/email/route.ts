@@ -143,6 +143,74 @@ interface CampaignItem {
   sendTime: string | null;
 }
 
+// Klaviyo API Response Types
+interface KlaviyoListResponse {
+  data: Array<{
+    id: string;
+    attributes: { name: string; profile_count?: number };
+  }>;
+  links?: { next?: string };
+}
+
+interface KlaviyoFlowResponse {
+  data: Array<{
+    id: string;
+    attributes: { name: string; status: string; trigger_type?: string };
+  }>;
+  links?: { next?: string };
+}
+
+interface KlaviyoSegmentResponse {
+  data: Array<{
+    id: string;
+    attributes: { name: string; profile_count?: number; is_active?: boolean };
+  }>;
+  links?: { next?: string };
+}
+
+interface KlaviyoCampaignResponse {
+  data: Array<{
+    id: string;
+    attributes: { name: string; status: string; send_time?: string | null };
+  }>;
+  links?: { next?: string };
+}
+
+interface KlaviyoReportStatistics {
+  delivered?: number;
+  opens_unique?: number;
+  clicks_unique?: number;
+  conversion_value?: number;
+  conversions?: number;
+  recipients?: number;
+  bounce_rate?: number;
+  open_rate?: number;
+  click_rate?: number;
+  unsubscribe_rate?: number;
+}
+
+interface KlaviyoFlowReportResponse {
+  data: {
+    attributes: {
+      results: Array<{
+        groupings: { flow_id: string; send_channel: string };
+        statistics: KlaviyoReportStatistics;
+      }>;
+    };
+  };
+}
+
+interface KlaviyoCampaignReportResponse {
+  data: {
+    attributes: {
+      results: Array<{
+        groupings: { campaign_id: string; send_channel: string };
+        statistics: KlaviyoReportStatistics;
+      }>;
+    };
+  };
+}
+
 // ============================================
 // KLAVIYO API REQUEST WITH RETRY
 // ============================================
@@ -320,13 +388,7 @@ async function getLists(apiKey: string): Promise<ListMetrics> {
   let nextPage: string | null = '/lists/?page[size]=100';
 
   while (nextPage) {
-    const response = await klaviyoRequest<{
-      data: Array<{
-        id: string;
-        attributes: { name: string; profile_count?: number };
-      }>;
-      links?: { next?: string };
-    }>(apiKey, nextPage);
+    const response: KlaviyoListResponse | null = await klaviyoRequest<KlaviyoListResponse>(apiKey, nextPage);
 
     if (!response?.data) break;
 
@@ -362,13 +424,7 @@ async function getFlows(apiKey: string): Promise<FlowItem[]> {
   let nextPage: string | null = '/flows?page[size]=100';
 
   while (nextPage) {
-    const response = await klaviyoRequest<{
-      data: Array<{
-        id: string;
-        attributes: { name: string; status: string; trigger_type?: string };
-      }>;
-      links?: { next?: string };
-    }>(apiKey, nextPage);
+    const response: KlaviyoFlowResponse | null = await klaviyoRequest<KlaviyoFlowResponse>(apiKey, nextPage);
 
     if (!response?.data) break;
 
@@ -399,13 +455,7 @@ async function getSegments(apiKey: string): Promise<SegmentMetrics> {
   let nextPage: string | null = '/segments/?page[size]=100';
 
   while (nextPage) {
-    const response = await klaviyoRequest<{
-      data: Array<{
-        id: string;
-        attributes: { name: string; profile_count?: number; is_active?: boolean };
-      }>;
-      links?: { next?: string };
-    }>(apiKey, nextPage);
+    const response: KlaviyoSegmentResponse | null = await klaviyoRequest<KlaviyoSegmentResponse>(apiKey, nextPage);
 
     if (!response?.data) break;
 
@@ -453,13 +503,7 @@ async function getCampaigns(apiKey: string): Promise<CampaignItem[]> {
   let nextPage: string | null = '/campaigns?filter=equals(messages.channel,"email")&page[size]=100';
 
   while (nextPage) {
-    const response = await klaviyoRequest<{
-      data: Array<{
-        id: string;
-        attributes: { name: string; status: string; send_time?: string | null };
-      }>;
-      links?: { next?: string };
-    }>(apiKey, nextPage);
+    const response: KlaviyoCampaignResponse | null = await klaviyoRequest<KlaviyoCampaignResponse>(apiKey, nextPage);
 
     if (!response?.data) break;
 
@@ -533,27 +577,11 @@ async function getFlowValuesReport(
 
   await sleep(MIN_REQUEST_INTERVAL);
 
-  const response = await klaviyoRequest<{
-    data: {
-      attributes: {
-        results: Array<{
-          groupings: { flow_id: string; send_channel: string };
-          statistics: {
-            delivered?: number;
-            opens_unique?: number;
-            clicks_unique?: number;
-            conversion_value?: number;
-            conversions?: number;
-            recipients?: number;
-            bounce_rate?: number;
-            open_rate?: number;
-            click_rate?: number;
-            unsubscribe_rate?: number;
-          };
-        }>;
-      };
-    };
-  }>(apiKey, '/flow-values-reports/', { method: 'POST', body });
+  const response: KlaviyoFlowReportResponse | null = await klaviyoRequest<KlaviyoFlowReportResponse>(
+    apiKey, 
+    '/flow-values-reports/', 
+    { method: 'POST', body }
+  );
 
   const emptyResult: FlowReport = { 
     totalRevenue: 0, 
@@ -681,27 +709,11 @@ async function getCampaignValuesReport(
 
   await sleep(MIN_REQUEST_INTERVAL);
 
-  const response = await klaviyoRequest<{
-    data: {
-      attributes: {
-        results: Array<{
-          groupings: { campaign_id: string; send_channel: string };
-          statistics: {
-            delivered?: number;
-            opens_unique?: number;
-            clicks_unique?: number;
-            conversion_value?: number;
-            conversions?: number;
-            recipients?: number;
-            bounce_rate?: number;
-            open_rate?: number;
-            click_rate?: number;
-            unsubscribe_rate?: number;
-          };
-        }>;
-      };
-    };
-  }>(apiKey, '/campaign-values-reports/', { method: 'POST', body });
+  const response: KlaviyoCampaignReportResponse | null = await klaviyoRequest<KlaviyoCampaignReportResponse>(
+    apiKey, 
+    '/campaign-values-reports/', 
+    { method: 'POST', body }
+  );
 
   const emptyResult: CampaignReport = { 
     totalRevenue: 0, 
