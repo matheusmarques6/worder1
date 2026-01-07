@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -26,6 +27,7 @@ import {
   ShoppingBag,
   MessageCircle,
   Loader2,
+  Users,
 } from 'lucide-react';
 import { Button, Input, Badge, Avatar } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -375,6 +377,14 @@ function NotificationsDropdown({
 // User Menu Dropdown
 // ============================================
 
+interface AgentStatus {
+  id: string;
+  name: string;
+  avatar_url?: string;
+  status: 'online' | 'offline' | 'away' | 'busy';
+  last_seen_at?: string;
+}
+
 interface UserMenuDropdownProps {
   isOpen: boolean;
   onClose: () => void;
@@ -383,11 +393,72 @@ interface UserMenuDropdownProps {
     email: string;
     avatar?: string;
     plan: string;
+    role?: string;
   };
 }
 
 function UserMenuDropdown({ isOpen, onClose, user }: UserMenuDropdownProps) {
+  const router = useRouter();
   const { theme, setTheme } = useUIStore();
+  const { signOut, user: authUser } = useAuthStore();
+  const [agents, setAgents] = useState<AgentStatus[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Carregar agentes quando menu abre
+  useEffect(() => {
+    if (isOpen && authUser?.organization_id) {
+      fetchAgents();
+    }
+  }, [isOpen, authUser?.organization_id]);
+
+  const fetchAgents = async () => {
+    setLoadingAgents(true);
+    try {
+      const res = await fetch('/api/agents/status');
+      if (res.ok) {
+        const data = await res.json();
+        setAgents(data.agents || []);
+      }
+    } catch (error) {
+      console.error('Error fetching agents:', error);
+    } finally {
+      setLoadingAgents(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      });
+      signOut();
+      router.push('/');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const handleNavigation = (path: string) => {
+    onClose();
+    router.push(path);
+  };
+
+  // Obter label do cargo
+  const getRoleLabel = () => {
+    const role = authUser?.role || user.role;
+    switch (role) {
+      case 'admin': return 'Administrador';
+      case 'manager': return 'Gerente';
+      case 'agent': return 'Agente';
+      default: return 'Admin';
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -398,66 +469,139 @@ function UserMenuDropdown({ isOpen, onClose, user }: UserMenuDropdownProps) {
         initial={{ opacity: 0, y: 10, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-        className="absolute right-0 top-full mt-2 w-64 bg-slate-900 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden"
+        className="absolute right-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-50 overflow-hidden"
       >
         {/* User Info */}
-        <div className="px-4 py-3 border-b border-white/5">
+        <div className="px-4 py-3 border-b border-dark-700">
           <div className="flex items-center gap-3">
-            <Avatar fallback={user.name?.substring(0, 2) || 'U'} src={user.avatar} size="md" />
+            <Avatar 
+              fallback={user.name?.substring(0, 2) || 'U'} 
+              src={user.avatar} 
+              size="lg" 
+            />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">{user.name}</p>
-              <p className="text-xs text-slate-400 truncate">{user.email}</p>
+              <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+              <p className="text-xs text-dark-400 truncate">{user.email}</p>
+              <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-primary-500/20 text-primary-400">
+                {getRoleLabel()}
+              </span>
             </div>
-          </div>
-          <div className="mt-3 flex items-center justify-between">
-            <Badge variant="primary">{user.plan}</Badge>
-            <button className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
-              Upgrade
-              <ExternalLink className="w-3 h-3" />
-            </button>
           </div>
         </div>
 
+        {/* Agents Section */}
+        {agents.length > 0 && (
+          <div className="px-3 py-2 border-b border-dark-700">
+            <div className="flex items-center gap-2 px-1 mb-2">
+              <Users className="w-3.5 h-3.5 text-dark-500" />
+              <span className="text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
+                Agentes ({agents.filter(a => a.status === 'online').length} online)
+              </span>
+            </div>
+            <div className="space-y-0.5 max-h-32 overflow-y-auto">
+              {loadingAgents ? (
+                <div className="flex items-center justify-center py-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-dark-500" />
+                </div>
+              ) : (
+                agents.map((agent) => (
+                  <div
+                    key={agent.id}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+                  >
+                    <div className="relative">
+                      {agent.avatar_url ? (
+                        <img 
+                          src={agent.avatar_url} 
+                          alt={agent.name}
+                          className="w-6 h-6 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-dark-600 flex items-center justify-center">
+                          <span className="text-[10px] text-dark-400">
+                            {agent.name?.substring(0, 2).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                      <div className={cn(
+                        'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-dark-800',
+                        agent.status === 'online' && 'bg-green-500',
+                        agent.status === 'away' && 'bg-yellow-500',
+                        agent.status === 'busy' && 'bg-red-500',
+                        agent.status === 'offline' && 'bg-dark-500',
+                      )} />
+                    </div>
+                    <span className="text-xs text-dark-300 truncate flex-1">{agent.name}</span>
+                    <span className={cn(
+                      'text-[10px]',
+                      agent.status === 'online' && 'text-green-400',
+                      agent.status === 'away' && 'text-yellow-400',
+                      agent.status === 'busy' && 'text-red-400',
+                      agent.status === 'offline' && 'text-dark-500',
+                    )}>
+                      {agent.status === 'online' ? 'Online' : 
+                       agent.status === 'away' ? 'Ausente' :
+                       agent.status === 'busy' ? 'Ocupado' : 'Offline'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Menu Items */}
         <div className="py-2">
-          <button className="w-full flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors">
-            <User className="w-4 h-4 text-slate-400" />
-            <span className="text-sm text-slate-300">Meu Perfil</span>
+          <button 
+            onClick={() => handleNavigation('/settings?tab=profile')}
+            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+          >
+            <User className="w-4 h-4 text-dark-400" />
+            <span className="text-sm text-dark-300">Meu Perfil</span>
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors">
-            <Building2 className="w-4 h-4 text-slate-400" />
-            <span className="text-sm text-slate-300">Configurações da Loja</span>
+          <button 
+            onClick={() => handleNavigation('/settings?tab=store')}
+            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+          >
+            <Building2 className="w-4 h-4 text-dark-400" />
+            <span className="text-sm text-dark-300">Configurações da Loja</span>
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors">
-            <CreditCard className="w-4 h-4 text-slate-400" />
-            <span className="text-sm text-slate-300">Faturamento</span>
+          <button 
+            onClick={() => handleNavigation('/settings?tab=billing')}
+            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+          >
+            <CreditCard className="w-4 h-4 text-dark-400" />
+            <span className="text-sm text-dark-300">Faturamento</span>
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-2 hover:bg-white/5 transition-colors">
-            <HelpCircle className="w-4 h-4 text-slate-400" />
-            <span className="text-sm text-slate-300">Ajuda & Suporte</span>
+          <button 
+            onClick={() => handleNavigation('/settings?tab=integrations')}
+            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+          >
+            <Settings className="w-4 h-4 text-dark-400" />
+            <span className="text-sm text-dark-300">Integrações</span>
           </button>
         </div>
 
         {/* Theme Toggle */}
-        <div className="px-4 py-2 border-t border-white/5">
+        <div className="px-4 py-2 border-t border-dark-700">
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-dark-700/50 transition-colors"
           >
             <div className="flex items-center gap-3">
               {theme === 'dark' ? (
-                <Moon className="w-4 h-4 text-slate-400" />
+                <Moon className="w-4 h-4 text-dark-400" />
               ) : (
-                <Sun className="w-4 h-4 text-slate-400" />
+                <Sun className="w-4 h-4 text-dark-400" />
               )}
-              <span className="text-sm text-slate-300">
+              <span className="text-sm text-dark-300">
                 {theme === 'dark' ? 'Modo Escuro' : 'Modo Claro'}
               </span>
             </div>
-            <div className="w-8 h-5 rounded-full bg-primary/20 relative">
+            <div className="w-8 h-5 rounded-full bg-primary-500/20 relative">
               <div
                 className={cn(
-                  'absolute top-0.5 w-4 h-4 rounded-full bg-primary transition-all',
+                  'absolute top-0.5 w-4 h-4 rounded-full bg-primary-500 transition-all',
                   theme === 'dark' ? 'left-0.5' : 'left-3.5'
                 )}
               />
@@ -466,10 +610,14 @@ function UserMenuDropdown({ isOpen, onClose, user }: UserMenuDropdownProps) {
         </div>
 
         {/* Logout */}
-        <div className="px-4 py-2 border-t border-white/5">
-          <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-red-500/10 transition-colors text-red-400">
+        <div className="px-4 py-2 border-t border-dark-700">
+          <button 
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-red-500/10 transition-colors text-red-400 disabled:opacity-50"
+          >
             <LogOut className="w-4 h-4" />
-            <span className="text-sm">Sair</span>
+            <span className="text-sm">{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
           </button>
         </div>
       </motion.div>
@@ -504,7 +652,9 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
   const userData = {
     name: user?.name || user?.email?.split('@')[0] || 'Usuário',
     email: user?.email || 'usuario@email.com',
+    avatar: user?.avatar_url || undefined,
     plan: 'Pro',
+    role: user?.role || 'admin',
   };
 
   // ============================================
@@ -690,8 +840,23 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
                 }}
                 className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-white/5 transition-colors"
               >
-                <Avatar fallback={userData.name?.substring(0, 2) || 'U'} size="sm" />
-                <ChevronDown className="w-4 h-4 text-slate-400" />
+                <Avatar 
+                  fallback={userData.name?.substring(0, 2) || 'U'} 
+                  src={userData.avatar}
+                  size="sm" 
+                />
+                <div className="hidden sm:block text-left">
+                  <p className="text-xs font-medium text-white truncate max-w-[100px]">
+                    {userData.name}
+                  </p>
+                  <p className="text-[10px] text-dark-400">
+                    {userData.role === 'admin' ? 'admin' : userData.role}
+                  </p>
+                </div>
+                <ChevronDown className={cn(
+                  "w-4 h-4 text-slate-400 transition-transform",
+                  isUserMenuOpen && "rotate-180"
+                )} />
               </button>
               <AnimatePresence>
                 <UserMenuDropdown
