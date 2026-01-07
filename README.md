@@ -1,93 +1,45 @@
-# Perfil de Usuário Completo
+# 🔧 Correção: APIs de Perfil (Erro 401)
 
-## ✅ O que foi implementado
+## ❌ Problema
+As APIs de perfil estavam retornando **401 Unauthorized** porque usavam um método de autenticação diferente do padrão do projeto.
 
-1. **Página de Perfil Funcional**
-   - Editar nome e sobrenome (salva no banco)
-   - Upload de foto de perfil (Supabase Storage)
-   - Telefone com máscara brasileira (11) 99999-9999
-   - Visualização de cargo (Admin/Gerente/Agente)
-   - Email somente leitura
-
-2. **Alteração de Senha**
-   - Envio de email de recuperação via Supabase Auth
-
-3. **APIs**
-   - `GET /api/profile` - Buscar dados do perfil
-   - `PUT /api/profile` - Atualizar nome, sobrenome, telefone
-   - `POST /api/profile` - Enviar email de recuperação de senha
-   - `POST /api/profile/avatar` - Upload de foto
-   - `DELETE /api/profile/avatar` - Remover foto
+## ✅ Solução
+Reescrevi as APIs para usar o mesmo padrão de autenticação do resto do projeto:
+- Lê o token de `cookies().get('sb-access-token')`
+- Valida com `supabaseAdmin.auth.getUser(accessToken)`
 
 ---
 
-## 📦 Arquivos Incluídos
+## 📦 Arquivos Corrigidos
 
 ```
-src/
-├── app/
-│   ├── api/
-│   │   └── profile/
-│   │       ├── route.ts              ← API de perfil
-│   │       └── avatar/
-│   │           └── route.ts          ← Upload/delete de avatar
-│   └── (dashboard)/
-│       └── settings/
-│           └── page.tsx              ← Página de configurações
-├── hooks/
-│   └── useProfile.ts                 ← Hook para gerenciar perfil
-└── components/
-    └── ui/
-        └── PhoneInput.tsx            ← Input de telefone com máscara
+src/app/api/profile/
+├── route.ts              ← GET/PUT/POST perfil
+└── avatar/
+    └── route.ts          ← POST/DELETE avatar
 ```
+
+**NOTA:** Os outros arquivos (settings/page.tsx, useProfile.ts, PhoneInput.tsx) já estão corretos no seu código!
 
 ---
 
 ## 🚀 Instalação
 
-### Passo 1: Execute o SQL no Supabase
-
-Execute o arquivo `SQL-PERFIL.sql` no SQL Editor do Supabase.
-
-**IMPORTANTE**: Execute cada bloco separadamente!
-
-### Passo 2: Substitua os arquivos
-
-Extraia o ZIP e copie a pasta `src` para o seu projeto, substituindo os arquivos existentes.
-
-### Passo 3: Deploy
+Apenas substitua a pasta `src/app/api/profile/` e faça deploy:
 
 ```bash
 git add .
-git commit -m "feat: perfil de usuário completo com upload de avatar"
+git commit -m "fix: profile API authentication"
 git push
 ```
 
 ---
 
-## ✅ Funcionalidades
+## ✅ O que vai funcionar agora
 
-| Funcionalidade | Status |
-|----------------|--------|
-| Editar nome/sobrenome | ✅ |
-| Upload de foto | ✅ |
-| Remover foto | ✅ |
-| Telefone com máscara | ✅ |
-| Visualizar cargo | ✅ |
-| Email (somente leitura) | ✅ |
-| Resetar senha por email | ✅ |
-| Header atualiza automaticamente | ✅ |
-
----
-
-## 🔐 Sistema de Cargos
-
-O sistema já suporta 3 tipos de cargo:
-
-| Cargo | Descrição |
-|-------|-----------|
-| **admin** | Administrador - Acesso total + criar usuários |
-| **manager** | Gerente - Acesso total, não cria usuários |
-| **agent** | Agente - Acesso restrito conforme permissões |
-
-Os próximos passos serão implementar o controle de permissões na interface (esconder menus, botões, etc).
+- ✅ Erro "Unauthorized" vai sumir
+- ✅ Buscar dados do perfil
+- ✅ Editar nome/sobrenome
+- ✅ Upload de foto
+- ✅ Remover foto
+- ✅ Resetar senha por email

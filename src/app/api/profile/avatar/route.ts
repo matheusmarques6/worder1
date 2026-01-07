@@ -1,17 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+
+// Cliente admin
+let supabaseAdmin: SupabaseClient | null = null;
+function getSupabaseAdmin(): SupabaseClient | null {
+  if (!supabaseAdmin) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (url && key && !url.includes('placeholder')) {
+      supabaseAdmin = createClient(url, key, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+    }
+  }
+  return supabaseAdmin;
+}
+
+// Obter usuário autenticado
+async function getAuthUser() {
+  const admin = getSupabaseAdmin();
+  if (!admin) return null;
+
+  const cookieStore = cookies();
+  const accessToken = cookieStore.get('sb-access-token')?.value;
+  
+  if (!accessToken) return null;
+  
+  const { data: { user }, error } = await admin.auth.getUser(accessToken);
+  if (error || !user) return null;
+  
+  return { user, admin };
+}
 
 // POST - Upload de avatar
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const auth = await getAuthUser();
     
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const { user, admin } = auth;
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -29,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar tamanho (max 5MB)
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
       return NextResponse.json({ 
         error: 'Arquivo muito grande. Máximo 5MB.' 
@@ -46,20 +77,23 @@ export async function POST(request: NextRequest) {
     const fileBuffer = new Uint8Array(arrayBuffer);
 
     // Deletar avatar anterior se existir
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile } = await admin
       .from('profiles')
       .select('avatar_url')
       .eq('id', user.id)
       .single();
 
     if (existingProfile?.avatar_url) {
-      // Extrair path do URL
-      const oldPath = existingProfile.avatar_url.split('/').slice(-2).join('/');
-      await supabase.storage.from('avatars').remove([oldPath]);
+      try {
+        const oldPath = existingProfile.avatar_url.split('/').slice(-2).join('/');
+        await admin.storage.from('avatars').remove([oldPath]);
+      } catch (e) {
+        console.log('Could not delete old avatar:', e);
+      }
     }
 
     // Upload para Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await admin.storage
       .from('avatars')
       .upload(filePath, fileBuffer, {
         contentType: file.type,
@@ -72,27 +106,43 @@ export async function POST(request: NextRequest) {
     }
 
     // Obter URL pública
-    const { data: { publicUrl } } = supabase.storage
+    const { data: { publicUrl } } = admin.storage
       .from('avatars')
       .getPublicUrl(filePath);
 
-    // Atualizar perfil com novo avatar
-    const { error: updateError } = await supabase
+    // Verificar se perfil existe
+    const { data: profile } = await admin
       .from('profiles')
-      .update({ 
-        avatar_url: publicUrl,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', user.id);
+      .select('id')
+      .eq('id', user.id)
+      .single();
 
-    if (updateError) {
-      console.error('Profile update error:', updateError);
-      // Continuar mesmo se falhar atualização do perfil
+    if (profile) {
+      // Atualizar perfil existente
+      await admin
+        .from('profiles')
+        .update({ 
+          avatar_url: publicUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+    } else {
+      // Criar perfil se não existir
+      await admin
+        .from('profiles')
+        .insert({
+          id: user.id,
+          organization_id: user.user_metadata?.organization_id,
+          avatar_url: publicUrl,
+          role: 'admin',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
     }
 
     // Atualizar user_metadata também
-    await supabase.auth.updateUser({
-      data: { 
+    await admin.auth.admin.updateUserById(user.id, {
+      user_metadata: { 
         ...user.user_metadata,
         avatar_url: publicUrl 
       }
@@ -113,31 +163,32 @@ export async function POST(request: NextRequest) {
 // DELETE - Remover avatar
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const auth = await getAuthUser();
     
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { user, admin } = auth;
+
     // Buscar avatar atual
-    const { data: profile } = await supabase
+    const { data: profile } = await admin
       .from('profiles')
       .select('avatar_url')
       .eq('id', user.id)
       .single();
 
     if (profile?.avatar_url) {
-      // Extrair path do URL
-      const oldPath = profile.avatar_url.split('/').slice(-2).join('/');
-      
-      // Deletar do Storage
-      await supabase.storage.from('avatars').remove([oldPath]);
+      try {
+        const oldPath = profile.avatar_url.split('/').slice(-2).join('/');
+        await admin.storage.from('avatars').remove([oldPath]);
+      } catch (e) {
+        console.log('Could not delete avatar from storage:', e);
+      }
     }
 
     // Atualizar perfil
-    const { error: updateError } = await supabase
+    await admin
       .from('profiles')
       .update({ 
         avatar_url: null,
@@ -145,13 +196,9 @@ export async function DELETE(request: NextRequest) {
       })
       .eq('id', user.id);
 
-    if (updateError) {
-      console.error('Profile update error:', updateError);
-    }
-
     // Atualizar user_metadata
-    await supabase.auth.updateUser({
-      data: { 
+    await admin.auth.admin.updateUserById(user.id, {
+      user_metadata: { 
         ...user.user_metadata,
         avatar_url: null 
       }
