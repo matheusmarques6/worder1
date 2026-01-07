@@ -46,7 +46,7 @@ interface KlaviyoAccount {
   api_key: string;
   public_key?: string;
   account_name?: string;
-  updated_at?: string;
+  last_sync_at?: string;
 }
 
 interface AccountInfo {
@@ -900,7 +900,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       // Get Klaviyo account for THIS organization
       const { data: account, error: accountError } = await supabase
         .from('klaviyo_accounts')
-        .select('id, organization_id, api_key, public_key, account_name, updated_at')
+        .select('id, organization_id, api_key, public_key, account_name, last_sync_at')
         .eq('organization_id', organizationId)
         .eq('is_active', true)
         .single();
@@ -918,7 +918,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         
         const { data: fallbackAccount } = await supabase
           .from('klaviyo_accounts')
-          .select('id, organization_id, api_key, public_key, account_name, updated_at')
+          .select('id, organization_id, api_key, public_key, account_name, last_sync_at')
           .eq('is_active', true)
           .limit(1)
           .single();
@@ -936,7 +936,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       
       const { data: account } = await supabase
         .from('klaviyo_accounts')
-        .select('id, organization_id, api_key, public_key, account_name, updated_at')
+        .select('id, organization_id, api_key, public_key, account_name, last_sync_at')
         .eq('is_active', true)
         .limit(1)
         .single();
@@ -1096,7 +1096,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         name: klaviyoAccount.account_name || 'Klaviyo Account',
         currency: accountInfo.currency,
         timezone: accountInfo.timezone,
-        lastSync: klaviyoAccount.updated_at || new Date().toISOString(),
+        lastSync: klaviyoAccount.last_sync_at || new Date().toISOString(),
         publicKey: klaviyoAccount.public_key || null
       },
       mode: 'realtime-reporting-api-v2',
