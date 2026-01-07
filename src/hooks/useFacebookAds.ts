@@ -101,7 +101,8 @@ export function useMetaAccounts(storeId: string | null) {
       const data = await response.json();
       
       if (data.authUrl) {
-        window.location.href = data.authUrl;
+        // Abrir em nova aba
+        window.open(data.authUrl, '_blank', 'noopener,noreferrer');
       }
     } catch (err) {
       console.error('Error getting auth URL:', err);
