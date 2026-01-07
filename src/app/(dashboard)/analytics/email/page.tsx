@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
+import { useStoreStore } from '@/stores'
 import {
   Mail,
   MousePointer,
@@ -314,13 +315,23 @@ export default function EmailAnalyticsPage() {
   const [error, setError] = useState<string | null>(null)
   const [syncProgress, setSyncProgress] = useState<string | null>(null)
 
+  // Get current store
+  const { currentStore } = useStoreStore()
+  const storeId = currentStore?.id
+
   // Fetch data from API
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      const response = await fetch(`/api/analytics/email?period=${selectedPeriod}`)
+      // Build URL with storeId if available
+      const params = new URLSearchParams({ period: selectedPeriod })
+      if (storeId) {
+        params.append('storeId', storeId)
+      }
+
+      const response = await fetch(`/api/analytics/email?${params.toString()}`)
       const result = await response.json()
 
       if (!response.ok) {
@@ -335,7 +346,7 @@ export default function EmailAnalyticsPage() {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [selectedPeriod])
+  }, [selectedPeriod, storeId])
 
   useEffect(() => {
     fetchData()
