@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Copy, Settings, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useSelectedNode } from '@/stores/flowStore';
-import { getNodeDefinition, getNodeColor } from './nodes/nodeTypes';
+import { getNodeDefinition, getNodeColor } from '../nodes/nodeTypes';
 
 // ============================================
 // TYPES
