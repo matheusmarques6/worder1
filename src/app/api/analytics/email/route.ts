@@ -897,7 +897,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       organizationId = store.organization_id as string;
       console.log(`[Klaviyo] Store: ${store.shop_name}, Organization: ${organizationId}`);
 
-      // Get Klaviyo account for THIS organization only
+      // Get Klaviyo account for THIS organization
       const { data: account, error: accountError } = await supabase
         .from('klaviyo_accounts')
         .select('id, organization_id, api_key, public_key, account_name, updated_at')
@@ -906,10 +906,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         .single();
 
       if (accountError && accountError.code !== 'PGRST116') {
-        console.error('[Klaviyo] Error fetching account:', accountError);
+        console.error('[Klaviyo] Error fetching account by org:', accountError);
       }
 
       klaviyoAccount = account as KlaviyoAccount | null;
+
+      // FALLBACK: If no account found for this org, try to find any active account
+      // This handles cases where Klaviyo was connected with a different organization_id
+      if (!klaviyoAccount) {
+        console.warn(`[Klaviyo] No account found for organization ${organizationId}, trying fallback...`);
+        
+        const { data: fallbackAccount } = await supabase
+          .from('klaviyo_accounts')
+          .select('id, organization_id, api_key, public_key, account_name, updated_at')
+          .eq('is_active', true)
+          .limit(1)
+          .single();
+
+        if (fallbackAccount) {
+          console.warn(`[Klaviyo] Using fallback account: ${fallbackAccount.account_name} (org: ${fallbackAccount.organization_id})`);
+          console.warn(`[Klaviyo] ATTENTION: Consider updating klaviyo_accounts.organization_id to match ${organizationId}`);
+          klaviyoAccount = fallbackAccount as KlaviyoAccount;
+        }
+      }
     } else {
       // Fallback: get first active account (for backward compatibility)
       // WARNING: This should be avoided in multi-store environments
