@@ -388,7 +388,26 @@ export default function CRMPage() {
     if (pipelines.length > 0 && !activePipeline) {
       setActivePipeline(pipelines[0])
     }
+    // ✅ CORREÇÃO: Limpar activePipeline quando pipelines fica vazio (troca de loja)
+    if (pipelines.length === 0 && activePipeline) {
+      setActivePipeline(null)
+    }
   }, [pipelines, activePipeline])
+
+  // ✅ CORREÇÃO: Fechar modais e limpar estados quando troca de loja (pipelines muda)
+  useEffect(() => {
+    if (pipelines.length === 0) {
+      setShowPipelineModal(false)
+      setShowCreateDealModal(false)
+      setShowEditStageModal(false)
+      setShowPipelineDropdown(false)
+      setShowFilterDropdown(false)
+      setSelectedDeal(null)
+      setEditingPipeline(null)
+      setEditingStage(null)
+      setActiveDeal(null)
+    }
+  }, [pipelines.length])
 
   // DnD sensors
   const sensors = useSensors(
@@ -662,6 +681,12 @@ export default function CRMPage() {
         />
       </>
     )
+  }
+
+  // ✅ CORREÇÃO: Guard para quando activePipeline ainda não foi definido
+  // Isso pode acontecer brevemente durante o primeiro render ou troca de loja
+  if (!activePipeline) {
+    return <LoadingState />
   }
 
   return (
