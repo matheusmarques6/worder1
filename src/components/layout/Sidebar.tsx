@@ -411,6 +411,7 @@ export function Sidebar() {
 const POLLING_INTERVAL = 30000 // 30 segundos
 
 export function Header() {
+  const router = useRouter()
   const { sidebarCollapsed } = useUIStore()
   const { currentStore } = useStoreStore()
   const { user, signOut } = useAuthStore()
