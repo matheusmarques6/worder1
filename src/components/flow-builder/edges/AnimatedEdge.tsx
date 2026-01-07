@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { NodeStatus } from '@/stores/flowStore';
 
-interface AnimatedEdgeData {
+interface AnimatedEdgeData extends Record<string, unknown> {
   status?: NodeStatus;
   label?: string;
 }
@@ -23,7 +23,7 @@ export const AnimatedEdge = memo(function AnimatedEdge({
   markerEnd,
   data,
   selected,
-}: EdgeProps<AnimatedEdgeData>) {
+}: EdgeProps) {
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -34,7 +34,8 @@ export const AnimatedEdge = memo(function AnimatedEdge({
     borderRadius: 8,
   });
 
-  const status = data?.status || 'idle';
+  const edgeData = data as AnimatedEdgeData | undefined;
+  const status = edgeData?.status || 'idle';
   
   const strokeColor = {
     idle: '#4b5563',
@@ -97,7 +98,7 @@ export const AnimatedEdge = memo(function AnimatedEdge({
       )}
 
       {/* Label */}
-      {data?.label && (
+      {edgeData?.label && (
         <EdgeLabelRenderer>
           <div
             style={{
@@ -111,7 +112,7 @@ export const AnimatedEdge = memo(function AnimatedEdge({
               'text-white/50'
             )}
           >
-            {data.label}
+            {edgeData.label}
           </div>
         </EdgeLabelRenderer>
       )}
