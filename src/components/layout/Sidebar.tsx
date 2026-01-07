@@ -37,6 +37,9 @@ import {
   ExternalLink,
   Loader2,
   TrendingUp,
+  User,
+  Building2,
+  CreditCard,
 } from 'lucide-react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
@@ -410,7 +413,7 @@ const POLLING_INTERVAL = 30000 // 30 segundos
 export function Header() {
   const { sidebarCollapsed } = useUIStore()
   const { currentStore } = useStoreStore()
-  const { user } = useAuthStore()
+  const { user, signOut } = useAuthStore()
   
   // Notifications state
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -422,7 +425,83 @@ export function Header() {
   // User data
   const userName = user?.name || user?.email?.split('@')[0] || 'Usuário'
   const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-  const userRole = user?.role || 'Admin'
+  const userRole = user?.role || 'admin'
+  const userAvatar = user?.avatar_url
+
+  // User menu state
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [agents, setAgents] = useState<Array<{
+    id: string
+    name: string
+    avatar_url?: string
+    status: 'online' | 'offline' | 'away' | 'busy'
+  }>>([])
+  const [loadingAgents, setLoadingAgents] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+
+  // Fetch agents when menu opens
+  const fetchAgents = useCallback(async () => {
+    if (!user?.organization_id) return
+    setLoadingAgents(true)
+    try {
+      const res = await fetch('/api/agents/status')
+      if (res.ok) {
+        const data = await res.json()
+        setAgents(data.agents || [])
+      }
+    } catch (error) {
+      console.error('Error fetching agents:', error)
+    } finally {
+      setLoadingAgents(false)
+    }
+  }, [user?.organization_id])
+
+  // Handle logout
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      })
+      signOut()
+      router.push('/')
+    } catch (error) {
+      console.error('Error logging out:', error)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
+  // Get role label
+  const getRoleLabel = (role?: string) => {
+    switch (role) {
+      case 'admin': return 'Administrador'
+      case 'manager': return 'Gerente'
+      case 'agent': return 'Agente'
+      default: return 'Admin'
+    }
+  }
+
+  // Close user menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Fetch agents when menu opens
+  useEffect(() => {
+    if (userMenuOpen && user?.organization_id) {
+      fetchAgents()
+    }
+  }, [userMenuOpen, user?.organization_id, fetchAgents])
 
   // ============================================
   // Load notifications from API
@@ -747,17 +826,172 @@ export function Header() {
           </AnimatePresence>
         </div>
 
-        {/* User Avatar */}
-        <div className="flex items-center gap-3 pl-4 border-l border-dark-700">
-          <div className="text-right">
-            <p className="text-sm font-medium text-white">{userName}</p>
-            <p className="text-xs text-dark-400">{userRole}</p>
-          </div>
-          <Avatar
-            fallback={userInitials}
-            size="sm"
-            status="online"
-          />
+        {/* User Avatar with Dropdown Menu */}
+        <div ref={userMenuRef} className="relative flex items-center gap-3 pl-4 border-l border-dark-700">
+          <button
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            className="flex items-center gap-3 p-1 rounded-lg hover:bg-dark-800/50 transition-colors"
+          >
+            <div className="text-right">
+              <p className="text-sm font-medium text-white">{userName}</p>
+              <p className="text-xs text-dark-400">{getRoleLabel(userRole)}</p>
+            </div>
+            {userAvatar ? (
+              <img 
+                src={userAvatar} 
+                alt={userName}
+                className="w-9 h-9 rounded-lg object-cover"
+              />
+            ) : (
+              <Avatar
+                fallback={userInitials}
+                size="sm"
+                status="online"
+              />
+            )}
+            <ChevronDown className={cn(
+              "w-4 h-4 text-dark-400 transition-transform",
+              userMenuOpen && "rotate-180"
+            )} />
+          </button>
+
+          {/* User Menu Dropdown */}
+          <AnimatePresence>
+            {userMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-50 overflow-hidden"
+              >
+                {/* User Info Header */}
+                <div className="p-4 border-b border-dark-700">
+                  <div className="flex items-center gap-3">
+                    {userAvatar ? (
+                      <img 
+                        src={userAvatar} 
+                        alt={userName}
+                        className="w-12 h-12 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+                        <span className="text-white font-bold text-lg">{userInitials}</span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{userName}</p>
+                      <p className="text-xs text-dark-400 truncate">{user?.email}</p>
+                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-primary-500/20 text-primary-400">
+                        {getRoleLabel(userRole)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Agents Section */}
+                {agents.length > 0 && (
+                  <div className="px-3 py-2 border-b border-dark-700">
+                    <div className="flex items-center gap-2 px-1 mb-2">
+                      <Users className="w-3.5 h-3.5 text-dark-500" />
+                      <span className="text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
+                        Agentes ({agents.filter(a => a.status === 'online').length} online)
+                      </span>
+                    </div>
+                    <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                      {loadingAgents ? (
+                        <div className="flex items-center justify-center py-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-dark-500" />
+                        </div>
+                      ) : (
+                        agents.map((agent) => (
+                          <div
+                            key={agent.id}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+                          >
+                            <div className="relative">
+                              {agent.avatar_url ? (
+                                <img 
+                                  src={agent.avatar_url} 
+                                  alt={agent.name}
+                                  className="w-6 h-6 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-6 h-6 rounded-full bg-dark-600 flex items-center justify-center">
+                                  <span className="text-[10px] text-dark-400">
+                                    {agent.name?.substring(0, 2).toUpperCase()}
+                                  </span>
+                                </div>
+                              )}
+                              <div className={cn(
+                                'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-dark-800',
+                                agent.status === 'online' && 'bg-green-500',
+                                agent.status === 'away' && 'bg-yellow-500',
+                                agent.status === 'busy' && 'bg-red-500',
+                                agent.status === 'offline' && 'bg-dark-500',
+                              )} />
+                            </div>
+                            <span className="text-xs text-dark-300 truncate flex-1">{agent.name}</span>
+                            <span className={cn(
+                              'text-[10px]',
+                              agent.status === 'online' && 'text-green-400',
+                              agent.status === 'away' && 'text-yellow-400',
+                              agent.status === 'busy' && 'text-red-400',
+                              agent.status === 'offline' && 'text-dark-500',
+                            )}>
+                              {agent.status === 'online' ? 'Online' : 
+                               agent.status === 'away' ? 'Ausente' :
+                               agent.status === 'busy' ? 'Ocupado' : 'Offline'}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Menu Options */}
+                <div className="py-2">
+                  <Link
+                    href="/settings?tab=profile"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+                  >
+                    <User className="w-4 h-4 text-dark-400" />
+                    <span className="text-sm text-dark-300">Meu Perfil</span>
+                  </Link>
+                  <Link
+                    href="/settings?tab=store"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+                  >
+                    <Building2 className="w-4 h-4 text-dark-400" />
+                    <span className="text-sm text-dark-300">Configurações da Loja</span>
+                  </Link>
+                  <Link
+                    href="/settings?tab=integrations"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+                  >
+                    <Settings className="w-4 h-4 text-dark-400" />
+                    <span className="text-sm text-dark-300">Integrações</span>
+                  </Link>
+                </div>
+
+                {/* Logout */}
+                <div className="px-4 py-2 border-t border-dark-700">
+                  <button
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-red-500/10 transition-colors text-red-400 disabled:opacity-50"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span className="text-sm">{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </header>
