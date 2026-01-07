@@ -29,6 +29,7 @@ interface StoreState {
   stores: ShopifyStore[]
   currentStore: ShopifyStore | null
   isLoading: boolean
+  _hasHydrated: boolean // ✅ NOVO: Controle de rehydration
   
   setStores: (stores: ShopifyStore[]) => void
   setCurrentStore: (store: ShopifyStore | null) => void
@@ -37,6 +38,7 @@ interface StoreState {
   removeStore: (id: string) => void
   setLoading: (loading: boolean) => void
   clearStores: () => void
+  setHasHydrated: (state: boolean) => void // ✅ NOVO
 }
 
 export const useStoreStore = create<StoreState>()(
@@ -45,6 +47,7 @@ export const useStoreStore = create<StoreState>()(
       stores: [],
       currentStore: null,
       isLoading: false,
+      _hasHydrated: false, // ✅ NOVO
       
       setStores: (stores) => set({ stores }),
       
@@ -92,9 +95,14 @@ export const useStoreStore = create<StoreState>()(
       })),
       setLoading: (isLoading) => set({ isLoading }),
       clearStores: () => set({ stores: [], currentStore: null, isLoading: false }),
+      setHasHydrated: (state) => set({ _hasHydrated: state }), // ✅ NOVO
     }),
     {
       name: 'worder-stores',
+      // ✅ NOVO: Callback quando rehydration termina
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     }
   )
 )

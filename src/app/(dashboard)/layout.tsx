@@ -145,7 +145,8 @@ export default function DashboardLayout({
   const [addStoreModalOpen, setAddStoreModalOpen] = useState(false)
   const pathname = usePathname()
   
-  const { stores, currentStore, setStores, setCurrentStore, addStore } = useStoreStore()
+  // ✅ MODIFICADO: Adicionar _hasHydrated para controlar quando carregar lojas
+  const { stores, currentStore, setStores, setCurrentStore, addStore, _hasHydrated } = useStoreStore()
   const { user, setUser } = useAuthStore()
 
   // ============================================
@@ -355,8 +356,13 @@ export default function DashboardLayout({
     setMobileOpen(false)
   }, [pathname])
 
-  // Load stores from database on mount
+  // Load stores from database on mount - ✅ CORRIGIDO: Esperar hydration
   useEffect(() => {
+    // ✅ CRÍTICO: Só rodar DEPOIS que o Zustand terminar de carregar do localStorage
+    if (!_hasHydrated) {
+      return
+    }
+    
     const loadStores = async () => {
       try {
         const response = await fetch('/api/stores')
@@ -370,16 +376,17 @@ export default function DashboardLayout({
           }))
           setStores(formattedStores)
           
-          // ✅ CORREÇÃO: Verificar se currentStore está na lista de lojas válidas
-          // Se não estiver (pode ser de outra org), setar a primeira loja válida
-          if (formattedStores.length > 0) {
-            const currentStoreIsValid = currentStore && formattedStores.some((s: any) => s.id === currentStore.id)
-            if (!currentStoreIsValid) {
+          // ✅ Agora currentStore já foi carregado do localStorage pelo Zustand
+          // Verificar se a loja salva ainda existe na lista
+          if (currentStore) {
+            const storeStillExists = formattedStores.some((s: any) => s.id === currentStore.id)
+            if (!storeStillExists) {
+              // Loja não existe mais, selecionar a primeira
               setCurrentStore(formattedStores[0])
             }
-          } else {
-            // Sem lojas, limpar currentStore
-            setCurrentStore(null)
+          } else if (formattedStores.length > 0) {
+            // Nenhuma loja selecionada, usar a primeira
+            setCurrentStore(formattedStores[0])
           }
         }
       } catch (error) {
@@ -387,7 +394,7 @@ export default function DashboardLayout({
       }
     }
     loadStores()
-  }, [])
+  }, [_hasHydrated]) // ✅ MODIFICADO: Dependência em _hasHydrated
 
   // Listen for openAddStoreModal event from other components
   useEffect(() => {
