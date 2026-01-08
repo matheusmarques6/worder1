@@ -174,7 +174,7 @@ export function FlowBuilder({
 
           {/* Properties Panel */}
           {showPropertiesPanel && (
-            <PropertiesPanel organizationId={organizationId} />
+            <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} />
           )}
         </div>
 

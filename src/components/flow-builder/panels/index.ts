@@ -8,3 +8,4 @@ export { TestModal } from './TestModal';
 export { HistoryPanel } from './HistoryPanel';
 export { VariablePicker } from './VariablePicker';
 export { CredentialSelector } from './CredentialSelector';
+export { WebhookConfig } from './WebhookConfig';

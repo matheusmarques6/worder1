@@ -109,7 +109,26 @@ export async function GET(request: NextRequest) {
   try {
     // Return available credential types
     if (includeTypes) {
-      return NextResponse.json({ types: CREDENTIAL_TYPES });
+      // Also fetch credentials if no specific type requested
+      let credentials: any[] = [];
+      
+      let query = supabase
+        .from('credentials')
+        .select('id, name, type, created_at, updated_at, last_used_at, last_test_success, automations_using')
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false });
+
+      if (type) {
+        query = query.eq('type', type);
+      }
+
+      const { data } = await query;
+      credentials = data || [];
+
+      return NextResponse.json({ 
+        types: CREDENTIAL_TYPES,
+        credentials,
+      });
     }
 
     // Get single credential (without decrypted data)

@@ -6,6 +6,8 @@ import { X, Trash2, Copy, Settings, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useSelectedNode } from '@/stores/flowStore';
 import { getNodeDefinition, getNodeColor } from '../nodes/nodeTypes';
+import { WebhookConfig } from './WebhookConfig';
+import { CredentialSelector } from './CredentialSelector';
 
 // ============================================
 // TYPES
@@ -21,7 +23,7 @@ interface Pipeline {
 // PROPERTIES PANEL
 // ============================================
 
-export function PropertiesPanel({ organizationId }: { organizationId?: string }) {
+export function PropertiesPanel({ organizationId, automationId }: { organizationId?: string; automationId?: string }) {
   const selectedNode = useSelectedNode();
   const selectNode = useFlowStore((state) => state.selectNode);
   const updateNode = useFlowStore((state) => state.updateNode);
@@ -172,6 +174,17 @@ export function PropertiesPanel({ organizationId }: { organizationId?: string })
               Configuração
             </h4>
 
+            {/* WEBHOOK TRIGGER */}
+            {selectedNode.data.nodeType === 'trigger_webhook' && (
+              <WebhookConfig
+                automationId={automationId}
+                nodeId={selectedNode.id}
+                organizationId={organizationId}
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+              />
+            )}
+
             {/* TAG NODES */}
             {(selectedNode.data.nodeType === 'trigger_tag' || 
               selectedNode.data.nodeType === 'action_tag' ||
@@ -231,6 +244,12 @@ export function PropertiesPanel({ organizationId }: { organizationId?: string })
             {/* EMAIL ACTION */}
             {selectedNode.data.nodeType === 'action_email' && (
               <>
+                <CredentialSelector
+                  connectionType="email"
+                  value={selectedNode.data.config?.credentialId}
+                  onChange={(id) => handleUpdate('credentialId', id)}
+                  label="Conta de Email"
+                />
                 <div className="space-y-2">
                   <label className="text-xs text-white/60">Assunto</label>
                   <input
@@ -247,7 +266,22 @@ export function PropertiesPanel({ organizationId }: { organizationId?: string })
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Template ID</label>
+                  <label className="text-xs text-white/60">Corpo do Email (HTML)</label>
+                  <textarea
+                    value={selectedNode.data.config?.html || ''}
+                    onChange={(e) => handleUpdate('html', e.target.value)}
+                    placeholder="<p>Olá {{contact.name}}!</p>"
+                    rows={4}
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg resize-none font-mono text-xs',
+                      'bg-[#0a0a0a] border border-white/10',
+                      'text-white placeholder-white/30',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Template ID (opcional)</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.templateId || ''}
@@ -267,21 +301,70 @@ export function PropertiesPanel({ organizationId }: { organizationId?: string })
             {/* WHATSAPP ACTION */}
             {selectedNode.data.nodeType === 'action_whatsapp' && (
               <>
+                <CredentialSelector
+                  connectionType="whatsapp"
+                  value={selectedNode.data.config?.credentialId}
+                  onChange={(id) => handleUpdate('credentialId', id)}
+                  label="Conexão WhatsApp"
+                />
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Template</label>
-                  <input
-                    type="text"
-                    value={selectedNode.data.config?.templateId || ''}
-                    onChange={(e) => handleUpdate('templateId', e.target.value)}
-                    placeholder="ID do template WhatsApp"
-                    className={cn(
-                      'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
-                      'text-sm text-white placeholder-white/30',
-                      'focus:outline-none focus:border-blue-500/50'
-                    )}
+                  <label className="text-xs text-white/60">Tipo de Mensagem</label>
+                  <SelectField
+                    value={selectedNode.data.config?.messageType || 'template'}
+                    onChange={(v) => handleUpdate('messageType', v)}
+                    options={[
+                      { value: 'template', label: 'Template' },
+                      { value: 'text', label: 'Texto Livre' },
+                    ]}
                   />
                 </div>
+                {selectedNode.data.config?.messageType === 'text' ? (
+                  <div className="space-y-2">
+                    <label className="text-xs text-white/60">Mensagem</label>
+                    <textarea
+                      value={selectedNode.data.config?.message || ''}
+                      onChange={(e) => handleUpdate('message', e.target.value)}
+                      placeholder="Olá {{contact.name}}!"
+                      rows={3}
+                      className={cn(
+                        'w-full px-3 py-2 rounded-lg resize-none',
+                        'bg-[#0a0a0a] border border-white/10',
+                        'text-sm text-white placeholder-white/30',
+                        'focus:outline-none focus:border-blue-500/50'
+                      )}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-xs text-white/60">Template</label>
+                      <input
+                        type="text"
+                        value={selectedNode.data.config?.templateId || ''}
+                        onChange={(e) => handleUpdate('templateId', e.target.value)}
+                        placeholder="Nome do template WhatsApp"
+                        className={cn(
+                          'w-full px-3 py-2 rounded-lg',
+                          'bg-[#0a0a0a] border border-white/10',
+                          'text-sm text-white placeholder-white/30',
+                          'focus:outline-none focus:border-blue-500/50'
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-white/60">Idioma</label>
+                      <SelectField
+                        value={selectedNode.data.config?.language || 'pt_BR'}
+                        onChange={(v) => handleUpdate('language', v)}
+                        options={[
+                          { value: 'pt_BR', label: 'Português (BR)' },
+                          { value: 'en_US', label: 'English (US)' },
+                          { value: 'es', label: 'Español' },
+                        ]}
+                      />
+                    </div>
+                  </>
+                )}
               </>
             )}
 
@@ -432,6 +515,12 @@ export function PropertiesPanel({ organizationId }: { organizationId?: string })
             {/* WEBHOOK ACTION */}
             {selectedNode.data.nodeType === 'action_webhook' && (
               <>
+                <CredentialSelector
+                  connectionType="http"
+                  value={selectedNode.data.config?.credentialId}
+                  onChange={(id) => handleUpdate('credentialId', id)}
+                  label="Autenticação (opcional)"
+                />
                 <div className="space-y-2">
                   <label className="text-xs text-white/60">URL</label>
                   <input
@@ -457,7 +546,38 @@ export function PropertiesPanel({ organizationId }: { organizationId?: string })
                       { value: 'POST', label: 'POST' },
                       { value: 'PUT', label: 'PUT' },
                       { value: 'PATCH', label: 'PATCH' },
+                      { value: 'DELETE', label: 'DELETE' },
                     ]}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Headers (JSON)</label>
+                  <textarea
+                    value={selectedNode.data.config?.headers || '{}'}
+                    onChange={(e) => handleUpdate('headers', e.target.value)}
+                    placeholder='{"Content-Type": "application/json"}'
+                    rows={2}
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg resize-none font-mono text-xs',
+                      'bg-[#0a0a0a] border border-white/10',
+                      'text-white placeholder-white/30',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Body (JSON)</label>
+                  <textarea
+                    value={selectedNode.data.config?.body || ''}
+                    onChange={(e) => handleUpdate('body', e.target.value)}
+                    placeholder='{"contact": "{{contact.email}}"}'
+                    rows={4}
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg resize-none font-mono text-xs',
+                      'bg-[#0a0a0a] border border-white/10',
+                      'text-white placeholder-white/30',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
                   />
                 </div>
               </>

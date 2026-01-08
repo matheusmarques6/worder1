@@ -1,273 +1,362 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Key, Plus, Check, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { 
+  ChevronDown, 
+  Plus, 
+  Check, 
+  AlertCircle, 
+  Loader2,
+  Search,
+  ExternalLink,
+  Settings,
+  X,
+  MessageCircle,
+  Mail,
+  ShoppingCart,
+  ShoppingBag,
+  Globe,
+  Key,
+  BarChart,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCredentials, Credential, CredentialType } from '@/hooks/useCredentials';
 
 // ============================================
 // TYPES
 // ============================================
 
-interface CredentialSelectorProps {
+interface Connection {
+  id: string;
   type: string;
-  value?: string;
-  onChange: (credentialId: string | undefined) => void;
-  label?: string;
-  required?: boolean;
+  typeName: string;
+  name: string;
+  identifier?: string;
+  icon: string;
+  color: string;
+  isActive: boolean;
+  createdAt: string;
 }
+
+interface CredentialSelectorProps {
+  /** Tipo de conexão: whatsapp, email, shopify, http, etc */
+  connectionType: string;
+  /** ID da conexão selecionada */
+  value?: string;
+  /** Callback quando conexão é selecionada */
+  onChange: (connectionId: string | undefined) => void;
+  /** Label do campo */
+  label?: string;
+  /** Campo obrigatório */
+  required?: boolean;
+  /** Placeholder */
+  placeholder?: string;
+}
+
+// Mapeamento de ícones
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  MessageCircle,
+  Mail,
+  ShoppingCart,
+  ShoppingBag,
+  Globe,
+  Key,
+  BarChart,
+};
 
 // ============================================
 // CREDENTIAL SELECTOR COMPONENT
 // ============================================
 
 export function CredentialSelector({
-  type,
+  connectionType,
   value,
   onChange,
-  label = 'Credencial',
+  label = 'Credencial para conectar',
   required = false,
+  placeholder = 'Selecione uma credencial...',
 }: CredentialSelectorProps) {
-  const { credentials, types, isLoading, load, create, test } = useCredentials({ type });
-  const [showCreate, setShowCreate] = useState(false);
-  const [newCredName, setNewCredName] = useState('');
-  const [newCredData, setNewCredData] = useState<Record<string, string>>({});
-  const [isCreating, setIsCreating] = useState(false);
-  const [isTesting, setIsTesting] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Get credential type info
-  const credType = types.find((t) => t.type === type);
-  const filteredCredentials = credentials.filter((c) => c.type === type);
-  const selectedCredential = filteredCredentials.find((c) => c.id === value);
+  // Conexão selecionada
+  const selectedConnection = connections.find(c => c.id === value);
 
-  // Reset form when type changes
+  // Filtrar conexões pela busca
+  const filteredConnections = connections.filter(c => 
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.typeName.toLowerCase().includes(search.toLowerCase()) ||
+    (c.identifier && c.identifier.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  // ============================================
+  // LOAD CONNECTIONS
+  // ============================================
+
   useEffect(() => {
-    setNewCredData({});
-    setNewCredName('');
-  }, [type]);
+    loadConnections();
+  }, [connectionType]);
 
-  // ============================================
-  // HANDLERS
-  // ============================================
-
-  const handleCreate = async () => {
-    if (!newCredName.trim()) return;
-
-    setIsCreating(true);
+  const loadConnections = async () => {
+    setIsLoading(true);
+    setError(null);
     try {
-      const created = await create(newCredName, type, newCredData);
-      if (created) {
-        onChange(created.id);
-        setShowCreate(false);
-        setNewCredName('');
-        setNewCredData({});
-      }
+      const params = new URLSearchParams();
+      if (connectionType) params.set('type', connectionType);
+
+      const res = await fetch(`/api/automations/connections?${params}`);
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error);
+
+      setConnections(data.connections || []);
+    } catch (e: any) {
+      setError(e.message);
     } finally {
-      setIsCreating(false);
+      setIsLoading(false);
     }
   };
 
-  const handleTest = async (credentialId: string) => {
-    setIsTesting(credentialId);
-    setTestResult(null);
-    try {
-      const result = await test(credentialId);
-      if (result) {
-        setTestResult({ id: credentialId, ...result });
+  // ============================================
+  // CLICK OUTSIDE
+  // ============================================
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setSearch('');
       }
-    } finally {
-      setIsTesting(null);
-    }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // ============================================
+  // RENDER ICON
+  // ============================================
+
+  const renderIcon = (iconName: string, color: string, size = 'w-5 h-5') => {
+    const IconComponent = ICON_MAP[iconName] || Globe;
+    return (
+      <div 
+        className="flex items-center justify-center rounded-md p-1.5"
+        style={{ backgroundColor: `${color}20` }}
+      >
+        <IconComponent className={size} style={{ color }} />
+      </div>
+    );
   };
 
   // ============================================
   // RENDER
   // ============================================
 
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        <label className="block text-xs text-white/60">{label}</label>
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-[#1a1a1a] border border-white/10">
+          <Loader2 className="w-4 h-4 text-white/40 animate-spin" />
+          <span className="text-sm text-white/40">Carregando conexões...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 relative" ref={dropdownRef}>
       {/* Label */}
-      <label className="block text-sm font-medium text-white/70">
+      <label className="block text-xs text-white/60">
         {label}
         {required && <span className="text-red-400 ml-1">*</span>}
       </label>
 
-      {/* Selector */}
-      {isLoading ? (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-[#0a0a0a] border border-white/10">
-          <Loader2 className="w-4 h-4 text-white/40 animate-spin" />
-          <span className="text-sm text-white/40">Carregando...</span>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {/* Dropdown */}
-          <div className="relative">
-            <select
-              value={value || ''}
-              onChange={(e) => onChange(e.target.value || undefined)}
-              className={cn(
-                'w-full pl-10 pr-4 py-2.5 rounded-lg appearance-none',
-                'bg-[#0a0a0a] border border-white/10 text-white',
-                'focus:outline-none focus:border-blue-500/50',
-                'cursor-pointer'
-              )}
-            >
-              <option value="">Selecione uma credencial...</option>
-              {filteredCredentials.map((cred) => (
-                <option key={cred.id} value={cred.id}>
-                  {cred.name}
-                  {cred.last_test_success === false && ' ⚠️'}
-                </option>
-              ))}
-            </select>
-            <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+      {/* Selector Button */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className={cn(
+            'w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg',
+            'bg-[#1a1a1a] border text-left',
+            'hover:bg-[#222] transition-colors',
+            isOpen ? 'border-blue-500/50' : 'border-white/10',
+            error && 'border-red-500/50'
+          )}
+        >
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {selectedConnection ? (
+              <>
+                {renderIcon(selectedConnection.icon, selectedConnection.color)}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white truncate">{selectedConnection.name}</p>
+                  <p className="text-[10px] text-white/40 truncate">{selectedConnection.typeName}</p>
+                </div>
+                {!selectedConnection.isActive && (
+                  <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                )}
+              </>
+            ) : (
+              <span className="text-sm text-white/40">{placeholder}</span>
+            )}
           </div>
+          <ChevronDown className={cn(
+            'w-4 h-4 text-white/40 transition-transform flex-shrink-0',
+            isOpen && 'rotate-180'
+          )} />
+        </button>
 
-          {/* Selected credential status */}
-          {selectedCredential && (
-            <div className="flex items-center justify-between p-2 rounded-lg bg-[#0a0a0a] border border-white/10">
-              <div className="flex items-center gap-2">
-                {selectedCredential.last_test_success === true && (
-                  <Check className="w-4 h-4 text-green-400" />
+        {/* Edit button */}
+        {selectedConnection && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open('/settings/integrations', '_blank');
+            }}
+            className="absolute right-10 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10 transition-colors"
+          >
+            <Settings className="w-3.5 h-3.5 text-white/40 hover:text-white" />
+          </button>
+        )}
+      </div>
+
+      {/* Dropdown */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className={cn(
+              'absolute z-50 left-0 right-0 mt-1 rounded-lg',
+              'bg-[#1a1a1a] border border-white/10',
+              'shadow-xl shadow-black/50',
+              'overflow-hidden'
+            )}
+            style={{ maxHeight: '300px' }}
+          >
+            {/* Search */}
+            <div className="p-2 border-b border-white/10">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar..."
+                  autoFocus
+                  className={cn(
+                    'w-full pl-9 pr-3 py-2 rounded-md',
+                    'bg-[#0a0a0a] border border-white/10',
+                    'text-sm text-white placeholder-white/30',
+                    'focus:outline-none focus:border-blue-500/50'
+                  )}
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10"
+                  >
+                    <X className="w-3 h-3 text-white/40" />
+                  </button>
                 )}
-                {selectedCredential.last_test_success === false && (
-                  <AlertCircle className="w-4 h-4 text-red-400" />
-                )}
-                <span className="text-sm text-white/60">
-                  {selectedCredential.name}
-                </span>
               </div>
+            </div>
+
+            {/* Connection List */}
+            <div className="overflow-y-auto" style={{ maxHeight: '200px' }}>
+              {filteredConnections.length === 0 ? (
+                <div className="p-4 text-center text-sm text-white/40">
+                  {search ? 'Nenhuma conexão encontrada' : 'Nenhuma conexão configurada'}
+                </div>
+              ) : (
+                filteredConnections.map((connection) => (
+                  <button
+                    key={connection.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(connection.id);
+                      setIsOpen(false);
+                      setSearch('');
+                    }}
+                    className={cn(
+                      'w-full flex items-center gap-3 px-3 py-2.5',
+                      'hover:bg-white/5 transition-colors text-left',
+                      value === connection.id && 'bg-blue-500/10'
+                    )}
+                  >
+                    {renderIcon(connection.icon, connection.color, 'w-4 h-4')}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-white truncate">{connection.name}</p>
+                        {!connection.isActive && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                            inativo
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-white/40 truncate">
+                        {connection.typeName}
+                        {connection.identifier && ` • ${connection.identifier}`}
+                      </p>
+                    </div>
+                    {value === connection.id && (
+                      <Check className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+
+            {/* Create New */}
+            <div className="border-t border-white/10">
               <button
-                onClick={() => handleTest(selectedCredential.id)}
-                disabled={isTesting === selectedCredential.id}
-                className="flex items-center gap-1 px-2 py-1 text-xs text-white/60 hover:text-white hover:bg-white/10 rounded transition-colors"
-              >
-                {isTesting === selectedCredential.id ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-3 h-3" />
+                type="button"
+                onClick={() => {
+                  window.open('/settings/integrations', '_blank');
+                }}
+                className={cn(
+                  'w-full flex items-center gap-3 px-3 py-3',
+                  'hover:bg-white/5 transition-colors text-left',
+                  'text-blue-400'
                 )}
-                Testar
+              >
+                <Plus className="w-4 h-4" />
+                <span className="text-sm">Criar nova credencial</span>
+                <ExternalLink className="w-3 h-3 ml-auto text-white/30" />
               </button>
             </div>
-          )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          {/* Test result */}
-          {testResult && testResult.id === value && (
-            <div className={cn(
-              'p-2 rounded-lg text-xs',
-              testResult.success 
-                ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                : 'bg-red-500/20 text-red-300 border border-red-500/30'
-            )}>
-              {testResult.message}
-            </div>
-          )}
-
-          {/* Create new button */}
-          {!showCreate && (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 w-full p-2 rounded-lg border border-dashed border-white/20 text-white/60 hover:text-white hover:border-white/40 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="text-sm">Criar nova credencial</span>
-            </button>
-          )}
-
-          {/* Create form */}
-          <AnimatePresence>
-            {showCreate && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="p-3 rounded-lg bg-[#141414] border border-white/10 space-y-3">
-                  <h4 className="text-sm font-medium text-white/80">
-                    Nova credencial {credType?.name}
-                  </h4>
-
-                  {/* Name */}
-                  <div>
-                    <label className="block text-xs text-white/50 mb-1">Nome</label>
-                    <input
-                      type="text"
-                      value={newCredName}
-                      onChange={(e) => setNewCredName(e.target.value)}
-                      placeholder="Ex: Minha conta WhatsApp"
-                      className={cn(
-                        'w-full px-3 py-2 rounded-lg text-sm',
-                        'bg-[#0a0a0a] border border-white/10 text-white',
-                        'placeholder-white/30',
-                        'focus:outline-none focus:border-blue-500/50'
-                      )}
-                    />
-                  </div>
-
-                  {/* Fields */}
-                  {credType?.fields.map((field) => (
-                    <div key={field}>
-                      <label className="block text-xs text-white/50 mb-1 capitalize">
-                        {field.replace(/([A-Z])/g, ' $1').trim()}
-                      </label>
-                      <input
-                        type={field.toLowerCase().includes('password') || field.toLowerCase().includes('secret') || field.toLowerCase().includes('token') || field.toLowerCase().includes('key') ? 'password' : 'text'}
-                        value={newCredData[field] || ''}
-                        onChange={(e) => setNewCredData((prev) => ({ ...prev, [field]: e.target.value }))}
-                        className={cn(
-                          'w-full px-3 py-2 rounded-lg text-sm',
-                          'bg-[#0a0a0a] border border-white/10 text-white',
-                          'placeholder-white/30',
-                          'focus:outline-none focus:border-blue-500/50'
-                        )}
-                      />
-                    </div>
-                  ))}
-
-                  {/* Actions */}
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button
-                      onClick={() => {
-                        setShowCreate(false);
-                        setNewCredName('');
-                        setNewCredData({});
-                      }}
-                      className="px-3 py-1.5 text-sm text-white/60 hover:text-white transition-colors"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={handleCreate}
-                      disabled={!newCredName.trim() || isCreating}
-                      className={cn(
-                        'flex items-center gap-2 px-3 py-1.5 rounded-lg',
-                        'bg-blue-600 hover:bg-blue-500 text-white text-sm',
-                        'disabled:opacity-50 disabled:cursor-not-allowed',
-                        'transition-colors'
-                      )}
-                    >
-                      {isCreating ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Salvando...
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-3 h-3" />
-                          Salvar
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+      {/* Error */}
+      {error && (
+        <div className="flex items-center gap-2 text-xs text-red-400">
+          <AlertCircle className="w-3 h-3" />
+          {error}
         </div>
+      )}
+
+      {/* No connections hint */}
+      {!isLoading && connections.length === 0 && !error && (
+        <p className="text-[11px] text-white/40">
+          Nenhuma conexão configurada. 
+          <a 
+            href="/settings/integrations" 
+            target="_blank" 
+            className="text-blue-400 hover:underline ml-1"
+          >
+            Configurar integrações →
+          </a>
+        </p>
       )}
     </div>
   );
