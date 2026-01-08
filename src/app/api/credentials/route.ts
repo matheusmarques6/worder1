@@ -274,7 +274,7 @@ export async function DELETE(request: NextRequest) {
       .eq('organization_id', organizationId)
       .single();
 
-    if (credential?.automations_using?.length > 0) {
+    if (credential && credential.automations_using && credential.automations_using.length > 0) {
       return NextResponse.json(
         { 
           error: 'Credential is being used by automations',
