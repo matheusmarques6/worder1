@@ -289,11 +289,6 @@ export default function AutomationsPage() {
     }
   };
 
-  // Handle test
-  const handleTest = () => {
-    alert('Teste iniciado (simulação)');
-  };
-
   // ============================================
   // RENDER EDITOR
   // ============================================
@@ -309,7 +304,6 @@ export default function AutomationsPage() {
           initialEdges={editingAutomation.edges || []}
           onSave={handleSave}
           onBack={handleBack}
-          onTest={handleTest}
           organizationId={organizationId}
         />
       </div>

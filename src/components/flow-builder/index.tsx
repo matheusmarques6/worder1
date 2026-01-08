@@ -179,7 +179,7 @@ export function FlowBuilder({
         </div>
 
         {/* Execution Panel */}
-        {showTestModal && savedAutomationId && organizationId && (
+        {showTestModal && savedAutomationId && savedAutomationId !== 'new' && organizationId && (
           <ExecutionPanel
             automationId={savedAutomationId}
             organizationId={organizationId}
@@ -188,7 +188,7 @@ export function FlowBuilder({
         )}
 
         {/* Execution Panel - Fallback for unsaved automations */}
-        {showTestModal && (!savedAutomationId || !organizationId) && (
+        {showTestModal && (!savedAutomationId || savedAutomationId === 'new' || !organizationId) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="bg-[#111111] border border-white/10 rounded-xl p-6 max-w-md">
               <h3 className="text-lg font-semibold text-white mb-2">
@@ -219,7 +219,7 @@ export function FlowBuilder({
         )}
 
         {/* History Panel */}
-        {showHistoryPanel && savedAutomationId && organizationId && (
+        {showHistoryPanel && savedAutomationId && savedAutomationId !== 'new' && organizationId && (
           <HistoryPanel
             automationId={savedAutomationId}
             organizationId={organizationId}
@@ -228,7 +228,7 @@ export function FlowBuilder({
         )}
 
         {/* History Panel - Fallback for unsaved automations */}
-        {showHistoryPanel && (!savedAutomationId || !organizationId) && (
+        {showHistoryPanel && (!savedAutomationId || savedAutomationId === 'new' || !organizationId) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="bg-[#111111] border border-white/10 rounded-xl p-6 max-w-md">
               <h3 className="text-lg font-semibold text-white mb-2">
