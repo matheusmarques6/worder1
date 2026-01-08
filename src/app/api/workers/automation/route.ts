@@ -284,6 +284,8 @@ async function handleExecuteRun(runId: string) {
           name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email,
           tags: contact.tags || [],
           customFields: contact.custom_fields || {},
+          createdAt: contact.created_at,
+          updatedAt: contact.updated_at,
         } : undefined,
         deal,
         trigger: metadata.trigger_data || {},
