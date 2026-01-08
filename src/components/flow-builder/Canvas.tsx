@@ -34,7 +34,7 @@ export function Canvas() {
   const onEdgesChange = useFlowStore((s) => s.onEdgesChange);
   const addEdgeToStore = useFlowStore((s) => s.addEdge);
   const addNode = useFlowStore((s) => s.addNode);
-  const setSelectedNode = useFlowStore((s) => s.setSelectedNode);
+  const selectNode = useFlowStore((s) => s.selectNode);
 
   // Handle new connections
   const onConnect = useCallback(
@@ -100,15 +100,15 @@ export function Canvas() {
   // Handle node click
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: any) => {
-      setSelectedNode(node.id);
+      selectNode(node.id);
     },
-    [setSelectedNode]
+    [selectNode]
   );
 
   // Handle pane click (deselect)
   const onPaneClick = useCallback(() => {
-    setSelectedNode(null);
-  }, [setSelectedNode]);
+    selectNode(null);
+  }, [selectNode]);
 
   return (
     <div ref={reactFlowWrapper} className="w-full h-full">

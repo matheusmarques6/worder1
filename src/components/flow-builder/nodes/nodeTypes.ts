@@ -376,4 +376,46 @@ export function getNodesByCategory(category: string): NodeTypeDefinition[] {
   return allNodeTypes.filter(n => n.category === category);
 }
 
+// ============================================
+// NODE SECTIONS (for Sidebar)
+// ============================================
+
+export const NODE_SECTIONS = [
+  {
+    title: 'Triggers',
+    category: 'trigger',
+    items: triggerTypes,
+  },
+  {
+    title: 'Ações',
+    category: 'action',
+    items: actionTypes,
+  },
+  {
+    title: 'Condições',
+    category: 'condition',
+    items: conditionTypes,
+  },
+  {
+    title: 'Controle',
+    category: 'control',
+    items: controlTypes,
+  },
+];
+
+// ============================================
+// HELPER: Get node color by category
+// ============================================
+
+export function getNodeColor(category: string): string {
+  const colors: Record<string, string> = {
+    trigger: '#10b981',
+    action: '#3b82f6',
+    condition: '#f59e0b',
+    control: '#a855f7',
+    transform: '#ec4899',
+  };
+  return colors[category] || '#525252';
+}
+
 export default nodeTypes;

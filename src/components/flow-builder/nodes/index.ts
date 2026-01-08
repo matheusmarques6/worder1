@@ -12,5 +12,7 @@ export {
   controlTypes,
   getNodeDefinition,
   getNodesByCategory,
+  getNodeColor,
+  NODE_SECTIONS,
   type NodeTypeDefinition,
 } from './nodeTypes';

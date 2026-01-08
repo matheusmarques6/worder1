@@ -147,7 +147,7 @@ function BaseNodeComponent(props: BaseNodeProps) {
   const { category, label, description, icon, status, executionTime, disabled } = data;
   const config = categoryConfig[category] || categoryConfig.action;
   const IconComponent = icon ? iconMap[icon] : Zap;
-  const setSelectedNode = useFlowStore((s) => s.setSelectedNode);
+  const selectNode = useFlowStore((s) => s.selectNode);
 
   return (
     <motion.div
@@ -164,7 +164,7 @@ function BaseNodeComponent(props: BaseNodeProps) {
         'transition-all duration-200',
         'hover:shadow-lg cursor-pointer'
       )}
-      onClick={() => setSelectedNode(id)}
+      onClick={() => selectNode(id)}
     >
       <StatusIndicator status={status} />
 
