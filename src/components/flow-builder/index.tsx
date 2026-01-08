@@ -27,7 +27,7 @@ export * from './edges';
 interface FlowBuilderProps {
   automationId?: string;
   automationName?: string;
-  automationStatus?: 'draft' | 'active' | 'paused';
+  automationStatus?: 'draft' | 'active' | 'paused' | 'error';
   initialNodes?: any[]; // Legacy AutomationNode[]
   initialEdges?: any[]; // Legacy AutomationEdge[]
   onSave: () => Promise<string | undefined>;

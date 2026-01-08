@@ -448,7 +448,7 @@ export const NODE_SECTIONS = [
 // HELPER: Get node color classes by color string
 // ============================================
 
-export function getNodeColor(color: string): { solid: string; bg: string; text: string } {
+export function getNodeColor(color?: string): { solid: string; bg: string; text: string } {
   const colorMap: Record<string, { solid: string; bg: string; text: string }> = {
     '#10b981': {
       solid: 'bg-emerald-500',
@@ -475,12 +475,43 @@ export function getNodeColor(color: string): { solid: string; bg: string; text: 
       bg: 'bg-pink-500/10',
       text: 'text-pink-400',
     },
+    // Named colors fallback
+    'emerald': {
+      solid: 'bg-emerald-500',
+      bg: 'bg-emerald-500/10',
+      text: 'text-emerald-400',
+    },
+    'blue': {
+      solid: 'bg-blue-500',
+      bg: 'bg-blue-500/10',
+      text: 'text-blue-400',
+    },
+    'amber': {
+      solid: 'bg-amber-500',
+      bg: 'bg-amber-500/10',
+      text: 'text-amber-400',
+    },
+    'purple': {
+      solid: 'bg-purple-500',
+      bg: 'bg-purple-500/10',
+      text: 'text-purple-400',
+    },
+    'pink': {
+      solid: 'bg-pink-500',
+      bg: 'bg-pink-500/10',
+      text: 'text-pink-400',
+    },
+    'slate': {
+      solid: 'bg-slate-500',
+      bg: 'bg-slate-500/10',
+      text: 'text-slate-400',
+    },
   };
 
-  return colorMap[color] || {
-    solid: 'bg-gray-500',
-    bg: 'bg-gray-500/10',
-    text: 'text-gray-400',
+  return colorMap[color || 'slate'] || {
+    solid: 'bg-slate-500',
+    bg: 'bg-slate-500/10',
+    text: 'text-slate-400',
   };
 }
 

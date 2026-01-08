@@ -205,7 +205,7 @@ export function useFlowBuilder(options: UseFlowBuilderOptions) {
 
     try {
       // Get current automation ID (save first if new)
-      let id = useFlowStore.getState().automationId;
+      let id: string | null | undefined = useFlowStore.getState().automationId;
       
       if (!id || id === 'new') {
         id = await save();
