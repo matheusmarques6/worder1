@@ -95,23 +95,35 @@ export async function POST(request: NextRequest) {
       return await runAutomation(organizationId, data);
     }
 
-    // Create new automation
+    // ✅ CORREÇÃO: Salvar nodes, edges e status corretamente
+    const insertData: Record<string, any> = {
+      organization_id: organizationId,
+      name: data.name || 'Nova Automação',
+      description: data.description || null,
+      trigger_type: data.trigger_type || 'manual',
+      trigger_config: data.trigger_config || {},
+      nodes: data.nodes || [],
+      edges: data.edges || [],
+      status: data.status || 'draft',
+      created_by: auth.user.id,
+    };
+
+    // Se status for 'active', setar activated_at
+    if (data.status === 'active') {
+      insertData.activated_at = new Date().toISOString();
+    }
+
     const { data: automation, error } = await supabase
       .from('automations')
-      .insert({
-        organization_id: organizationId,
-        name: data.name || 'Nova Automação',
-        description: data.description,
-        trigger_type: data.trigger_type || 'manual',
-        trigger_config: data.trigger_config || {},
-        actions: data.actions || [],
-        is_active: data.is_active ?? true,
-        created_by: auth.user.id,
-      })
+      .insert(insertData)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error creating automation:', error);
+      throw error;
+    }
+    
     return NextResponse.json({ automation }, { status: 201 });
   } catch (error: any) {
     console.error('Automation POST error:', error);
@@ -128,25 +140,52 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { id, organizationId: _ignore, ...updates } = body;
+    const { id, organizationId: _ignore, ...data } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Automation ID required' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    // ✅ CORREÇÃO: Preparar dados de atualização corretamente
+    const updateData: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    // Campos permitidos para atualização
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.trigger_type !== undefined) updateData.trigger_type = data.trigger_type;
+    if (data.trigger_config !== undefined) updateData.trigger_config = data.trigger_config;
+    if (data.nodes !== undefined) updateData.nodes = data.nodes;
+    if (data.edges !== undefined) updateData.edges = data.edges;
+    
+    // ✅ Tratar mudanças de status
+    if (data.status !== undefined) {
+      updateData.status = data.status;
+      
+      // Setar timestamps baseado no status
+      if (data.status === 'active') {
+        updateData.activated_at = new Date().toISOString();
+        updateData.paused_at = null;
+      } else if (data.status === 'paused') {
+        updateData.paused_at = new Date().toISOString();
+      }
+    }
+
+    const { data: automation, error } = await supabase
       .from('automations')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', id)
       .eq('organization_id', organizationId)
       .select()
       .single();
 
-    if (error) throw error;
-    return NextResponse.json({ automation: data });
+    if (error) {
+      console.error('Error updating automation:', error);
+      throw error;
+    }
+    
+    return NextResponse.json({ automation });
   } catch (error: any) {
     console.error('Automation PUT error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

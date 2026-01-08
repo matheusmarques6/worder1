@@ -26,9 +26,18 @@ export function Sidebar() {
     ),
   })).filter((section) => section.nodes.length > 0);
 
-  // Handle drag start
-  const handleDragStart = (e: DragEvent, nodeType: string) => {
-    e.dataTransfer.setData('application/reactflow', nodeType);
+  // Handle drag start - passa objeto completo com todas as informações
+  const handleDragStart = (e: DragEvent, node: NodeTypeDefinition) => {
+    const dragData = {
+      nodeType: node.type,
+      label: node.label,
+      description: node.description,
+      category: node.category,
+      icon: node.icon?.name || 'Zap',
+      color: node.color,
+      defaultConfig: node.defaultConfig || {},
+    };
+    e.dataTransfer.setData('application/reactflow', JSON.stringify(dragData));
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -144,7 +153,7 @@ export function Sidebar() {
 
 interface NodeItemProps {
   node: NodeTypeDefinition;
-  onDragStart: (e: DragEvent, nodeType: string) => void;
+  onDragStart: (e: DragEvent, node: NodeTypeDefinition) => void;
   onClick: () => void;
 }
 
@@ -156,7 +165,7 @@ function NodeItem({ node, onDragStart, onClick }: NodeItemProps) {
   return (
     <motion.button
       draggable
-      onDragStart={(e) => onDragStart(e as unknown as DragEvent, node.type)}
+      onDragStart={(e) => onDragStart(e as unknown as DragEvent, node)}
       onClick={onClick}
       className={cn(
         'w-full flex items-center gap-3 p-2.5 rounded-xl',
