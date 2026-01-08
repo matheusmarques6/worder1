@@ -52,6 +52,10 @@ export interface ExecutionOptions {
   credentials?: Record<string, any>;
   executionId?: string;
   startFromNodeId?: string;
+  triggerData?: Record<string, any>;
+  contactId?: string;
+  dealId?: string;
+  orderId?: string;
 }
 
 export interface ExecutionResult {
