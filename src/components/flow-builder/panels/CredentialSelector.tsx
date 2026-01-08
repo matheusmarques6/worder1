@@ -54,7 +54,7 @@ interface CredentialSelectorProps {
 }
 
 // Mapeamento de ícones
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string; color?: string }>> = {
   MessageCircle,
   Mail,
   ShoppingCart,
@@ -148,7 +148,7 @@ export function CredentialSelector({
         className="flex items-center justify-center rounded-md p-1.5"
         style={{ backgroundColor: `${color}20` }}
       >
-        <IconComponent className={size} style={{ color }} />
+        <IconComponent className={`${size}`} color={color} />
       </div>
     );
   };
