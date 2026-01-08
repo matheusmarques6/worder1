@@ -3,7 +3,6 @@
  * Specific execution logic for each node type with real integrations
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { VariableContext } from './variable-engine';
 import { WorkflowNode } from './execution-engine';
 
@@ -25,7 +24,7 @@ export interface NodeExecutorContext {
   config: Record<string, any>;
   context: VariableContext;
   credentials?: Record<string, any>;
-  supabase: ReturnType<typeof createClient>;
+  supabase: any; // SupabaseClient com tipos genéricos
   isTest: boolean;
 }
 
