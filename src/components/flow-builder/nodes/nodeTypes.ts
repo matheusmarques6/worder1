@@ -382,24 +382,28 @@ export function getNodesByCategory(category: string): NodeTypeDefinition[] {
 
 export const NODE_SECTIONS = [
   {
+    id: 'triggers',
     title: 'Triggers',
     category: 'trigger',
-    items: triggerTypes,
+    nodes: triggerTypes,
   },
   {
+    id: 'actions',
     title: 'Ações',
     category: 'action',
-    items: actionTypes,
+    nodes: actionTypes,
   },
   {
+    id: 'conditions',
     title: 'Condições',
     category: 'condition',
-    items: conditionTypes,
+    nodes: conditionTypes,
   },
   {
+    id: 'control',
     title: 'Controle',
     category: 'control',
-    items: controlTypes,
+    nodes: controlTypes,
   },
 ];
 
