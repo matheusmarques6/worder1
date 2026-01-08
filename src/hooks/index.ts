@@ -8,6 +8,10 @@ import { supabaseClient as supabase } from '@/lib/supabase-client';
 // Re-export usePipelines
 export { usePipelines } from './usePipelines';
 
+// Re-export Flow Builder hooks
+export { useFlowBuilder } from './useFlowBuilder';
+export { useCredentials } from './useCredentials';
+
 // Re-export CRM Realtime
 export { useCRMRealtime, useDealsRealtime, useContactsRealtime } from './useCRMRealtime';
 

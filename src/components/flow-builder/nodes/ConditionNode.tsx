@@ -6,8 +6,8 @@ import { FlowNodeData } from '@/stores/flowStore';
 import BaseNode from './BaseNode';
 import { getNodeDefinition } from './nodeTypes';
 
-export const ConditionNode = memo(function ConditionNode(props: NodeProps) {
-  const data = props.data as FlowNodeData;
+export const ConditionNode = memo(function ConditionNode(props: NodeProps<FlowNodeData>) {
+  const { data } = props;
   const definition = getNodeDefinition(data.nodeType);
   
   // Preview da condição configurada
@@ -16,7 +16,6 @@ export const ConditionNode = memo(function ConditionNode(props: NodeProps) {
   return (
     <BaseNode
       {...props}
-      data={data}
       showTargetHandle={true}
       showSourceHandle={false}
       sourceHandles={[

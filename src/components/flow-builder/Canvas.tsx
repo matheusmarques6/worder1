@@ -10,19 +10,13 @@ import {
   BackgroundVariant,
   ReactFlowProvider,
   useReactFlow,
-  NodeTypes,
-  EdgeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useFlowStore, FlowNode } from '@/stores/flowStore';
-import { nodeTypes as customNodeTypes } from './nodes';
-import { edgeTypes as customEdgeTypes } from './edges';
+import { nodeTypes } from './nodes';
+import { edgeTypes } from './edges';
 import { getNodeDefinition } from './nodes/nodeTypes';
-
-// Cast to satisfy React Flow types
-const nodeTypes = customNodeTypes as unknown as NodeTypes;
-const edgeTypes = customEdgeTypes as unknown as EdgeTypes;
 
 // ============================================
 // CANVAS INNER COMPONENT

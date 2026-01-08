@@ -5,8 +5,8 @@ import { NodeProps } from '@xyflow/react';
 import { FlowNodeData } from '@/stores/flowStore';
 import BaseNode from './BaseNode';
 
-export const ControlNode = memo(function ControlNode(props: NodeProps) {
-  const data = props.data as FlowNodeData;
+export const ControlNode = memo(function ControlNode(props: NodeProps<FlowNodeData>) {
+  const { data } = props;
   
   // Preview do delay
   const delayPreview = getDelayPreview(data);
@@ -14,7 +14,6 @@ export const ControlNode = memo(function ControlNode(props: NodeProps) {
   return (
     <BaseNode
       {...props}
-      data={data}
       showTargetHandle={true}
       showSourceHandle={true}
     >

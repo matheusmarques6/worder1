@@ -5,11 +5,10 @@ import { NodeProps } from '@xyflow/react';
 import { FlowNodeData } from '@/stores/flowStore';
 import BaseNode from './BaseNode';
 
-export const ActionNode = memo(function ActionNode(props: NodeProps) {
+export const ActionNode = memo(function ActionNode(props: NodeProps<FlowNodeData>) {
   return (
     <BaseNode
       {...props}
-      data={props.data as FlowNodeData}
       showTargetHandle={true}
       showSourceHandle={true}
     />

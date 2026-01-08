@@ -453,5 +453,14 @@ export type { Conversation, Message, WhatsAppNumber } from './inboxStore'
 // ===============================
 // RE-EXPORT FLOW STORE
 // ===============================
-export { useFlowStore, useSelectedNode, useNodeById, useTriggerNodes, useIsValidFlow } from './flowStore'
-export type { FlowNode, FlowNodeData, FlowEdge, NodeCategory, NodeStatus, TestExecution, ExecutionStep } from './flowStore'
+export { 
+  useFlowStore, 
+  useSelectedNode, 
+  useNodeById, 
+  useTriggerNodes, 
+  useActionNodes,
+  useIsValidFlow,
+  useCanUndo,
+  useCanRedo
+} from './flowStore'
+export type { FlowNode, FlowEdge, FlowNodeData, NodeCategory, NodeStatus, TestExecution, ExecutionStep } from './flowStore'

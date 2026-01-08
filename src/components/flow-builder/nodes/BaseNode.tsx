@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, ReactNode } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, XCircle, Loader2, AlertTriangle, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -65,10 +65,7 @@ const statusVariants = {
 // BASE NODE PROPS
 // ============================================
 
-interface BaseNodeProps {
-  id?: string;
-  data: FlowNodeData;
-  selected?: boolean;
+interface BaseNodeProps extends NodeProps<FlowNodeData> {
   children?: ReactNode;
   showSourceHandle?: boolean;
   showTargetHandle?: boolean;
