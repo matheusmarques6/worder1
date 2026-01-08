@@ -58,18 +58,6 @@ export {
 } from './credential-encryption';
 
 // ============================================
-// EVENT BUS
-// ============================================
-export {
-  getEventBus,
-  emitEvent,
-  events,
-  type EventType,
-  type EventPayload,
-  type TriggerMatch,
-} from './event-bus';
-
-// ============================================
 // LEGACY EXPORTS (for backwards compatibility)
 // ============================================
 export * from './variables';
