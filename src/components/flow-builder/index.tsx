@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import '@/styles/flow-builder.css';
@@ -9,6 +9,8 @@ import { Canvas } from './Canvas';
 import { Sidebar } from './Sidebar';
 import { Toolbar } from './Toolbar';
 import { PropertiesPanel } from './panels/PropertiesPanel';
+import { TestModal } from './panels/TestModal';
+import { HistoryPanel } from './panels/HistoryPanel';
 import { useFlowStore, FlowNode, FlowNodeData } from '@/stores/flowStore';
 import { getNodeDefinition } from './nodes/nodeTypes';
 
@@ -17,6 +19,8 @@ export { Canvas } from './Canvas';
 export { Sidebar } from './Sidebar';
 export { Toolbar } from './Toolbar';
 export { PropertiesPanel } from './panels/PropertiesPanel';
+export { TestModal } from './panels/TestModal';
+export { HistoryPanel } from './panels/HistoryPanel';
 export * from './nodes';
 export * from './edges';
 
@@ -28,8 +32,8 @@ interface FlowBuilderProps {
   automationId?: string;
   automationName?: string;
   automationStatus?: 'draft' | 'active' | 'paused' | 'error';
-  initialNodes?: any[]; // Legacy AutomationNode[]
-  initialEdges?: any[]; // Legacy AutomationEdge[]
+  initialNodes?: any[];
+  initialEdges?: any[];
   onSave: () => Promise<string | undefined>;
   onBack: () => void;
   onTest?: () => void;
@@ -47,11 +51,19 @@ export function FlowBuilder({
   onTest,
   organizationId,
 }: FlowBuilderProps) {
+  // Store
   const loadAutomation = useFlowStore((state) => state.loadAutomation);
   const resetStore = useFlowStore((state) => state.resetStore);
   const nodes = useFlowStore((state) => state.nodes);
   const edges = useFlowStore((state) => state.edges);
   const showPropertiesPanel = useFlowStore((state) => state.showPropertiesPanel);
+  const showTestModal = useFlowStore((state) => state.showTestModal);
+  const toggleTestModal = useFlowStore((state) => state.toggleTestModal);
+  const showHistoryPanel = useFlowStore((state) => state.showHistoryPanel);
+  const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
+
+  // Local state for saved automation ID
+  const [savedAutomationId, setSavedAutomationId] = useState<string | undefined>(automationId);
 
   // Convert legacy nodes to new format
   const convertLegacyNodes = useCallback((legacyNodes: any[]): FlowNode[] => {
@@ -113,16 +125,31 @@ export function FlowBuilder({
 
   // Handle save with conversion back to legacy format
   const handleSave = useCallback(async () => {
-    // The parent component will read from store
-    return onSave();
+    const result = await onSave();
+    if (result) {
+      setSavedAutomationId(result);
+    }
+    return result;
   }, [onSave]);
 
-  // Handle test
+  // Handle test - open modal
   const handleTest = useCallback(() => {
     if (onTest) {
       onTest();
+    } else {
+      toggleTestModal();
     }
-  }, [onTest]);
+  }, [onTest, toggleTestModal]);
+
+  // Handle close test modal
+  const handleCloseTestModal = useCallback(() => {
+    toggleTestModal();
+  }, [toggleTestModal]);
+
+  // Handle close history panel
+  const handleCloseHistoryPanel = useCallback(() => {
+    toggleHistoryPanel();
+  }, [toggleHistoryPanel]);
 
   return (
     <ReactFlowProvider>
@@ -150,6 +177,86 @@ export function FlowBuilder({
             <PropertiesPanel organizationId={organizationId} />
           )}
         </div>
+
+        {/* Test Modal */}
+        {showTestModal && savedAutomationId && organizationId && (
+          <TestModal
+            automationId={savedAutomationId}
+            organizationId={organizationId}
+            onClose={handleCloseTestModal}
+          />
+        )}
+
+        {/* Test Modal - Fallback for unsaved automations */}
+        {showTestModal && (!savedAutomationId || !organizationId) && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-[#111111] border border-white/10 rounded-xl p-6 max-w-md">
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Salve a automação primeiro
+              </h3>
+              <p className="text-white/60 text-sm mb-4">
+                Para testar a automação, você precisa salvá-la primeiro.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={handleCloseTestModal}
+                  className="px-4 py-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={async () => {
+                    handleCloseTestModal();
+                    await handleSave();
+                  }}
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                >
+                  Salvar Agora
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* History Panel */}
+        {showHistoryPanel && savedAutomationId && organizationId && (
+          <HistoryPanel
+            automationId={savedAutomationId}
+            organizationId={organizationId}
+            onClose={handleCloseHistoryPanel}
+          />
+        )}
+
+        {/* History Panel - Fallback for unsaved automations */}
+        {showHistoryPanel && (!savedAutomationId || !organizationId) && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-[#111111] border border-white/10 rounded-xl p-6 max-w-md">
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Automação não salva
+              </h3>
+              <p className="text-white/60 text-sm mb-4">
+                O histórico de execuções só está disponível após salvar a automação.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={handleCloseHistoryPanel}
+                  className="px-4 py-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={async () => {
+                    handleCloseHistoryPanel();
+                    await handleSave();
+                  }}
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                >
+                  Salvar Agora
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </ReactFlowProvider>
   );

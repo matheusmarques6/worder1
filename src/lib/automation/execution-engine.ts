@@ -1,9 +1,9 @@
 /**
- * EXECUTION ENGINE
+ * EXECUTION ENGINE - UPDATED VERSION
  * Core engine for executing automation workflows
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { VariableContext, variableEngine, createExecutionContext } from './variable-engine';
 import { nodeExecutors, NodeExecutionResult } from './node-executors';
 
@@ -35,7 +35,7 @@ export interface WorkflowEdge {
 
 export interface Workflow {
   id: string;
-  name: string;
+  name?: string;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   settings?: {
@@ -48,15 +48,10 @@ export interface Workflow {
 
 export interface ExecutionOptions {
   isTest?: boolean;
-  triggerData?: Record<string, any>;
-  contactId?: string;
-  dealId?: string;
-  orderId?: string;
+  context?: Partial<VariableContext>;
+  credentials?: Record<string, any>;
+  executionId?: string;
   startFromNodeId?: string;
-  resumeData?: {
-    nodeId: string;
-    context: Partial<VariableContext>;
-  };
 }
 
 export interface ExecutionResult {
@@ -66,12 +61,9 @@ export interface ExecutionResult {
   completedAt?: Date;
   duration?: number;
   nodeResults: Record<string, NodeExecutionResult>;
-  finalContext: Partial<VariableContext>;
-  error?: {
-    nodeId: string;
-    message: string;
-    stack?: string;
-  };
+  context: Partial<VariableContext>;
+  error?: string;
+  errorNodeId?: string;
   waitingAt?: {
     nodeId: string;
     resumeAt: Date;
@@ -79,190 +71,164 @@ export interface ExecutionResult {
   };
 }
 
+interface ExecutionEngineConfig {
+  supabase: SupabaseClient;
+  isTest?: boolean;
+}
+
 // ============================================
 // EXECUTION ENGINE CLASS
 // ============================================
 
 export class ExecutionEngine {
-  private supabase: ReturnType<typeof createClient>;
-  private workflow: Workflow;
-  private context: VariableContext;
-  private nodeResults: Record<string, NodeExecutionResult> = {};
-  private executionId: string;
+  private supabase: SupabaseClient;
   private isTest: boolean;
-  private aborted: boolean = false;
 
-  constructor(
-    workflow: Workflow,
-    supabaseUrl: string,
-    supabaseKey: string,
-    options: ExecutionOptions = {}
-  ) {
-    this.workflow = workflow;
-    this.supabase = createClient(supabaseUrl, supabaseKey);
-    this.executionId = options.resumeData ? 
-      `resume_${Date.now()}` : 
-      `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    this.isTest = options.isTest || false;
-
-    // Initialize context
-    const triggerNode = this.findTriggerNode();
-    
-    this.context = options.resumeData?.context as VariableContext || createExecutionContext({
-      automationId: workflow.id,
-      automationName: workflow.name,
-      executionId: this.executionId,
-      triggerType: triggerNode?.data.nodeType || 'manual',
-      triggerData: options.triggerData || {},
-      timezone: workflow.settings?.timezone,
-    });
+  constructor(config: ExecutionEngineConfig) {
+    this.supabase = config.supabase;
+    this.isTest = config.isTest || false;
   }
 
   /**
    * Execute the workflow
    */
-  async execute(): Promise<ExecutionResult> {
+  async execute(
+    workflow: Workflow,
+    options: ExecutionOptions = {}
+  ): Promise<ExecutionResult> {
     const startedAt = new Date();
+    const executionId = options.executionId || `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const nodeResults: Record<string, NodeExecutionResult> = {};
     
-    try {
-      // Log execution start
-      if (!this.isTest) {
-        await this.logExecutionStart();
-      }
+    // Initialize context
+    const triggerNode = workflow.nodes.find(n => n.data.category === 'trigger');
+    let context: VariableContext = options.context as VariableContext || createExecutionContext({
+      automationId: workflow.id,
+      automationName: workflow.name || 'Automação',
+      executionId,
+      triggerType: triggerNode?.data.nodeType || 'manual',
+      triggerData: options.context?.trigger?.data || {},
+      timezone: workflow.settings?.timezone,
+    });
 
-      // Build execution graph
-      const executionOrder = this.buildExecutionOrder();
+    // Ensure nodes object exists in context
+    if (!context.nodes) {
+      context.nodes = {};
+    }
+
+    try {
+      // Build execution order
+      const executionOrder = this.buildExecutionOrder(workflow);
       
       // Execute nodes in order
       for (const node of executionOrder) {
-        if (this.aborted) {
-          break;
-        }
-
         // Skip if already processed (from branching)
-        if (this.nodeResults[node.id]?.status === 'skipped') {
+        if (nodeResults[node.id]?.status === 'skipped') {
           continue;
         }
 
-        const result = await this.executeNode(node);
-        this.nodeResults[node.id] = result;
+        const nodeStartTime = Date.now();
 
-        // Update context with node output
-        this.context.nodes[node.id] = {
-          output: result.output,
-          executedAt: new Date().toISOString(),
-        };
-
-        // Handle special results
-        if (result.status === 'error' && this.workflow.settings?.errorHandling === 'stop') {
-          throw new Error(result.error || 'Node execution failed');
-        }
-
-        if (result.status === 'waiting') {
-          // Schedule resume
-          if (!this.isTest && result.waitUntil) {
-            await this.scheduleResume(node.id, result.waitUntil, result.output);
-          }
+        try {
+          // Get executor for this node type
+          const nodeType = node.data.nodeType || node.type;
+          const executor = nodeExecutors[nodeType];
           
-          return this.createResult('waiting', startedAt, {
-            waitingAt: {
-              nodeId: node.id,
-              resumeAt: result.waitUntil!,
-              data: result.output,
-            },
+          if (!executor) {
+            console.warn(`No executor found for node type: ${nodeType}, using passthrough`);
+            nodeResults[node.id] = {
+              status: 'success',
+              output: node.data.config,
+              duration: Date.now() - nodeStartTime,
+            };
+            continue;
+          }
+
+          // Process config with variables
+          const processedConfig = variableEngine.processObject(node.data.config, context);
+
+          // Get credentials if needed
+          let credentials = options.credentials?.[node.data.credentialId || ''];
+          if (!credentials && node.data.credentialId) {
+            credentials = await this.getCredentials(node.data.credentialId);
+          }
+
+          // Execute the node
+          const result = await executor.execute({
+            node,
+            config: processedConfig,
+            context,
+            credentials,
+            supabase: this.supabase,
+            isTest: this.isTest,
           });
-        }
 
-        // Handle branching (conditions)
-        if (result.branch) {
-          this.markSkippedBranches(node.id, result.branch);
+          nodeResults[node.id] = {
+            ...result,
+            duration: Date.now() - nodeStartTime,
+          };
+
+          // Update context with node output
+          context.nodes[node.id] = {
+            output: result.output,
+            executedAt: new Date().toISOString(),
+          };
+
+          // Handle special results
+          if (result.status === 'error' && workflow.settings?.errorHandling === 'stop') {
+            return this.createResult(executionId, 'error', startedAt, nodeResults, context, {
+              error: result.error,
+              errorNodeId: node.id,
+            });
+          }
+
+          if (result.status === 'waiting' && result.waitUntil) {
+            return this.createResult(executionId, 'waiting', startedAt, nodeResults, context, {
+              waitingAt: {
+                nodeId: node.id,
+                resumeAt: result.waitUntil,
+                data: result.output,
+              },
+            });
+          }
+
+          // Handle branching (conditions)
+          if (result.branch) {
+            this.markSkippedBranches(workflow, node.id, result.branch, nodeResults);
+          }
+
+        } catch (nodeError: any) {
+          nodeResults[node.id] = {
+            status: 'error',
+            output: null,
+            error: nodeError.message,
+            duration: Date.now() - nodeStartTime,
+          };
+
+          if (workflow.settings?.errorHandling === 'stop') {
+            return this.createResult(executionId, 'error', startedAt, nodeResults, context, {
+              error: nodeError.message,
+              errorNodeId: node.id,
+            });
+          }
         }
       }
 
-      // Log execution complete
-      if (!this.isTest) {
-        await this.logExecutionComplete('success');
-      }
-
-      return this.createResult('success', startedAt);
+      return this.createResult(executionId, 'success', startedAt, nodeResults, context);
 
     } catch (error: any) {
       console.error('Execution error:', error);
-      
-      // Log execution error
-      if (!this.isTest) {
-        await this.logExecutionComplete('error', error.message);
-      }
-
-      return this.createResult('error', startedAt, {
-        error: {
-          nodeId: this.findErrorNodeId(),
-          message: error.message,
-          stack: error.stack,
-        },
-      });
-    }
-  }
-
-  /**
-   * Execute a single node
-   */
-  private async executeNode(node: WorkflowNode): Promise<NodeExecutionResult> {
-    const startTime = Date.now();
-    
-    try {
-      // Get executor for this node type
-      const executor = nodeExecutors[node.data.nodeType];
-      
-      if (!executor) {
-        // Use default passthrough for unknown types
-        console.warn(`No executor found for node type: ${node.data.nodeType}, using passthrough`);
-        return {
-          status: 'success',
-          output: node.data.config,
-          duration: Date.now() - startTime,
-        };
-      }
-
-      // Process config with variables
-      const processedConfig = variableEngine.processObject(node.data.config, this.context);
-
-      // Get credentials if needed
-      let credentials: Record<string, any> | undefined;
-      if (node.data.credentialId) {
-        credentials = await this.getCredentials(node.data.credentialId);
-      }
-
-      // Execute the node
-      const result = await executor.execute({
-        node,
-        config: processedConfig,
-        context: this.context,
-        credentials,
-        supabase: this.supabase,
-        isTest: this.isTest,
-      });
-
-      return {
-        ...result,
-        duration: Date.now() - startTime,
-      };
-
-    } catch (error: any) {
-      return {
-        status: 'error' as const,
-        output: null,
+      return this.createResult(executionId, 'error', startedAt, nodeResults, context, {
         error: error.message,
-        duration: Date.now() - startTime,
-      };
+      });
     }
   }
 
   /**
    * Build execution order using topological sort
    */
-  private buildExecutionOrder(): WorkflowNode[] {
-    const { nodes, edges } = this.workflow;
+  private buildExecutionOrder(workflow: Workflow): WorkflowNode[] {
+    const { nodes, edges } = workflow;
     const result: WorkflowNode[] = [];
     const visited = new Set<string>();
     const inDegree = new Map<string, number>();
@@ -319,27 +285,35 @@ export class ExecutionEngine {
   /**
    * Mark branches that should be skipped based on condition result
    */
-  private markSkippedBranches(nodeId: string, selectedBranch: string): void {
-    // Find all edges from this node
-    const nodeEdges = this.workflow.edges.filter(e => e.source === nodeId);
-    
-    // Find targets that should be skipped (other branches)
+  private markSkippedBranches(
+    workflow: Workflow,
+    nodeId: string,
+    selectedBranch: string,
+    nodeResults: Record<string, NodeExecutionResult>
+  ): void {
+    const nodeEdges = workflow.edges.filter(e => e.source === nodeId);
     const skippedTargets = new Set<string>();
     
     for (const edge of nodeEdges) {
-      if (edge.sourceHandle !== selectedBranch) {
+      // Check if this edge matches the selected branch
+      const edgeHandle = edge.sourceHandle || 'default';
+      const matches = edgeHandle === selectedBranch || 
+                     edgeHandle === `output-${selectedBranch}` ||
+                     (selectedBranch === 'true' && edgeHandle === 'yes') ||
+                     (selectedBranch === 'false' && edgeHandle === 'no');
+      
+      if (!matches) {
         skippedTargets.add(edge.target);
-        // Also skip all descendants of skipped targets
-        this.collectDescendants(edge.target, skippedTargets);
+        this.collectDescendants(workflow, edge.target, skippedTargets);
       }
     }
 
     // Mark as skipped
     for (const targetId of skippedTargets) {
-      if (!this.nodeResults[targetId]) {
-        this.nodeResults[targetId] = {
+      if (!nodeResults[targetId]) {
+        nodeResults[targetId] = {
           status: 'skipped',
-          output: null,
+          output: { reason: 'Condição não atendida' },
           duration: 0,
         };
       }
@@ -349,122 +323,40 @@ export class ExecutionEngine {
   /**
    * Collect all descendant nodes
    */
-  private collectDescendants(nodeId: string, collected: Set<string>): void {
-    const edges = this.workflow.edges.filter(e => e.source === nodeId);
+  private collectDescendants(workflow: Workflow, nodeId: string, collected: Set<string>): void {
+    const edges = workflow.edges.filter(e => e.source === nodeId);
     
     for (const edge of edges) {
       if (!collected.has(edge.target)) {
         collected.add(edge.target);
-        this.collectDescendants(edge.target, collected);
+        this.collectDescendants(workflow, edge.target, collected);
       }
     }
-  }
-
-  /**
-   * Find the trigger node
-   */
-  private findTriggerNode(): WorkflowNode | undefined {
-    return this.workflow.nodes.find(n => n.data.category === 'trigger');
-  }
-
-  /**
-   * Find the node that caused an error
-   */
-  private findErrorNodeId(): string {
-    const errorNode = Object.entries(this.nodeResults).find(
-      ([_, result]) => result.status === 'error'
-    );
-    return errorNode?.[0] || 'unknown';
   }
 
   /**
    * Get decrypted credentials
    */
   private async getCredentials(credentialId: string): Promise<Record<string, any>> {
-    const { data, error } = await this.supabase
-      .from('credentials')
-      .select('encrypted_data')
-      .eq('id', credentialId)
-      .single();
+    try {
+      const { data, error } = await this.supabase
+        .from('credentials')
+        .select('encrypted_data, type')
+        .eq('id', credentialId)
+        .single();
 
-    if (error || !data) {
-      throw new Error(`Credentials not found: ${credentialId}`);
-    }
+      if (error || !data) {
+        console.warn(`Credentials not found: ${credentialId}`);
+        return {};
+      }
 
-    // Import dynamically to avoid circular dependencies
-    const { decryptCredential } = await import('./credential-encryption');
-    return decryptCredential((data as any).encrypted_data);
-  }
-
-  /**
-   * Log execution start to database
-   */
-  private async logExecutionStart(): Promise<void> {
-    const triggerNode = this.findTriggerNode();
-    
-    await (this.supabase.from('automation_executions') as any).insert({
-      id: this.executionId,
-      automation_id: this.workflow.id,
-      status: 'running',
-      triggered_by: triggerNode?.data.nodeType || 'manual',
-      trigger_data: this.context.trigger.data,
-      contact_id: this.context.contact?.id,
-      deal_id: this.context.deal?.id,
-      started_at: new Date().toISOString(),
-      is_test: this.isTest,
-    });
-  }
-
-  /**
-   * Log execution complete to database
-   */
-  private async logExecutionComplete(status: 'success' | 'error', errorMessage?: string): Promise<void> {
-    await (this.supabase.from('automation_executions') as any)
-      .update({
-        status,
-        completed_at: new Date().toISOString(),
-        node_results: this.nodeResults,
-        final_context: this.context,
-        error_message: errorMessage,
-        error_node_id: status === 'error' ? this.findErrorNodeId() : null,
-      })
-      .eq('id', this.executionId);
-  }
-
-  /**
-   * Schedule a resume for delayed execution
-   */
-  private async scheduleResume(nodeId: string, resumeAt: Date, data: any): Promise<void> {
-    // Update execution with wait data
-    await (this.supabase.from('automation_executions') as any)
-      .update({
-        status: 'waiting',
-        wait_till: resumeAt.toISOString(),
-        resume_data: {
-          nodeId,
-          context: this.context,
-          data,
-        },
-      })
-      .eq('id', this.executionId);
-
-    // If using QStash, schedule the resume
-    if (process.env.QSTASH_URL && process.env.QSTASH_TOKEN) {
-      const delay = Math.max(0, resumeAt.getTime() - Date.now());
-      
-      await fetch(`${process.env.QSTASH_URL}/v2/publish/${process.env.NEXT_PUBLIC_APP_URL}/api/workers/automation`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.QSTASH_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Upstash-Delay': `${Math.floor(delay / 1000)}s`,
-        },
-        body: JSON.stringify({
-          action: 'resume',
-          executionId: this.executionId,
-          automationId: this.workflow.id,
-        }),
-      });
+      // Import dynamically to avoid circular dependencies
+      const { decryptCredential } = await import('./credential-encryption');
+      const decrypted = decryptCredential((data as any).encrypted_data);
+      return { ...decrypted, type: (data as any).type };
+    } catch (err) {
+      console.error('Error getting credentials:', err);
+      return {};
     }
   }
 
@@ -472,43 +364,25 @@ export class ExecutionEngine {
    * Create execution result
    */
   private createResult(
+    executionId: string,
     status: ExecutionResult['status'],
     startedAt: Date,
+    nodeResults: Record<string, NodeExecutionResult>,
+    context: Partial<VariableContext>,
     extra: Partial<ExecutionResult> = {}
   ): ExecutionResult {
     const completedAt = status !== 'waiting' ? new Date() : undefined;
     
     return {
-      executionId: this.executionId,
+      executionId,
       status,
       startedAt,
       completedAt,
       duration: completedAt ? completedAt.getTime() - startedAt.getTime() : undefined,
-      nodeResults: this.nodeResults,
-      finalContext: this.context,
+      nodeResults,
+      context,
       ...extra,
     };
-  }
-
-  /**
-   * Abort execution
-   */
-  abort(): void {
-    this.aborted = true;
-  }
-
-  /**
-   * Get current context
-   */
-  getContext(): VariableContext {
-    return this.context;
-  }
-
-  /**
-   * Get execution ID
-   */
-  getExecutionId(): string {
-    return this.executionId;
   }
 }
 
@@ -521,16 +395,19 @@ export class ExecutionEngine {
  */
 export async function executeWorkflow(
   workflow: Workflow,
-  options: ExecutionOptions = {}
+  options: ExecutionOptions & { supabaseUrl?: string; supabaseKey?: string } = {}
 ): Promise<ExecutionResult> {
-  const engine = new ExecutionEngine(
-    workflow,
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    options
+  const supabase = createClient(
+    options.supabaseUrl || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    options.supabaseKey || process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  return engine.execute();
+  const engine = new ExecutionEngine({
+    supabase,
+    isTest: options.isTest,
+  });
+
+  return engine.execute(workflow, options);
 }
 
 /**
@@ -555,26 +432,27 @@ export async function resumeExecution(
     throw new Error(`Execution not found: ${executionId}`);
   }
 
+  const automations = (execution as any).automations;
+
   // Get workflow
   const workflow: Workflow = {
-    id: execution.automations.id,
-    name: execution.automations.name,
-    nodes: execution.automations.nodes,
-    edges: execution.automations.edges,
-    settings: execution.automations.settings,
+    id: automations.id,
+    name: automations.name,
+    nodes: automations.nodes,
+    edges: automations.edges,
+    settings: automations.settings,
   };
 
-  // Resume from where we left off
-  const engine = new ExecutionEngine(
-    workflow,
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      resumeData: execution.resume_data,
-    }
-  );
+  const engine = new ExecutionEngine({
+    supabase,
+    isTest: false,
+  });
 
-  return engine.execute();
+  // Resume from where we left off
+  return engine.execute(workflow, {
+    context: (execution as any).resume_data?.context,
+    executionId,
+  });
 }
 
 /**
@@ -586,6 +464,12 @@ export async function testWorkflow(
 ): Promise<ExecutionResult> {
   return executeWorkflow(workflow, {
     isTest: true,
-    triggerData,
+    context: {
+      trigger: {
+        type: 'test',
+        data: triggerData,
+        timestamp: new Date().toISOString(),
+      },
+    },
   });
 }
