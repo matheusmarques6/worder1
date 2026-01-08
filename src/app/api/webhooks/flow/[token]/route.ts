@@ -122,9 +122,9 @@ export async function POST(
       });
     } else {
       // Execute directly (for development)
-      const { executeWorkflow, Workflow } = await import('@/lib/automation/execution-engine');
+      const { executeWorkflow } = await import('@/lib/automation/execution-engine');
       
-      const workflow: Workflow = {
+      const workflow = {
         id: webhook.automations.id,
         name: webhook.automations.name,
         nodes: webhook.automations.nodes || [],
