@@ -237,11 +237,12 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
 // STATUS BADGE COMPONENT
 // ============================================
 
-function StatusBadge({ status }: { status: 'draft' | 'active' | 'paused' }) {
+function StatusBadge({ status }: { status: 'draft' | 'active' | 'paused' | 'error' }) {
   const config = {
     draft: { label: 'Rascunho', color: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
     active: { label: 'Ativa', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
     paused: { label: 'Pausada', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+    error: { label: 'Erro', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
   };
 
   const { label, color } = config[status];
