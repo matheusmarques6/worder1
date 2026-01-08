@@ -3,7 +3,7 @@
  * AES-256-GCM encryption for secure credential storage
  */
 
-import crypto from 'crypto';
+import crypto, { CipherGCM, DecipherGCM } from 'crypto';
 
 // ============================================
 // TYPES
@@ -22,7 +22,7 @@ export interface EncryptedData {
 class CredentialEncryption {
   private static instance: CredentialEncryption;
   private key: Buffer;
-  private algorithm = 'aes-256-gcm';
+  private algorithm = 'aes-256-gcm' as const;
 
   private constructor() {
     const encryptionKey = process.env.ENCRYPTION_KEY;
@@ -51,7 +51,7 @@ class CredentialEncryption {
    */
   public encrypt(plaintext: string): string {
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
+    const cipher = crypto.createCipheriv(this.algorithm, this.key, iv) as CipherGCM;
     
     let encrypted = cipher.update(plaintext, 'utf8', 'hex');
     encrypted += cipher.final('hex');
@@ -77,7 +77,7 @@ class CredentialEncryption {
     const iv = Buffer.from(ivHex, 'hex');
     const authTag = Buffer.from(authTagHex, 'hex');
     
-    const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv);
+    const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv) as DecipherGCM;
     decipher.setAuthTag(authTag);
     
     let decrypted = decipher.update(encryptedData, 'hex', 'utf8');

@@ -11,6 +11,7 @@
  * - {{nodes.node_123.output.result}}
  */
 
+// @ts-ignore - lodash types might not be installed
 import { get, set, has } from 'lodash';
 
 // ============================================

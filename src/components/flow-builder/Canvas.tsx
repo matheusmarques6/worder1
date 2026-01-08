@@ -153,7 +153,7 @@ export function Canvas() {
 
         {/* MiniMap */}
         <MiniMap
-          nodeColor={(node) => {
+          nodeColor={(node: any) => {
             const category = node.data?.category;
             switch (category) {
               case 'trigger':

@@ -250,7 +250,8 @@ export class ExecutionEngine {
 
     } catch (error: any) {
       return {
-        status: 'error',
+        status: 'error' as const,
+        output: null,
         error: error.message,
         duration: Date.now() - startTime,
       };
@@ -392,7 +393,7 @@ export class ExecutionEngine {
 
     // Import dynamically to avoid circular dependencies
     const { decryptCredential } = await import('./credential-encryption');
-    return decryptCredential(data.encrypted_data);
+    return decryptCredential((data as any).encrypted_data);
   }
 
   /**
@@ -401,7 +402,7 @@ export class ExecutionEngine {
   private async logExecutionStart(): Promise<void> {
     const triggerNode = this.findTriggerNode();
     
-    await this.supabase.from('automation_executions').insert({
+    await (this.supabase.from('automation_executions') as any).insert({
       id: this.executionId,
       automation_id: this.workflow.id,
       status: 'running',
@@ -418,8 +419,7 @@ export class ExecutionEngine {
    * Log execution complete to database
    */
   private async logExecutionComplete(status: 'success' | 'error', errorMessage?: string): Promise<void> {
-    await this.supabase
-      .from('automation_executions')
+    await (this.supabase.from('automation_executions') as any)
       .update({
         status,
         completed_at: new Date().toISOString(),
@@ -436,8 +436,7 @@ export class ExecutionEngine {
    */
   private async scheduleResume(nodeId: string, resumeAt: Date, data: any): Promise<void> {
     // Update execution with wait data
-    await this.supabase
-      .from('automation_executions')
+    await (this.supabase.from('automation_executions') as any)
       .update({
         status: 'waiting',
         wait_till: resumeAt.toISOString(),

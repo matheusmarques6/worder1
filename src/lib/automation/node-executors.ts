@@ -255,11 +255,10 @@ const actionExecutors: Record<string, NodeExecutor> = {
           .eq('id', contactId)
           .single();
 
-        const currentTags = contact?.tags || [];
+        const currentTags = (contact as any)?.tags || [];
         
         if (!currentTags.includes(config.tagName)) {
-          await supabase
-            .from('contacts')
+          await (supabase.from('contacts') as any)
             .update({ tags: [...currentTags, config.tagName] })
             .eq('id', contactId);
         }
@@ -296,11 +295,10 @@ const actionExecutors: Record<string, NodeExecutor> = {
           .eq('id', contactId)
           .single();
 
-        const currentTags = contact?.tags || [];
+        const currentTags = (contact as any)?.tags || [];
         const newTags = currentTags.filter((t: string) => t !== config.tagName);
 
-        await supabase
-          .from('contacts')
+        await (supabase.from('contacts') as any)
           .update({ tags: newTags })
           .eq('id', contactId);
 
@@ -330,8 +328,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
 
       try {
-        await supabase
-          .from('contacts')
+        await (supabase.from('contacts') as any)
           .update(config.fields)
           .eq('id', contactId);
 
@@ -356,8 +353,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
 
       try {
-        const { data, error } = await supabase
-          .from('deals')
+        const { data, error } = await (supabase.from('deals') as any)
           .insert({
             title: config.title,
             value: config.value || 0,
@@ -398,8 +394,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
 
       try {
-        await supabase
-          .from('deals')
+        await (supabase.from('deals') as any)
           .update({ stage_id: config.stageId })
           .eq('id', dealId);
 
