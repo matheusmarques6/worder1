@@ -9,7 +9,7 @@ import { Canvas } from './Canvas';
 import { Sidebar } from './Sidebar';
 import { Toolbar } from './Toolbar';
 import { PropertiesPanel } from './panels/PropertiesPanel';
-import { TestModal } from './panels/TestModal';
+import { ExecutionPanel } from './panels/ExecutionPanel';
 import { HistoryPanel } from './panels/HistoryPanel';
 import { useFlowStore, FlowNode, FlowNodeData } from '@/stores/flowStore';
 import { getNodeDefinition } from './nodes/nodeTypes';
@@ -19,7 +19,7 @@ export { Canvas } from './Canvas';
 export { Sidebar } from './Sidebar';
 export { Toolbar } from './Toolbar';
 export { PropertiesPanel } from './panels/PropertiesPanel';
-export { TestModal } from './panels/TestModal';
+export { ExecutionPanel } from './panels/ExecutionPanel';
 export { HistoryPanel } from './panels/HistoryPanel';
 export * from './nodes';
 export * from './edges';
@@ -178,16 +178,16 @@ export function FlowBuilder({
           )}
         </div>
 
-        {/* Test Modal */}
+        {/* Execution Panel */}
         {showTestModal && savedAutomationId && organizationId && (
-          <TestModal
+          <ExecutionPanel
             automationId={savedAutomationId}
             organizationId={organizationId}
             onClose={handleCloseTestModal}
           />
         )}
 
-        {/* Test Modal - Fallback for unsaved automations */}
+        {/* Execution Panel - Fallback for unsaved automations */}
         {showTestModal && (!savedAutomationId || !organizationId) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="bg-[#111111] border border-white/10 rounded-xl p-6 max-w-md">
