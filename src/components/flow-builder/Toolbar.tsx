@@ -40,7 +40,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
   const toggleTestModal = useFlowStore((state) => state.toggleTestModal);
   
-  const { valid, error } = useIsValidFlow();
+  const { valid, errors } = useIsValidFlow();
   
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isEditing, setIsEditing] = useState(false);
@@ -77,7 +77,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
 
   const handleTest = () => {
     if (!valid) {
-      alert(error);
+      alert(errors.join('\n'));
       return;
     }
     onTest();
@@ -140,10 +140,10 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
       {/* Right Section */}
       <div className="flex items-center gap-2">
         {/* Validation indicator */}
-        {!valid && (
+        {!valid && errors.length > 0 && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 rounded-lg">
             <AlertCircle className="w-4 h-4 text-amber-400" />
-            <span className="text-xs text-amber-400">{error}</span>
+            <span className="text-xs text-amber-400">{errors[0]}</span>
           </div>
         )}
 
