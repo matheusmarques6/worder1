@@ -1,9 +1,10 @@
-export { AnimatedEdge } from './AnimatedEdge';
-
 import { AnimatedEdge } from './AnimatedEdge';
 
-// React Flow edge types map
-export const edgeTypes = {
+// Using 'any' to bypass strict typing issues with React Flow v12
+export const edgeTypes: Record<string, any> = {
   animated: AnimatedEdge,
-  smoothstep: AnimatedEdge, // Use animated as default
+  default: AnimatedEdge,
 };
+
+export { AnimatedEdge };
+export default edgeTypes;

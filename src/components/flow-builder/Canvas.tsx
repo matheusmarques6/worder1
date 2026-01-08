@@ -1,116 +1,117 @@
 'use client';
 
-import { useCallback, useRef, DragEvent } from 'react';
+import { useCallback, useRef, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
-  ConnectionLineType,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  Connection,
   BackgroundVariant,
-  ReactFlowProvider,
-  useReactFlow,
+  Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useFlowStore, FlowNode } from '@/stores/flowStore';
+import { useFlowStore } from '@/stores/flowStore';
 import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
-import { getNodeDefinition } from './nodes/nodeTypes';
+import { cn } from '@/lib/utils';
 
 // ============================================
-// CANVAS INNER COMPONENT
+// CANVAS COMPONENT
 // ============================================
 
-function CanvasInner() {
+export function Canvas() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
-  
-  // Store
-  const nodes = useFlowStore((state) => state.nodes);
-  const edges = useFlowStore((state) => state.edges);
-  const onNodesChange = useFlowStore((state) => state.onNodesChange);
-  const onEdgesChange = useFlowStore((state) => state.onEdgesChange);
-  const onConnect = useFlowStore((state) => state.onConnect);
-  const addNode = useFlowStore((state) => state.addNode);
-  const selectNode = useFlowStore((state) => state.selectNode);
-  const selectedNodeId = useFlowStore((state) => state.selectedNodeId);
 
-  // Handle node click
-  const handleNodeClick = useCallback(
-    (_: React.MouseEvent, node: FlowNode) => {
-      selectNode(node.id);
+  // Store state
+  const nodes = useFlowStore((s) => s.nodes);
+  const edges = useFlowStore((s) => s.edges);
+  const onNodesChange = useFlowStore((s) => s.onNodesChange);
+  const onEdgesChange = useFlowStore((s) => s.onEdgesChange);
+  const addEdgeToStore = useFlowStore((s) => s.addEdge);
+  const addNode = useFlowStore((s) => s.addNode);
+  const setSelectedNode = useFlowStore((s) => s.setSelectedNode);
+
+  // Handle new connections
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      if (connection.source && connection.target) {
+        addEdgeToStore({
+          id: `e-${connection.source}-${connection.target}-${Date.now()}`,
+          source: connection.source,
+          target: connection.target,
+          sourceHandle: connection.sourceHandle || undefined,
+          targetHandle: connection.targetHandle || undefined,
+          type: 'animated',
+        });
+      }
     },
-    [selectNode]
+    [addEdgeToStore]
   );
-
-  // Handle pane click (deselect)
-  const handlePaneClick = useCallback(() => {
-    selectNode(null);
-  }, [selectNode]);
 
   // Handle drop from sidebar
-  const handleDrop = useCallback(
-    (event: DragEvent) => {
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
       event.preventDefault();
 
-      const type = event.dataTransfer.getData('application/reactflow');
-      if (!type || !reactFlowWrapper.current) return;
+      const data = event.dataTransfer.getData('application/reactflow');
+      if (!data) return;
 
-      const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
+      try {
+        const nodeData = JSON.parse(data);
+        const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+        
+        if (!bounds) return;
 
-      const definition = getNodeDefinition(type);
-      if (!definition) return;
+        const position = {
+          x: event.clientX - bounds.left - 100,
+          y: event.clientY - bounds.top - 30,
+        };
 
-      const newNode: FlowNode = {
-        id: `node-${Date.now()}`,
-        type,
-        position,
-        data: {
-          label: definition.label,
-          description: definition.description,
-          category: definition.category,
-          nodeType: type,
-          config: definition.defaultConfig || {},
-        },
-      };
-
-      addNode(newNode);
+        addNode({
+          id: `node-${Date.now()}`,
+          type: nodeData.nodeType,
+          position,
+          data: {
+            label: nodeData.label,
+            description: nodeData.description,
+            category: nodeData.category,
+            nodeType: nodeData.nodeType,
+            icon: nodeData.icon,
+            config: nodeData.defaultConfig || {},
+          },
+        });
+      } catch (error) {
+        console.error('Error adding node:', error);
+      }
     },
-    [screenToFlowPosition, addNode]
+    [addNode]
   );
 
-  const handleDragOver = useCallback((event: DragEvent) => {
+  const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  // Get node color for minimap
-  const getMinimapNodeColor = useCallback((node: FlowNode): string => {
-    switch (node.data.category) {
-      case 'trigger':
-        return '#3b82f6';
-      case 'action':
-        return '#8b5cf6';
-      case 'condition':
-        return '#f59e0b';
-      case 'control':
-        return '#22c55e';
-      default:
-        return '#6b7280';
-    }
-  }, []);
+  // Handle node click
+  const onNodeClick = useCallback(
+    (_: React.MouseEvent, node: any) => {
+      setSelectedNode(node.id);
+    },
+    [setSelectedNode]
+  );
+
+  // Handle pane click (deselect)
+  const onPaneClick = useCallback(() => {
+    setSelectedNode(null);
+  }, [setSelectedNode]);
 
   return (
-    <div 
-      ref={reactFlowWrapper} 
-      className="h-full w-full bg-[#0a0a0a]"
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-    >
+    <div ref={reactFlowWrapper} className="w-full h-full">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -119,65 +120,69 @@ function CanvasInner() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onNodeClick={handleNodeClick}
-        onPaneClick={handlePaneClick}
-        connectionLineType={ConnectionLineType.SmoothStep}
-        connectionLineStyle={{ stroke: '#60a5fa', strokeWidth: 2 }}
-        defaultEdgeOptions={{
-          type: 'smoothstep',
-          style: { stroke: '#4b5563', strokeWidth: 2 },
-        }}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
         snapToGrid
-        snapGrid={[20, 20]}
-        minZoom={0.1}
-        maxZoom={2}
-        nodesFocusable
-        edgesFocusable
-        deleteKeyCode={['Backspace', 'Delete']}
-        selectionKeyCode={['Shift']}
-        multiSelectionKeyCode={['Meta', 'Control']}
-        panOnScroll
-        selectionOnDrag
-        panOnDrag={[1, 2]} // Middle and right click
+        snapGrid={[16, 16]}
+        defaultEdgeOptions={{
+          type: 'animated',
+          animated: true,
+        }}
         proOptions={{ hideAttribution: true }}
+        className="bg-[#0a0a0a]"
       >
-        <Background 
+        {/* Background */}
+        <Background
           variant={BackgroundVariant.Dots}
-          color="rgba(255, 255, 255, 0.05)"
           gap={20}
           size={1}
+          color="#262626"
         />
-        
-        <Controls 
-          showZoom
-          showFitView
-          showInteractive
-          position="bottom-left"
+
+        {/* Controls */}
+        <Controls
+          className={cn(
+            '[&>button]:bg-[#1a1a1a] [&>button]:border-white/10',
+            '[&>button]:text-white/60 [&>button:hover]:bg-white/10',
+            '[&>button:hover]:text-white'
+          )}
         />
-        
+
+        {/* MiniMap */}
         <MiniMap
-          nodeColor={getMinimapNodeColor}
-          maskColor="rgba(0, 0, 0, 0.85)"
-          pannable
-          zoomable
-          position="bottom-right"
+          nodeColor={(node) => {
+            const category = node.data?.category;
+            switch (category) {
+              case 'trigger':
+                return '#10b981';
+              case 'action':
+                return '#3b82f6';
+              case 'condition':
+                return '#f59e0b';
+              case 'control':
+                return '#a855f7';
+              default:
+                return '#525252';
+            }
+          }}
+          maskColor="rgba(0, 0, 0, 0.8)"
+          className="!bg-[#1a1a1a] !border-white/10"
         />
+
+        {/* Empty state */}
+        {nodes.length === 0 && (
+          <Panel position="top-center" className="mt-20">
+            <div className="text-center text-white/40 p-8">
+              <p className="text-lg mb-2">Arraste componentes da barra lateral</p>
+              <p className="text-sm">ou clique duas vezes para adicionar</p>
+            </div>
+          </Panel>
+        )}
       </ReactFlow>
     </div>
-  );
-}
-
-// ============================================
-// CANVAS WRAPPER WITH PROVIDER
-// ============================================
-
-export function Canvas() {
-  return (
-    <ReactFlowProvider>
-      <CanvasInner />
-    </ReactFlowProvider>
   );
 }
 

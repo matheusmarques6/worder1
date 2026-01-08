@@ -1,29 +1,14 @@
-import {
-  ShoppingCart,
-  Package,
-  UserPlus,
-  Tag,
-  Briefcase,
-  MoveRight,
-  Trophy,
-  XCircle,
-  Star,
-  Users,
-  Webhook,
-  MessageSquare,
-  Mail,
-  Send,
-  Database,
-  PlusCircle,
-  Bell,
-  Clock,
-  GitBranch,
-  Split,
-  Filter,
-  Zap,
-  LucideIcon,
-} from 'lucide-react';
-import { NodeCategory } from '@/stores/flowStore';
+'use client';
+
+/**
+ * NODE TYPES - React Flow v12 Compatible
+ * Maps node type strings to React components
+ */
+
+import { TriggerNode } from './TriggerNode';
+import { ActionNode } from './ActionNode';
+import { ConditionNode } from './ConditionNode';
+import { ControlNode } from './ControlNode';
 
 // ============================================
 // NODE TYPE DEFINITIONS
@@ -33,442 +18,362 @@ export interface NodeTypeDefinition {
   type: string;
   label: string;
   description: string;
-  icon: LucideIcon;
-  category: NodeCategory;
+  icon: string;
+  category: 'trigger' | 'action' | 'condition' | 'control';
   color: string;
   defaultConfig?: Record<string, any>;
 }
 
 // ============================================
-// TRIGGERS
+// TRIGGER DEFINITIONS
 // ============================================
 
-export const TRIGGER_NODES: NodeTypeDefinition[] = [
+export const triggerTypes: NodeTypeDefinition[] = [
   {
     type: 'trigger_order',
-    label: 'Pedido Realizado',
-    description: 'Quando um pedido for criado',
-    icon: ShoppingCart,
+    label: 'Pedido Criado',
+    description: 'Dispara quando um novo pedido é criado',
+    icon: 'ShoppingCart',
     category: 'trigger',
-    color: 'emerald',
+    color: '#10b981',
   },
   {
     type: 'trigger_order_paid',
     label: 'Pedido Pago',
-    description: 'Quando um pedido for pago',
-    icon: ShoppingCart,
+    description: 'Dispara quando um pedido é pago',
+    icon: 'CreditCard',
     category: 'trigger',
-    color: 'emerald',
+    color: '#10b981',
   },
   {
     type: 'trigger_abandon',
     label: 'Carrinho Abandonado',
-    description: 'Quando carrinho for abandonado',
-    icon: Package,
+    description: 'Dispara quando cliente abandona carrinho',
+    icon: 'ShoppingBag',
     category: 'trigger',
-    color: 'amber',
+    color: '#10b981',
   },
   {
     type: 'trigger_signup',
     label: 'Novo Cadastro',
-    description: 'Quando um contato for criado',
-    icon: UserPlus,
+    description: 'Dispara quando um novo contato é criado',
+    icon: 'UserPlus',
     category: 'trigger',
-    color: 'blue',
+    color: '#10b981',
   },
   {
     type: 'trigger_tag',
     label: 'Tag Adicionada',
-    description: 'Quando uma tag for adicionada',
-    icon: Tag,
+    description: 'Dispara quando uma tag é adicionada ao contato',
+    icon: 'Tag',
     category: 'trigger',
-    color: 'purple',
+    color: '#10b981',
   },
   {
     type: 'trigger_deal_created',
     label: 'Deal Criado',
-    description: 'Quando um deal for criado',
-    icon: Briefcase,
+    description: 'Dispara quando um novo deal é criado',
+    icon: 'Briefcase',
     category: 'trigger',
-    color: 'blue',
+    color: '#10b981',
   },
   {
     type: 'trigger_deal_stage',
     label: 'Deal Mudou Estágio',
-    description: 'Quando deal mudar de estágio',
-    icon: MoveRight,
+    description: 'Dispara quando deal muda de estágio',
+    icon: 'ArrowRight',
     category: 'trigger',
-    color: 'violet',
+    color: '#10b981',
   },
   {
     type: 'trigger_deal_won',
     label: 'Deal Ganho',
-    description: 'Quando deal for ganho',
-    icon: Trophy,
+    description: 'Dispara quando deal é marcado como ganho',
+    icon: 'Trophy',
     category: 'trigger',
-    color: 'emerald',
+    color: '#10b981',
   },
   {
     type: 'trigger_deal_lost',
     label: 'Deal Perdido',
-    description: 'Quando deal for perdido',
-    icon: XCircle,
+    description: 'Dispara quando deal é marcado como perdido',
+    icon: 'XCircle',
     category: 'trigger',
-    color: 'red',
+    color: '#10b981',
   },
   {
     type: 'trigger_date',
     label: 'Data Especial',
-    description: 'Em data específica (aniversário, etc)',
-    icon: Star,
+    description: 'Dispara em data especial do contato',
+    icon: 'Calendar',
     category: 'trigger',
-    color: 'pink',
+    color: '#10b981',
   },
   {
     type: 'trigger_segment',
-    label: 'Entrou em Segmento',
-    description: 'Quando entrar em segmento',
-    icon: Users,
+    label: 'Entrou no Segmento',
+    description: 'Dispara quando contato entra em um segmento',
+    icon: 'Users',
     category: 'trigger',
-    color: 'cyan',
+    color: '#10b981',
   },
   {
     type: 'trigger_webhook',
-    label: 'Webhook Recebido',
-    description: 'Quando webhook for recebido',
-    icon: Webhook,
+    label: 'Webhook',
+    description: 'Dispara quando um webhook é recebido',
+    icon: 'Webhook',
     category: 'trigger',
-    color: 'orange',
+    color: '#10b981',
   },
   {
     type: 'trigger_whatsapp',
     label: 'WhatsApp Recebido',
-    description: 'Quando mensagem for recebida',
-    icon: MessageSquare,
+    description: 'Dispara quando uma mensagem é recebida',
+    icon: 'MessageSquare',
     category: 'trigger',
-    color: 'green',
+    color: '#10b981',
   },
 ];
 
 // ============================================
-// ACTIONS
+// ACTION DEFINITIONS
 // ============================================
 
-export const ACTION_NODES: NodeTypeDefinition[] = [
-  {
-    type: 'action_email',
-    label: 'Enviar Email',
-    description: 'Enviar email para o contato',
-    icon: Mail,
-    category: 'action',
-    color: 'violet',
-    defaultConfig: {
-      subject: '',
-      templateId: '',
-    },
-  },
+export const actionTypes: NodeTypeDefinition[] = [
   {
     type: 'action_whatsapp',
     label: 'Enviar WhatsApp',
-    description: 'Enviar mensagem WhatsApp',
-    icon: MessageSquare,
+    description: 'Envia mensagem via WhatsApp',
+    icon: 'MessageSquare',
     category: 'action',
-    color: 'green',
-    defaultConfig: {
-      templateId: '',
-      instanceId: '',
-    },
+    color: '#3b82f6',
+  },
+  {
+    type: 'action_email',
+    label: 'Enviar Email',
+    description: 'Envia email para o contato',
+    icon: 'Mail',
+    category: 'action',
+    color: '#3b82f6',
   },
   {
     type: 'action_sms',
     label: 'Enviar SMS',
-    description: 'Enviar SMS para o contato',
-    icon: Send,
+    description: 'Envia SMS para o contato',
+    icon: 'Phone',
     category: 'action',
-    color: 'blue',
-    defaultConfig: {
-      message: '',
-    },
+    color: '#3b82f6',
   },
   {
     type: 'action_tag',
     label: 'Adicionar Tag',
-    description: 'Adicionar tag ao contato',
-    icon: Tag,
+    description: 'Adiciona tag ao contato',
+    icon: 'Tag',
     category: 'action',
-    color: 'purple',
-    defaultConfig: {
-      tagName: '',
-    },
+    color: '#3b82f6',
   },
   {
     type: 'action_remove_tag',
     label: 'Remover Tag',
-    description: 'Remover tag do contato',
-    icon: Tag,
+    description: 'Remove tag do contato',
+    icon: 'UserMinus',
     category: 'action',
-    color: 'red',
-    defaultConfig: {
-      tagName: '',
-    },
+    color: '#3b82f6',
   },
   {
     type: 'action_update',
     label: 'Atualizar Contato',
-    description: 'Atualizar campos do contato',
-    icon: Database,
+    description: 'Atualiza dados do contato',
+    icon: 'Edit',
     category: 'action',
-    color: 'cyan',
-    defaultConfig: {
-      fields: {},
-    },
+    color: '#3b82f6',
   },
   {
     type: 'action_create_deal',
     label: 'Criar Deal',
-    description: 'Criar novo deal no CRM',
-    icon: PlusCircle,
+    description: 'Cria um novo deal no CRM',
+    icon: 'Briefcase',
     category: 'action',
-    color: 'blue',
-    defaultConfig: {
-      pipelineId: '',
-      stageId: '',
-      title: '',
-      value: 0,
-    },
+    color: '#3b82f6',
   },
   {
     type: 'action_move_deal',
     label: 'Mover Deal',
-    description: 'Mover deal para outro estágio',
-    icon: MoveRight,
+    description: 'Move deal para outro estágio',
+    icon: 'ArrowRight',
     category: 'action',
-    color: 'violet',
-    defaultConfig: {
-      stageId: '',
-    },
-  },
-  {
-    type: 'action_assign_deal',
-    label: 'Atribuir Deal',
-    description: 'Atribuir deal a um agente',
-    icon: UserPlus,
-    category: 'action',
-    color: 'cyan',
-    defaultConfig: {
-      userId: '',
-    },
+    color: '#3b82f6',
   },
   {
     type: 'action_notify',
     label: 'Notificação Interna',
-    description: 'Enviar notificação para equipe',
-    icon: Bell,
+    description: 'Envia notificação para equipe',
+    icon: 'Bell',
     category: 'action',
-    color: 'amber',
-    defaultConfig: {
-      message: '',
-      userIds: [],
-    },
+    color: '#3b82f6',
   },
   {
     type: 'action_webhook',
-    label: 'Chamar Webhook',
-    description: 'Fazer requisição HTTP externa',
-    icon: Webhook,
+    label: 'HTTP Request',
+    description: 'Faz requisição HTTP externa',
+    icon: 'Globe',
     category: 'action',
-    color: 'slate',
-    defaultConfig: {
-      url: '',
-      method: 'POST',
-      headers: {},
-      body: '',
-    },
+    color: '#3b82f6',
   },
 ];
 
 // ============================================
-// CONDITIONS / LOGIC
+// CONDITION DEFINITIONS
 // ============================================
 
-export const CONDITION_NODES: NodeTypeDefinition[] = [
+export const conditionTypes: NodeTypeDefinition[] = [
   {
     type: 'condition_has_tag',
     label: 'Tem Tag?',
-    description: 'Verificar se contato tem tag',
-    icon: Tag,
+    description: 'Verifica se contato tem tag específica',
+    icon: 'Tag',
     category: 'condition',
-    color: 'amber',
-    defaultConfig: {
-      tagName: '',
-    },
+    color: '#f59e0b',
   },
   {
     type: 'condition_field',
     label: 'Campo Igual?',
-    description: 'Verificar valor de um campo',
-    icon: GitBranch,
+    description: 'Compara valor de campo do contato',
+    icon: 'GitBranch',
     category: 'condition',
-    color: 'amber',
-    defaultConfig: {
-      field: '',
-      operator: 'equals',
-      value: '',
-    },
+    color: '#f59e0b',
   },
   {
     type: 'condition_deal_value',
     label: 'Valor do Deal?',
-    description: 'Comparar valor do deal',
-    icon: Briefcase,
+    description: 'Verifica valor do deal',
+    icon: 'Target',
     category: 'condition',
-    color: 'amber',
-    defaultConfig: {
-      operator: 'greater_than',
-      value: 0,
-    },
+    color: '#f59e0b',
   },
   {
     type: 'condition_order_value',
     label: 'Valor do Pedido?',
-    description: 'Comparar valor do pedido',
-    icon: ShoppingCart,
+    description: 'Verifica valor do pedido',
+    icon: 'ShoppingCart',
     category: 'condition',
-    color: 'amber',
-    defaultConfig: {
-      operator: 'greater_than',
-      value: 0,
-    },
+    color: '#f59e0b',
   },
   {
     type: 'logic_split',
     label: 'Teste A/B',
-    description: 'Dividir tráfego aleatoriamente',
-    icon: Split,
+    description: 'Divide contatos aleatoriamente',
+    icon: 'Percent',
     category: 'condition',
-    color: 'pink',
-    defaultConfig: {
-      percentageA: 50,
-    },
+    color: '#f59e0b',
   },
   {
     type: 'logic_filter',
-    label: 'Filtrar',
-    description: 'Filtrar por condição avançada',
-    icon: Filter,
+    label: 'Filtro Avançado',
+    description: 'Filtra com múltiplas condições',
+    icon: 'Filter',
     category: 'condition',
-    color: 'indigo',
-    defaultConfig: {
-      conditions: [],
-    },
+    color: '#f59e0b',
   },
 ];
 
 // ============================================
-// CONTROL FLOW
+// CONTROL DEFINITIONS
 // ============================================
 
-export const CONTROL_NODES: NodeTypeDefinition[] = [
+export const controlTypes: NodeTypeDefinition[] = [
   {
     type: 'control_delay',
     label: 'Aguardar',
-    description: 'Pausar execução por um tempo',
-    icon: Clock,
+    description: 'Aguarda tempo determinado',
+    icon: 'Clock',
     category: 'control',
-    color: 'slate',
-    defaultConfig: {
-      value: 1,
-      unit: 'hours',
-    },
+    color: '#a855f7',
   },
   {
     type: 'control_delay_until',
     label: 'Aguardar Até',
-    description: 'Pausar até data/hora específica',
-    icon: Clock,
+    description: 'Aguarda até data/hora específica',
+    icon: 'Calendar',
     category: 'control',
-    color: 'slate',
-    defaultConfig: {
-      datetime: '',
-      timezone: 'America/Sao_Paulo',
-    },
+    color: '#a855f7',
   },
 ];
 
 // ============================================
-// ALL NODES
+// ALL NODE DEFINITIONS
 // ============================================
 
-export const ALL_NODE_TYPES: NodeTypeDefinition[] = [
-  ...TRIGGER_NODES,
-  ...ACTION_NODES,
-  ...CONDITION_NODES,
-  ...CONTROL_NODES,
+export const allNodeTypes: NodeTypeDefinition[] = [
+  ...triggerTypes,
+  ...actionTypes,
+  ...conditionTypes,
+  ...controlTypes,
 ];
 
 // ============================================
-// HELPERS
+// NODE TYPES MAP FOR REACT FLOW
+// Using 'any' to bypass strict typing issues with React Flow v12
+// ============================================
+
+export const nodeTypes: Record<string, any> = {
+  // Triggers
+  trigger_order: TriggerNode,
+  trigger_order_paid: TriggerNode,
+  trigger_abandon: TriggerNode,
+  trigger_signup: TriggerNode,
+  trigger_tag: TriggerNode,
+  trigger_deal_created: TriggerNode,
+  trigger_deal_stage: TriggerNode,
+  trigger_deal_won: TriggerNode,
+  trigger_deal_lost: TriggerNode,
+  trigger_date: TriggerNode,
+  trigger_segment: TriggerNode,
+  trigger_webhook: TriggerNode,
+  trigger_whatsapp: TriggerNode,
+  
+  // Actions
+  action_whatsapp: ActionNode,
+  action_email: ActionNode,
+  action_sms: ActionNode,
+  action_tag: ActionNode,
+  action_remove_tag: ActionNode,
+  action_update: ActionNode,
+  action_create_deal: ActionNode,
+  action_move_deal: ActionNode,
+  action_notify: ActionNode,
+  action_webhook: ActionNode,
+  
+  // Conditions
+  condition_has_tag: ConditionNode,
+  condition_field: ConditionNode,
+  condition_deal_value: ConditionNode,
+  condition_order_value: ConditionNode,
+  logic_split: ConditionNode,
+  logic_filter: ConditionNode,
+  
+  // Control
+  control_delay: ControlNode,
+  control_delay_until: ControlNode,
+  logic_delay: ControlNode,
+  
+  // Generic fallbacks
+  triggerNode: TriggerNode,
+  actionNode: ActionNode,
+  conditionNode: ConditionNode,
+  controlNode: ControlNode,
+};
+
+// ============================================
+// HELPER FUNCTIONS
 // ============================================
 
 export function getNodeDefinition(nodeType: string): NodeTypeDefinition | undefined {
-  return ALL_NODE_TYPES.find((n) => n.type === nodeType);
+  return allNodeTypes.find(n => n.type === nodeType);
 }
 
-export function getNodesByCategory(category: NodeCategory): NodeTypeDefinition[] {
-  return ALL_NODE_TYPES.filter((n) => n.category === category);
+export function getNodesByCategory(category: string): NodeTypeDefinition[] {
+  return allNodeTypes.filter(n => n.category === category);
 }
 
-export function getNodeColor(color: string): {
-  bg: string;
-  border: string;
-  text: string;
-  solid: string;
-  glow: string;
-} {
-  const colors: Record<string, any> = {
-    emerald: { bg: 'bg-emerald-500/15', border: 'border-emerald-500/50', text: 'text-emerald-400', solid: 'bg-emerald-500', glow: 'shadow-emerald-500/30' },
-    amber: { bg: 'bg-amber-500/15', border: 'border-amber-500/50', text: 'text-amber-400', solid: 'bg-amber-500', glow: 'shadow-amber-500/30' },
-    blue: { bg: 'bg-blue-500/15', border: 'border-blue-500/50', text: 'text-blue-400', solid: 'bg-blue-500', glow: 'shadow-blue-500/30' },
-    purple: { bg: 'bg-purple-500/15', border: 'border-purple-500/50', text: 'text-purple-400', solid: 'bg-purple-500', glow: 'shadow-purple-500/30' },
-    pink: { bg: 'bg-pink-500/15', border: 'border-pink-500/50', text: 'text-pink-400', solid: 'bg-pink-500', glow: 'shadow-pink-500/30' },
-    cyan: { bg: 'bg-cyan-500/15', border: 'border-cyan-500/50', text: 'text-cyan-400', solid: 'bg-cyan-500', glow: 'shadow-cyan-500/30' },
-    orange: { bg: 'bg-orange-500/15', border: 'border-orange-500/50', text: 'text-orange-400', solid: 'bg-orange-500', glow: 'shadow-orange-500/30' },
-    violet: { bg: 'bg-violet-500/15', border: 'border-violet-500/50', text: 'text-violet-400', solid: 'bg-violet-500', glow: 'shadow-violet-500/30' },
-    green: { bg: 'bg-green-500/15', border: 'border-green-500/50', text: 'text-green-400', solid: 'bg-green-500', glow: 'shadow-green-500/30' },
-    slate: { bg: 'bg-slate-500/15', border: 'border-slate-500/50', text: 'text-slate-400', solid: 'bg-slate-500', glow: 'shadow-slate-500/30' },
-    indigo: { bg: 'bg-indigo-500/15', border: 'border-indigo-500/50', text: 'text-indigo-400', solid: 'bg-indigo-500', glow: 'shadow-indigo-500/30' },
-    red: { bg: 'bg-red-500/15', border: 'border-red-500/50', text: 'text-red-400', solid: 'bg-red-500', glow: 'shadow-red-500/30' },
-  };
-  return colors[color] || colors.slate;
-}
-
-// ============================================
-// SECTIONS FOR SIDEBAR
-// ============================================
-
-export const NODE_SECTIONS = [
-  {
-    id: 'triggers',
-    label: 'Gatilhos',
-    icon: Zap,
-    nodes: TRIGGER_NODES,
-  },
-  {
-    id: 'actions',
-    label: 'Ações',
-    icon: Send,
-    nodes: ACTION_NODES,
-  },
-  {
-    id: 'conditions',
-    label: 'Condições',
-    icon: GitBranch,
-    nodes: CONDITION_NODES,
-  },
-  {
-    id: 'control',
-    label: 'Controle',
-    icon: Clock,
-    nodes: CONTROL_NODES,
-  },
-];
+export default nodeTypes;

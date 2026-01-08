@@ -1,308 +1,233 @@
 'use client';
 
-import { memo, ReactNode } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, XCircle, Loader2, AlertTriangle, Zap } from 'lucide-react';
+import { memo } from 'react';
+import { Handle, Position } from '@xyflow/react';
+import { motion } from 'framer-motion';
+import {
+  ShoppingCart,
+  CreditCard,
+  ShoppingBag,
+  UserPlus,
+  Tag,
+  Briefcase,
+  ArrowRight,
+  Trophy,
+  XCircle,
+  Calendar,
+  Users,
+  Webhook,
+  MessageSquare,
+  Clock,
+  Mail,
+  Phone,
+  Bell,
+  Edit,
+  Trash,
+  GitBranch,
+  Percent,
+  Filter,
+  Zap,
+  Send,
+  UserMinus,
+  Target,
+  Globe,
+  AlertCircle,
+  CheckCircle,
+  Loader2,
+  LucideIcon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { FlowNodeData, NodeStatus } from '@/stores/flowStore';
-import { getNodeDefinition, getNodeColor } from './nodeTypes';
+import { useFlowStore } from '@/stores/flowStore';
 
 // ============================================
-// STATUS ICON COMPONENT
+// TYPES
 // ============================================
 
-const StatusIcon = ({ status }: { status?: NodeStatus }) => {
-  switch (status) {
-    case 'running':
-      return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />;
-    case 'success':
-      return <CheckCircle2 className="w-4 h-4 text-green-400" />;
-    case 'error':
-      return <XCircle className="w-4 h-4 text-red-400" />;
-    case 'warning':
-      return <AlertTriangle className="w-4 h-4 text-amber-400" />;
-    case 'skipped':
-      return <span className="text-xs text-slate-400">—</span>;
-    default:
-      return null;
-  }
-};
-
-// ============================================
-// STATUS VARIANTS FOR ANIMATION
-// ============================================
-
-const statusVariants = {
-  idle: {
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    boxShadow: 'none',
-  },
-  running: {
-    borderColor: '#3b82f6',
-    boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)',
-  },
-  success: {
-    borderColor: '#22c55e',
-    boxShadow: '0 0 20px rgba(34, 197, 94, 0.4)',
-  },
-  error: {
-    borderColor: '#ef4444',
-    boxShadow: '0 0 20px rgba(239, 68, 68, 0.4)',
-  },
-  warning: {
-    borderColor: '#f59e0b',
-    boxShadow: '0 0 20px rgba(245, 158, 11, 0.4)',
-  },
-  skipped: {
-    borderColor: '#6b7280',
-    boxShadow: 'none',
-    opacity: 0.6,
-  },
-};
-
-// ============================================
-// BASE NODE PROPS
-// ============================================
-
-interface BaseNodeProps extends NodeProps<FlowNodeData> {
-  children?: ReactNode;
-  showSourceHandle?: boolean;
-  showTargetHandle?: boolean;
-  sourceHandles?: Array<{ id: string; label?: string; color?: string; position?: 'top' | 'center' | 'bottom' }>;
+export interface FlowNodeData {
+  label: string;
+  description?: string;
+  category: 'trigger' | 'action' | 'condition' | 'control' | 'transform';
+  nodeType: string;
+  config: Record<string, any>;
+  icon?: string;
+  color?: string;
+  credentialId?: string;
+  disabled?: boolean;
+  notes?: string;
+  status?: 'idle' | 'running' | 'success' | 'error' | 'warning';
+  statusMessage?: string;
+  executionTime?: number;
 }
+
+// Simple props interface - React Flow will pass these
+export interface BaseNodeProps {
+  id: string;
+  data: FlowNodeData;
+  selected?: boolean;
+}
+
+// ============================================
+// ICON MAP
+// ============================================
+
+const iconMap: Record<string, LucideIcon> = {
+  ShoppingCart, CreditCard, ShoppingBag, UserPlus, Tag, Briefcase,
+  ArrowRight, Trophy, XCircle, Calendar, Users, Webhook, MessageSquare,
+  Mail, Phone, Bell, Edit, Trash, Send, UserMinus, Target, Globe,
+  GitBranch, Percent, Filter, Clock, Zap,
+};
+
+// ============================================
+// CATEGORY CONFIG
+// ============================================
+
+const categoryConfig = {
+  trigger: {
+    gradient: 'from-emerald-500/20 to-emerald-600/10',
+    border: 'border-emerald-500/30',
+    glow: 'shadow-emerald-500/20',
+    icon: 'text-emerald-400',
+  },
+  action: {
+    gradient: 'from-blue-500/20 to-blue-600/10',
+    border: 'border-blue-500/30',
+    glow: 'shadow-blue-500/20',
+    icon: 'text-blue-400',
+  },
+  condition: {
+    gradient: 'from-amber-500/20 to-amber-600/10',
+    border: 'border-amber-500/30',
+    glow: 'shadow-amber-500/20',
+    icon: 'text-amber-400',
+  },
+  control: {
+    gradient: 'from-purple-500/20 to-purple-600/10',
+    border: 'border-purple-500/30',
+    glow: 'shadow-purple-500/20',
+    icon: 'text-purple-400',
+  },
+  transform: {
+    gradient: 'from-pink-500/20 to-pink-600/10',
+    border: 'border-pink-500/30',
+    glow: 'shadow-pink-500/20',
+    icon: 'text-pink-400',
+  },
+};
+
+// ============================================
+// STATUS INDICATOR
+// ============================================
+
+const StatusIndicator = ({ status }: { status?: string }) => {
+  if (!status || status === 'idle') return null;
+
+  const config: Record<string, { icon: LucideIcon; color: string; animate: boolean }> = {
+    running: { icon: Loader2, color: 'text-blue-400', animate: true },
+    success: { icon: CheckCircle, color: 'text-green-400', animate: false },
+    error: { icon: AlertCircle, color: 'text-red-400', animate: false },
+    warning: { icon: AlertCircle, color: 'text-amber-400', animate: false },
+  };
+
+  const cfg = config[status] || config.running;
+  const Icon = cfg.icon;
+
+  return (
+    <div className={cn('absolute -top-1 -right-1', cfg.color)}>
+      <Icon className={cn('w-4 h-4', cfg.animate && 'animate-spin')} />
+    </div>
+  );
+};
 
 // ============================================
 // BASE NODE COMPONENT
 // ============================================
 
-export const BaseNode = memo(function BaseNode({
-  data,
-  selected,
-  showSourceHandle = true,
-  showTargetHandle = true,
-  sourceHandles,
-  children,
-}: BaseNodeProps) {
-  const definition = getNodeDefinition(data.nodeType);
-  const colors = getNodeColor(definition?.color || 'slate');
-  const Icon = definition?.icon || Zap;
-  const status = data.status || 'idle';
-  const isTrigger = data.category === 'trigger';
-  const isCondition = data.category === 'condition';
+function BaseNodeComponent(props: BaseNodeProps) {
+  const { id, data, selected } = props;
+  const { category, label, description, icon, status, executionTime, disabled } = data;
+  const config = categoryConfig[category] || categoryConfig.action;
+  const IconComponent = icon ? iconMap[icon] : Zap;
+  const setSelectedNode = useFlowStore((s) => s.setSelectedNode);
 
   return (
     <motion.div
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
       className={cn(
-        'fb-node min-w-[220px] max-w-[280px]',
-        'rounded-xl border-2 overflow-hidden',
-        'bg-[#1a1a1a] backdrop-blur-sm',
-        'transition-colors duration-200',
-        // Category border color
-        isTrigger && 'border-blue-500/50',
-        data.category === 'action' && 'border-purple-500/50',
-        isCondition && 'border-amber-500/50',
-        data.category === 'control' && 'border-green-500/50',
-        // Selection
-        selected && 'ring-2 ring-white/30',
-        // Status
-        status === 'running' && 'fb-node-running',
-        status === 'error' && 'fb-node-error',
-        status === 'success' && 'fb-node-success',
-        status === 'skipped' && 'opacity-60'
+        'relative min-w-[200px] max-w-[280px]',
+        'rounded-xl border backdrop-blur-sm',
+        'bg-gradient-to-br',
+        config.gradient,
+        config.border,
+        selected && `ring-2 ring-white/30 ${config.glow} shadow-lg`,
+        disabled && 'opacity-50',
+        'transition-all duration-200',
+        'hover:shadow-lg cursor-pointer'
       )}
-      initial={false}
-      animate={statusVariants[status]}
-      transition={{ duration: 0.3 }}
-      whileHover={{ 
-        y: -2,
-        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
-      }}
+      onClick={() => setSelectedNode(id)}
     >
-      {/* Target Handle (entrada - esquerda) */}
-      {showTargetHandle && !isTrigger && (
+      <StatusIndicator status={status} />
+
+      {/* Input Handle */}
+      {category !== 'trigger' && (
         <Handle
           type="target"
-          position={Position.Left}
-          className={cn(
-            '!w-3 !h-3 !bg-slate-500 !border-2 !border-[#1a1a1a]',
-            '!-left-1.5',
-            'transition-all duration-150',
-            'hover:!scale-125 hover:!bg-blue-400'
-          )}
+          position={Position.Top}
+          className="!w-3 !h-3 !border-2 !border-white/20 !bg-[#1a1a1a] hover:!bg-white/20 !-top-1.5"
         />
       )}
 
-      {/* Trigger Badge */}
-      {isTrigger && (
-        <div className={cn(
-          'px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider',
-          'text-white flex items-center gap-1.5',
-          colors.solid
-        )}>
-          <Zap className="w-3 h-3" />
-          Gatilho
-        </div>
-      )}
-
-      {/* Header */}
-      <div className={cn(
-        'flex items-center gap-3 p-3',
-        !isTrigger && 'border-b border-white/10',
-        isTrigger && 'bg-[#0f0f0f]'
-      )}>
-        {/* Icon */}
-        <div className={cn(
-          'w-10 h-10 rounded-lg flex items-center justify-center',
-          colors.bg
-        )}>
-          <Icon className={cn('w-5 h-5', colors.text)} />
-        </div>
-
-        {/* Label & Description */}
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-sm text-white/90 truncate">
-            {data.label || definition?.label}
-          </h3>
-          {data.description && (
-            <p className="text-[11px] text-white/50 truncate mt-0.5">
-              {data.description}
-            </p>
-          )}
-        </div>
-
-        {/* Status Icon */}
-        <AnimatePresence>
-          {status !== 'idle' && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className={cn(
-                'w-6 h-6 rounded-full flex items-center justify-center',
-                status === 'running' && 'bg-blue-500/20',
-                status === 'success' && 'bg-green-500/20',
-                status === 'error' && 'bg-red-500/20',
-                status === 'warning' && 'bg-amber-500/20'
-              )}
-            >
-              <StatusIcon status={status} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Body (custom content) */}
-      {children && (
-        <div className="p-3 pt-0">
-          {children}
-        </div>
-      )}
-
-      {/* Config Preview */}
-      {data.config && Object.keys(data.config).length > 0 && !children && (
-        <div className="px-3 pb-3">
-          <div className="flex flex-wrap gap-1.5">
-            {data.config.tagName && (
-              <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] rounded-full">
-                #{data.config.tagName}
-              </span>
-            )}
-            {data.config.delay && (
-              <span className="px-2 py-0.5 bg-slate-500/20 text-slate-300 text-[10px] rounded-full">
-                ⏱ {data.config.delay.value} {data.config.delay.unit}
-              </span>
-            )}
-            {data.config.value !== undefined && data.config.unit && (
-              <span className="px-2 py-0.5 bg-slate-500/20 text-slate-300 text-[10px] rounded-full">
-                ⏱ {data.config.value} {data.config.unit}
-              </span>
-            )}
-            {data.config.subject && (
-              <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 text-[10px] rounded-full truncate max-w-[150px]">
-                📧 {data.config.subject}
-              </span>
-            )}
-            {data.config.templateId && (
-              <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] rounded-full">
-                📄 Template
-              </span>
+      {/* Content */}
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <div className={cn('p-2 rounded-lg bg-white/5 border border-white/10', config.icon)}>
+            {IconComponent && <IconComponent className="w-5 h-5" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-medium text-white truncate">{label}</h3>
+            {description && (
+              <p className="text-xs text-white/50 mt-0.5 line-clamp-2">{description}</p>
             )}
           </div>
         </div>
-      )}
 
-      {/* Footer with status message & execution time */}
-      <AnimatePresence>
-        {(data.statusMessage || data.executionTime) && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="px-3 pb-2 border-t border-white/5"
-          >
-            <div className="flex items-center justify-between text-[10px] pt-2">
-              {data.statusMessage && (
-                <span className={cn(
-                  'truncate',
-                  status === 'error' ? 'text-red-400' : 'text-white/40'
-                )}>
-                  {data.statusMessage}
-                </span>
-              )}
-              {data.executionTime !== undefined && (
-                <span className="text-white/30 ml-2">
-                  {data.executionTime}ms
-                </span>
-              )}
-            </div>
-          </motion.div>
+        {executionTime !== undefined && (
+          <div className="mt-2 flex justify-end">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-white/40">
+              {executionTime}ms
+            </span>
+          </div>
         )}
-      </AnimatePresence>
+      </div>
 
-      {/* Source Handles */}
-      {showSourceHandle && !isCondition && (
+      {/* Output Handle(s) */}
+      {category === 'condition' ? (
+        <>
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="true"
+            className="!w-3 !h-3 !border-2 !border-green-500/50 !bg-green-500/30 hover:!bg-green-500/50 !-bottom-1.5 !left-1/3"
+          />
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="false"
+            className="!w-3 !h-3 !border-2 !border-red-500/50 !bg-red-500/30 hover:!bg-red-500/50 !-bottom-1.5 !left-2/3"
+          />
+          <div className="absolute -bottom-6 left-1/3 -translate-x-1/2 text-[10px] text-green-400">Sim</div>
+          <div className="absolute -bottom-6 left-2/3 -translate-x-1/2 text-[10px] text-red-400">Não</div>
+        </>
+      ) : (
         <Handle
           type="source"
-          position={Position.Right}
-          className={cn(
-            '!w-3 !h-3 !border-2 !border-[#1a1a1a]',
-            '!-right-1.5',
-            'transition-all duration-150',
-            'hover:!scale-125',
-            isTrigger && '!bg-blue-500',
-            data.category === 'action' && '!bg-purple-500',
-            data.category === 'control' && '!bg-green-500'
-          )}
+          position={Position.Bottom}
+          className="!w-3 !h-3 !border-2 !border-white/20 !bg-[#1a1a1a] hover:!bg-white/20 !-bottom-1.5"
         />
       )}
-
-      {/* Multiple Source Handles (for conditions) */}
-      {sourceHandles && sourceHandles.map((handle, index) => {
-        const total = sourceHandles.length;
-        const offset = total === 2 ? (index === 0 ? '33%' : '67%') : '50%';
-        
-        return (
-          <Handle
-            key={handle.id}
-            type="source"
-            position={Position.Right}
-            id={handle.id}
-            style={{ top: offset }}
-            className={cn(
-              '!w-3 !h-3 !border-2 !border-[#1a1a1a]',
-              '!-right-1.5',
-              'transition-all duration-150',
-              'hover:!scale-125',
-              handle.color === 'green' && '!bg-green-500',
-              handle.color === 'red' && '!bg-red-500',
-              !handle.color && '!bg-amber-500'
-            )}
-          />
-        );
-      })}
     </motion.div>
   );
-});
+}
 
+export const BaseNode = memo(BaseNodeComponent);
 export default BaseNode;

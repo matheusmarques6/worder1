@@ -1,18 +1,11 @@
 'use client';
 
 import { memo } from 'react';
-import { NodeProps } from '@xyflow/react';
-import { FlowNodeData } from '@/stores/flowStore';
-import BaseNode from './BaseNode';
+import { BaseNode, BaseNodeProps } from './BaseNode';
 
-export const TriggerNode = memo(function TriggerNode(props: NodeProps<FlowNodeData>) {
-  return (
-    <BaseNode
-      {...props}
-      showTargetHandle={false}
-      showSourceHandle={true}
-    />
-  );
-});
+function TriggerNodeComponent(props: BaseNodeProps) {
+  return <BaseNode {...props} />;
+}
 
+export const TriggerNode = memo(TriggerNodeComponent);
 export default TriggerNode;
