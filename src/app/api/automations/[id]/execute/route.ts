@@ -13,7 +13,7 @@ export async function POST(
 ) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase, user } = auth;
+  const { supabase } = auth;
 
   try {
     const { id: automationId } = await params;
@@ -137,24 +137,39 @@ export async function POST(
         id: 'sample-contact',
         email: 'teste@exemplo.com',
         phone: '+5511999999999',
-        first_name: 'Contato',
-        last_name: 'Teste',
+        name: 'Contato Teste',
+        firstName: 'Contato',
+        lastName: 'Teste',
+        tags: [],
+        customFields: {},
+        createdAt: new Date().toISOString(),
       },
-      deal: deal || null,
-      automation: {
+      deal: deal || undefined,
+      nodes: {},
+      workflow: {
         id: automationId,
         name: automation.name,
+        executionId,
       },
-      system: {
-        execution_id: executionId,
-        started_at: new Date().toISOString(),
-        is_test: isTest,
+      now: {
+        iso: new Date().toISOString(),
+        timestamp: Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toTimeString().split(' ')[0],
+        dayOfWeek: new Date().getDay(),
+        dayOfMonth: new Date().getDate(),
+        month: new Date().getMonth() + 1,
+        year: new Date().getFullYear(),
+      },
+      env: {
+        timezone: 'America/Sao_Paulo',
+        locale: 'pt-BR',
       },
     };
 
     // Executar workflow
     const result = await engine.execute(workflow, {
-      context: initialContext,
+      context: initialContext as any,
       credentials,
       executionId,
     });
@@ -169,18 +184,17 @@ export async function POST(
           .insert({
             id: executionId,
             automation_id: automationId,
-            organization_id: automation.organization_id,
             status: result.status,
             trigger_type: triggerType || 'manual',
             trigger_data: triggerData,
-            contact_id: contactId,
-            deal_id: dealId,
+            contact_id: contactId || null,
+            deal_id: dealId || null,
             node_results: result.nodeResults,
             final_context: result.context,
             duration_ms: duration,
-            error_message: result.error,
-            error_node_id: result.errorNodeId,
-            started_at: initialContext.system.started_at,
+            error_message: result.error || null,
+            error_node_id: result.errorNodeId || null,
+            started_at: initialContext.trigger.timestamp,
             completed_at: new Date().toISOString(),
           });
       } catch (saveError) {
