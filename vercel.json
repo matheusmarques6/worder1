@@ -8,13 +8,5 @@
       "path": "/api/cron/check-delayed-runs",
       "schedule": "*/5 * * * *"
     }
-  ],
-  "functions": {
-    "api/workers/**/*.ts": {
-      "maxDuration": 60
-    },
-    "api/webhooks/**/*.ts": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
