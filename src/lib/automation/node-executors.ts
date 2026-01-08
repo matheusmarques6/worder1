@@ -619,11 +619,11 @@ const actionExecutors: Record<string, NodeExecutor> = {
       if (isTest) {
         return {
           status: 'success',
-          output: { tagged: true, customerId: context.contact?.shopify_customer_id, test: true },
+          output: { tagged: true, customerId: (context.contact as any)?.shopify_customer_id, test: true },
         };
       }
 
-      const customerId = context.contact?.shopify_customer_id;
+      const customerId = (context.contact as any)?.shopify_customer_id;
       if (!customerId) {
         return { status: 'error', output: null, error: 'Cliente Shopify não encontrado' };
       }
