@@ -66,6 +66,7 @@ export interface ExecutionResult {
   duration?: number;
   nodeResults: Record<string, NodeExecutionResult>;
   context: Partial<VariableContext>;
+  finalContext: Partial<VariableContext>;
   error?: string;
   errorNodeId?: string;
   waitingAt?: {
@@ -385,6 +386,7 @@ export class ExecutionEngine {
       duration: completedAt ? completedAt.getTime() - startedAt.getTime() : undefined,
       nodeResults,
       context,
+      finalContext: context,
       ...extra,
     };
   }
