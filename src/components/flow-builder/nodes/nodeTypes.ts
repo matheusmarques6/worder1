@@ -5,6 +5,36 @@
  * Maps node type strings to React components
  */
 
+import {
+  ShoppingCart,
+  CreditCard,
+  ShoppingBag,
+  UserPlus,
+  Tag,
+  Briefcase,
+  ArrowRight,
+  Trophy,
+  XCircle,
+  Calendar,
+  Users,
+  Webhook,
+  MessageSquare,
+  Clock,
+  Mail,
+  Phone,
+  Bell,
+  Edit,
+  GitBranch,
+  Percent,
+  Filter,
+  Zap,
+  Send,
+  UserMinus,
+  Target,
+  Globe,
+  LucideIcon,
+} from 'lucide-react';
+
 import { TriggerNode } from './TriggerNode';
 import { ActionNode } from './ActionNode';
 import { ConditionNode } from './ConditionNode';
@@ -18,7 +48,7 @@ export interface NodeTypeDefinition {
   type: string;
   label: string;
   description: string;
-  icon: string;
+  icon: LucideIcon;
   category: 'trigger' | 'action' | 'condition' | 'control';
   color: string;
   defaultConfig?: Record<string, any>;
@@ -33,7 +63,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_order',
     label: 'Pedido Criado',
     description: 'Dispara quando um novo pedido é criado',
-    icon: 'ShoppingCart',
+    icon: ShoppingCart,
     category: 'trigger',
     color: '#10b981',
   },
@@ -41,7 +71,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_order_paid',
     label: 'Pedido Pago',
     description: 'Dispara quando um pedido é pago',
-    icon: 'CreditCard',
+    icon: CreditCard,
     category: 'trigger',
     color: '#10b981',
   },
@@ -49,7 +79,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_abandon',
     label: 'Carrinho Abandonado',
     description: 'Dispara quando cliente abandona carrinho',
-    icon: 'ShoppingBag',
+    icon: ShoppingBag,
     category: 'trigger',
     color: '#10b981',
   },
@@ -57,7 +87,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_signup',
     label: 'Novo Cadastro',
     description: 'Dispara quando um novo contato é criado',
-    icon: 'UserPlus',
+    icon: UserPlus,
     category: 'trigger',
     color: '#10b981',
   },
@@ -65,7 +95,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_tag',
     label: 'Tag Adicionada',
     description: 'Dispara quando uma tag é adicionada ao contato',
-    icon: 'Tag',
+    icon: Tag,
     category: 'trigger',
     color: '#10b981',
   },
@@ -73,7 +103,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_deal_created',
     label: 'Deal Criado',
     description: 'Dispara quando um novo deal é criado',
-    icon: 'Briefcase',
+    icon: Briefcase,
     category: 'trigger',
     color: '#10b981',
   },
@@ -81,7 +111,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_deal_stage',
     label: 'Deal Mudou Estágio',
     description: 'Dispara quando deal muda de estágio',
-    icon: 'ArrowRight',
+    icon: ArrowRight,
     category: 'trigger',
     color: '#10b981',
   },
@@ -89,7 +119,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_deal_won',
     label: 'Deal Ganho',
     description: 'Dispara quando deal é marcado como ganho',
-    icon: 'Trophy',
+    icon: Trophy,
     category: 'trigger',
     color: '#10b981',
   },
@@ -97,7 +127,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_deal_lost',
     label: 'Deal Perdido',
     description: 'Dispara quando deal é marcado como perdido',
-    icon: 'XCircle',
+    icon: XCircle,
     category: 'trigger',
     color: '#10b981',
   },
@@ -105,7 +135,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_date',
     label: 'Data Especial',
     description: 'Dispara em data especial do contato',
-    icon: 'Calendar',
+    icon: Calendar,
     category: 'trigger',
     color: '#10b981',
   },
@@ -113,7 +143,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_segment',
     label: 'Entrou no Segmento',
     description: 'Dispara quando contato entra em um segmento',
-    icon: 'Users',
+    icon: Users,
     category: 'trigger',
     color: '#10b981',
   },
@@ -121,7 +151,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_webhook',
     label: 'Webhook',
     description: 'Dispara quando um webhook é recebido',
-    icon: 'Webhook',
+    icon: Webhook,
     category: 'trigger',
     color: '#10b981',
   },
@@ -129,7 +159,7 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_whatsapp',
     label: 'WhatsApp Recebido',
     description: 'Dispara quando uma mensagem é recebida',
-    icon: 'MessageSquare',
+    icon: MessageSquare,
     category: 'trigger',
     color: '#10b981',
   },
@@ -144,7 +174,7 @@ export const actionTypes: NodeTypeDefinition[] = [
     type: 'action_whatsapp',
     label: 'Enviar WhatsApp',
     description: 'Envia mensagem via WhatsApp',
-    icon: 'MessageSquare',
+    icon: MessageSquare,
     category: 'action',
     color: '#3b82f6',
   },
@@ -152,7 +182,7 @@ export const actionTypes: NodeTypeDefinition[] = [
     type: 'action_email',
     label: 'Enviar Email',
     description: 'Envia email para o contato',
-    icon: 'Mail',
+    icon: Mail,
     category: 'action',
     color: '#3b82f6',
   },
@@ -160,7 +190,7 @@ export const actionTypes: NodeTypeDefinition[] = [
     type: 'action_sms',
     label: 'Enviar SMS',
     description: 'Envia SMS para o contato',
-    icon: 'Phone',
+    icon: Phone,
     category: 'action',
     color: '#3b82f6',
   },
@@ -168,7 +198,7 @@ export const actionTypes: NodeTypeDefinition[] = [
     type: 'action_tag',
     label: 'Adicionar Tag',
     description: 'Adiciona tag ao contato',
-    icon: 'Tag',
+    icon: Tag,
     category: 'action',
     color: '#3b82f6',
   },
@@ -176,7 +206,7 @@ export const actionTypes: NodeTypeDefinition[] = [
     type: 'action_remove_tag',
     label: 'Remover Tag',
     description: 'Remove tag do contato',
-    icon: 'UserMinus',
+    icon: UserMinus,
     category: 'action',
     color: '#3b82f6',
   },
@@ -184,7 +214,7 @@ export const actionTypes: NodeTypeDefinition[] = [
     type: 'action_update',
     label: 'Atualizar Contato',
     description: 'Atualiza dados do contato',
-    icon: 'Edit',
+    icon: Edit,
     category: 'action',
     color: '#3b82f6',
   },
@@ -192,7 +222,7 @@ export const actionTypes: NodeTypeDefinition[] = [
     type: 'action_create_deal',
     label: 'Criar Deal',
     description: 'Cria um novo deal no CRM',
-    icon: 'Briefcase',
+    icon: Briefcase,
     category: 'action',
     color: '#3b82f6',
   },
@@ -200,7 +230,7 @@ export const actionTypes: NodeTypeDefinition[] = [
     type: 'action_move_deal',
     label: 'Mover Deal',
     description: 'Move deal para outro estágio',
-    icon: 'ArrowRight',
+    icon: ArrowRight,
     category: 'action',
     color: '#3b82f6',
   },
@@ -208,7 +238,7 @@ export const actionTypes: NodeTypeDefinition[] = [
     type: 'action_notify',
     label: 'Notificação Interna',
     description: 'Envia notificação para equipe',
-    icon: 'Bell',
+    icon: Bell,
     category: 'action',
     color: '#3b82f6',
   },
@@ -216,7 +246,7 @@ export const actionTypes: NodeTypeDefinition[] = [
     type: 'action_webhook',
     label: 'HTTP Request',
     description: 'Faz requisição HTTP externa',
-    icon: 'Globe',
+    icon: Globe,
     category: 'action',
     color: '#3b82f6',
   },
@@ -231,7 +261,7 @@ export const conditionTypes: NodeTypeDefinition[] = [
     type: 'condition_has_tag',
     label: 'Tem Tag?',
     description: 'Verifica se contato tem tag específica',
-    icon: 'Tag',
+    icon: Tag,
     category: 'condition',
     color: '#f59e0b',
   },
@@ -239,7 +269,7 @@ export const conditionTypes: NodeTypeDefinition[] = [
     type: 'condition_field',
     label: 'Campo Igual?',
     description: 'Compara valor de campo do contato',
-    icon: 'GitBranch',
+    icon: GitBranch,
     category: 'condition',
     color: '#f59e0b',
   },
@@ -247,7 +277,7 @@ export const conditionTypes: NodeTypeDefinition[] = [
     type: 'condition_deal_value',
     label: 'Valor do Deal?',
     description: 'Verifica valor do deal',
-    icon: 'Target',
+    icon: Target,
     category: 'condition',
     color: '#f59e0b',
   },
@@ -255,7 +285,7 @@ export const conditionTypes: NodeTypeDefinition[] = [
     type: 'condition_order_value',
     label: 'Valor do Pedido?',
     description: 'Verifica valor do pedido',
-    icon: 'ShoppingCart',
+    icon: ShoppingCart,
     category: 'condition',
     color: '#f59e0b',
   },
@@ -263,7 +293,7 @@ export const conditionTypes: NodeTypeDefinition[] = [
     type: 'logic_split',
     label: 'Teste A/B',
     description: 'Divide contatos aleatoriamente',
-    icon: 'Percent',
+    icon: Percent,
     category: 'condition',
     color: '#f59e0b',
   },
@@ -271,7 +301,7 @@ export const conditionTypes: NodeTypeDefinition[] = [
     type: 'logic_filter',
     label: 'Filtro Avançado',
     description: 'Filtra com múltiplas condições',
-    icon: 'Filter',
+    icon: Filter,
     category: 'condition',
     color: '#f59e0b',
   },
@@ -286,7 +316,7 @@ export const controlTypes: NodeTypeDefinition[] = [
     type: 'control_delay',
     label: 'Aguardar',
     description: 'Aguarda tempo determinado',
-    icon: 'Clock',
+    icon: Clock,
     category: 'control',
     color: '#a855f7',
   },
@@ -294,7 +324,7 @@ export const controlTypes: NodeTypeDefinition[] = [
     type: 'control_delay_until',
     label: 'Aguardar Até',
     description: 'Aguarda até data/hora específica',
-    icon: 'Calendar',
+    icon: Calendar,
     category: 'control',
     color: '#a855f7',
   },
@@ -313,7 +343,6 @@ export const allNodeTypes: NodeTypeDefinition[] = [
 
 // ============================================
 // NODE TYPES MAP FOR REACT FLOW
-// Using 'any' to bypass strict typing issues with React Flow v12
 // ============================================
 
 export const nodeTypes: Record<string, any> = {
@@ -383,43 +412,76 @@ export function getNodesByCategory(category: string): NodeTypeDefinition[] {
 export const NODE_SECTIONS = [
   {
     id: 'triggers',
+    label: 'Triggers',
     title: 'Triggers',
     category: 'trigger',
+    icon: Zap,
     nodes: triggerTypes,
   },
   {
     id: 'actions',
+    label: 'Ações',
     title: 'Ações',
     category: 'action',
+    icon: Send,
     nodes: actionTypes,
   },
   {
     id: 'conditions',
+    label: 'Condições',
     title: 'Condições',
     category: 'condition',
+    icon: GitBranch,
     nodes: conditionTypes,
   },
   {
     id: 'control',
+    label: 'Controle',
     title: 'Controle',
     category: 'control',
+    icon: Clock,
     nodes: controlTypes,
   },
 ];
 
 // ============================================
-// HELPER: Get node color by category
+// HELPER: Get node color classes by color string
 // ============================================
 
-export function getNodeColor(category: string): string {
-  const colors: Record<string, string> = {
-    trigger: '#10b981',
-    action: '#3b82f6',
-    condition: '#f59e0b',
-    control: '#a855f7',
-    transform: '#ec4899',
+export function getNodeColor(color: string): { solid: string; bg: string; text: string } {
+  const colorMap: Record<string, { solid: string; bg: string; text: string }> = {
+    '#10b981': {
+      solid: 'bg-emerald-500',
+      bg: 'bg-emerald-500/10',
+      text: 'text-emerald-400',
+    },
+    '#3b82f6': {
+      solid: 'bg-blue-500',
+      bg: 'bg-blue-500/10',
+      text: 'text-blue-400',
+    },
+    '#f59e0b': {
+      solid: 'bg-amber-500',
+      bg: 'bg-amber-500/10',
+      text: 'text-amber-400',
+    },
+    '#a855f7': {
+      solid: 'bg-purple-500',
+      bg: 'bg-purple-500/10',
+      text: 'text-purple-400',
+    },
+    '#ec4899': {
+      solid: 'bg-pink-500',
+      bg: 'bg-pink-500/10',
+      text: 'text-pink-400',
+    },
   };
-  return colors[category] || '#525252';
+
+  return colorMap[color] || {
+    solid: 'bg-gray-500',
+    bg: 'bg-gray-500/10',
+    text: 'text-gray-400',
+  };
 }
 
 export default nodeTypes;
