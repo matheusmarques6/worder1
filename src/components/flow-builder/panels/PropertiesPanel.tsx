@@ -185,6 +185,88 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               />
             )}
 
+            {/* TRIGGER: ORDER CREATED */}
+            {selectedNode.data.nodeType === 'trigger_order' && (
+              <OrderTriggerConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                organizationId={organizationId}
+                label="Pedido Criado"
+              />
+            )}
+
+            {/* TRIGGER: ORDER PAID */}
+            {selectedNode.data.nodeType === 'trigger_order_paid' && (
+              <OrderTriggerConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                organizationId={organizationId}
+                label="Pedido Pago"
+              />
+            )}
+
+            {/* TRIGGER: DEAL STAGE CHANGED */}
+            {selectedNode.data.nodeType === 'trigger_deal_stage' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Pipeline</label>
+                  <SelectField
+                    value={selectedNode.data.config?.pipelineId || ''}
+                    onChange={(v) => {
+                      handleUpdate('pipelineId', v);
+                      handleUpdate('fromStageId', '');
+                      handleUpdate('stageId', '');
+                    }}
+                    options={[
+                      { value: '', label: 'Selecione o pipeline...' },
+                      ...pipelines.map((p) => ({ value: p.id, label: p.name })),
+                    ]}
+                    loading={loadingPipelines}
+                  />
+                </div>
+                
+                {selectedPipeline && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-xs text-white/60">De qual estágio? (opcional)</label>
+                      <SelectField
+                        value={selectedNode.data.config?.fromStageId || ''}
+                        onChange={(v) => handleUpdate('fromStageId', v)}
+                        options={[
+                          { value: '', label: 'Qualquer estágio' },
+                          ...selectedPipeline.stages.map((s) => ({ 
+                            value: s.id, 
+                            label: s.name 
+                          })),
+                        ]}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-xs text-white/60">Para qual estágio?</label>
+                      <SelectField
+                        value={selectedNode.data.config?.stageId || ''}
+                        onChange={(v) => handleUpdate('stageId', v)}
+                        options={[
+                          { value: '', label: 'Qualquer estágio' },
+                          ...selectedPipeline.stages.map((s) => ({ 
+                            value: s.id, 
+                            label: s.name 
+                          })),
+                        ]}
+                      />
+                    </div>
+                  </>
+                )}
+                
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <p className="text-[11px] text-blue-300">
+                    💡 Exemplo: Dispara quando deal mover de "Qualificação" para "Proposta"
+                  </p>
+                </div>
+              </>
+            )}
+
             {/* TAG NODES */}
             {(selectedNode.data.nodeType === 'trigger_tag' || 
               selectedNode.data.nodeType === 'action_tag' ||
@@ -318,6 +400,65 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
               </div>
+            )}
+
+            {/* DELAY UNTIL - Wait until specific date/time */}
+            {selectedNode.data.nodeType === 'control_delay_until' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Tipo de Espera</label>
+                  <SelectField
+                    value={selectedNode.data.config?.waitType || 'datetime'}
+                    onChange={(v) => handleUpdate('waitType', v)}
+                    options={[
+                      { value: 'datetime', label: 'Data e Hora Específica' },
+                      { value: 'time', label: 'Horário do Dia' },
+                    ]}
+                  />
+                </div>
+
+                {selectedNode.data.config?.waitType === 'time' ? (
+                  <div className="space-y-2">
+                    <label className="text-xs text-white/60">Horário</label>
+                    <input
+                      type="time"
+                      value={selectedNode.data.config?.time || '09:00'}
+                      onChange={(e) => handleUpdate('time', e.target.value)}
+                      className={cn(
+                        'w-full px-3 py-2 rounded-lg',
+                        'bg-[#0a0a0a] border border-white/10',
+                        'text-sm text-white',
+                        'focus:outline-none focus:border-blue-500/50'
+                      )}
+                    />
+                    <p className="text-[10px] text-white/40">
+                      Se o horário já passou hoje, aguardará até amanhã
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-xs text-white/60">Data e Hora</label>
+                    <input
+                      type="datetime-local"
+                      value={selectedNode.data.config?.datetime || ''}
+                      onChange={(e) => handleUpdate('datetime', e.target.value)}
+                      className={cn(
+                        'w-full px-3 py-2 rounded-lg',
+                        'bg-[#0a0a0a] border border-white/10',
+                        'text-sm text-white',
+                        'focus:outline-none focus:border-blue-500/50',
+                        '[color-scheme:dark]'
+                      )}
+                    />
+                  </div>
+                )}
+
+                <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                  <p className="text-[11px] text-purple-300">
+                    ⏰ A automação pausará neste ponto até a data/hora especificada
+                  </p>
+                </div>
+              </>
             )}
 
             {/* EMAIL ACTION */}
@@ -760,21 +901,46 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
 
             {/* NOTIFY ACTION */}
             {selectedNode.data.nodeType === 'action_notify' && (
-              <div className="space-y-2">
-                <label className="text-xs text-white/60">Mensagem</label>
-                <textarea
-                  value={selectedNode.data.config?.message || ''}
-                  onChange={(e) => handleUpdate('message', e.target.value)}
-                  placeholder="Mensagem de notificação..."
-                  rows={3}
-                  className={cn(
-                    'w-full px-3 py-2 rounded-lg resize-none',
-                    'bg-[#0a0a0a] border border-white/10',
-                    'text-sm text-white placeholder-white/30',
-                    'focus:outline-none focus:border-blue-500/50'
-                  )}
+              <NotifyActionConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                organizationId={organizationId}
+              />
+            )}
+
+            {/* SMS ACTION */}
+            {selectedNode.data.nodeType === 'action_sms' && (
+              <>
+                <CredentialSelector
+                  connectionType="sms"
+                  value={selectedNode.data.config?.credentialId}
+                  onChange={(id) => handleUpdate('credentialId', id)}
+                  label="Provedor SMS (Twilio)"
                 />
-              </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Mensagem</label>
+                  <textarea
+                    value={selectedNode.data.config?.message || ''}
+                    onChange={(e) => handleUpdate('message', e.target.value)}
+                    placeholder="Olá {{contact.name}}! Sua mensagem aqui..."
+                    rows={3}
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg resize-none',
+                      'bg-[#0a0a0a] border border-white/10',
+                      'text-sm text-white placeholder-white/30',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                  <p className="text-[10px] text-white/40">
+                    Máximo 160 caracteres por segmento SMS
+                  </p>
+                </div>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <p className="text-[11px] text-amber-300">
+                    📱 SMS será enviado para o telefone do contato
+                  </p>
+                </div>
+              </>
             )}
           </section>
 
@@ -1130,6 +1296,283 @@ function FilterConditionsEditor({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================
+// ORDER TRIGGER CONFIG
+// ============================================
+
+interface OrderTriggerConfigProps {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+  organizationId?: string;
+  label: string;
+}
+
+function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTriggerConfigProps) {
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [loadingStores, setLoadingStores] = useState(false);
+
+  useEffect(() => {
+    if (organizationId) {
+      fetchStores();
+    }
+  }, [organizationId]);
+
+  const fetchStores = async () => {
+    if (!organizationId) return;
+    setLoadingStores(true);
+    try {
+      const res = await fetch(`/api/stores?organizationId=${organizationId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setStores(data.stores || []);
+      }
+    } catch (e) {
+      console.error('Error fetching stores:', e);
+    } finally {
+      setLoadingStores(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Store Filter */}
+      <div className="space-y-2">
+        <label className="text-xs text-white/60">Loja (opcional)</label>
+        <div className="relative">
+          <select
+            value={config.storeId || ''}
+            onChange={(e) => onUpdate('storeId', e.target.value)}
+            disabled={loadingStores}
+            className={cn(
+              'w-full px-3 py-2 rounded-lg appearance-none',
+              'bg-[#0a0a0a] border border-white/10',
+              'text-sm text-white',
+              'focus:outline-none focus:border-blue-500/50',
+              'disabled:opacity-50'
+            )}
+          >
+            <option value="">Todas as lojas</option>
+            {stores.map((store) => (
+              <option key={store.id} value={store.id}>
+                {store.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+        </div>
+        <p className="text-[10px] text-white/40">
+          Filtre por loja específica ou deixe vazio para todas
+        </p>
+      </div>
+
+      {/* Minimum Value Filter */}
+      <div className="space-y-2">
+        <label className="text-xs text-white/60">Valor Mínimo (opcional)</label>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-white/40">R$</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={config.minValue || ''}
+            onChange={(e) => onUpdate('minValue', e.target.value ? parseFloat(e.target.value) : null)}
+            placeholder="0.00"
+            className={cn(
+              'flex-1 px-3 py-2 rounded-lg',
+              'bg-[#0a0a0a] border border-white/10',
+              'text-sm text-white placeholder-white/30',
+              'focus:outline-none focus:border-blue-500/50'
+            )}
+          />
+        </div>
+        <p className="text-[10px] text-white/40">
+          Só dispara para pedidos acima deste valor
+        </p>
+      </div>
+
+      {/* Status Filter for Order Paid */}
+      {label === 'Pedido Pago' && (
+        <div className="space-y-2">
+          <label className="text-xs text-white/60">Status de Pagamento</label>
+          <div className="relative">
+            <select
+              value={config.paymentStatus || 'paid'}
+              onChange={(e) => onUpdate('paymentStatus', e.target.value)}
+              className={cn(
+                'w-full px-3 py-2 rounded-lg appearance-none',
+                'bg-[#0a0a0a] border border-white/10',
+                'text-sm text-white',
+                'focus:outline-none focus:border-blue-500/50'
+              )}
+            >
+              <option value="paid">Pago</option>
+              <option value="partially_paid">Parcialmente Pago</option>
+              <option value="any">Qualquer status de pagamento</option>
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+          </div>
+        </div>
+      )}
+
+      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+        <p className="text-[11px] text-emerald-300">
+          🛒 {label}: Dispara quando um pedido {label === 'Pedido Pago' ? 'for pago' : 'for criado'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// NOTIFY ACTION CONFIG
+// ============================================
+
+interface NotifyActionConfigProps {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+  organizationId?: string;
+}
+
+function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionConfigProps) {
+  const [users, setUsers] = useState<{ id: string; email: string; name?: string }[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  useEffect(() => {
+    if (organizationId) {
+      fetchUsers();
+    }
+  }, [organizationId]);
+
+  const fetchUsers = async () => {
+    if (!organizationId) return;
+    setLoadingUsers(true);
+    try {
+      const res = await fetch(`/api/organization/members?organizationId=${organizationId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data.members || []);
+      }
+    } catch (e) {
+      console.error('Error fetching users:', e);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const selectedUserIds = config.userIds || [];
+
+  const toggleUser = (userId: string) => {
+    const newUserIds = selectedUserIds.includes(userId)
+      ? selectedUserIds.filter((id: string) => id !== userId)
+      : [...selectedUserIds, userId];
+    onUpdate('userIds', newUserIds);
+  };
+
+  const selectAll = () => {
+    onUpdate('userIds', users.map(u => u.id));
+  };
+
+  const selectNone = () => {
+    onUpdate('userIds', []);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Title */}
+      <div className="space-y-2">
+        <label className="text-xs text-white/60">Título da Notificação</label>
+        <input
+          type="text"
+          value={config.title || ''}
+          onChange={(e) => onUpdate('title', e.target.value)}
+          placeholder="Ex: Nova ação necessária"
+          className={cn(
+            'w-full px-3 py-2 rounded-lg',
+            'bg-[#0a0a0a] border border-white/10',
+            'text-sm text-white placeholder-white/30',
+            'focus:outline-none focus:border-blue-500/50'
+          )}
+        />
+      </div>
+
+      {/* Message */}
+      <div className="space-y-2">
+        <label className="text-xs text-white/60">Mensagem</label>
+        <textarea
+          value={config.message || ''}
+          onChange={(e) => onUpdate('message', e.target.value)}
+          placeholder="Mensagem da notificação..."
+          rows={3}
+          className={cn(
+            'w-full px-3 py-2 rounded-lg resize-none',
+            'bg-[#0a0a0a] border border-white/10',
+            'text-sm text-white placeholder-white/30',
+            'focus:outline-none focus:border-blue-500/50'
+          )}
+        />
+      </div>
+
+      {/* User Selection */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-xs text-white/60">Notificar Usuários</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={selectAll}
+              className="text-[10px] text-blue-400 hover:text-blue-300"
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={selectNone}
+              className="text-[10px] text-white/40 hover:text-white/60"
+            >
+              Nenhum
+            </button>
+          </div>
+        </div>
+        
+        <div className="max-h-40 overflow-y-auto space-y-1 p-2 bg-[#0a0a0a] rounded-lg border border-white/10">
+          {loadingUsers ? (
+            <p className="text-xs text-white/40 text-center py-2">Carregando...</p>
+          ) : users.length === 0 ? (
+            <p className="text-xs text-white/40 text-center py-2">Nenhum usuário encontrado</p>
+          ) : (
+            users.map((user) => (
+              <label
+                key={user.id}
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedUserIds.includes(user.id)}
+                  onChange={() => toggleUser(user.id)}
+                  className="w-4 h-4 rounded border-white/20 bg-transparent text-blue-500"
+                />
+                <span className="text-xs text-white/80">
+                  {user.name || user.email}
+                </span>
+              </label>
+            ))
+          )}
+        </div>
+        
+        <p className="text-[10px] text-white/40">
+          {selectedUserIds.length} usuário(s) selecionado(s)
+        </p>
+      </div>
+
+      <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+        <p className="text-[11px] text-blue-300">
+          🔔 A notificação aparecerá no sino de notificações dos usuários selecionados
+        </p>
+      </div>
     </div>
   );
 }

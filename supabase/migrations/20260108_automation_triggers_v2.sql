@@ -403,13 +403,23 @@ BEGIN
         )
       ))
       OR
-      -- Stage específico (stageId ou stage_id)
+      -- Stage específico com suporte a fromStageId (de qual estágio) e stageId (para qual estágio)
       (v_trigger_type = 'trigger_deal_stage' AND (
         a.trigger_config IS NULL 
         OR (
-          COALESCE(a.trigger_config->>'stageId', a.trigger_config->>'stage_id') IS NULL 
-          OR COALESCE(a.trigger_config->>'stageId', a.trigger_config->>'stage_id') = 
-             COALESCE(p_payload->>'to_stage_id', p_payload->>'toStageId')
+          -- Verificar "para qual estágio" (stageId)
+          (
+            COALESCE(a.trigger_config->>'stageId', a.trigger_config->>'stage_id') IS NULL 
+            OR COALESCE(a.trigger_config->>'stageId', a.trigger_config->>'stage_id') = 
+               COALESCE(p_payload->>'to_stage_id', p_payload->>'toStageId')
+          )
+          AND
+          -- Verificar "de qual estágio" (fromStageId) - opcional
+          (
+            COALESCE(a.trigger_config->>'fromStageId', a.trigger_config->>'from_stage_id') IS NULL 
+            OR COALESCE(a.trigger_config->>'fromStageId', a.trigger_config->>'from_stage_id') = 
+               COALESCE(p_payload->>'from_stage_id', p_payload->>'fromStageId')
+          )
         )
       ))
       OR
@@ -423,8 +433,18 @@ BEGIN
         )
       ))
       OR
+      -- Store específica para triggers de pedido
+      ((v_trigger_type IN ('trigger_order', 'trigger_order_paid')) AND (
+        a.trigger_config IS NULL 
+        OR (
+          COALESCE(a.trigger_config->>'storeId', a.trigger_config->>'store_id') IS NULL 
+          OR COALESCE(a.trigger_config->>'storeId', a.trigger_config->>'store_id') = 
+             COALESCE(p_payload->>'storeId', p_payload->>'store_id')
+        )
+      ))
+      OR
       -- Outros triggers sem condições especiais
-      (v_trigger_type NOT IN ('trigger_tag', 'trigger_deal_stage', 'trigger_deal_created', 'trigger_deal_won', 'trigger_deal_lost'))
+      (v_trigger_type NOT IN ('trigger_tag', 'trigger_deal_stage', 'trigger_deal_created', 'trigger_deal_won', 'trigger_deal_lost', 'trigger_order', 'trigger_order_paid'))
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
