@@ -136,6 +136,51 @@ export async function GET(request: NextRequest) {
               .update({ status: 'running' })
               .eq('id', run.id);
 
+            // Buscar contact se houver
+            let contact;
+            if (run.contact_id) {
+              const { data: c } = await supabase
+                .from('contacts')
+                .select('*')
+                .eq('id', run.contact_id)
+                .single();
+              contact = c;
+            }
+
+            // Buscar deal se houver
+            const metadata = run.metadata || {};
+            let deal;
+            if (metadata.deal_id) {
+              console.log(`[DEBUG] Fetching deal ${metadata.deal_id}...`);
+              const { data: d, error: dealError } = await supabase
+                .from('deals')
+                .select('*, pipeline_stages(*), pipelines(*)')
+                .eq('id', metadata.deal_id)
+                .single();
+              
+              if (dealError) {
+                console.error(`[DEBUG] Error fetching deal:`, dealError);
+              }
+              
+              if (d) {
+                deal = {
+                  id: d.id,
+                  title: d.title,
+                  value: d.value,
+                  stageId: d.stage_id,
+                  stageName: d.pipeline_stages?.name || '',
+                  pipelineId: d.pipeline_id,
+                  pipelineName: d.pipelines?.name || '',
+                  contactId: d.contact_id,
+                  customFields: d.custom_fields || {},
+                  createdAt: d.created_at,
+                };
+                console.log(`[DEBUG] Deal found:`, { id: deal.id, title: deal.title, stageId: deal.stageId });
+              } else {
+                console.log(`[DEBUG] Deal not found for id: ${metadata.deal_id}`);
+              }
+            }
+
             // Executar workflow
             const workflow: Workflow = {
               id: automation.id,
@@ -146,8 +191,7 @@ export async function GET(request: NextRequest) {
             };
 
             console.log(`[DEBUG] Executing workflow with ${workflow.nodes.length} nodes`);
-
-            const metadata = run.metadata || {};
+            console.log(`[DEBUG] Context: organizationId=${automation.organization_id}, dealId=${metadata.deal_id}, hasDeal=${!!deal}`);
             
             const result = await executeWorkflow(workflow, {
               organizationId: automation.organization_id,
@@ -155,6 +199,23 @@ export async function GET(request: NextRequest) {
               triggerData: metadata.trigger_data || {},
               contactId: run.contact_id,
               dealId: metadata.deal_id,
+              context: {
+                organizationId: automation.organization_id,
+                contact: contact ? {
+                  id: contact.id,
+                  email: contact.email,
+                  phone: contact.phone,
+                  firstName: contact.first_name,
+                  lastName: contact.last_name,
+                  name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email,
+                  tags: contact.tags || [],
+                  customFields: contact.custom_fields || {},
+                  createdAt: contact.created_at,
+                  updatedAt: contact.updated_at,
+                } : undefined,
+                deal,
+                trigger: metadata.trigger_data || {},
+              },
             });
 
             console.log(`[DEBUG] Run ${run.id} completed with status: ${result.status}`);
@@ -308,6 +369,49 @@ export async function GET(request: NextRequest) {
           config: n.data?.config,
         }));
 
+        // Buscar contact se houver
+        let contact;
+        if (run.contact_id) {
+          const { data: c } = await supabase
+            .from('contacts')
+            .select('*')
+            .eq('id', run.contact_id)
+            .single();
+          contact = c;
+        }
+
+        // Buscar deal se houver
+        const metadata = run.metadata || {};
+        let deal;
+        if (metadata.deal_id) {
+          console.log(`[execute-run] Fetching deal ${metadata.deal_id}...`);
+          const { data: d, error: dealError } = await supabase
+            .from('deals')
+            .select('*, pipeline_stages(*), pipelines(*)')
+            .eq('id', metadata.deal_id)
+            .single();
+          
+          if (dealError) {
+            console.error(`[execute-run] Error fetching deal:`, dealError);
+          }
+          
+          if (d) {
+            deal = {
+              id: d.id,
+              title: d.title,
+              value: d.value,
+              stageId: d.stage_id,
+              stageName: d.pipeline_stages?.name || '',
+              pipelineId: d.pipeline_id,
+              pipelineName: d.pipelines?.name || '',
+              contactId: d.contact_id,
+              customFields: d.custom_fields || {},
+              createdAt: d.created_at,
+            };
+            console.log(`[execute-run] Deal found:`, { id: deal.id, title: deal.title, stageId: deal.stageId });
+          }
+        }
+
         // Atualizar para running
         await supabase
           .from('automation_runs')
@@ -324,7 +428,7 @@ export async function GET(request: NextRequest) {
             settings: automation.settings,
           };
 
-          const metadata = run.metadata || {};
+          console.log(`[execute-run] Executing with context: organizationId=${automation.organization_id}, dealId=${metadata.deal_id}, hasDeal=${!!deal}`);
 
           const result = await executeWorkflow(workflow, {
             organizationId: automation.organization_id,
@@ -332,6 +436,23 @@ export async function GET(request: NextRequest) {
             triggerData: metadata.trigger_data || {},
             contactId: run.contact_id,
             dealId: metadata.deal_id,
+            context: {
+              organizationId: automation.organization_id,
+              contact: contact ? {
+                id: contact.id,
+                email: contact.email,
+                phone: contact.phone,
+                firstName: contact.first_name,
+                lastName: contact.last_name,
+                name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email,
+                tags: contact.tags || [],
+                customFields: contact.custom_fields || {},
+                createdAt: contact.created_at,
+                updatedAt: contact.updated_at,
+              } : undefined,
+              deal,
+              trigger: metadata.trigger_data || {},
+            },
           });
 
           // Atualizar run
@@ -351,6 +472,13 @@ export async function GET(request: NextRequest) {
             automationName: automation.name,
             nodesInAutomation: nodesInfo,
             edgesCount: (automation.edges || []).length,
+            contextUsed: {
+              hasDeal: !!deal,
+              dealId: deal?.id,
+              dealStageId: deal?.stageId,
+              hasContact: !!contact,
+              contactId: contact?.id,
+            },
             result: {
               status: result.status,
               duration: result.duration,
