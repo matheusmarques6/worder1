@@ -185,7 +185,8 @@ export default function AutomationsPage() {
 
     const flowData = getFlowDataForSave();
     const triggerNode = flowData.nodes.find((n: any) => n.type?.startsWith('trigger_'));
-    const triggerType = triggerNode?.type?.replace('trigger_', '') || 'manual';
+    // ✅ CORREÇÃO: Manter o prefixo trigger_ (ex: trigger_deal_created)
+    const triggerType = triggerNode?.type || 'manual';
 
     const payload = {
       organizationId,
