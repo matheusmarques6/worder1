@@ -5,6 +5,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/process-runs",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/check-delayed-runs",
       "schedule": "*/5 * * * *"
     },

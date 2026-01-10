@@ -249,12 +249,21 @@ class EventProcessorClass {
     console.log(`[EventProcessor] Created run ${run.id} for automation ${automationId}`);
 
     // Enfileirar para execução
+    console.log(`[EventProcessor] Enqueueing run ${run.id}...`);
+    console.log(`[EventProcessor] QSTASH_TOKEN configured: ${!!process.env.QSTASH_TOKEN}`);
+    console.log(`[EventProcessor] APP_URL: ${process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL}`);
+    
     const messageId = await enqueueAutomationRun(run.id);
+    
+    console.log(`[EventProcessor] QStash messageId: ${messageId || 'null - using fallback'}`);
     
     if (!messageId) {
       // Fallback: executar diretamente se QStash não disponível
-      console.log(`[EventProcessor] QStash not available, will execute directly`);
-      await this.triggerDirectExecution(run.id);
+      console.log(`[EventProcessor] QStash not available, triggering direct execution`);
+      // Não aguardar para não bloquear, o cron vai pegar se falhar
+      this.triggerDirectExecution(run.id);
+    } else {
+      console.log(`[EventProcessor] Run ${run.id} enqueued successfully with messageId: ${messageId}`);
     }
 
     return run.id;
@@ -264,11 +273,17 @@ class EventProcessorClass {
    * Execução direta quando QStash não está disponível
    */
   private async triggerDirectExecution(runId: string): Promise<void> {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || 'http://localhost:3000';
+    let appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || 'http://localhost:3000';
+    
+    // Garantir que tem protocolo
+    if (!appUrl.startsWith('http://') && !appUrl.startsWith('https://')) {
+      appUrl = `https://${appUrl}`;
+    }
+    
+    console.log(`[EventProcessor] Direct execution URL: ${appUrl}/api/workers/automation`);
     
     try {
-      // Não aguardar resposta para não bloquear
-      fetch(`${appUrl}/api/workers/automation`, {
+      const response = await fetch(`${appUrl}/api/workers/automation`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -278,11 +293,17 @@ class EventProcessorClass {
           action: 'execute_run',
           runId,
         }),
-      }).catch(err => {
-        console.error(`[EventProcessor] Direct execution failed for run ${runId}:`, err);
       });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        console.error(`[EventProcessor] Direct execution failed for run ${runId}:`, error);
+      } else {
+        console.log(`[EventProcessor] Direct execution triggered for run ${runId}`);
+      }
     } catch (error) {
-      console.error(`[EventProcessor] Error triggering direct execution:`, error);
+      console.error(`[EventProcessor] Error triggering direct execution for run ${runId}:`, error);
+      // O cron vai pegar runs pendentes
     }
   }
 

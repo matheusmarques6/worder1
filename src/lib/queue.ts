@@ -309,10 +309,21 @@ export async function verifyQStashSignature(
 ): Promise<{ isValid: boolean; body: any }> {
   const receiver = getQStashReceiver();
   
+  console.log('[Queue] Verifying signature. Receiver configured:', !!receiver);
+  console.log('[Queue] Has upstash-signature:', request.headers.has('upstash-signature'));
+  
   // Se QStash não está configurado, aceita internal requests
   if (!receiver) {
+    console.log('[Queue] No receiver configured');
     const isInternal = request.headers.get('X-Internal-Request') === 'true';
     if (isInternal) {
+      const body = await request.text();
+      return { isValid: true, body: JSON.parse(body) };
+    }
+    // Em produção sem receiver, aceitar se tem CRON_SECRET
+    const authHeader = request.headers.get('authorization');
+    const cronSecret = process.env.CRON_SECRET;
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
       const body = await request.text();
       return { isValid: true, body: JSON.parse(body) };
     }
@@ -323,12 +334,15 @@ export async function verifyQStashSignature(
     const signature = request.headers.get('upstash-signature');
     const body = await request.text();
     
+    console.log('[Queue] Body length:', body.length);
+    
     if (!signature) {
       // Verificar se é request interno
       const isInternal = request.headers.get('X-Internal-Request') === 'true';
       if (isInternal) {
         return { isValid: true, body: JSON.parse(body) };
       }
+      console.log('[Queue] No signature and not internal');
       return { isValid: false, body: null };
     }
 
@@ -336,6 +350,8 @@ export async function verifyQStashSignature(
       signature,
       body,
     });
+
+    console.log('[Queue] Signature validation result:', isValid);
 
     return {
       isValid,

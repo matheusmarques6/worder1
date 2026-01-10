@@ -11,13 +11,21 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function GET(request: NextRequest) {
-  // Verificar authorization
+  // Verificar autorização
+  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
+  const isInternal = request.headers.get('X-Internal-Request') === 'true';
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
+  
+  const isAuthorized = isVercelCron || isInternal || 
+    (cronSecret && authHeader === `Bearer ${cronSecret}`);
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!isAuthorized) {
+    console.log('[CheckAbandonedCarts] Unauthorized request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  console.log('[CheckAbandonedCarts] Starting check');
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 

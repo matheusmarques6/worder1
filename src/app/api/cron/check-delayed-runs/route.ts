@@ -23,16 +23,22 @@ const supabase = createClient(
 // ============================================
 
 export async function GET(request: NextRequest) {
-  // Verificar autorização do Vercel Cron
+  // Verificar autorização
+  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
+  const isInternal = request.headers.get('X-Internal-Request') === 'true';
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-  
-  // Em desenvolvimento, permitir sem secret
   const isDev = process.env.NODE_ENV === 'development';
   
-  if (!isDev && cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  const isAuthorized = isDev || isVercelCron || isInternal || 
+    (cronSecret && authHeader === `Bearer ${cronSecret}`);
+  
+  if (!isAuthorized) {
+    console.log('[Check Delayed] Unauthorized request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  console.log('[Check Delayed] Starting check (Vercel Cron:', isVercelCron, ')');
 
   try {
     const now = new Date().toISOString();
