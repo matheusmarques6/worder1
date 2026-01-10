@@ -137,6 +137,8 @@ export async function GET(request: NextRequest) {
               pipelineName: d.pipelines?.name,
               contactId: d.contact_id,
               customFields: d.custom_fields || {},
+              createdAt: d.created_at,
+              updatedAt: d.updated_at,
             };
           }
         }
