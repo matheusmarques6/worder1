@@ -205,6 +205,72 @@ export async function GET(request: NextRequest) {
         });
       }
 
+      case 'test-move-deal': {
+        const dealId = searchParams.get('dealId');
+        const stageId = searchParams.get('stageId');
+        
+        if (!dealId || !stageId) {
+          return NextResponse.json({ error: 'dealId and stageId required' }, { status: 400 });
+        }
+
+        // Buscar deal atual
+        const { data: beforeDeal } = await supabase
+          .from('deals')
+          .select('id, title, stage_id')
+          .eq('id', dealId)
+          .single();
+
+        console.log('[test-move-deal] Before:', beforeDeal);
+
+        // Mover deal
+        const { data: afterDeal, error: updateError } = await supabase
+          .from('deals')
+          .update({ stage_id: stageId })
+          .eq('id', dealId)
+          .select('id, title, stage_id')
+          .single();
+
+        if (updateError) {
+          return NextResponse.json({ error: updateError.message }, { status: 500 });
+        }
+
+        console.log('[test-move-deal] After:', afterDeal);
+
+        return NextResponse.json({
+          action: 'test-move-deal',
+          before: beforeDeal,
+          after: afterDeal,
+          moved: beforeDeal?.stage_id !== afterDeal?.stage_id,
+        });
+      }
+
+      case 'view-run': {
+        if (!runId) {
+          return NextResponse.json({ error: 'runId required' }, { status: 400 });
+        }
+
+        const { data: run, error } = await supabase
+          .from('automation_runs')
+          .select('*')
+          .eq('id', runId)
+          .single();
+
+        if (error || !run) {
+          return NextResponse.json({ error: 'Run not found', details: error }, { status: 404 });
+        }
+
+        return NextResponse.json({
+          id: run.id,
+          status: run.status,
+          automation_id: run.automation_id,
+          contact_id: run.contact_id,
+          metadata: run.metadata,
+          last_error: run.last_error,
+          created_at: run.created_at,
+          completed_at: run.completed_at,
+        });
+      }
+
       case 'execute-run': {
         if (!runId) {
           return NextResponse.json({ error: 'runId required' }, { status: 400 });
@@ -316,7 +382,7 @@ export async function GET(request: NextRequest) {
       default:
         return NextResponse.json({ 
           error: 'Invalid action',
-          availableActions: ['status', 'process-runs', 'execute-run&runId=xxx'],
+          availableActions: ['status', 'view-automation&automationId=xxx', 'view-run&runId=xxx', 'process-runs', 'execute-run&runId=xxx'],
         }, { status: 400 });
     }
 

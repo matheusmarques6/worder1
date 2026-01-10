@@ -494,6 +494,14 @@ const actionExecutors: Record<string, NodeExecutor> = {
     async execute({ config, context, supabase, isTest, organizationId }) {
       const dealId = context.deal?.id;
 
+      console.log('[action_move_deal] Starting...', {
+        dealId,
+        stageId: config.stageId,
+        organizationId,
+        isTest,
+        hasDealInContext: !!context.deal,
+      });
+
       if (isTest) {
         return {
           status: 'success',
@@ -502,15 +510,19 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
 
       if (!dealId) {
-        return { status: 'error', output: null, error: 'Deal não encontrado' };
+        console.error('[action_move_deal] Deal not found in context');
+        return { status: 'error', output: null, error: 'Deal não encontrado no contexto' };
       }
 
       // ⚠️ CRÍTICO: Verificar organization_id
       if (!organizationId) {
+        console.error('[action_move_deal] Organization ID not provided');
         return { status: 'error', output: null, error: 'Organization ID não fornecido' };
       }
 
       try {
+        console.log('[action_move_deal] Updating deal...', { dealId, stageId: config.stageId });
+        
         const { data, error } = await (supabase.from('deals') as any)
           .update({ stage_id: config.stageId })
           .eq('id', dealId)
@@ -518,15 +530,23 @@ const actionExecutors: Record<string, NodeExecutor> = {
           .select()
           .single();
 
-        if (error || !data) {
+        if (error) {
+          console.error('[action_move_deal] Error updating deal:', error);
+          return { status: 'error', output: null, error: error.message };
+        }
+        
+        if (!data) {
+          console.error('[action_move_deal] No data returned');
           return { status: 'error', output: null, error: 'Deal não encontrado ou não pertence à organização' };
         }
 
+        console.log('[action_move_deal] ✅ Deal moved successfully to stage:', config.stageId);
         return {
           status: 'success',
-          output: { moved: true, stageId: config.stageId },
+          output: { moved: true, dealId, stageId: config.stageId, newStage: data.stage_id },
         };
       } catch (error: any) {
+        console.error('[action_move_deal] Exception:', error);
         return { status: 'error', output: null, error: error.message };
       }
     },
