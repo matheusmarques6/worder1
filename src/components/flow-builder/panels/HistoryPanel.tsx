@@ -370,7 +370,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
       trigger_webhook: 'Webhook',
       trigger_whatsapp: 'WhatsApp',
     };
-    return names[type] || type.replace('trigger_', '').replace('_', ' ');
+    return names[type] || (type ? type.replace('trigger_', '').replace('_', ' ') : 'Manual');
   };
 
   const filteredRuns = runs.filter((run) => {
@@ -657,7 +657,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                                 {step.node_label || node?.data?.label || step.node_id}
                               </p>
                               <p className="text-xs text-white/40">
-                                {step.node_type.replace('trigger_', '').replace('action_', '').replace('logic_', '')}
+                                {(step.node_type || '').replace('trigger_', '').replace('action_', '').replace('logic_', '')}
                               </p>
                             </div>
                             {step.duration_ms !== undefined && (

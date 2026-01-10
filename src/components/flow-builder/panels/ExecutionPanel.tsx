@@ -585,7 +585,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                         {step.nodeLabel}
                       </p>
                       <p className="text-xs text-white/40">
-                        {step.nodeType.replace('trigger_', '').replace('action_', '').replace('logic_', '')}
+                        {(step.nodeType || '').replace('trigger_', '').replace('action_', '').replace('logic_', '')}
                       </p>
                     </div>
                     {step.duration !== undefined && (
