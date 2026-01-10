@@ -3,14 +3,13 @@
  * Endpoint para testar manualmente a execução de automações
  * 
  * GET /api/debug/automation?action=status
- * GET /api/debug/automation?action=process-events
  * GET /api/debug/automation?action=process-runs
  * GET /api/debug/automation?action=execute-run&runId=xxx
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { EventProcessor } from '@/lib/automation/event-processor';
+import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -28,7 +27,7 @@ export async function GET(request: NextRequest) {
         // Mostrar status geral
         const [events, runs, automations] = await Promise.all([
           supabase.from('event_logs').select('id, event_type, processed, created_at').order('created_at', { ascending: false }).limit(10),
-          supabase.from('automation_runs').select('id, status, created_at, automation_id').order('created_at', { ascending: false }).limit(10),
+          supabase.from('automation_runs').select('id, status, created_at, automation_id, last_error').order('created_at', { ascending: false }).limit(10),
           supabase.from('automations').select('id, name, status, trigger_type').order('created_at', { ascending: false }).limit(10),
         ]);
 
@@ -38,6 +37,7 @@ export async function GET(request: NextRequest) {
             QSTASH_CURRENT_SIGNING_KEY: !!process.env.QSTASH_CURRENT_SIGNING_KEY,
             NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || null,
             VERCEL_URL: process.env.VERCEL_URL || null,
+            CRON_SECRET: process.env.CRON_SECRET ? 'SET' : 'NOT SET',
           },
           recentEvents: events.data,
           recentRuns: runs.data,
@@ -45,51 +45,120 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      case 'process-events': {
-        // Processar eventos pendentes manualmente
-        console.log('[DEBUG] Processing pending events...');
-        const result = await EventProcessor.processPendingEvents(10);
-        return NextResponse.json({
-          action: 'process-events',
-          result,
-        });
-      }
-
       case 'process-runs': {
-        // Processar runs pendentes
-        const { data: pendingRuns } = await supabase
+        // Processar runs pendentes DIRETAMENTE
+        console.log('[DEBUG] Processing pending runs directly...');
+        
+        const { data: pendingRuns, error: runsError } = await supabase
           .from('automation_runs')
-          .select('id')
+          .select('id, automation_id, contact_id, created_at, metadata')
           .eq('status', 'pending')
+          .order('created_at', { ascending: true })
           .limit(5);
 
-        if (!pendingRuns || pendingRuns.length === 0) {
-          return NextResponse.json({ message: 'No pending runs' });
+        if (runsError) {
+          return NextResponse.json({ error: runsError.message }, { status: 500 });
         }
 
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${process.env.VERCEL_URL}`;
+        if (!pendingRuns || pendingRuns.length === 0) {
+          return NextResponse.json({ message: 'No pending runs found' });
+        }
+
         const results = [];
 
         for (const run of pendingRuns) {
-          const response = await fetch(`${appUrl}/api/workers/automation`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Internal-Request': 'true',
-            },
-            body: JSON.stringify({
-              action: 'execute_run',
-              runId: run.id,
-            }),
-          });
+          console.log(`[DEBUG] Processing run ${run.id}...`);
+          
+          try {
+            // Buscar automação
+            const { data: automation, error: autoError } = await supabase
+              .from('automations')
+              .select('*')
+              .eq('id', run.automation_id)
+              .single();
 
-          const data = await response.json();
-          results.push({ runId: run.id, response: data });
+            if (autoError || !automation) {
+              results.push({ runId: run.id, error: 'Automation not found', details: autoError });
+              continue;
+            }
+
+            // Verificar se está ativa
+            if (automation.status !== 'active') {
+              results.push({ runId: run.id, error: `Automation status is ${automation.status}` });
+              continue;
+            }
+
+            // Atualizar para running
+            await supabase
+              .from('automation_runs')
+              .update({ status: 'running' })
+              .eq('id', run.id);
+
+            // Executar workflow
+            const workflow: Workflow = {
+              id: automation.id,
+              name: automation.name,
+              nodes: automation.nodes || [],
+              edges: automation.edges || [],
+              settings: automation.settings,
+            };
+
+            console.log(`[DEBUG] Executing workflow with ${workflow.nodes.length} nodes`);
+
+            const metadata = run.metadata || {};
+            
+            const result = await executeWorkflow(workflow, {
+              organizationId: automation.organization_id,
+              executionId: run.id,
+              triggerData: metadata.trigger_data || {},
+              contactId: run.contact_id,
+              dealId: metadata.deal_id,
+            });
+
+            console.log(`[DEBUG] Run ${run.id} completed with status: ${result.status}`);
+
+            // Atualizar run
+            await supabase
+              .from('automation_runs')
+              .update({
+                status: result.status === 'waiting' ? 'waiting' : (result.status === 'success' ? 'completed' : 'failed'),
+                completed_at: result.status !== 'waiting' ? new Date().toISOString() : null,
+                last_error: result.error || null,
+              })
+              .eq('id', run.id);
+
+            results.push({
+              runId: run.id,
+              success: result.status === 'success',
+              status: result.status,
+              duration: result.duration,
+              error: result.error,
+              nodeResults: Object.keys(result.nodeResults || {}),
+            });
+
+          } catch (error: any) {
+            console.error(`[DEBUG] Error executing run ${run.id}:`, error);
+            
+            await supabase
+              .from('automation_runs')
+              .update({
+                status: 'failed',
+                completed_at: new Date().toISOString(),
+                last_error: error.message,
+              })
+              .eq('id', run.id);
+
+            results.push({
+              runId: run.id,
+              error: error.message,
+              stack: error.stack?.split('\n').slice(0, 5),
+            });
+          }
         }
 
         return NextResponse.json({
           action: 'process-runs',
-          processed: pendingRuns.length,
+          found: pendingRuns.length,
           results,
         });
       }
@@ -99,34 +168,106 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: 'runId required' }, { status: 400 });
         }
 
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${process.env.VERCEL_URL}`;
-        
-        const response = await fetch(`${appUrl}/api/workers/automation`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Internal-Request': 'true',
-          },
-          body: JSON.stringify({
-            action: 'execute_run',
-            runId,
-          }),
-        });
+        // Buscar o run
+        const { data: run, error: runError } = await supabase
+          .from('automation_runs')
+          .select('*')
+          .eq('id', runId)
+          .single();
 
-        const data = await response.json();
-        return NextResponse.json({
-          action: 'execute-run',
-          runId,
-          response: data,
-        });
+        if (runError || !run) {
+          return NextResponse.json({ error: 'Run not found', details: runError }, { status: 404 });
+        }
+
+        // Buscar automação
+        const { data: automation, error: autoError } = await supabase
+          .from('automations')
+          .select('*')
+          .eq('id', run.automation_id)
+          .single();
+
+        if (autoError || !automation) {
+          return NextResponse.json({ error: 'Automation not found', details: autoError }, { status: 404 });
+        }
+
+        // Atualizar para running
+        await supabase
+          .from('automation_runs')
+          .update({ status: 'running' })
+          .eq('id', runId);
+
+        try {
+          // Executar workflow
+          const workflow: Workflow = {
+            id: automation.id,
+            name: automation.name,
+            nodes: automation.nodes || [],
+            edges: automation.edges || [],
+            settings: automation.settings,
+          };
+
+          const metadata = run.metadata || {};
+
+          const result = await executeWorkflow(workflow, {
+            organizationId: automation.organization_id,
+            executionId: runId,
+            triggerData: metadata.trigger_data || {},
+            contactId: run.contact_id,
+            dealId: metadata.deal_id,
+          });
+
+          // Atualizar run
+          await supabase
+            .from('automation_runs')
+            .update({
+              status: result.status === 'waiting' ? 'waiting' : (result.status === 'success' ? 'completed' : 'failed'),
+              completed_at: result.status !== 'waiting' ? new Date().toISOString() : null,
+              last_error: result.error || null,
+            })
+            .eq('id', runId);
+
+          return NextResponse.json({
+            action: 'execute-run',
+            runId,
+            automationId: automation.id,
+            automationName: automation.name,
+            nodesCount: workflow.nodes.length,
+            result: {
+              status: result.status,
+              duration: result.duration,
+              error: result.error,
+              nodeResults: result.nodeResults,
+            },
+          });
+
+        } catch (error: any) {
+          await supabase
+            .from('automation_runs')
+            .update({
+              status: 'failed',
+              completed_at: new Date().toISOString(),
+              last_error: error.message,
+            })
+            .eq('id', runId);
+
+          return NextResponse.json({
+            action: 'execute-run',
+            runId,
+            error: error.message,
+            stack: error.stack?.split('\n').slice(0, 10),
+          }, { status: 500 });
+        }
       }
 
       default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+        return NextResponse.json({ 
+          error: 'Invalid action',
+          availableActions: ['status', 'process-runs', 'execute-run&runId=xxx'],
+        }, { status: 400 });
     }
 
   } catch (error: any) {
     console.error('[DEBUG] Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, stack: error.stack?.split('\n').slice(0, 10) }, { status: 500 });
   }
 }
