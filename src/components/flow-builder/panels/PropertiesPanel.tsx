@@ -185,6 +185,146 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               />
             )}
 
+            {/* TRIGGER: DATE - Aniversário/Data Especial */}
+            {selectedNode.data.nodeType === 'trigger_date' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Campo de Data</label>
+                  <SelectField
+                    value={selectedNode.data.config?.dateField || 'birth_date'}
+                    onChange={(v) => handleUpdate('dateField', v)}
+                    options={[
+                      { value: 'birth_date', label: 'Aniversário' },
+                      { value: 'created_at', label: 'Data de Cadastro' },
+                      { value: 'custom_date', label: 'Campo Personalizado' },
+                    ]}
+                  />
+                </div>
+
+                {selectedNode.data.config?.dateField === 'custom_date' && (
+                  <div className="space-y-2">
+                    <label className="text-xs text-white/60">Nome do Campo</label>
+                    <input
+                      type="text"
+                      value={selectedNode.data.config?.customFieldName || ''}
+                      onChange={(e) => handleUpdate('customFieldName', e.target.value)}
+                      placeholder="Ex: data_renovacao"
+                      className={cn(
+                        'w-full px-3 py-2 rounded-lg',
+                        'bg-[#0a0a0a] border border-white/10',
+                        'text-sm text-white placeholder-white/30',
+                        'focus:outline-none focus:border-blue-500/50'
+                      )}
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Quando Disparar?</label>
+                  <SelectField
+                    value={selectedNode.data.config?.timing || 'on_date'}
+                    onChange={(v) => handleUpdate('timing', v)}
+                    options={[
+                      { value: '7_days_before', label: '7 dias antes' },
+                      { value: '3_days_before', label: '3 dias antes' },
+                      { value: '1_day_before', label: '1 dia antes' },
+                      { value: 'on_date', label: 'No dia' },
+                    ]}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Horário de Disparo</label>
+                  <input
+                    type="time"
+                    value={selectedNode.data.config?.triggerTime || '09:00'}
+                    onChange={(e) => handleUpdate('triggerTime', e.target.value)}
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg',
+                      'bg-[#0a0a0a] border border-white/10',
+                      'text-sm text-white',
+                      'focus:outline-none focus:border-blue-500/50',
+                      '[color-scheme:dark]'
+                    )}
+                  />
+                </div>
+
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                  <p className="text-[11px] text-emerald-300">
+                    🎂 Ideal para campanhas de aniversário, renovações, etc.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* TRIGGER: WHATSAPP RECEIVED */}
+            {selectedNode.data.nodeType === 'trigger_whatsapp' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Tipo de Mensagem</label>
+                  <SelectField
+                    value={selectedNode.data.config?.messageType || 'any'}
+                    onChange={(v) => handleUpdate('messageType', v)}
+                    options={[
+                      { value: 'any', label: 'Qualquer mensagem' },
+                      { value: 'text', label: 'Apenas texto' },
+                      { value: 'image', label: 'Apenas imagens' },
+                      { value: 'audio', label: 'Apenas áudios' },
+                      { value: 'document', label: 'Apenas documentos' },
+                    ]}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Contém Palavra-chave (opcional)</label>
+                  <input
+                    type="text"
+                    value={selectedNode.data.config?.keyword || ''}
+                    onChange={(e) => handleUpdate('keyword', e.target.value)}
+                    placeholder="Ex: comprar, ajuda, suporte..."
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg',
+                      'bg-[#0a0a0a] border border-white/10',
+                      'text-sm text-white placeholder-white/30',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                  <p className="text-[10px] text-white/40">
+                    Deixe vazio para disparar em qualquer mensagem
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedNode.data.config?.onlyFirstMessage || false}
+                      onChange={(e) => handleUpdate('onlyFirstMessage', e.target.checked)}
+                      className="w-4 h-4 rounded border-white/20 bg-transparent text-green-500"
+                    />
+                    <span className="text-xs text-white/60">
+                      Apenas primeira mensagem (novo contato)
+                    </span>
+                  </label>
+                </div>
+
+                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <p className="text-[11px] text-green-300">
+                    💬 Dispara quando uma mensagem WhatsApp é recebida
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* TRIGGER: CART ABANDONED */}
+            {selectedNode.data.nodeType === 'trigger_abandon' && (
+              <AbandonedCartConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                organizationId={organizationId}
+              />
+            )}
+
             {/* TRIGGER: ORDER CREATED */}
             {selectedNode.data.nodeType === 'trigger_order' && (
               <OrderTriggerConfig
@@ -1571,6 +1711,167 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
       <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
         <p className="text-[11px] text-blue-300">
           🔔 A notificação aparecerá no sino de notificações dos usuários selecionados
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// ABANDONED CART CONFIG
+// ============================================
+
+interface AbandonedCartConfigProps {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+  organizationId?: string;
+}
+
+function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCartConfigProps) {
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [loadingStores, setLoadingStores] = useState(false);
+
+  useEffect(() => {
+    if (organizationId) {
+      fetchStores();
+    }
+  }, [organizationId]);
+
+  const fetchStores = async () => {
+    if (!organizationId) return;
+    setLoadingStores(true);
+    try {
+      const res = await fetch(`/api/stores?organizationId=${organizationId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setStores(data.stores || []);
+      }
+    } catch (e) {
+      console.error('Error fetching stores:', e);
+    } finally {
+      setLoadingStores(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Store Filter */}
+      <div className="space-y-2">
+        <label className="text-xs text-white/60">Loja (opcional)</label>
+        <div className="relative">
+          <select
+            value={config.storeId || ''}
+            onChange={(e) => onUpdate('storeId', e.target.value)}
+            disabled={loadingStores}
+            className={cn(
+              'w-full px-3 py-2 rounded-lg appearance-none',
+              'bg-[#0a0a0a] border border-white/10',
+              'text-sm text-white',
+              'focus:outline-none focus:border-blue-500/50',
+              'disabled:opacity-50'
+            )}
+          >
+            <option value="">Todas as lojas</option>
+            {stores.map((store) => (
+              <option key={store.id} value={store.id}>
+                {store.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Abandonment Time */}
+      <div className="space-y-2">
+        <label className="text-xs text-white/60">Tempo de Abandono</label>
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            type="number"
+            min="1"
+            value={config.abandonTime || 30}
+            onChange={(e) => onUpdate('abandonTime', parseInt(e.target.value) || 30)}
+            className={cn(
+              'px-3 py-2 rounded-lg',
+              'bg-[#0a0a0a] border border-white/10',
+              'text-sm text-white',
+              'focus:outline-none focus:border-blue-500/50'
+            )}
+          />
+          <div className="relative">
+            <select
+              value={config.abandonUnit || 'minutes'}
+              onChange={(e) => onUpdate('abandonUnit', e.target.value)}
+              className={cn(
+                'w-full px-3 py-2 rounded-lg appearance-none',
+                'bg-[#0a0a0a] border border-white/10',
+                'text-sm text-white',
+                'focus:outline-none focus:border-blue-500/50'
+              )}
+            >
+              <option value="minutes">Minutos</option>
+              <option value="hours">Horas</option>
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+          </div>
+        </div>
+        <p className="text-[10px] text-white/40">
+          Dispara após este tempo sem finalizar a compra
+        </p>
+      </div>
+
+      {/* Minimum Value */}
+      <div className="space-y-2">
+        <label className="text-xs text-white/60">Valor Mínimo do Carrinho (opcional)</label>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-white/40">R$</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={config.minValue || ''}
+            onChange={(e) => onUpdate('minValue', e.target.value ? parseFloat(e.target.value) : null)}
+            placeholder="0.00"
+            className={cn(
+              'flex-1 px-3 py-2 rounded-lg',
+              'bg-[#0a0a0a] border border-white/10',
+              'text-sm text-white placeholder-white/30',
+              'focus:outline-none focus:border-blue-500/50'
+            )}
+          />
+        </div>
+      </div>
+
+      {/* Options */}
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={config.onlyWithEmail || false}
+            onChange={(e) => onUpdate('onlyWithEmail', e.target.checked)}
+            className="w-4 h-4 rounded border-white/20 bg-transparent text-amber-500"
+          />
+          <span className="text-xs text-white/60">
+            Apenas carrinhos com email identificado
+          </span>
+        </label>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={config.excludeRecovered || true}
+            onChange={(e) => onUpdate('excludeRecovered', e.target.checked)}
+            className="w-4 h-4 rounded border-white/20 bg-transparent text-amber-500"
+          />
+          <span className="text-xs text-white/60">
+            Não disparar se carrinho já foi recuperado
+          </span>
+        </label>
+      </div>
+
+      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+        <p className="text-[11px] text-amber-300">
+          🛒 Dispara quando cliente abandona o carrinho após {config.abandonTime || 30} {config.abandonUnit === 'hours' ? 'horas' : 'minutos'}
         </p>
       </div>
     </div>

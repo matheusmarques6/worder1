@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/check-delayed-runs",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/check-abandoned-carts",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/check-dates",
+      "schedule": "1 0 * * *"
     }
   ]
 }
