@@ -8,10 +8,6 @@ import { supabaseClient as supabase } from '@/lib/supabase-client';
 // Re-export usePipelines
 export { usePipelines } from './usePipelines';
 
-// Re-export Flow Builder hooks
-export { useFlowBuilder } from './useFlowBuilder';
-export { useCredentials } from './useCredentials';
-
 // Re-export CRM Realtime
 export { useCRMRealtime, useDealsRealtime, useContactsRealtime } from './useCRMRealtime';
 
@@ -504,9 +500,10 @@ export function useDeals(pipelineId?: string, storeIdOverride?: string) {
   };
 
   const updateDeal = async (id: string, data: any) => {
-    // Atualização otimista local primeiro
-    const previousDeals = [...deals]; // Guardar estado anterior para rollback
+    // ✅ Guardar estado anterior para rollback
+    const previousDeals = [...deals];
     
+    // Atualização otimista local primeiro
     setDeals(prev => prev.map(d => 
       d.id === id ? { ...d, ...data, _localUpdate: true } : d
     ));
@@ -679,22 +676,7 @@ export function useAuth() {
         throw new Error(result.error || 'Login failed');
       }
 
-      // Transform profile to match User interface
-      const userFromProfile = {
-        id: result.profile?.id || result.user?.id,
-        email: result.profile?.email || result.user?.email,
-        name: result.profile?.first_name && result.profile?.last_name
-          ? `${result.profile.first_name} ${result.profile.last_name}`
-          : result.profile?.first_name || result.user?.email?.split('@')[0] || 'Usuário',
-        avatar_url: result.profile?.avatar_url,
-        organization_id: result.profile?.organization_id,
-        role: result.profile?.role || 'admin',
-        user_metadata: result.user?.user_metadata,
-        created_at: result.profile?.created_at || new Date().toISOString(),
-        updated_at: result.profile?.updated_at || new Date().toISOString(),
-      };
-      
-      setUser(userFromProfile);
+      setUser(result.profile);
       return result;
     } catch (e) {
       const error = e instanceof Error ? e : new Error('An error occurred');

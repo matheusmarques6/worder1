@@ -29,7 +29,7 @@ import {
   Plus,
   Sparkles,
 } from 'lucide-react'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores'
 import WhatsAppIntegrationCard from '@/components/whatsapp/WhatsAppIntegrationCard'
 import ActiveIntegrationsSection from '@/components/integrations/active/ActiveIntegrationsSection'
 
@@ -250,6 +250,7 @@ function IntegrationCard({
 // Main Page Component
 export default function IntegrationsPage() {
   const { user } = useAuthStore()
+  const { currentStore } = useStoreStore() // ✅ NOVO: Pegar loja atual
   const router = useRouter()
   const [categories, setCategories] = useState<IntegrationCategory[]>([])
   const [integrations, setIntegrations] = useState<Integration[]>([])
@@ -495,7 +496,10 @@ export default function IntegrationsPage() {
 
       {/* ====== SUAS INTEGRAÇÕES ATIVAS ====== */}
       {!search && !selectedCategory && user?.organization_id && (
-        <ActiveIntegrationsSection organizationId={user.organization_id} />
+        <ActiveIntegrationsSection 
+          organizationId={user.organization_id} 
+          storeId={currentStore?.id} // ✅ NOVO: Passar storeId
+        />
       )}
 
       {/* Other Integrations Header */}

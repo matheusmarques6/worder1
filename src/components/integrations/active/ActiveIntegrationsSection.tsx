@@ -67,9 +67,11 @@ interface WhatsAppConfig {
 // =============================================
 
 export default function ActiveIntegrationsSection({ 
-  organizationId 
+  organizationId,
+  storeId, // ✅ NOVO: Aceitar storeId como prop opcional
 }: { 
-  organizationId: string 
+  organizationId: string
+  storeId?: string | null // ✅ NOVO
 }) {
   const router = useRouter()
   const [shopifyStore, setShopifyStore] = useState<ShopifyStore | null>(null)
@@ -80,17 +82,30 @@ export default function ActiveIntegrationsSection({
 
   useEffect(() => {
     fetchActiveIntegrations()
-  }, [organizationId])
+  }, [organizationId, storeId]) // ✅ CORRIGIDO: Adicionar storeId como dependência
 
   const fetchActiveIntegrations = async () => {
     setLoading(true)
     try {
-      // Buscar Shopify
-      const shopifyRes = await fetch(`/api/shopify/store?organizationId=${organizationId}`)
+      // Buscar Shopify - ✅ CORRIGIDO: Usar storeId se disponível
+      const shopifyUrl = storeId 
+        ? `/api/shopify/store?storeId=${storeId}`
+        : `/api/shopify/store`;
+        
+      const shopifyRes = await fetch(shopifyUrl)
       if (shopifyRes.ok) {
         const shopifyData = await shopifyRes.json()
+        // ✅ CORRIGIDO: Aceitar tanto 'store' quanto 'stores'
         if (shopifyData.store) {
           setShopifyStore(shopifyData.store)
+        } else if (shopifyData.stores && shopifyData.stores.length > 0) {
+          // Se retornou array, usar a primeira loja (ou a que corresponde ao storeId)
+          const targetStore = storeId 
+            ? shopifyData.stores.find((s: any) => s.id === storeId)
+            : shopifyData.stores[0];
+          if (targetStore) {
+            setShopifyStore(targetStore)
+          }
         }
       }
 
