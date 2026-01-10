@@ -43,7 +43,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
     if (needsPipelines && pipelines.length === 0) {
       fetchPipelines();
     }
-  }, [selectedNode?.data.nodeType, organizationId]);
+  }, [selectedNode?.data.nodeType, organizationId, pipelines.length]);
 
   const fetchPipelines = async () => {
     if (!organizationId) return;
@@ -205,6 +205,85 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   )}
                 />
               </div>
+            )}
+
+            {/* TRIGGER: DEAL CREATED - Pipeline Filter */}
+            {selectedNode.data.nodeType === 'trigger_deal_created' && (
+              <div className="space-y-2">
+                <label className="text-xs text-white/60">Pipeline (opcional)</label>
+                <SelectField
+                  value={selectedNode.data.config?.pipelineId || ''}
+                  onChange={(v) => handleUpdate('pipelineId', v)}
+                  options={[
+                    { value: '', label: 'Qualquer pipeline' },
+                    ...pipelines.map((p) => ({ value: p.id, label: p.name })),
+                  ]}
+                  loading={loadingPipelines}
+                />
+                <p className="text-[10px] text-white/40">
+                  Deixe vazio para disparar em qualquer pipeline
+                </p>
+              </div>
+            )}
+
+            {/* TRIGGER: DEAL WON - Pipeline Filter */}
+            {selectedNode.data.nodeType === 'trigger_deal_won' && (
+              <div className="space-y-2">
+                <label className="text-xs text-white/60">Pipeline (opcional)</label>
+                <SelectField
+                  value={selectedNode.data.config?.pipelineId || ''}
+                  onChange={(v) => handleUpdate('pipelineId', v)}
+                  options={[
+                    { value: '', label: 'Qualquer pipeline' },
+                    ...pipelines.map((p) => ({ value: p.id, label: p.name })),
+                  ]}
+                  loading={loadingPipelines}
+                />
+                <p className="text-[10px] text-white/40">
+                  Filtre por pipeline específico ou deixe vazio para todos
+                </p>
+              </div>
+            )}
+
+            {/* TRIGGER: DEAL LOST - Pipeline Filter */}
+            {selectedNode.data.nodeType === 'trigger_deal_lost' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Pipeline (opcional)</label>
+                  <SelectField
+                    value={selectedNode.data.config?.pipelineId || ''}
+                    onChange={(v) => handleUpdate('pipelineId', v)}
+                    options={[
+                      { value: '', label: 'Qualquer pipeline' },
+                      ...pipelines.map((p) => ({ value: p.id, label: p.name })),
+                    ]}
+                    loading={loadingPipelines}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Motivo da Perda (opcional)</label>
+                  <input
+                    type="text"
+                    value={selectedNode.data.config?.lostReason || ''}
+                    onChange={(e) => handleUpdate('lostReason', e.target.value)}
+                    placeholder="Ex: preço, concorrente..."
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg',
+                      'bg-[#0a0a0a] border border-white/10',
+                      'text-sm text-white placeholder-white/30',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* ACTION: UPDATE CONTACT */}
+            {selectedNode.data.nodeType === 'action_update' && (
+              <ContactFieldsEditor
+                fields={selectedNode.data.config?.fields || {}}
+                onFieldsChange={(fields) => handleUpdate('fields', fields)}
+              />
             )}
 
             {/* DELAY NODES */}
@@ -491,6 +570,102 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               </>
             )}
 
+            {/* CONDITION: ORDER VALUE */}
+            {selectedNode.data.nodeType === 'condition_order_value' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Operador</label>
+                  <SelectField
+                    value={selectedNode.data.config?.operator || 'greater_than'}
+                    onChange={(v) => handleUpdate('operator', v)}
+                    options={[
+                      { value: 'greater_than', label: 'Maior que' },
+                      { value: 'greater_or_equal', label: 'Maior ou igual a' },
+                      { value: 'less_than', label: 'Menor que' },
+                      { value: 'less_or_equal', label: 'Menor ou igual a' },
+                      { value: 'equals', label: 'Igual a' },
+                      { value: 'not_equals', label: 'Diferente de' },
+                    ]}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Valor (R$)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={selectedNode.data.config?.value || ''}
+                    onChange={(e) => handleUpdate('value', e.target.value)}
+                    placeholder="Ex: 100.00"
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg',
+                      'bg-[#0a0a0a] border border-white/10',
+                      'text-sm text-white placeholder-white/30',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                </div>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <p className="text-[11px] text-amber-300">
+                    💡 Exemplo: "Maior que R$ 100" vai seguir o caminho "Sim" se o pedido for acima de R$ 100
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* CONDITION: DEAL VALUE */}
+            {selectedNode.data.nodeType === 'condition_deal_value' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Operador</label>
+                  <SelectField
+                    value={selectedNode.data.config?.operator || 'greater_than'}
+                    onChange={(v) => handleUpdate('operator', v)}
+                    options={[
+                      { value: 'greater_than', label: 'Maior que' },
+                      { value: 'greater_or_equal', label: 'Maior ou igual a' },
+                      { value: 'less_than', label: 'Menor que' },
+                      { value: 'less_or_equal', label: 'Menor ou igual a' },
+                      { value: 'equals', label: 'Igual a' },
+                      { value: 'not_equals', label: 'Diferente de' },
+                    ]}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/60">Valor (R$)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={selectedNode.data.config?.value || ''}
+                    onChange={(e) => handleUpdate('value', e.target.value)}
+                    placeholder="Ex: 5000.00"
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg',
+                      'bg-[#0a0a0a] border border-white/10',
+                      'text-sm text-white placeholder-white/30',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                </div>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <p className="text-[11px] text-amber-300">
+                    💡 Exemplo: "Maior que R$ 5.000" vai seguir o caminho "Sim" se o deal for acima desse valor
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* LOGIC FILTER - Advanced Conditions */}
+            {selectedNode.data.nodeType === 'logic_filter' && (
+              <FilterConditionsEditor
+                conditions={selectedNode.data.config?.conditions || []}
+                logicOperator={selectedNode.data.config?.logicOperator || 'and'}
+                onConditionsChange={(conditions) => handleUpdate('conditions', conditions)}
+                onLogicOperatorChange={(op) => handleUpdate('logicOperator', op)}
+              />
+            )}
+
             {/* A/B SPLIT */}
             {selectedNode.data.nodeType === 'logic_split' && (
               <div className="space-y-2">
@@ -676,6 +851,285 @@ function SelectField({ value, onChange, options, loading }: SelectFieldProps) {
         ))}
       </select>
       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+    </div>
+  );
+}
+
+// ============================================
+// CONTACT FIELDS EDITOR
+// ============================================
+
+interface ContactFieldsEditorProps {
+  fields: Record<string, any>;
+  onFieldsChange: (fields: Record<string, any>) => void;
+}
+
+const CONTACT_FIELDS = [
+  { key: 'first_name', label: 'Nome', type: 'text' },
+  { key: 'last_name', label: 'Sobrenome', type: 'text' },
+  { key: 'email', label: 'Email', type: 'email' },
+  { key: 'phone', label: 'Telefone', type: 'text' },
+  { key: 'notes', label: 'Notas', type: 'textarea' },
+];
+
+function ContactFieldsEditor({ fields, onFieldsChange }: ContactFieldsEditorProps) {
+  const [selectedFields, setSelectedFields] = useState<string[]>(Object.keys(fields));
+
+  const handleFieldToggle = (key: string) => {
+    const newSelectedFields = selectedFields.includes(key)
+      ? selectedFields.filter(f => f !== key)
+      : [...selectedFields, key];
+    
+    setSelectedFields(newSelectedFields);
+    
+    // Remove field if unchecked
+    if (!newSelectedFields.includes(key)) {
+      const newFields = { ...fields };
+      delete newFields[key];
+      onFieldsChange(newFields);
+    }
+  };
+
+  const handleFieldValueChange = (key: string, value: string) => {
+    onFieldsChange({ ...fields, [key]: value });
+  };
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] text-white/50">
+        Selecione os campos que deseja atualizar:
+      </p>
+      
+      {CONTACT_FIELDS.map((field) => (
+        <div key={field.key} className="space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={selectedFields.includes(field.key)}
+              onChange={() => handleFieldToggle(field.key)}
+              className="w-4 h-4 rounded border-white/20 bg-transparent text-blue-500 focus:ring-blue-500/30"
+            />
+            <span className="text-xs text-white/60">{field.label}</span>
+          </label>
+          
+          {selectedFields.includes(field.key) && (
+            field.type === 'textarea' ? (
+              <textarea
+                value={fields[field.key] || ''}
+                onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                placeholder={`Novo valor para ${field.label}`}
+                rows={2}
+                className={cn(
+                  'w-full px-3 py-2 rounded-lg resize-none',
+                  'bg-[#0a0a0a] border border-white/10',
+                  'text-sm text-white placeholder-white/30',
+                  'focus:outline-none focus:border-blue-500/50'
+                )}
+              />
+            ) : (
+              <input
+                type={field.type}
+                value={fields[field.key] || ''}
+                onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                placeholder={`Novo valor para ${field.label}`}
+                className={cn(
+                  'w-full px-3 py-2 rounded-lg',
+                  'bg-[#0a0a0a] border border-white/10',
+                  'text-sm text-white placeholder-white/30',
+                  'focus:outline-none focus:border-blue-500/50'
+                )}
+              />
+            )
+          )}
+        </div>
+      ))}
+      
+      <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+        <p className="text-[11px] text-blue-300">
+          💡 Use variáveis: <code className="bg-blue-500/20 px-1 rounded">{'{{trigger.new_name}}'}</code>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// FILTER CONDITIONS EDITOR
+// ============================================
+
+interface FilterCondition {
+  field: string;
+  operator: string;
+  value: string;
+}
+
+interface FilterConditionsEditorProps {
+  conditions: FilterCondition[];
+  logicOperator: 'and' | 'or';
+  onConditionsChange: (conditions: FilterCondition[]) => void;
+  onLogicOperatorChange: (op: 'and' | 'or') => void;
+}
+
+const FILTER_FIELDS = [
+  { value: 'contact.email', label: 'Email' },
+  { value: 'contact.phone', label: 'Telefone' },
+  { value: 'contact.first_name', label: 'Nome' },
+  { value: 'contact.last_name', label: 'Sobrenome' },
+  { value: 'contact.tags', label: 'Tags' },
+  { value: 'contact.total_orders', label: 'Total de Pedidos' },
+  { value: 'contact.total_spent', label: 'Total Gasto' },
+  { value: 'deal.value', label: 'Valor do Deal' },
+  { value: 'deal.stage_name', label: 'Estágio do Deal' },
+  { value: 'order.total_price', label: 'Valor do Pedido' },
+  { value: 'trigger.data', label: 'Dado do Trigger' },
+];
+
+const FILTER_OPERATORS = [
+  { value: 'equals', label: 'Igual a' },
+  { value: 'not_equals', label: 'Diferente de' },
+  { value: 'contains', label: 'Contém' },
+  { value: 'not_contains', label: 'Não contém' },
+  { value: 'greater_than', label: 'Maior que' },
+  { value: 'less_than', label: 'Menor que' },
+  { value: 'is_empty', label: 'Está vazio' },
+  { value: 'is_not_empty', label: 'Não está vazio' },
+];
+
+function FilterConditionsEditor({ 
+  conditions, 
+  logicOperator, 
+  onConditionsChange, 
+  onLogicOperatorChange 
+}: FilterConditionsEditorProps) {
+  
+  const addCondition = () => {
+    onConditionsChange([
+      ...conditions,
+      { field: '', operator: 'equals', value: '' }
+    ]);
+  };
+
+  const updateCondition = (index: number, updates: Partial<FilterCondition>) => {
+    const newConditions = conditions.map((c, i) => 
+      i === index ? { ...c, ...updates } : c
+    );
+    onConditionsChange(newConditions);
+  };
+
+  const removeCondition = (index: number) => {
+    onConditionsChange(conditions.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Logic Operator */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-white/60">Combinar condições com:</span>
+        <div className="flex gap-1">
+          <button
+            onClick={() => onLogicOperatorChange('and')}
+            className={cn(
+              'px-3 py-1 rounded text-xs transition-colors',
+              logicOperator === 'and'
+                ? 'bg-blue-500 text-white'
+                : 'bg-white/5 text-white/60 hover:bg-white/10'
+            )}
+          >
+            E (AND)
+          </button>
+          <button
+            onClick={() => onLogicOperatorChange('or')}
+            className={cn(
+              'px-3 py-1 rounded text-xs transition-colors',
+              logicOperator === 'or'
+                ? 'bg-blue-500 text-white'
+                : 'bg-white/5 text-white/60 hover:bg-white/10'
+            )}
+          >
+            OU (OR)
+          </button>
+        </div>
+      </div>
+
+      {/* Conditions List */}
+      <div className="space-y-2">
+        {conditions.map((condition, index) => (
+          <div key={index} className="p-3 bg-white/5 rounded-lg space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-white/40 uppercase">
+                Condição {index + 1}
+              </span>
+              <button
+                onClick={() => removeCondition(index)}
+                className="text-red-400 hover:text-red-300 text-xs"
+              >
+                Remover
+              </button>
+            </div>
+            
+            <select
+              value={condition.field}
+              onChange={(e) => updateCondition(index, { field: e.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 rounded text-xs',
+                'bg-[#0a0a0a] border border-white/10 text-white'
+              )}
+            >
+              <option value="">Selecione o campo...</option>
+              {FILTER_FIELDS.map(f => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </select>
+            
+            <select
+              value={condition.operator}
+              onChange={(e) => updateCondition(index, { operator: e.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 rounded text-xs',
+                'bg-[#0a0a0a] border border-white/10 text-white'
+              )}
+            >
+              {FILTER_OPERATORS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            
+            {!['is_empty', 'is_not_empty'].includes(condition.operator) && (
+              <input
+                type="text"
+                value={condition.value}
+                onChange={(e) => updateCondition(index, { value: e.target.value })}
+                placeholder="Valor"
+                className={cn(
+                  'w-full px-2 py-1.5 rounded text-xs',
+                  'bg-[#0a0a0a] border border-white/10 text-white placeholder-white/30'
+                )}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Add Button */}
+      <button
+        onClick={addCondition}
+        className={cn(
+          'w-full py-2 rounded-lg text-xs',
+          'border border-dashed border-white/20',
+          'text-white/60 hover:text-white hover:border-white/40',
+          'transition-colors'
+        )}
+      >
+        + Adicionar Condição
+      </button>
+
+      {conditions.length === 0 && (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+          <p className="text-[11px] text-amber-300">
+            ⚠️ Adicione pelo menos uma condição para o filtro funcionar
+          </p>
+        </div>
+      )}
     </div>
   );
 }

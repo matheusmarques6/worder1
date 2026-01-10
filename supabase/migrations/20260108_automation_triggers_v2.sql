@@ -391,26 +391,36 @@ BEGIN
     AND a.status = 'active'                     -- ← SÓ AUTOMAÇÕES ATIVAS
     AND a.trigger_type = v_trigger_type
     -- Verificar condições adicionais do trigger_config
+    -- ⚠️ Suporta tanto camelCase (do React) quanto snake_case
     AND (
-      -- Tag específica
+      -- Tag específica (tagName ou tag_name)
       (v_trigger_type = 'trigger_tag' AND (
         a.trigger_config IS NULL 
-        OR a.trigger_config->>'tag_name' IS NULL 
-        OR a.trigger_config->>'tag_name' = p_payload->>'tag_name'
+        OR (
+          COALESCE(a.trigger_config->>'tagName', a.trigger_config->>'tag_name') IS NULL 
+          OR COALESCE(a.trigger_config->>'tagName', a.trigger_config->>'tag_name') = 
+             COALESCE(p_payload->>'tagName', p_payload->>'tag_name')
+        )
       ))
       OR
-      -- Stage específico
+      -- Stage específico (stageId ou stage_id)
       (v_trigger_type = 'trigger_deal_stage' AND (
         a.trigger_config IS NULL 
-        OR a.trigger_config->>'stage_id' IS NULL 
-        OR a.trigger_config->>'stage_id' = p_payload->>'to_stage_id'
+        OR (
+          COALESCE(a.trigger_config->>'stageId', a.trigger_config->>'stage_id') IS NULL 
+          OR COALESCE(a.trigger_config->>'stageId', a.trigger_config->>'stage_id') = 
+             COALESCE(p_payload->>'to_stage_id', p_payload->>'toStageId')
+        )
       ))
       OR
-      -- Pipeline específico
+      -- Pipeline específico (pipelineId ou pipeline_id)
       ((v_trigger_type IN ('trigger_deal_created', 'trigger_deal_stage', 'trigger_deal_won', 'trigger_deal_lost')) AND (
         a.trigger_config IS NULL 
-        OR a.trigger_config->>'pipeline_id' IS NULL 
-        OR a.trigger_config->>'pipeline_id' = p_payload->>'pipeline_id'
+        OR (
+          COALESCE(a.trigger_config->>'pipelineId', a.trigger_config->>'pipeline_id') IS NULL 
+          OR COALESCE(a.trigger_config->>'pipelineId', a.trigger_config->>'pipeline_id') = 
+             COALESCE(p_payload->>'pipelineId', p_payload->>'pipeline_id')
+        )
       ))
       OR
       -- Outros triggers sem condições especiais
