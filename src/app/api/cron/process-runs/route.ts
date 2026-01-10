@@ -132,13 +132,12 @@ export async function GET(request: NextRequest) {
               title: d.title,
               value: d.value,
               stageId: d.stage_id,
-              stageName: d.pipeline_stages?.name,
+              stageName: d.pipeline_stages?.name || '',
               pipelineId: d.pipeline_id,
-              pipelineName: d.pipelines?.name,
+              pipelineName: d.pipelines?.name || '',
               contactId: d.contact_id,
               customFields: d.custom_fields || {},
               createdAt: d.created_at,
-              updatedAt: d.updated_at,
             };
           }
         }
