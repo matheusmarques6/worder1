@@ -208,6 +208,13 @@ class EventProcessorClass {
       throw new Error(`Automation not found: ${automationId}`);
     }
 
+    // ⚠️ CRITICAL: Double-check if automation is still active
+    // (could have been deactivated between find_matching_automations and now)
+    if (automation.status !== 'active') {
+      console.log(`[EventProcessor] Automation ${automationId} is no longer active (status: ${automation.status}), skipping`);
+      return null;
+    }
+
     // Criar contexto inicial
     const initialContext = {
       organization_id: event.organization_id,
@@ -315,6 +322,36 @@ class EventProcessorClass {
    */
   async resumeRun(runId: string, nodeId: string): Promise<void> {
     const supabase = this.getSupabase();
+    
+    // Buscar o run com a automação para verificar status
+    const { data: run, error: runError } = await supabase
+      .from('automation_runs')
+      .select('*, automations!inner(id, status)')
+      .eq('id', runId)
+      .single();
+
+    if (runError || !run) {
+      console.error(`[EventProcessor] Run not found for resume: ${runId}`);
+      return;
+    }
+
+    // ⚠️ CRITICAL: Check if automation is still active
+    const automation = (run as any).automations;
+    if (automation?.status !== 'active') {
+      console.log(`[EventProcessor] Automation ${automation?.id} is not active, cancelling resume for run ${runId}`);
+      
+      await supabase
+        .from('automation_runs')
+        .update({
+          status: 'cancelled',
+          waiting_until: null,
+          completed_at: new Date().toISOString(),
+          last_error: `Automação desativada (status: ${automation?.status})`,
+        })
+        .eq('id', runId);
+      
+      return;
+    }
     
     // Atualizar status
     await supabase

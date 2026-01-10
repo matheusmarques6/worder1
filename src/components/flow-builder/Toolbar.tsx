@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
   Save,
@@ -9,10 +9,11 @@ import {
   Pause,
   PlayCircle,
   History,
-  Settings,
   Loader2,
   Check,
   AlertCircle,
+  Power,
+  Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useIsValidFlow } from '@/stores/flowStore';
@@ -44,6 +45,9 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isEditing, setIsEditing] = useState(false);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+
+  const isActive = automationStatus === 'active';
 
   const handleSave = async () => {
     if (isSaving) return;
@@ -70,9 +74,36 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   };
 
   const handleToggleStatus = async () => {
-    const newStatus = automationStatus === 'active' ? 'paused' : 'active';
+    if (!valid) {
+      alert('Corrija os erros antes de ativar:\n\n' + errors.join('\n'));
+      return;
+    }
+
+    setIsTogglingStatus(true);
+    
+    // Determine new status
+    const newStatus = isActive ? 'paused' : 'active';
+    
+    // Update status in store
     setAutomationStatus(newStatus);
-    // Save will be triggered by parent
+    
+    // Auto-save when toggling status
+    try {
+      setSaving(true);
+      const result = await onSave();
+      if (result) {
+        setDirty(false);
+      } else {
+        // Revert on failure
+        setAutomationStatus(automationStatus);
+      }
+    } catch (e) {
+      // Revert on error
+      setAutomationStatus(automationStatus);
+    } finally {
+      setSaving(false);
+      setIsTogglingStatus(false);
+    }
   };
 
   const handleTest = () => {
@@ -203,31 +234,16 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           </span>
         </button>
 
-        {/* Activate / Pause */}
-        <button
-          onClick={handleToggleStatus}
-          disabled={!valid || automationStatus === 'draft'}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg',
-            'text-sm font-medium transition-colors',
-            automationStatus === 'active'
-              ? 'bg-amber-600 hover:bg-amber-500 text-white'
-              : 'bg-green-600 hover:bg-green-500 text-white',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-        >
-          {automationStatus === 'active' ? (
-            <>
-              <Pause className="w-4 h-4" />
-              Pausar
-            </>
-          ) : (
-            <>
-              <Play className="w-4 h-4" />
-              Ativar
-            </>
-          )}
-        </button>
+        {/* Divider */}
+        <div className="w-px h-6 bg-white/10 mx-1" />
+
+        {/* Activate / Pause Toggle */}
+        <ActivationToggle
+          isActive={isActive}
+          isLoading={isTogglingStatus}
+          disabled={!valid && !isActive}
+          onToggle={handleToggleStatus}
+        />
       </div>
     </div>
   );
@@ -254,6 +270,89 @@ function StatusBadge({ status }: { status: 'draft' | 'active' | 'paused' | 'erro
     )}>
       {label}
     </span>
+  );
+}
+
+// ============================================
+// ACTIVATION TOGGLE COMPONENT
+// ============================================
+
+interface ActivationToggleProps {
+  isActive: boolean;
+  isLoading: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}
+
+function ActivationToggle({ isActive, isLoading, disabled, onToggle }: ActivationToggleProps) {
+  return (
+    <button
+      onClick={onToggle}
+      disabled={disabled || isLoading}
+      className={cn(
+        'relative flex items-center gap-3 px-4 py-2 rounded-xl',
+        'transition-all duration-300',
+        'disabled:opacity-50 disabled:cursor-not-allowed',
+        isActive
+          ? 'bg-green-500/20 border border-green-500/40 hover:bg-green-500/30'
+          : 'bg-white/5 border border-white/10 hover:bg-white/10'
+      )}
+    >
+      {/* Toggle Track */}
+      <div className={cn(
+        'relative w-11 h-6 rounded-full transition-colors duration-300',
+        isActive ? 'bg-green-500' : 'bg-white/20'
+      )}>
+        {/* Toggle Thumb */}
+        <motion.div
+          className={cn(
+            'absolute top-1 w-4 h-4 rounded-full',
+            'flex items-center justify-center',
+            isActive ? 'bg-white' : 'bg-white/60'
+          )}
+          animate={{
+            left: isActive ? 24 : 4,
+          }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+        >
+          {isLoading ? (
+            <Loader2 className="w-2.5 h-2.5 text-green-600 animate-spin" />
+          ) : isActive ? (
+            <Zap className="w-2.5 h-2.5 text-green-600" />
+          ) : null}
+        </motion.div>
+      </div>
+
+      {/* Label */}
+      <div className="flex flex-col items-start">
+        <span className={cn(
+          'text-sm font-medium leading-tight',
+          isActive ? 'text-green-400' : 'text-white/70'
+        )}>
+          {isLoading ? 'Salvando...' : isActive ? 'Ativa' : 'Inativa'}
+        </span>
+        <span className="text-[10px] text-white/40 leading-tight">
+          {isActive ? 'Automação rodando' : 'Clique para ativar'}
+        </span>
+      </div>
+
+      {/* Active Glow Effect */}
+      <AnimatePresence>
+        {isActive && !isLoading && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="absolute -top-1 -right-1"
+          >
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </button>
   );
 }
 

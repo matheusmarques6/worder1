@@ -26,6 +26,7 @@ export interface NodeExecutorContext {
   credentials?: Record<string, any>;
   supabase: any; // SupabaseClient com tipos genéricos
   isTest: boolean;
+  organizationId?: string;  // ← CRÍTICO: Para isolamento multi-tenant
 }
 
 export interface NodeExecutor {
@@ -306,7 +307,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
   // ========== TAGS ==========
   action_tag: {
-    async execute({ config, context, supabase, isTest }) {
+    async execute({ config, context, supabase, isTest, organizationId }) {
       const contactId = context.contact?.id;
       
       if (isTest) {
@@ -320,19 +321,30 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Contato não encontrado' };
       }
 
+      // ⚠️ CRÍTICO: Verificar organization_id
+      if (!organizationId) {
+        return { status: 'error', output: null, error: 'Organization ID não fornecido' };
+      }
+
       try {
         const { data: contact } = await supabase
           .from('contacts')
           .select('tags')
           .eq('id', contactId)
+          .eq('organization_id', organizationId)  // ← ISOLAMENTO
           .single();
+
+        if (!contact) {
+          return { status: 'error', output: null, error: 'Contato não encontrado ou não pertence à organização' };
+        }
 
         const currentTags = (contact as any)?.tags || [];
         
         if (!currentTags.includes(config.tagName)) {
           await (supabase.from('contacts') as any)
             .update({ tags: [...currentTags, config.tagName] })
-            .eq('id', contactId);
+            .eq('id', contactId)
+            .eq('organization_id', organizationId);  // ← ISOLAMENTO
         }
 
         return {
@@ -346,7 +358,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
   },
 
   action_remove_tag: {
-    async execute({ config, context, supabase, isTest }) {
+    async execute({ config, context, supabase, isTest, organizationId }) {
       const contactId = context.contact?.id;
 
       if (isTest) {
@@ -360,19 +372,30 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Contato não encontrado' };
       }
 
+      // ⚠️ CRÍTICO: Verificar organization_id
+      if (!organizationId) {
+        return { status: 'error', output: null, error: 'Organization ID não fornecido' };
+      }
+
       try {
         const { data: contact } = await supabase
           .from('contacts')
           .select('tags')
           .eq('id', contactId)
+          .eq('organization_id', organizationId)  // ← ISOLAMENTO
           .single();
+
+        if (!contact) {
+          return { status: 'error', output: null, error: 'Contato não encontrado ou não pertence à organização' };
+        }
 
         const currentTags = (contact as any)?.tags || [];
         const newTags = currentTags.filter((t: string) => t !== config.tagName);
 
         await (supabase.from('contacts') as any)
           .update({ tags: newTags })
-          .eq('id', contactId);
+          .eq('id', contactId)
+          .eq('organization_id', organizationId);  // ← ISOLAMENTO
 
         return {
           status: 'success',
@@ -386,7 +409,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
   // ========== CONTACT UPDATE ==========
   action_update: {
-    async execute({ config, context, supabase, isTest }) {
+    async execute({ config, context, supabase, isTest, organizationId }) {
       const contactId = context.contact?.id;
 
       if (isTest) {
@@ -400,10 +423,22 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Contato não encontrado' };
       }
 
+      // ⚠️ CRÍTICO: Verificar organization_id
+      if (!organizationId) {
+        return { status: 'error', output: null, error: 'Organization ID não fornecido' };
+      }
+
       try {
-        await (supabase.from('contacts') as any)
+        const { data, error } = await (supabase.from('contacts') as any)
           .update(config.fields)
-          .eq('id', contactId);
+          .eq('id', contactId)
+          .eq('organization_id', organizationId)  // ← ISOLAMENTO
+          .select()
+          .single();
+
+        if (error || !data) {
+          return { status: 'error', output: null, error: 'Contato não encontrado ou não pertence à organização' };
+        }
 
         return {
           status: 'success',
@@ -417,12 +452,19 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
   // ========== DEALS ==========
   action_create_deal: {
-    async execute({ config, context, supabase, isTest }) {
+    async execute({ config, context, supabase, isTest, organizationId }) {
       if (isTest) {
         return {
           status: 'success',
           output: { created: true, title: config.title, test: true },
         };
+      }
+
+      // ⚠️ CRÍTICO: Usar organizationId do contexto, não da config
+      const orgId = organizationId || (context as any).organizationId;
+      
+      if (!orgId) {
+        return { status: 'error', output: null, error: 'Organization ID não fornecido' };
       }
 
       try {
@@ -433,7 +475,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
             pipeline_id: config.pipelineId,
             stage_id: config.stageId,
             contact_id: context.contact?.id,
-            organization_id: config.organizationId || context.automation?.organization_id,
+            organization_id: orgId,  // ← USAR O ID DO CONTEXTO
             store_id: config.storeId,
           })
           .select()
@@ -449,7 +491,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
   },
 
   action_move_deal: {
-    async execute({ config, context, supabase, isTest }) {
+    async execute({ config, context, supabase, isTest, organizationId }) {
       const dealId = context.deal?.id;
 
       if (isTest) {
@@ -463,10 +505,22 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Deal não encontrado' };
       }
 
+      // ⚠️ CRÍTICO: Verificar organization_id
+      if (!organizationId) {
+        return { status: 'error', output: null, error: 'Organization ID não fornecido' };
+      }
+
       try {
-        await (supabase.from('deals') as any)
+        const { data, error } = await (supabase.from('deals') as any)
           .update({ stage_id: config.stageId })
-          .eq('id', dealId);
+          .eq('id', dealId)
+          .eq('organization_id', organizationId)  // ← ISOLAMENTO
+          .select()
+          .single();
+
+        if (error || !data) {
+          return { status: 'error', output: null, error: 'Deal não encontrado ou não pertence à organização' };
+        }
 
         return {
           status: 'success',
@@ -479,7 +533,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
   },
 
   action_update_deal: {
-    async execute({ config, context, supabase, isTest }) {
+    async execute({ config, context, supabase, isTest, organizationId }) {
       const dealId = context.deal?.id;
 
       if (isTest) {
@@ -493,10 +547,22 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Deal não encontrado' };
       }
 
+      // ⚠️ CRÍTICO: Verificar organization_id
+      if (!organizationId) {
+        return { status: 'error', output: null, error: 'Organization ID não fornecido' };
+      }
+
       try {
-        await (supabase.from('deals') as any)
+        const { data, error } = await (supabase.from('deals') as any)
           .update(config.fields)
-          .eq('id', dealId);
+          .eq('id', dealId)
+          .eq('organization_id', organizationId)  // ← ISOLAMENTO
+          .select()
+          .single();
+
+        if (error || !data) {
+          return { status: 'error', output: null, error: 'Deal não encontrado ou não pertence à organização' };
+        }
 
         return {
           status: 'success',
@@ -510,7 +576,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
   // ========== NOTIFICATIONS ==========
   action_notify: {
-    async execute({ config, supabase, isTest }) {
+    async execute({ config, supabase, isTest, organizationId }) {
       if (isTest) {
         return {
           status: 'success',
@@ -518,13 +584,28 @@ const actionExecutors: Record<string, NodeExecutor> = {
         };
       }
 
+      // ⚠️ CRÍTICO: Verificar organization_id
+      if (!organizationId) {
+        return { status: 'error', output: null, error: 'Organization ID não fornecido' };
+      }
+
       try {
-        const notifications = (config.userIds || []).map((userId: string) => ({
+        // Verificar se os userIds pertencem à organização
+        const { data: members } = await supabase
+          .from('organization_members')
+          .select('user_id')
+          .eq('organization_id', organizationId)
+          .in('user_id', config.userIds || []);
+
+        const validUserIds = (members || []).map((m: any) => m.user_id);
+
+        const notifications = validUserIds.map((userId: string) => ({
           user_id: userId,
           title: config.title || 'Nova notificação',
           message: config.message,
           type: 'automation',
           read: false,
+          organization_id: organizationId,  // ← INCLUIR ORG ID
         }));
 
         if (notifications.length > 0) {

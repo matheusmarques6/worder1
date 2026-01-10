@@ -56,6 +56,7 @@ export interface ExecutionOptions {
   contactId?: string;
   dealId?: string;
   orderId?: string;
+  organizationId?: string;  // ← CRÍTICO: Para isolamento multi-tenant
 }
 
 export interface ExecutionResult {
@@ -116,6 +117,11 @@ export class ExecutionEngine {
       timezone: workflow.settings?.timezone,
     });
 
+    // ⚠️ CRÍTICO: Garantir organizationId no contexto para isolamento
+    if (options.organizationId) {
+      (context as any).organizationId = options.organizationId;
+    }
+
     // Ensure nodes object exists in context
     if (!context.nodes) {
       context.nodes = {};
@@ -159,6 +165,7 @@ export class ExecutionEngine {
           }
 
           // Execute the node
+          // ⚠️ CRÍTICO: Passar organizationId para isolamento
           const result = await executor.execute({
             node,
             config: processedConfig,
@@ -166,6 +173,7 @@ export class ExecutionEngine {
             credentials,
             supabase: this.supabase,
             isTest: this.isTest,
+            organizationId: options.organizationId || (context as any).organizationId,
           });
 
           nodeResults[node.id] = {

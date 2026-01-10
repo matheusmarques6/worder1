@@ -116,6 +116,9 @@ async function handleExecute(
     }, { status: 400 });
   }
 
+  // ⚠️ CRÍTICO: Pegar organization_id da automação para garantir isolamento
+  const organizationId = automation.organization_id;
+
   // Build workflow
   const workflow: Workflow = {
     id: automation.id,
@@ -126,6 +129,7 @@ async function handleExecute(
   };
 
   // Fetch related data if IDs provided
+  // ⚠️ CRÍTICO: SEMPRE filtrar por organization_id
   let contact, deal, order;
 
   if (options.contactId) {
@@ -133,6 +137,7 @@ async function handleExecute(
       .from('contacts')
       .select('*')
       .eq('id', options.contactId)
+      .eq('organization_id', organizationId)  // ← ISOLAMENTO
       .single();
     contact = data;
   }
@@ -142,6 +147,7 @@ async function handleExecute(
       .from('deals')
       .select('*, pipeline_stages(*), pipelines(*)')
       .eq('id', options.dealId)
+      .eq('organization_id', organizationId)  // ← ISOLAMENTO
       .single();
     deal = data ? {
       id: data.id,
@@ -162,8 +168,9 @@ async function handleExecute(
     order = options.triggerData?.order || undefined;
   }
 
-  // Execute
+  // Execute with organization context
   const result = await executeWorkflow(workflow, {
+    organizationId,  // ← PASSAR PARA O ENGINE
     triggerData: options.triggerData || {},
     contactId: options.contactId,
     dealId: options.dealId,
@@ -214,6 +221,31 @@ async function handleExecuteRun(runId: string) {
     return NextResponse.json({ error: 'Automation not found for run' }, { status: 404 });
   }
 
+  // ⚠️ CRITICAL: Check if automation is still active
+  if (automation.status !== 'active') {
+    console.log(`[Automation Worker] Automation ${automation.id} is not active (status: ${automation.status}), skipping run ${runId}`);
+    
+    // Mark run as cancelled
+    await supabase
+      .from('automation_runs')
+      .update({
+        status: 'cancelled',
+        completed_at: new Date().toISOString(),
+        last_error: `Automação desativada (status: ${automation.status})`,
+      })
+      .eq('id', runId);
+
+    return NextResponse.json({
+      message: 'Automation is not active',
+      runId,
+      automationStatus: automation.status,
+      status: 'cancelled',
+    });
+  }
+
+  // ⚠️ CRÍTICO: Pegar organization_id da automação para garantir isolamento
+  const organizationId = automation.organization_id;
+
   // Update run status to 'running'
   await supabase
     .from('automation_runs')
@@ -233,23 +265,27 @@ async function handleExecuteRun(runId: string) {
   const metadata = run.metadata || {};
   
   // Fetch contact if needed
+  // ⚠️ CRÍTICO: SEMPRE filtrar por organization_id
   let contact;
   if (run.contact_id) {
     const { data } = await supabase
       .from('contacts')
       .select('*')
       .eq('id', run.contact_id)
+      .eq('organization_id', organizationId)  // ← ISOLAMENTO
       .single();
     contact = data;
   }
 
   // Fetch deal if needed
+  // ⚠️ CRÍTICO: SEMPRE filtrar por organization_id
   let deal;
   if (metadata.deal_id) {
     const { data } = await supabase
       .from('deals')
       .select('*, pipeline_stages(*), pipelines(*)')
       .eq('id', metadata.deal_id)
+      .eq('organization_id', organizationId)  // ← ISOLAMENTO
       .single();
     if (data) {
       deal = {
@@ -268,13 +304,15 @@ async function handleExecuteRun(runId: string) {
   }
 
   try {
-    // Execute workflow
+    // Execute workflow with organization context
     const result = await executeWorkflow(workflow, {
+      organizationId,  // ← PASSAR PARA O ENGINE
       executionId: runId,
       triggerData: metadata.trigger_data || {},
       contactId: run.contact_id,
       dealId: metadata.deal_id,
       context: {
+        organizationId,  // ← INCLUIR NO CONTEXTO
         contact: contact ? {
           id: contact.id,
           email: contact.email,

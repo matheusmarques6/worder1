@@ -38,9 +38,10 @@ export async function GET(request: NextRequest) {
     const now = new Date().toISOString();
 
     // Buscar runs que estão em 'waiting' e já passaram do tempo
+    // JUNTO com a automação para verificar status
     const { data: runs, error } = await supabase
       .from('automation_runs')
-      .select('id, automation_id, current_node_id, waiting_until')
+      .select('id, automation_id, current_node_id, waiting_until, automations!inner(id, status)')
       .eq('status', 'waiting')
       .lte('waiting_until', now)
       .limit(50);
@@ -55,16 +56,37 @@ export async function GET(request: NextRequest) {
         message: 'No delayed runs to process',
         checked: 0,
         enqueued: 0,
+        cancelled: 0,
       });
     }
 
-    console.log(`[Check Delayed] Found ${runs.length} runs to resume`);
+    console.log(`[Check Delayed] Found ${runs.length} runs to check`);
 
     let enqueued = 0;
+    let cancelled = 0;
     const errors: string[] = [];
 
     for (const run of runs) {
       try {
+        // ⚠️ CRITICAL: Check if automation is still active
+        const automation = (run as any).automations;
+        if (automation?.status !== 'active') {
+          console.log(`[Check Delayed] Automation ${run.automation_id} is not active, cancelling run ${run.id}`);
+          
+          await supabase
+            .from('automation_runs')
+            .update({
+              status: 'cancelled',
+              waiting_until: null,
+              completed_at: new Date().toISOString(),
+              last_error: `Automação desativada (status: ${automation?.status})`,
+            })
+            .eq('id', run.id);
+          
+          cancelled++;
+          continue;
+        }
+
         // Atualizar status para pending
         await supabase
           .from('automation_runs')
@@ -106,6 +128,7 @@ export async function GET(request: NextRequest) {
       message: 'Delayed runs checked',
       checked: runs.length,
       enqueued,
+      cancelled,
       errors: errors.length > 0 ? errors : undefined,
       timestamp: now,
     });
