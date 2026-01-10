@@ -45,6 +45,48 @@ export async function GET(request: NextRequest) {
         });
       }
 
+      case 'view-automation': {
+        const automationId = searchParams.get('automationId');
+        if (!automationId) {
+          return NextResponse.json({ error: 'automationId required' }, { status: 400 });
+        }
+
+        const { data: automation, error } = await supabase
+          .from('automations')
+          .select('*')
+          .eq('id', automationId)
+          .single();
+
+        if (error || !automation) {
+          return NextResponse.json({ error: 'Automation not found', details: error }, { status: 404 });
+        }
+
+        const nodes = (automation.nodes || []).map((n: any) => ({
+          id: n.id,
+          type: n.type,
+          nodeType: n.data?.nodeType,
+          label: n.data?.label,
+          category: n.data?.category,
+          config: n.data?.config,
+        }));
+
+        const edges = (automation.edges || []).map((e: any) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+        }));
+
+        return NextResponse.json({
+          id: automation.id,
+          name: automation.name,
+          status: automation.status,
+          trigger_type: automation.trigger_type,
+          nodes,
+          edges,
+          settings: automation.settings,
+        });
+      }
+
       case 'process-runs': {
         // Processar runs pendentes DIRETAMENTE
         console.log('[DEBUG] Processing pending runs directly...');
@@ -190,6 +232,16 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: 'Automation not found', details: autoError }, { status: 404 });
         }
 
+        // Mostrar detalhes da automação
+        const nodes = automation.nodes || [];
+        const nodesInfo = nodes.map((n: any) => ({
+          id: n.id,
+          type: n.type,
+          nodeType: n.data?.nodeType,
+          label: n.data?.label,
+          config: n.data?.config,
+        }));
+
         // Atualizar para running
         await supabase
           .from('automation_runs')
@@ -231,7 +283,8 @@ export async function GET(request: NextRequest) {
             runId,
             automationId: automation.id,
             automationName: automation.name,
-            nodesCount: workflow.nodes.length,
+            nodesInAutomation: nodesInfo,
+            edgesCount: (automation.edges || []).length,
             result: {
               status: result.status,
               duration: result.duration,
@@ -253,6 +306,7 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({
             action: 'execute-run',
             runId,
+            nodesInAutomation: nodesInfo,
             error: error.message,
             stack: error.stack?.split('\n').slice(0, 10),
           }, { status: 500 });
