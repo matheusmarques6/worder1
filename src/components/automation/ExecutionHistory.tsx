@@ -29,7 +29,7 @@ interface AutomationRun {
   id: string;
   automation_id: string;
   automation_name: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'waiting';
   trigger_type: string;
   contact: {
     id: string;
@@ -232,6 +232,20 @@ export function ExecutionHistory({
             <span className="text-xs">Executando</span>
           </div>
         );
+      case 'pending':
+        return (
+          <div className="flex items-center gap-1.5 text-blue-400">
+            <Clock className="w-4 h-4" />
+            <span className="text-xs">Pendente</span>
+          </div>
+        );
+      case 'waiting':
+        return (
+          <div className="flex items-center gap-1.5 text-purple-400">
+            <Clock className="w-4 h-4" />
+            <span className="text-xs">Aguardando</span>
+          </div>
+        );
       case 'cancelled':
         return (
           <div className="flex items-center gap-1.5 text-gray-400">
@@ -284,9 +298,10 @@ export function ExecutionHistory({
             className="px-3 py-1.5 bg-[#1a1a1a] border border-[#333333] rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
           >
             <option value="">Todos os status</option>
+            <option value="pending">⏳ Pendente</option>
+            <option value="running">🔄 Executando</option>
             <option value="completed">✅ Sucesso</option>
             <option value="failed">❌ Erro</option>
-            <option value="running">⏳ Executando</option>
           </select>
 
           {/* Filtro de Data */}

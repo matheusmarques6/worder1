@@ -49,7 +49,7 @@ interface RunDetail {
   id: string;
   automation_id: string;
   automation_name: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'waiting';
   trigger_type: string;
   trigger_data: any;
   contact: {
