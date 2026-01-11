@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js';
 const publicRoutes = ['/', '/signup', '/login', '/register', '/forgot-password', '/reset-password', '/change-password'];
 
 // Public API routes (webhooks, etc)
-const publicApiRoutes = ['/api/auth', '/api/shopify', '/api/klaviyo', '/api/webhooks', '/api/public'];
+const publicApiRoutes = ['/api/auth', '/api/shopify', '/api/klaviyo', '/api/webhooks', '/api/public', '/api/cron', '/api/debug', '/api/workers'];
 
 // Routes that should redirect to dashboard/inbox if already authenticated
 const authRoutes = ['/', '/signup', '/login'];
