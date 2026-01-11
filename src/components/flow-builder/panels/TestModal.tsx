@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore } from '@/stores/flowStore';
+import { useHydratedStoreId } from '@/hooks'; // ✅ NOVO
 
 // ============================================
 // TYPES
@@ -74,15 +75,21 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
   const nodes = useFlowStore((s) => s.nodes);
   const triggerNode = nodes.find((n) => n.type?.startsWith('trigger') || n.data?.category === 'trigger');
 
+  // ✅ NOVO: Hook para obter storeId após hydration
+  const { storeId, ready } = useHydratedStoreId();
+
   // ============================================
   // LOAD CONTACTS
   // ============================================
 
   useEffect(() => {
+    // ✅ MODIFICADO: Só buscar quando tiver storeId
+    if (!ready || !storeId) return;
+    
     async function loadContacts() {
       setIsLoadingContacts(true);
       try {
-        const response = await fetch('/api/contacts?pageSize=10');
+        const response = await fetch(`/api/contacts?limit=10&storeId=${storeId}`); // ✅ MODIFICADO
         if (response.ok) {
           const data = await response.json();
           setContacts(data.contacts?.map((c: any) => ({
@@ -99,7 +106,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
       }
     }
     loadContacts();
-  }, []);
+  }, [ready, storeId]); // ✅ MODIFICADO: Dependências corretas
 
   // ============================================
   // GENERATE SAMPLE DATA BASED ON TRIGGER

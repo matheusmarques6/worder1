@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, NodeStatus } from '@/stores/flowStore';
+import { useHydratedStoreId } from '@/hooks'; // ✅ NOVO
 
 // ============================================
 // TYPES
@@ -84,6 +85,9 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
   const resetNodeStatuses = useFlowStore((s) => s.resetNodeStatuses);
   const testExecution = useFlowStore((s) => s.testExecution);
 
+  // ✅ NOVO: Hook para obter storeId após hydration
+  const { storeId, ready } = useHydratedStoreId();
+
   // Get trigger node for sample data
   const triggerNode = nodes.find((n) => n.type?.startsWith('trigger') || n.data?.category === 'trigger');
 
@@ -92,9 +96,12 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
   // ============================================
 
   useEffect(() => {
+    // ✅ MODIFICADO: Só buscar quando tiver storeId
+    if (!ready || !storeId) return;
+    
     async function loadContacts() {
       try {
-        const response = await fetch('/api/contacts?pageSize=10');
+        const response = await fetch(`/api/contacts?limit=10&storeId=${storeId}`); // ✅ MODIFICADO
         if (response.ok) {
           const data = await response.json();
           setContacts(data.contacts?.map((c: any) => ({
@@ -109,7 +116,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
       }
     }
     loadContacts();
-  }, []);
+  }, [ready, storeId]); // ✅ MODIFICADO: Dependências corretas
 
   // ============================================
   // GENERATE SAMPLE DATA

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
 import { EventBus, EventType } from '@/lib/events';
 
 // GET - List contacts or get single contact
@@ -17,10 +17,11 @@ export async function GET(request: NextRequest) {
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '50');
   
-  // ✅ FILTRO POR LOJA
+  // ✅ FILTRO POR LOJA - OBRIGATÓRIO (exceto para busca por ID específico)
   const storeId = searchParams.get('storeId');
 
   try {
+    // Se buscar por ID específico, não precisa de storeId
     if (contactId) {
       const { data, error } = await supabase
         .from('contacts')
@@ -42,17 +43,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ contact: data });
     }
 
+    // ✅ NOVO: Para listagem, storeId é obrigatório
+    const storeValidation = await validateStoreAccess(supabase, organizationId, storeId);
+    if (!storeValidation.valid) {
+      return NextResponse.json(
+        { error: storeValidation.error },
+        { status: storeValidation.status || 400 }
+      );
+    }
+
     let query = supabase
       .from('contacts')
       .select('*, deals(id)', { count: 'exact' })
       .eq('organization_id', organizationId)
+      .eq('store_id', storeId) // ✅ MODIFICADO: Sempre filtrar por store_id
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
-
-    // ✅ FILTRAR POR STORE_ID SE FORNECIDO
-    if (storeId) {
-      query = query.eq('store_id', storeId);
-    }
 
     if (search) {
       query = query.or(`email.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%`);

@@ -41,6 +41,8 @@ import {
   User,
   Building2,
   CreditCard,
+  Menu,
+  X,
 } from 'lucide-react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
@@ -189,11 +191,29 @@ export function Sidebar() {
 
   return (
     <>
+      {/* ✅ NOVO: Overlay para mobile (quando sidebar está aberta) */}
+      <AnimatePresence>
+        {!sidebarCollapsed && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+            onClick={toggleSidebar}
+          />
+        )}
+      </AnimatePresence>
+
       <motion.aside
         initial={false}
         animate={{ width: sidebarCollapsed ? 80 : 280 }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
-        className="fixed left-0 top-0 bottom-0 z-40 bg-dark-900/80 backdrop-blur-xl border-r border-dark-700/50 flex flex-col"
+        className={cn(
+          "fixed left-0 top-0 bottom-0 z-40 bg-dark-900/80 backdrop-blur-xl border-r border-dark-700/50 flex flex-col",
+          // ✅ NOVO: Esconder no mobile quando recolhido
+          sidebarCollapsed && "max-lg:-translate-x-full",
+          "transition-transform duration-300"
+        )}
       >
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-dark-700/50">
@@ -413,7 +433,7 @@ const POLLING_INTERVAL = 30000 // 30 segundos
 
 export function Header() {
   const router = useRouter()
-  const { sidebarCollapsed } = useUIStore()
+  const { sidebarCollapsed, toggleSidebar } = useUIStore() // ✅ MODIFICADO: Adicionar toggleSidebar
   const { currentStore } = useStoreStore()
   const { user, signOut } = useAuthStore()
   
@@ -639,10 +659,21 @@ export function Header() {
   return (
     <header
       className={cn(
-        'fixed top-0 right-0 h-16 bg-dark-950/80 backdrop-blur-xl border-b border-dark-700/50 z-30 flex items-center justify-between px-6 transition-all duration-300',
-        sidebarCollapsed ? 'left-20' : 'left-[280px]'
+        'fixed top-0 right-0 h-16 bg-dark-950/80 backdrop-blur-xl border-b border-dark-700/50 z-30 flex items-center justify-between px-4 lg:px-6 transition-all duration-300',
+        // ✅ MODIFICADO: Mobile sempre left-0, desktop depende do sidebar
+        'left-0',
+        'lg:left-20',
+        !sidebarCollapsed && 'lg:left-[280px]'
       )}
     >
+      {/* ✅ NOVO: Botão Hamburger (Mobile only) */}
+      <button
+        onClick={toggleSidebar}
+        className="lg:hidden p-2 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-dark-100 transition-colors mr-2"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
       {/* Search */}
       <div className="flex-1 max-w-xl">
         <div className="relative">

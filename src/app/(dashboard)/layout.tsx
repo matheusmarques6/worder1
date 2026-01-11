@@ -64,8 +64,9 @@ const TikTokIcon = () => (
   </svg>
 )
 
-import { useStoreStore, useAuthStore, type ShopifyStore } from '@/stores'
+import { useStoreStore, useAuthStore, useUIStore, type ShopifyStore } from '@/stores'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
+import { cn } from '@/lib/utils'
 
 // ============================================
 // Types
@@ -139,7 +140,8 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const [collapsed, setCollapsed] = useState(false)
+  // ✅ MODIFICADO: Usar useUIStore para persistência do sidebar
+  const { sidebarCollapsed: collapsed, toggleSidebar, _hasHydrated: uiHasHydrated } = useUIStore()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false)
   const [addStoreModalOpen, setAddStoreModalOpen] = useState(false)
@@ -148,6 +150,19 @@ export default function DashboardLayout({
   // ✅ MODIFICADO: Adicionar _hasHydrated para controlar quando carregar lojas
   const { stores, currentStore, setStores, setCurrentStore, addStore, _hasHydrated } = useStoreStore()
   const { user, setUser } = useAuthStore()
+
+  // ✅ NOVO: Função para alternar sidebar (wrapper para manter compatibilidade)
+  const setCollapsed = (value: boolean | ((prev: boolean) => boolean)) => {
+    // Se for função, ignorar e só fazer toggle
+    // Se for boolean, comparar com atual e fazer toggle se diferente
+    if (typeof value === 'boolean') {
+      if (value !== collapsed) {
+        toggleSidebar()
+      }
+    } else {
+      toggleSidebar()
+    }
+  }
 
   // ============================================
   // Notifications State
@@ -873,10 +888,16 @@ export default function DashboardLayout({
       </motion.aside>
 
       {/* Main Content */}
-      <motion.main
-        initial={false}
-        animate={{ marginLeft: collapsed ? 80 : 280 }}
-        className="min-h-screen lg:ml-[280px] pt-[72px] lg:pt-0"
+      {/* ✅ CORRIGIDO: Remover animate marginLeft que quebrava mobile */}
+      {/* Agora usa classes Tailwind que só aplicam no desktop (lg:) */}
+      <main
+        className={cn(
+          "min-h-screen pt-[72px] lg:pt-0 transition-all duration-300",
+          // Mobile: sempre ml-0
+          "ml-0",
+          // Desktop: margem baseada no estado do sidebar
+          collapsed ? "lg:ml-20" : "lg:ml-[280px]"
+        )}
       >
         {/* Desktop Header */}
         <header className="hidden lg:flex sticky top-0 z-30 items-center justify-between px-6 py-4 bg-dark-950/80 backdrop-blur-xl border-b border-dark-800/50">
@@ -930,7 +951,7 @@ export default function DashboardLayout({
         <div className="p-4 lg:p-6">
           {children}
         </div>
-      </motion.main>
+      </main>
 
       {/* Add Store Modal */}
       <AddStoreModal

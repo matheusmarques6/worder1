@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Search, User, X, Plus, Check } from 'lucide-react'
-import { useContacts } from '@/hooks'
+import { useContacts, useHydratedStoreId } from '@/hooks' // ✅ MODIFICADO
 import { useAuthStore } from '@/stores'
 import type { Contact } from '@/types'
 import { CreateContactModal } from './CreateContactModal'
@@ -19,6 +19,7 @@ export function ContactSelector({ selectedId, onSelect, placeholder = 'Seleciona
   const [showCreateModal, setShowCreateModal] = useState(false)
   const { contacts, loading, refetch } = useContacts({ search, limit: 10 })
   const { user } = useAuthStore()
+  const { storeId } = useHydratedStoreId() // ✅ NOVO
   const containerRef = useRef<HTMLDivElement>(null)
 
   const selectedContact = contacts.find((c: Contact) => c.id === selectedId)
@@ -61,6 +62,7 @@ export function ContactSelector({ selectedId, onSelect, placeholder = 'Seleciona
       body: JSON.stringify({
         ...contactData,
         organizationId: user?.organization_id,
+        store_id: storeId, // ✅ NOVO: Incluir storeId
       }),
     })
 

@@ -170,10 +170,12 @@ interface UIState {
   currentPage: string
   searchQuery: string
   theme: 'dark' | 'light'
+  _hasHydrated: boolean // ✅ NOVO: Controle de rehydration
   toggleSidebar: () => void
   setCurrentPage: (page: string) => void
   setSearchQuery: (query: string) => void
   setTheme: (theme: 'dark' | 'light') => void
+  setHasHydrated: (state: boolean) => void // ✅ NOVO
 }
 
 export const useUIStore = create<UIState>()(
@@ -183,13 +185,19 @@ export const useUIStore = create<UIState>()(
       currentPage: 'dashboard',
       searchQuery: '',
       theme: 'dark',
+      _hasHydrated: false, // ✅ NOVO
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setCurrentPage: (currentPage) => set({ currentPage }),
       setSearchQuery: (searchQuery) => set({ searchQuery }),
       setTheme: (theme) => set({ theme }),
+      setHasHydrated: (state) => set({ _hasHydrated: state }), // ✅ NOVO
     }),
     {
       name: 'worder-ui',
+      // ✅ NOVO: Callback quando rehydration termina
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     }
   )
 )

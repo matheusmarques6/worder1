@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
 import { EventBus, EventType } from '@/lib/events';
 
 // ✅ MIGRADO PARA RLS - Não usa mais getSupabaseClient()
@@ -18,22 +18,27 @@ export async function GET(request: NextRequest) {
   const pipelineId = searchParams.get('pipelineId');
   const stageId = searchParams.get('stageId');
   const contactId = searchParams.get('contactId');
-  const storeId = searchParams.get('storeId'); // ✅ FILTRO POR LOJA
+  const storeId = searchParams.get('storeId'); // ✅ FILTRO POR LOJA - OBRIGATÓRIO
 
   try {
+    // ✅ NOVO: Validar acesso à loja (exceto para busca por ID específico)
+    if (!dealId) {
+      const storeValidation = await validateStoreAccess(supabase, organizationId, storeId);
+      if (!storeValidation.valid) {
+        return NextResponse.json(
+          { error: storeValidation.error },
+          { status: storeValidation.status || 400 }
+        );
+      }
+    }
+
     if (type === 'pipelines') {
-      // ✅ CORRIGIDO: Filtrar pipelines por store_id
-      let pipelinesQuery = supabase
+      // ✅ CORRIGIDO: Filtrar pipelines por store_id (agora obrigatório)
+      const { data: pipelines, error: pipelineError } = await supabase
         .from('pipelines')
         .select('*')
+        .eq('store_id', storeId)
         .order('position');
-      
-      // ✅ NOVO: Filtrar por loja se fornecido
-      if (storeId) {
-        pipelinesQuery = pipelinesQuery.eq('store_id', storeId);
-      }
-      
-      const { data: pipelines, error: pipelineError } = await pipelinesQuery;
 
       if (pipelineError) throw pipelineError;
 
@@ -48,12 +53,11 @@ export async function GET(request: NextRequest) {
 
         if (stagesError) throw stagesError;
 
-        // ✅ FILTRAR DEALS POR STORE_ID SE FORNECIDO
-        let dealCountsQuery = supabase
+        // ✅ FILTRAR DEALS POR STORE_ID
+        const { data: dealCounts } = await supabase
           .from('deals')
-          .select('stage_id, status');
-        if (storeId) dealCountsQuery = dealCountsQuery.eq('store_id', storeId);
-        const { data: dealCounts } = await dealCountsQuery;
+          .select('stage_id, status')
+          .eq('store_id', storeId);
 
         const stageDealsMap: Record<string, number> = {};
         dealCounts?.forEach(deal => {

@@ -162,3 +162,63 @@ export function parseDateRange(startDate: string | null, endDate: string | null,
 export function isSupabaseConfigured(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
+
+/**
+ * ✅ VALIDAÇÃO DE ACESSO À LOJA (Multi-tenant security)
+ * Verifica se o storeId pertence à organização do usuário
+ * @returns true se acesso permitido, false caso contrário
+ */
+export async function validateStoreAccess(
+  supabase: SupabaseClient,
+  organizationId: string,
+  storeId: string | null | undefined
+): Promise<{ valid: boolean; error?: string; status?: number }> {
+  // Se não tem storeId, retornar erro
+  if (!storeId) {
+    return { valid: false, error: 'storeId é obrigatório', status: 400 };
+  }
+
+  try {
+    // Verificar se a loja pertence à organização
+    const { data: store, error } = await supabase
+      .from('shopify_stores')
+      .select('id, organization_id')
+      .eq('id', storeId)
+      .eq('organization_id', organizationId)
+      .single();
+
+    if (error || !store) {
+      return { 
+        valid: false, 
+        error: 'Loja não encontrada ou sem permissão de acesso', 
+        status: 403 
+      };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    console.error('[validateStoreAccess] Error:', error);
+    return { valid: false, error: 'Erro ao validar acesso à loja', status: 500 };
+  }
+}
+
+/**
+ * ✅ HELPER: Extrai e valida storeId de query params
+ * Retorna NextResponse de erro ou o storeId validado
+ */
+export async function requireStoreAccess(
+  supabase: SupabaseClient,
+  organizationId: string,
+  storeId: string | null | undefined
+): Promise<NextResponse | string> {
+  const validation = await validateStoreAccess(supabase, organizationId, storeId);
+  
+  if (!validation.valid) {
+    return NextResponse.json(
+      { error: validation.error },
+      { status: validation.status || 400 }
+    );
+  }
+  
+  return storeId as string;
+}

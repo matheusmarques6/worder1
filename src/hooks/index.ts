@@ -5,6 +5,9 @@ import { useAuthStore, useStoreStore } from '@/stores'; // ✅ ADICIONADO useSto
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabaseClient as supabase } from '@/lib/supabase-client';
 
+// ✅ NOVO: Re-export useHydratedStoreId (hook centralizado para hydration)
+export { useHydratedStoreId, useHydratedUI } from './useHydratedStoreId';
+
 // Re-export usePipelines
 export { usePipelines } from './usePipelines';
 
@@ -110,12 +113,13 @@ export function useContacts(options: {
   storeId?: string; // ✅ NOVO: Filtro por loja
 } = {}) {
   const { user } = useAuthStore();
-  const { currentStore } = useStoreStore(); // ✅ NOVO: Pegar loja selecionada
+  const { currentStore, _hasHydrated } = useStoreStore();
   const [contacts, setContacts] = useState<any[]>([]);
   const [pagination, setPagination] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null); // ✅ NOVO: Para cancelar requests
 
   // ✅ NOVO: Usar storeId do parâmetro ou do store global
   const effectiveStoreId = options.storeId || currentStore?.id;
@@ -131,31 +135,50 @@ export function useContacts(options: {
       return;
     }
 
+    // ✅ NOVO: Cancelar request anterior se existir
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     try {
       if (showLoading) setLoading(true);
       const params = new URLSearchParams({
         page: String(options.page || 1),
         limit: String(options.limit || 50),
-        storeId: effectiveStoreId, // ✅ NOVO: Enviar storeId
+        storeId: effectiveStoreId,
       });
       if (options.search) params.set('search', options.search);
       if (options.tags?.length) params.set('tags', options.tags.join(','));
 
-      const response = await fetch(`/api/contacts?${params}`);
+      const response = await fetch(`/api/contacts?${params}`, {
+        signal: abortControllerRef.current.signal, // ✅ NOVO: Passar signal
+      });
       if (!response.ok) throw new Error('Failed to fetch contacts');
       const result = await response.json();
       setContacts(result.contacts);
       setPagination(result.pagination);
     } catch (e) {
+      // ✅ NOVO: Ignorar erros de abort
+      if (e instanceof Error && e.name === 'AbortError') return;
       setError(e instanceof Error ? e : new Error('An error occurred'));
     } finally {
       setLoading(false);
     }
   }, [user?.organization_id, effectiveStoreId, options.search, options.tags, options.page, options.limit]);
 
+  // ✅ MODIFICADO: Esperar _hasHydrated antes de fazer fetch
   useEffect(() => {
+    if (!_hasHydrated) return;
     fetchContacts();
-  }, [fetchContacts]);
+    
+    // ✅ NOVO: Cleanup - cancelar request ao desmontar ou mudar dependências
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [fetchContacts, _hasHydrated]);
 
   // =============================================
   // REALTIME - Escutar mudanças em contatos
@@ -302,12 +325,13 @@ const supabaseRealtime = supabase;
 // ✅ CORRIGIDO: Agora filtra por storeId (multi-tenant por loja)
 export function useDeals(pipelineId?: string, storeIdOverride?: string) {
   const { user } = useAuthStore();
-  const { currentStore } = useStoreStore(); // ✅ NOVO
+  const { currentStore, _hasHydrated } = useStoreStore();
   const [deals, setDeals] = useState<any[]>([]);
   const [pipelines, setPipelines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null); // ✅ NOVO
 
   // ✅ NOVO: Usar storeId do parâmetro ou do store global
   const effectiveStoreId = storeIdOverride || currentStore?.id;
@@ -325,7 +349,6 @@ export function useDeals(pipelineId?: string, storeIdOverride?: string) {
     }
 
     try {
-      // ✅ CORRIGIDO: Incluir storeId na URL
       const response = await fetch(
         `/api/deals?type=pipelines&storeId=${effectiveStoreId}`
       );
@@ -351,20 +374,29 @@ export function useDeals(pipelineId?: string, storeIdOverride?: string) {
       return;
     }
 
+    // ✅ NOVO: Cancelar request anterior
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     try {
       if (showLoading) setLoading(true);
-      // ✅ CORRIGIDO: Incluir storeId no URLSearchParams
       const params = new URLSearchParams({
-        storeId: effectiveStoreId, // ✅ NOVO
+        storeId: effectiveStoreId,
       });
       if (pipelineId) params.set('pipelineId', pipelineId);
 
       const url = `/api/deals?${params}`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        signal: abortControllerRef.current.signal, // ✅ NOVO
+      });
       if (!response.ok) throw new Error('Failed to fetch deals');
       const result = await response.json();
       setDeals(result.deals || []);
     } catch (e) {
+      // ✅ NOVO: Ignorar erros de abort
+      if (e instanceof Error && e.name === 'AbortError') return;
       console.error('Error fetching deals:', e);
       setError(e instanceof Error ? e : new Error('An error occurred'));
     } finally {
@@ -372,11 +404,19 @@ export function useDeals(pipelineId?: string, storeIdOverride?: string) {
     }
   }, [user?.organization_id, effectiveStoreId, pipelineId]);
 
-  // Fetch inicial
+  // ✅ MODIFICADO: Esperar _hasHydrated antes de fazer fetch
   useEffect(() => {
+    if (!_hasHydrated) return;
     fetchPipelines();
     fetchDeals();
-  }, [fetchPipelines, fetchDeals]);
+    
+    // ✅ NOVO: Cleanup - cancelar request ao desmontar
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [fetchPipelines, fetchDeals, _hasHydrated]);
 
   // =============================================
   // REALTIME - Escutar mudanças em deals
