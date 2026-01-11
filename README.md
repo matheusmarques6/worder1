@@ -1,100 +1,54 @@
-# 🔧 CORREÇÃO COMPLETA - Integração com Revisão Senior
+# 🔧 CORREÇÃO COMPLETA v2 - Multi-tenant por Loja
 
 ## ✅ Problemas Corrigidos
 
-| # | Problema | Causa | Solução |
-|---|----------|-------|---------|
-| 1 | Dados da Oak Vintage aparecem na San Martin | Race condition + storeId opcional | Hooks esperam hydration + storeId obrigatório no backend |
-| 2 | Site não responsivo no mobile | `animate={{ marginLeft }}` do Framer Motion | Removido animate, usando classes Tailwind condicionais |
-| 3 | Dados persistem após atualização | Mesmo que #1 | AbortController + validação server-side |
-| 4 | Menu recolhido não persiste | Layout usava `useState` local | Layout agora usa `useUIStore` persistido |
+| # | Problema | Causa | Status |
+|---|----------|-------|--------|
+| 1 | Automação da Oak Vintage aparece na San Martin | API não filtrava por `store_id` | ✅ CORRIGIDO |
+| 2 | Cards de contatos com dados de todas as lojas | Página não enviava `storeId` | ✅ CORRIGIDO |
+| 3 | Lista de contatos vazia | storeId obrigatório (funcionando!) | ✅ JÁ FUNCIONAVA |
+| 4 | Dados persistem após refresh | Race condition hydration | ✅ CORRIGIDO |
+| 5 | Mobile não responsivo | marginLeft do Framer Motion | ✅ CORRIGIDO |
+| 6 | Menu recolhido não persiste | Layout usava useState local | ✅ CORRIGIDO |
 
 ---
 
-## 📁 Arquivos Modificados (12 arquivos)
+## 📁 Arquivos Modificados (15 arquivos)
 
-### 🔐 Backend - Segurança Multi-tenant
+### 🔐 Backend - APIs
 
-#### `src/lib/api-utils.ts`
-**Nova função:** `validateStoreAccess()`
-```typescript
-// Valida se storeId pertence à organização do usuário
-export async function validateStoreAccess(
-  supabase: SupabaseClient,
-  organizationId: string,
-  storeId: string | null | undefined
-): Promise<{ valid: boolean; error?: string; status?: number }>
-```
+| Arquivo | Mudança |
+|---------|---------|
+| `src/lib/api-utils.ts` | Nova função `validateStoreAccess()` |
+| `src/app/api/contacts/route.ts` | storeId obrigatório para listagem |
+| `src/app/api/deals/route.ts` | storeId obrigatório para listagem |
+| `src/app/api/automations/route.ts` | **NOVO:** Filtro por store_id |
 
-#### `src/app/api/contacts/route.ts`
-- **storeId agora é OBRIGATÓRIO** para listagem
-- Retorna 400 se não enviado
-- Retorna 403 se loja não pertence à org
+### 🎣 Hooks
 
-#### `src/app/api/deals/route.ts`
-- **storeId agora é OBRIGATÓRIO** para listagem
-- Validação de acesso antes de retornar dados
+| Arquivo | Mudança |
+|---------|---------|
+| `src/hooks/useHydratedStoreId.ts` | **NOVO:** Hook centralizado |
+| `src/hooks/index.ts` | useContacts/useDeals com AbortController |
 
----
+### 📄 Páginas
 
-### 🎣 Hooks - Centralização e AbortController
+| Arquivo | Mudança |
+|---------|---------|
+| `src/app/(dashboard)/layout.tsx` | Usa useUIStore + fix mobile |
+| `src/app/(dashboard)/dashboard/page.tsx` | Espera hydration |
+| `src/app/(dashboard)/automations/page.tsx` | **NOVO:** Envia storeId |
+| `src/app/(dashboard)/crm/contacts/page.tsx` | **NOVO:** Stats com storeId |
 
-#### `src/hooks/useHydratedStoreId.ts` (NOVO)
-```typescript
-// Hook centralizado - evita duplicação em múltiplas páginas
-export function useHydratedStoreId() {
-  return {
-    storeId,      // string | undefined
-    hasHydrated,  // boolean
-    ready,        // boolean (hydrated && storeId existe)
-    currentStore, // objeto completo
-  };
-}
-```
+### 🧩 Componentes
 
-#### `src/hooks/index.ts`
-- `useContacts`: Agora usa `AbortController` para cancelar requests
-- `useDeals`: Agora usa `AbortController` para cancelar requests
-- Ambos esperam `_hasHydrated` antes de buscar
-
----
-
-### 🎨 Frontend - Responsividade e Persistência
-
-#### `src/stores/index.ts`
-- `useUIStore` agora tem `_hasHydrated` e `onRehydrateStorage`
-
-#### `src/app/(dashboard)/layout.tsx`
-```typescript
-// ANTES (quebrava mobile)
-<motion.main animate={{ marginLeft: collapsed ? 80 : 280 }}>
-
-// DEPOIS (funciona em todos os tamanhos)
-<main className={cn(
-  "ml-0",                                    // Mobile: sempre 0
-  collapsed ? "lg:ml-20" : "lg:ml-[280px]"   // Desktop: dinâmico
-)}>
-```
-- Agora usa `useUIStore` para persistir estado do sidebar
-
-#### `src/components/layout/Sidebar.tsx`
-- Adicionado overlay mobile
-- Classes de responsividade
-
----
-
-### 🔧 Componentes - Correções de storeId
-
-#### `src/components/flow-builder/panels/TestModal.tsx`
-- Adicionado `useHydratedStoreId`
-- Fetch de contatos agora inclui `storeId`
-
-#### `src/components/flow-builder/panels/ExecutionPanel.tsx`
-- Adicionado `useHydratedStoreId`
-- Fetch de contatos agora inclui `storeId`
-
-#### `src/components/crm/ContactSelector.tsx`
-- POST de novo contato agora inclui `store_id`
+| Arquivo | Mudança |
+|---------|---------|
+| `src/stores/index.ts` | UIStore com _hasHydrated |
+| `src/components/layout/Sidebar.tsx` | Responsividade mobile |
+| `src/components/flow-builder/panels/TestModal.tsx` | storeId no fetch |
+| `src/components/flow-builder/panels/ExecutionPanel.tsx` | storeId no fetch |
+| `src/components/crm/ContactSelector.tsx` | store_id no POST |
 
 ---
 
@@ -102,13 +56,13 @@ export function useHydratedStoreId() {
 
 ```bash
 # 1. Extraia o ZIP na raiz do projeto
-unzip all-fixes-senior-complete.zip -d seu-projeto/
+unzip all-fixes-v2-complete.zip -d seu-projeto/
 
 # 2. Os arquivos serão sobrescritos automaticamente
 
 # 3. Commit e deploy
 git add .
-git commit -m "fix: correção completa multi-tenant + responsividade + persistência"
+git commit -m "fix: isolamento completo multi-tenant por loja"
 git push
 ```
 
@@ -116,88 +70,80 @@ git push
 
 ## 🧪 Como Testar
 
-### Teste 1: Isolamento de Dados por Loja
-1. Selecione loja "San Martin"
-2. Crie um contato ou deal
-3. Troque para "Oak Vintage"
-4. Atualize a página (F5)
-5. ✅ O contato/deal NÃO deve aparecer na Oak Vintage
+### Teste 1: Automações por Loja
+1. Crie uma automação na Oak Vintage
+2. Troque para San Martin
+3. ✅ A automação NÃO deve aparecer
 
-### Teste 2: Persistência do Menu
-1. Recolha o menu lateral (clique na seta)
-2. Atualize a página (F5)
-3. ✅ O menu deve continuar recolhido
+### Teste 2: Cards de Contatos
+1. Selecione San Martin (que tem 0 contatos)
+2. ✅ Os cards devem mostrar:
+   - Total de Contatos: 0
+   - Novos Este Mês: 0
+   - Valor Total: R$ 0,00
 
-### Teste 3: Mobile Responsivo
-1. Abra DevTools (F12) → Toggle device toolbar
-2. Selecione um dispositivo mobile
-3. ✅ Conteúdo não deve ficar empurrado
-4. ✅ Botão hamburger deve abrir sidebar como drawer
+### Teste 3: Lista de Contatos
+1. Selecione San Martin
+2. ✅ Deve mostrar "Nenhum contato ainda"
+3. Troque para Oak Vintage
+4. ✅ Deve mostrar os contatos da Oak Vintage
 
-### Teste 4: Troca Rápida de Loja
-1. Esteja na Oak Vintage
-2. Troque rapidamente para San Martin
-3. ✅ Não deve haver "flash" de dados da loja anterior
-
----
-
-## 📋 Diferenças: Minha Implementação vs Senior
-
-| Aspecto | Minha Implementação Original | Implementação Integrada |
-|---------|------------------------------|------------------------|
-| Validação storeId | Só no client | **Client + Server** |
-| Hook centralizado | Código duplicado em ~8 arquivos | **useHydratedStoreId** |
-| Framer Motion | Não identifiquei o problema | **Removido marginLeft inline** |
-| AbortController | Não tinha | **Implementado** |
-| UIStore hydration | Implementei mas não integrei ao layout | **Integrado corretamente** |
+### Teste 4: Criar Automação
+1. Na San Martin, crie uma nova automação
+2. ✅ A automação deve ser salva com store_id da San Martin
+3. ✅ Não deve aparecer em outras lojas
 
 ---
 
-## ⚠️ Pontos de Atenção
+## ⚠️ IMPORTANTE: Migração de Dados
 
-### Endpoints que ainda podem precisar de storeId obrigatório:
-- `/api/analytics/sales`
-- `/api/analytics/email`
-- `/api/analytics/shopify`
-- `/api/whatsapp/agents`
-- `/api/integrations/status`
+Se você já tem automações criadas **SEM** store_id, elas NÃO aparecerão após esta atualização.
 
-### Se encontrar erros 400 "storeId é obrigatório":
-Significa que algum componente está chamando a API sem passar storeId.
-Solução: Adicionar `useHydratedStoreId` e incluir storeId na URL.
+### Opção 1: Atualizar via SQL
+```sql
+-- Associar automações órfãs a uma loja específica
+UPDATE automations 
+SET store_id = 'ID_DA_LOJA_PADRAO'
+WHERE store_id IS NULL;
+```
+
+### Opção 2: Recriar automações
+Recriar as automações após a atualização (elas serão salvas com o store_id correto).
 
 ---
 
-## 🏗️ Arquitetura Final
+## 📋 Endpoints que Agora Exigem storeId
+
+| Endpoint | Método | storeId |
+|----------|--------|---------|
+| `/api/contacts` | GET | Obrigatório (listagem) |
+| `/api/contacts/stats` | GET | Recomendado |
+| `/api/deals` | GET | Obrigatório (listagem) |
+| `/api/automations` | GET | Recomendado |
+| `/api/automations` | POST | Recomendado |
+
+---
+
+## 🏗️ Arquitetura Multi-tenant
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        FRONTEND                              │
-├─────────────────────────────────────────────────────────────┤
-│  useHydratedStoreId() ──► { storeId, ready, hasHydrated }   │
-│         │                                                    │
-│         ▼                                                    │
-│  useContacts() / useDeals() ──► Espera ready + AbortCtrl    │
-│         │                                                    │
-│         ▼                                                    │
-│  fetch(`/api/...?storeId=${storeId}`)                       │
+│                    ORGANIZAÇÃO (Conta)                       │
+│                                                              │
+│   ┌─────────────────┐    ┌─────────────────┐                │
+│   │    Loja A       │    │    Loja B       │                │
+│   │   (Oak Vintage) │    │   (San Martin)  │                │
+│   │                 │    │                 │                │
+│   │ - Contatos      │    │ - Contatos      │                │
+│   │ - Deals         │    │ - Deals         │                │
+│   │ - Automações    │    │ - Automações    │                │
+│   │ - Pipelines     │    │ - Pipelines     │                │
+│   └─────────────────┘    └─────────────────┘                │
+│                                                              │
 └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                         BACKEND                              │
-├─────────────────────────────────────────────────────────────┤
-│  1. getAuthClient() ──► Valida token, retorna org_id        │
-│         │                                                    │
-│         ▼                                                    │
-│  2. validateStoreAccess(supabase, org_id, storeId)          │
-│         │                                                    │
-│         ├── 400 se storeId ausente                          │
-│         ├── 403 se storeId não pertence à org               │
-│         │                                                    │
-│         ▼                                                    │
-│  3. Query com .eq('store_id', storeId)                      │
-└─────────────────────────────────────────────────────────────┘
+
+Cada loja tem seus próprios dados isolados.
+Uma conta pode ter múltiplas lojas.
 ```
 
 ---
@@ -205,5 +151,5 @@ Solução: Adicionar `useHydratedStoreId` e incluir storeId na URL.
 ## 📝 Créditos
 
 - **Implementação inicial:** Claude
-- **Revisão e correções:** Senior Developer
-- **Integração final:** Claude + feedback do Senior
+- **Revisão técnica:** Senior Developer
+- **Correções finais:** Claude (baseado no feedback)

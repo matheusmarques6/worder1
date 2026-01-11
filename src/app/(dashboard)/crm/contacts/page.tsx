@@ -27,7 +27,7 @@ import {
   Square,
   MinusSquare,
 } from 'lucide-react'
-import { useContacts, useDeals } from '@/hooks'
+import { useContacts, useDeals, useHydratedStoreId } from '@/hooks' // ✅ MODIFICADO
 import { useAuthStore } from '@/stores'
 import { ContactDrawer, MergeContactsModal, ImportContactsModal } from '@/components/crm'
 import { BulkDeleteModal } from '@/components/crm/BulkDeleteModal'
@@ -570,6 +570,9 @@ export default function ContactsPage() {
     console.log('Export selected:', Array.from(selectedIds))
   }
   
+  // ✅ NOVO: Hook para obter storeId
+  const { storeId, ready } = useHydratedStoreId()
+  
   // Stats from API (accurate totals)
   const [stats, setStats] = useState<{
     totalContacts: number
@@ -581,9 +584,11 @@ export default function ContactsPage() {
   // Fetch stats from API
   useEffect(() => {
     async function fetchStats() {
-      if (!user?.organization_id) return
+      // ✅ MODIFICADO: Esperar hydration e ter storeId
+      if (!user?.organization_id || !ready || !storeId) return
       try {
-        const res = await fetch(`/api/contacts/stats?organizationId=${user.organization_id}`)
+        // ✅ MODIFICADO: Incluir storeId na URL
+        const res = await fetch(`/api/contacts/stats?organizationId=${user.organization_id}&storeId=${storeId}`)
         if (res.ok) {
           const data = await res.json()
           setStats(data)
@@ -593,7 +598,7 @@ export default function ContactsPage() {
       }
     }
     fetchStats()
-  }, [user?.organization_id, contacts]) // Refetch when contacts change
+  }, [user?.organization_id, contacts, storeId, ready]) // ✅ MODIFICADO: Dependências
 
   // Update contact tags
   const handleUpdateTags = async (contactId: string, tags: string[]) => {

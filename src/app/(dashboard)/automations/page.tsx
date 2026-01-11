@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
+import { useHydratedStoreId } from '@/hooks'; // ✅ NOVO
 import { FlowBuilder, getFlowDataForSave } from '@/components/flow-builder';
 
 // ============================================
@@ -103,18 +104,21 @@ export default function AutomationsPage() {
   const [loading, setLoading] = useState(true);
 
   const organizationId = user?.organization_id;
+  const { storeId, ready } = useHydratedStoreId(); // ✅ NOVO
 
   // Fetch automations
   useEffect(() => {
     async function fetchAutomations() {
-      if (!organizationId) {
+      // ✅ MODIFICADO: Esperar hydration e ter storeId
+      if (!organizationId || !ready || !storeId) {
         setLoading(false);
         return;
       }
 
       setLoading(true);
       try {
-        const res = await fetch(`/api/automations?organizationId=${organizationId}`);
+        // ✅ MODIFICADO: Incluir storeId na URL
+        const res = await fetch(`/api/automations?organizationId=${organizationId}&storeId=${storeId}`);
         if (res.ok) {
           const data = await res.json();
           setAutomations(data.automations || []);
@@ -127,7 +131,7 @@ export default function AutomationsPage() {
     }
 
     fetchAutomations();
-  }, [organizationId]);
+  }, [organizationId, storeId, ready]); // ✅ MODIFICADO: Dependências
 
   // Filter automations
   const filteredAutomations = automations.filter((automation) => {
@@ -190,6 +194,7 @@ export default function AutomationsPage() {
 
     const payload = {
       organizationId,
+      store_id: storeId, // ✅ NOVO: Incluir store_id
       name: flowData.name,
       trigger_type: triggerType,
       trigger_config: triggerNode?.data.config || {},

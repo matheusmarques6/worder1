@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseClient, getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 
 // Module-level lazy client
@@ -32,6 +32,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  // ✅ NOVO: Filtro por loja
+  const storeId = searchParams.get('storeId');
+
   try {
     getDb();
   } catch {
@@ -42,6 +45,7 @@ export async function GET(request: NextRequest) {
 
   try {
     if (automationId) {
+      // Busca por ID específico - não precisa de storeId
       const { data, error } = await supabase
         .from('automations')
         .select(`
@@ -62,11 +66,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ automation: data });
     }
 
-    const { data, error } = await supabase
+    // ✅ MODIFICADO: Para listagem, validar e usar storeId
+    // Validar acesso à loja se storeId fornecido
+    if (storeId) {
+      const storeValidation = await validateStoreAccess(auth.supabase, organizationId, storeId);
+      if (!storeValidation.valid) {
+        return NextResponse.json(
+          { error: storeValidation.error },
+          { status: storeValidation.status || 400 }
+        );
+      }
+    }
+
+    let query = supabase
       .from('automations')
       .select('*')
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });
+    
+    // ✅ NOVO: Filtrar por loja se fornecido
+    if (storeId) {
+      query = query.eq('store_id', storeId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching automations:', error);
@@ -95,9 +118,21 @@ export async function POST(request: NextRequest) {
       return await runAutomation(organizationId, data);
     }
 
+    // ✅ NOVO: Validar store_id se fornecido
+    if (data.store_id) {
+      const storeValidation = await validateStoreAccess(auth.supabase, organizationId, data.store_id);
+      if (!storeValidation.valid) {
+        return NextResponse.json(
+          { error: storeValidation.error },
+          { status: storeValidation.status || 400 }
+        );
+      }
+    }
+
     // ✅ CORREÇÃO: Salvar nodes, edges e status corretamente
     const insertData: Record<string, any> = {
       organization_id: organizationId,
+      store_id: data.store_id || null, // ✅ NOVO: Salvar store_id
       name: data.name || 'Nova Automação',
       description: data.description || null,
       trigger_type: data.trigger_type || 'manual',
