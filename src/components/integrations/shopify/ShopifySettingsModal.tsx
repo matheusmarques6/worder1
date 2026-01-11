@@ -58,7 +58,7 @@ interface Pipeline {
     id: string
     name: string
     color: string
-    sort_order: number
+    position: number
   }[]
 }
 
@@ -107,13 +107,17 @@ export function ShopifySettingsModal({
   const loadPipelines = async () => {
     setLoadingPipelines(true)
     try {
-      const res = await fetch(`/api/deals?type=pipelines&organizationId=${organizationId}`)
+      // ✅ CORRIGIDO: Passar storeId para filtrar pipelines da loja
+      const res = await fetch(`/api/deals?type=pipelines&organizationId=${organizationId}&storeId=${store.id}`)
       if (res.ok) {
         const data = await res.json()
+        console.log('[ShopifySettings] Pipelines carregadas:', data.pipelines?.length || 0)
         setPipelines(data.pipelines || [])
+      } else {
+        console.error('[ShopifySettings] Erro ao carregar pipelines:', res.status)
       }
     } catch (error) {
-      console.error('Error loading pipelines:', error)
+      console.error('[ShopifySettings] Error loading pipelines:', error)
     } finally {
       setLoadingPipelines(false)
     }

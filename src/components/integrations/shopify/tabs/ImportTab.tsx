@@ -34,7 +34,7 @@ interface Pipeline {
     id: string
     name: string
     color: string
-    sort_order: number
+    position: number
   }[]
 }
 
@@ -185,7 +185,7 @@ export function ImportTab({
   const getStages = () => {
     if (!selectedPipeline) return []
     return pipelines.find(p => p.id === selectedPipeline)?.stages
-      .sort((a, b) => a.sort_order - b.sort_order) || []
+      .sort((a, b) => a.position - b.position) || []
   }
   
   const toggleTag = (tag: string) => {

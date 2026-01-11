@@ -39,7 +39,7 @@ interface Pipeline {
     id: string
     name: string
     color: string
-    sort_order: number
+    position: number
   }[]
 }
 
@@ -231,12 +231,30 @@ export function AutomationRulesTab({
         </div>
         <button
           onClick={handleCreateRule}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-xl text-white text-sm font-medium transition-colors"
+          disabled={pipelines.length === 0}
+          className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" />
           Nova Regra
         </button>
       </div>
+
+      {/* Aviso se não há pipelines */}
+      {pipelines.length === 0 && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-amber-300 font-medium">
+                Nenhum pipeline encontrado
+              </p>
+              <p className="text-xs text-amber-400/80 mt-1">
+                Crie pipelines no CRM antes de configurar regras de automação.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Rules List */}
       {rules.length === 0 ? (
@@ -433,7 +451,7 @@ function RuleModal({
   const getStages = (pipelineId: string) => {
     if (!pipelineId) return []
     return pipelines.find(p => p.id === pipelineId)?.stages
-      .sort((a, b) => a.sort_order - b.sort_order) || []
+      .sort((a, b) => a.position - b.position) || []
   }
 
   const handleSubmit = () => {

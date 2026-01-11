@@ -35,7 +35,7 @@ interface Pipeline {
     id: string
     name: string
     color: string
-    sort_order: number
+    position: number
   }[]
 }
 
@@ -204,7 +204,7 @@ export function SyncConfigTab({
   const getStagesForPipeline = (pipelineId: string | null) => {
     if (!pipelineId) return []
     const pipeline = pipelines.find(p => p.id === pipelineId)
-    return pipeline?.stages.sort((a, b) => a.sort_order - b.sort_order) || []
+    return pipeline?.stages.sort((a, b) => a.position - b.position) || []
   }
   
   const addTag = (type: 'customer' | 'order', tag: string) => {
