@@ -182,7 +182,7 @@ async function processJobBatch(supabase: any, job: any, store: any, startTime: n
       console.log(`[ImportWorker] Page ${job.current_page + page + 1}...`);
 
       // Fetch da Shopify
-      const response = await fetch(nextPageUrl, {
+      const response: Response = await fetch(nextPageUrl, {
         headers: {
           'X-Shopify-Access-Token': store.access_token,
           'Content-Type': 'application/json',
