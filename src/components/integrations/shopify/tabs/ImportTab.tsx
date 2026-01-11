@@ -1,14 +1,14 @@
 'use client'
 
 // =============================================
-// Import Tab
+// Import Tab - V2 com Sistema de Jobs
 // /src/components/integrations/shopify/tabs/ImportTab.tsx
 //
-// Importação em massa de clientes da Shopify
+// Importação em background para grandes volumes
 // =============================================
 
-import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect, useCallback } from 'react'
+import { motion } from 'framer-motion'
 import {
   Download,
   Users,
@@ -20,7 +20,9 @@ import {
   Check,
   Filter,
   X,
-  ArrowRight,
+  Pause,
+  Play,
+  Clock,
 } from 'lucide-react'
 
 // =============================================
@@ -38,13 +40,22 @@ interface Pipeline {
   }[]
 }
 
-interface ImportStats {
-  total: number
-  created: number
-  updated: number
-  skipped: number
-  errors: number
-  dealsCreated: number
+interface ImportJob {
+  id: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'paused'
+  total_customers: number
+  processed_count: number
+  created_count: number
+  updated_count: number
+  skipped_count: number
+  error_count: number
+  deals_created_count: number
+  current_page: number
+  last_error: string | null
+  started_at: string | null
+  completed_at: string | null
+  progress?: number
+  estimatedTimeRemaining?: string
 }
 
 interface ImportTabProps {
@@ -64,13 +75,15 @@ export function ImportTab({
   pipelines,
   onSuccess,
 }: ImportTabProps) {
+  // Estado inicial
   const [loading, setLoading] = useState(true)
-  const [importing, setImporting] = useState(false)
   const [customerCount, setCustomerCount] = useState(0)
   const [existingCount, setExistingCount] = useState(0)
-  const [progress, setProgress] = useState(0)
-  const [stats, setStats] = useState<ImportStats | null>(null)
   const [error, setError] = useState('')
+  
+  // Job ativo
+  const [activeJob, setActiveJob] = useState<ImportJob | null>(null)
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
   
   // Filtros
   const [availableTags, setAvailableTags] = useState<{ tag: string; count: number }[]>([])
@@ -90,16 +103,33 @@ export function ImportTab({
   
   useEffect(() => {
     loadInitialData()
+    return () => {
+      if (pollingInterval) clearInterval(pollingInterval)
+    }
   }, [store.id])
 
   const loadInitialData = async () => {
     setLoading(true)
     try {
+      // Carregar contagem de clientes
       const res = await fetch(`/api/shopify/import-customers?storeId=${store.id}`)
       if (res.ok) {
         const data = await res.json()
         setCustomerCount(data.count || 0)
         setExistingCount(data.existingInCRM || 0)
+      }
+
+      // Verificar se existe job em andamento
+      const jobsRes = await fetch(`/api/shopify/import-jobs?storeId=${store.id}`)
+      if (jobsRes.ok) {
+        const jobsData = await jobsRes.json()
+        const runningJob = jobsData.jobs?.find((j: ImportJob) => 
+          ['pending', 'running', 'paused'].includes(j.status)
+        )
+        if (runningJob) {
+          setActiveJob(runningJob)
+          startPolling(runningJob.id)
+        }
       }
     } catch (err) {
       console.error('Error loading data:', err)
@@ -108,7 +138,6 @@ export function ImportTab({
       setLoading(false)
     }
     
-    // Load tags in background
     loadTags()
   }
 
@@ -130,22 +159,49 @@ export function ImportTab({
   }
 
   // =============================================
-  // Import
+  // Polling para atualizar status do job
+  // =============================================
+
+  const startPolling = useCallback((jobId: string) => {
+    if (pollingInterval) clearInterval(pollingInterval)
+    
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/shopify/import-jobs?jobId=${jobId}`)
+        if (res.ok) {
+          const data = await res.json()
+          setActiveJob(data.job)
+          
+          // Se job completou ou falhou, parar polling
+          if (['completed', 'failed', 'cancelled'].includes(data.job.status)) {
+            clearInterval(interval)
+            setPollingInterval(null)
+            if (data.job.status === 'completed') {
+              onSuccess?.()
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Polling error:', err)
+      }
+    }, 2000) // Poll a cada 2 segundos
+    
+    setPollingInterval(interval)
+  }, [pollingInterval, onSuccess])
+
+  // =============================================
+  // Iniciar importação
   // =============================================
   
-  const handleImport = async () => {
-    setImporting(true)
-    setProgress(0)
-    setStats(null)
+  const handleStartImport = async () => {
     setError('')
     
     try {
-      const res = await fetch('/api/shopify/import-customers', {
+      const res = await fetch('/api/shopify/import-jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           storeId: store.id,
-          organizationId,
           contactType,
           createDeals,
           pipelineId: createDeals ? selectedPipeline : null,
@@ -155,26 +211,52 @@ export function ImportTab({
         }),
       })
       
-      // Simular progresso (a API real deveria usar streaming)
-      const progressInterval = setInterval(() => {
-        setProgress(prev => Math.min(prev + 10, 90))
-      }, 500)
+      const data = await res.json()
       
-      if (res.ok) {
-        const data = await res.json()
-        clearInterval(progressInterval)
-        setProgress(100)
-        setStats(data.stats)
-        onSuccess?.()
+      if (res.ok && data.job) {
+        setActiveJob({
+          ...data.job,
+          processed_count: 0,
+          created_count: 0,
+          updated_count: 0,
+          skipped_count: 0,
+          error_count: 0,
+          deals_created_count: 0,
+          current_page: 0,
+          last_error: null,
+          started_at: null,
+          completed_at: null,
+          progress: 0,
+        })
+        startPolling(data.job.id)
       } else {
-        clearInterval(progressInterval)
-        const data = await res.json()
-        setError(data.error || 'Erro na importação')
+        setError(data.error || 'Erro ao iniciar importação')
       }
     } catch (err: any) {
-      setError(err.message || 'Erro na importação')
-    } finally {
-      setImporting(false)
+      setError(err.message || 'Erro ao iniciar importação')
+    }
+  }
+
+  // =============================================
+  // Cancelar importação
+  // =============================================
+
+  const handleCancelImport = async () => {
+    if (!activeJob) return
+    
+    try {
+      await fetch(`/api/shopify/import-jobs?jobId=${activeJob.id}`, {
+        method: 'DELETE',
+      })
+      
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+        setPollingInterval(null)
+      }
+      
+      setActiveJob(null)
+    } catch (err) {
+      console.error('Error cancelling job:', err)
     }
   }
 
@@ -194,21 +276,15 @@ export function ImportTab({
     )
   }
   
-  const addImportTag = (tag: string) => {
-    const trimmed = tag.trim().toLowerCase()
-    if (trimmed && !importTags.includes(trimmed)) {
-      setImportTags(prev => [...prev, trimmed])
-    }
-  }
-  
   const removeImportTag = (tag: string) => {
     setImportTags(prev => prev.filter(t => t !== tag))
   }
 
   const newCount = customerCount - existingCount
+  const isJobActive = activeJob && ['pending', 'running', 'paused'].includes(activeJob.status)
 
   // =============================================
-  // Render
+  // Render - Loading
   // =============================================
   
   if (loading) {
@@ -219,8 +295,11 @@ export function ImportTab({
     )
   }
 
-  // Show results if import completed
-  if (stats) {
+  // =============================================
+  // Render - Job Completed
+  // =============================================
+
+  if (activeJob?.status === 'completed') {
     return (
       <div className="space-y-6">
         <div className="p-8 bg-dark-800/50 border border-dark-700 rounded-2xl text-center">
@@ -231,56 +310,146 @@ export function ImportTab({
             Importação Concluída!
           </h3>
           <p className="text-dark-400 mb-6">
-            {stats.total} clientes processados
+            {activeJob.processed_count.toLocaleString('pt-BR')} clientes processados
           </p>
           
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
-              <p className="text-2xl font-bold text-green-400">{stats.created}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-md mx-auto">
+            <div className="p-3 bg-dark-900/50 rounded-xl">
+              <p className="text-lg font-bold text-green-400">{activeJob.created_count}</p>
               <p className="text-xs text-dark-400">Criados</p>
             </div>
-            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-              <p className="text-2xl font-bold text-blue-400">{stats.updated}</p>
+            <div className="p-3 bg-dark-900/50 rounded-xl">
+              <p className="text-lg font-bold text-blue-400">{activeJob.updated_count}</p>
               <p className="text-xs text-dark-400">Atualizados</p>
             </div>
-            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-              <p className="text-2xl font-bold text-amber-400">{stats.skipped}</p>
+            <div className="p-3 bg-dark-900/50 rounded-xl">
+              <p className="text-lg font-bold text-amber-400">{activeJob.skipped_count}</p>
               <p className="text-xs text-dark-400">Pulados</p>
             </div>
-            <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-              <p className="text-2xl font-bold text-purple-400">{stats.dealsCreated}</p>
+            <div className="p-3 bg-dark-900/50 rounded-xl">
+              <p className="text-lg font-bold text-purple-400">{activeJob.deals_created_count}</p>
               <p className="text-xs text-dark-400">Deals</p>
             </div>
           </div>
           
-          <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => setActiveJob(null)}
+            className="mt-6 px-6 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+          >
+            Nova Importação
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // =============================================
+  // Render - Job Active (Processing)
+  // =============================================
+
+  if (isJobActive) {
+    const progress = activeJob.total_customers > 0
+      ? Math.round((activeJob.processed_count / activeJob.total_customers) * 100)
+      : 0
+
+    return (
+      <div className="space-y-6">
+        {/* Header com status */}
+        <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              {activeJob.status === 'running' ? (
+                <Loader2 className="w-5 h-5 text-primary-400 animate-spin" />
+              ) : (
+                <Clock className="w-5 h-5 text-amber-400" />
+              )}
+              <div>
+                <h3 className="text-white font-medium">
+                  {activeJob.status === 'pending' && 'Aguardando início...'}
+                  {activeJob.status === 'running' && 'Importando...'}
+                  {activeJob.status === 'paused' && 'Pausado'}
+                </h3>
+                <p className="text-sm text-dark-400">
+                  {activeJob.processed_count.toLocaleString('pt-BR')} de {activeJob.total_customers.toLocaleString('pt-BR')} clientes
+                </p>
+              </div>
+            </div>
+            
             <button
-              onClick={() => setStats(null)}
-              className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+              onClick={handleCancelImport}
+              className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+              title="Cancelar importação"
             >
-              Importar Novamente
+              <X className="w-5 h-5" />
             </button>
-            <a
-              href="/crm/contacts"
-              className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-xl text-white transition-colors"
-            >
-              Ver Contatos
-              <ArrowRight className="w-4 h-4" />
-            </a>
+          </div>
+
+          {/* Barra de progresso */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-dark-400">Progresso</span>
+              <span className="text-primary-400 font-medium">{progress}%</span>
+            </div>
+            <div className="h-3 bg-dark-700 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-gradient-to-r from-primary-500 to-accent-500"
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.5 }}
+              />
+            </div>
+            {activeJob.estimatedTimeRemaining && (
+              <p className="text-xs text-dark-500 text-center">
+                Tempo estimado: {activeJob.estimatedTimeRemaining}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Stats em tempo real */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+            <p className="text-lg font-bold text-green-400">{activeJob.created_count}</p>
+            <p className="text-xs text-dark-400">Criados</p>
+          </div>
+          <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+            <p className="text-lg font-bold text-blue-400">{activeJob.updated_count}</p>
+            <p className="text-xs text-dark-400">Atualizados</p>
+          </div>
+          <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+            <p className="text-lg font-bold text-amber-400">{activeJob.skipped_count}</p>
+            <p className="text-xs text-dark-400">Pulados</p>
+          </div>
+          <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+            <p className="text-lg font-bold text-red-400">{activeJob.error_count}</p>
+            <p className="text-xs text-dark-400">Erros</p>
+          </div>
+        </div>
+
+        {/* Aviso */}
+        <div className="flex items-center gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+          <AlertCircle className="w-5 h-5 text-blue-400 flex-shrink-0" />
+          <div className="text-sm text-blue-300">
+            <p>A importação continua em background mesmo se você fechar esta janela.</p>
+            <p className="text-blue-400/70 mt-1">Página: {activeJob.current_page}</p>
           </div>
         </div>
       </div>
     )
   }
 
+  // =============================================
+  // Render - Formulário de Importação
+  // =============================================
+  
   return (
-    <div className="space-y-6">
-      {/* Customer Count Card */}
-      <div className="p-6 bg-dark-800/50 border border-dark-700 rounded-2xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-[#96bf48]/20 rounded-xl">
-              <Users className="w-6 h-6 text-[#96bf48]" />
+    <div className="space-y-5">
+      {/* Customer Count */}
+      <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-primary-500/15 rounded-xl">
+              <Users className="w-6 h-6 text-primary-400" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-white">
@@ -299,13 +468,13 @@ export function ImportTab({
           </button>
         </div>
         
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 mt-4">
           <div className="p-3 bg-dark-900/50 rounded-xl text-center">
-            <p className="text-xl font-bold text-blue-400">{existingCount}</p>
+            <p className="text-xl font-bold text-blue-400">{existingCount.toLocaleString('pt-BR')}</p>
             <p className="text-xs text-dark-400">Já no CRM</p>
           </div>
           <div className="p-3 bg-dark-900/50 rounded-xl text-center">
-            <p className="text-xl font-bold text-green-400">{newCount}</p>
+            <p className="text-xl font-bold text-green-400">{newCount.toLocaleString('pt-BR')}</p>
             <p className="text-xs text-dark-400">Novos</p>
           </div>
         </div>
@@ -320,7 +489,7 @@ export function ImportTab({
             {loadingTags && <Loader2 className="w-4 h-4 animate-spin text-dark-400" />}
           </div>
           <div className="flex flex-wrap gap-2">
-            {availableTags.map(({ tag, count }) => (
+            {availableTags.slice(0, 20).map(({ tag, count }) => (
               <button
                 key={tag}
                 onClick={() => toggleTag(tag)}
@@ -429,7 +598,7 @@ export function ImportTab({
             <label className="block text-sm text-dark-400 mb-2">
               Tags no CRM
             </label>
-            <div className="flex flex-wrap gap-2 mb-2">
+            <div className="flex flex-wrap gap-2">
               {importTags.map(tag => (
                 <span
                   key={tag}
@@ -455,6 +624,9 @@ export function ImportTab({
         <div className="text-sm text-amber-300">
           <p>Clientes sem email ou telefone serão ignorados.</p>
           <p>Contatos existentes serão atualizados com novos dados.</p>
+          <p className="mt-1 text-amber-400/70">
+            ⚡ A importação será processada em background - você pode fechar esta janela.
+          </p>
         </div>
       </div>
 
@@ -466,47 +638,18 @@ export function ImportTab({
         </div>
       )}
 
-      {/* Progress */}
-      {importing && (
-        <div className="p-4 bg-dark-800/50 border border-dark-700 rounded-xl">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-white">Importando...</span>
-            <span className="text-sm text-primary-400">{Math.round(progress)}%</span>
-          </div>
-          <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-gradient-to-r from-primary-500 to-accent-500"
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-            />
-          </div>
-          <p className="text-xs text-dark-400 mt-2 text-center">
-            Não feche esta janela durante a importação
-          </p>
-        </div>
-      )}
-
       {/* Import Button */}
       <button
-        onClick={handleImport}
-        disabled={importing || customerCount === 0 || (createDeals && (!selectedPipeline || !selectedStage))}
+        onClick={handleStartImport}
+        disabled={customerCount === 0 || (createDeals && (!selectedPipeline || !selectedStage))}
         className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#96bf48] hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-medium transition-colors"
       >
-        {importing ? (
-          <>
-            <Loader2 className="w-5 h-5 animate-spin" />
-            Importando...
-          </>
-        ) : (
-          <>
-            <Download className="w-5 h-5" />
-            Iniciar Importação
-            {selectedTags.length > 0 && (
-              <span className="text-sm opacity-80">
-                (filtrado)
-              </span>
-            )}
-          </>
+        <Download className="w-5 h-5" />
+        Iniciar Importação em Background
+        {selectedTags.length > 0 && (
+          <span className="text-sm opacity-80">
+            (filtrado)
+          </span>
         )}
       </button>
     </div>

@@ -42,16 +42,30 @@ interface Automation {
   updated_at?: string;
 }
 
+interface DashboardStats {
+  activeAutomations: number;
+  processedToday: number;
+  conversions30d: number;
+  revenue30d: number;
+}
+
+// STATS são carregados dinamicamente via API
+
 // ============================================
-// STATS DATA
+// FORMATTERS
 // ============================================
 
-const stats = [
-  { label: 'Automações Ativas', value: '8', icon: Zap, color: 'primary' },
-  { label: 'Processados Hoje', value: '2.4k', icon: Mail, color: 'primary' },
-  { label: 'Conversões', value: '342', icon: Users, color: 'primary' },
-  { label: 'Receita (30d)', value: 'R$ 180k', icon: DollarSign, color: 'primary' },
-];
+function formatNumber(num: number): string {
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
+  return num.toString();
+}
+
+function formatCurrency(value: number): string {
+  if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `R$ ${(value / 1000).toFixed(0)}k`;
+  return `R$ ${value.toFixed(0)}`;
+}
 
 // ============================================
 // TEMPLATES
@@ -101,8 +115,28 @@ export default function AutomationsPage() {
   const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   const organizationId = user?.organization_id;
+
+  // Fetch dashboard stats
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const res = await fetch('/api/automations/dashboard-stats');
+        if (res.ok) {
+          const data = await res.json();
+          setDashboardStats(data);
+        }
+      } catch (err) {
+        console.error('Error fetching stats:', err);
+      } finally {
+        setStatsLoading(false);
+      }
+    }
+    fetchStats();
+  }, []);
 
   // Fetch automations
   useEffect(() => {
@@ -338,24 +372,100 @@ export default function AutomationsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-lg bg-primary-500/15">
-                <stat.icon className="w-5 h-5 text-primary-400" />
-              </div>
-              <div>
-                <p className="text-xl font-bold text-white">{stat.value}</p>
-                <p className="text-xs text-dark-400">{stat.label}</p>
-              </div>
+        {/* Automações Ativas */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-primary-500/15">
+              <Zap className="w-5 h-5 text-primary-400" />
             </div>
-          </motion.div>
-        ))}
+            <div>
+              {statsLoading ? (
+                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+              ) : (
+                <p className="text-xl font-bold text-white">
+                  {dashboardStats?.activeAutomations || 0}
+                </p>
+              )}
+              <p className="text-xs text-dark-400">Automações Ativas</p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Processados Hoje */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-primary-500/15">
+              <Mail className="w-5 h-5 text-primary-400" />
+            </div>
+            <div>
+              {statsLoading ? (
+                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+              ) : (
+                <p className="text-xl font-bold text-white">
+                  {formatNumber(dashboardStats?.processedToday || 0)}
+                </p>
+              )}
+              <p className="text-xs text-dark-400">Processados Hoje</p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Conversões */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-primary-500/15">
+              <Users className="w-5 h-5 text-primary-400" />
+            </div>
+            <div>
+              {statsLoading ? (
+                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+              ) : (
+                <p className="text-xl font-bold text-white">
+                  {formatNumber(dashboardStats?.conversions30d || 0)}
+                </p>
+              )}
+              <p className="text-xs text-dark-400">Conversões (30d)</p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Receita */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-primary-500/15">
+              <DollarSign className="w-5 h-5 text-primary-400" />
+            </div>
+            <div>
+              {statsLoading ? (
+                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+              ) : (
+                <p className="text-xl font-bold text-white">
+                  {formatCurrency(dashboardStats?.revenue30d || 0)}
+                </p>
+              )}
+              <p className="text-xs text-dark-400">Receita (30d)</p>
+            </div>
+          </div>
+        </motion.div>
       </div>
 
       {/* Filters */}
