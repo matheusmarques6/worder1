@@ -9,7 +9,10 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // TYPES
@@ -65,6 +68,11 @@ const AVAILABLE_EVENTS = [
 // =============================================
 
 export async function GET(request: NextRequest) {
+  // ✅ Autenticação
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+  
   try {
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('storeId');
@@ -78,9 +86,24 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    const supabase = getSupabaseAdmin();
+    // Verificar acesso à loja via RLS
+    const { data: store, error: storeError } = await supabase
+      .from('shopify_stores')
+      .select('id')
+      .eq('id', storeId)
+      .single();
     
-    let query = supabase
+    if (storeError || !store) {
+      return NextResponse.json(
+        { error: 'Store not found or access denied' },
+        { status: 404 }
+      );
+    }
+    
+    // Usar admin para buscar (tabela pode não ter RLS ainda)
+    const supabaseAdmin = getSupabaseAdmin();
+    
+    let query = supabaseAdmin
       .from('shopify_transition_rules')
       .select(`
         *,
@@ -103,7 +126,7 @@ export async function GET(request: NextRequest) {
     const { data: rules, error } = await query;
     
     if (error) {
-      console.error('Error fetching transition rules:', error);
+      console.error('[TransitionRules API] Error fetching rules:', error);
       return NextResponse.json(
         { error: 'Failed to fetch rules' },
         { status: 500 }
@@ -116,7 +139,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error: any) {
-    console.error('Error in GET /api/shopify/transition-rules:', error);
+    console.error('[TransitionRules API] Error in GET:', error);
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
@@ -129,20 +152,18 @@ export async function GET(request: NextRequest) {
 // =============================================
 
 export async function POST(request: NextRequest) {
+  // ✅ Autenticação
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+  
   try {
     const body = await request.json();
-    const { storeId, organizationId, ...ruleData } = body;
+    const { storeId, ...ruleData } = body;
     
     if (!storeId) {
       return NextResponse.json(
         { error: 'storeId is required' },
-        { status: 400 }
-      );
-    }
-    
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: 'organizationId is required' },
         { status: 400 }
       );
     }
@@ -161,10 +182,24 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const supabase = getSupabaseAdmin();
+    // Verificar acesso à loja via RLS
+    const { data: store, error: storeError } = await supabase
+      .from('shopify_stores')
+      .select('id, organization_id')
+      .eq('id', storeId)
+      .single();
+    
+    if (storeError || !store) {
+      return NextResponse.json(
+        { error: 'Store not found or access denied' },
+        { status: 404 }
+      );
+    }
+    
+    const supabaseAdmin = getSupabaseAdmin();
     
     // Buscar próximo sort_order
-    const { data: existingRules } = await supabase
+    const { data: existingRules } = await supabaseAdmin
       .from('shopify_transition_rules')
       .select('sort_order')
       .eq('store_id', storeId)
@@ -175,10 +210,10 @@ export async function POST(request: NextRequest) {
       ? existingRules[0].sort_order + 1 
       : 0;
     
-    // Preparar dados
+    // Preparar dados (usar organization_id da loja, não do body)
     const rule = {
       store_id: storeId,
-      organization_id: organizationId,
+      organization_id: store.organization_id,
       rule_name: ruleData.ruleName,
       description: ruleData.description || null,
       is_active: ruleData.isActive ?? true,
@@ -204,7 +239,7 @@ export async function POST(request: NextRequest) {
       update_deal_value: ruleData.updateDealValue ?? false,
     };
     
-    const { data: createdRule, error } = await supabase
+    const { data: createdRule, error } = await supabaseAdmin
       .from('shopify_transition_rules')
       .insert(rule)
       .select(`
@@ -244,6 +279,11 @@ export async function POST(request: NextRequest) {
 // =============================================
 
 export async function PUT(request: NextRequest) {
+  // ✅ Autenticação
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+  
   try {
     const body = await request.json();
     const { ruleId, ...ruleData } = body;
@@ -255,7 +295,35 @@ export async function PUT(request: NextRequest) {
       );
     }
     
-    const supabase = getSupabaseAdmin();
+    const supabaseAdmin = getSupabaseAdmin();
+    
+    // Verificar se regra existe e pegar store_id para validação
+    const { data: existingRule, error: findError } = await supabaseAdmin
+      .from('shopify_transition_rules')
+      .select('id, store_id')
+      .eq('id', ruleId)
+      .single();
+    
+    if (findError || !existingRule) {
+      return NextResponse.json(
+        { error: 'Rule not found' },
+        { status: 404 }
+      );
+    }
+    
+    // Verificar acesso à loja via RLS
+    const { data: store, error: storeError } = await supabase
+      .from('shopify_stores')
+      .select('id')
+      .eq('id', existingRule.store_id)
+      .single();
+    
+    if (storeError || !store) {
+      return NextResponse.json(
+        { error: 'Access denied' },
+        { status: 403 }
+      );
+    }
     
     // Preparar dados para update
     const updateData: Record<string, any> = {
@@ -288,7 +356,7 @@ export async function PUT(request: NextRequest) {
     if (ruleData.removeTags !== undefined) updateData.remove_tags = ruleData.removeTags;
     if (ruleData.updateDealValue !== undefined) updateData.update_deal_value = ruleData.updateDealValue;
     
-    const { data: updatedRule, error } = await supabase
+    const { data: updatedRule, error } = await supabaseAdmin
       .from('shopify_transition_rules')
       .update(updateData)
       .eq('id', ruleId)
@@ -302,7 +370,7 @@ export async function PUT(request: NextRequest) {
       .single();
     
     if (error) {
-      console.error('Error updating transition rule:', error);
+      console.error('[TransitionRules API] Error updating rule:', error);
       return NextResponse.json(
         { error: 'Failed to update rule', details: error.message },
         { status: 500 }
@@ -316,7 +384,7 @@ export async function PUT(request: NextRequest) {
     });
     
   } catch (error: any) {
-    console.error('Error in PUT /api/shopify/transition-rules:', error);
+    console.error('[TransitionRules API] Error in PUT:', error);
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
@@ -329,6 +397,11 @@ export async function PUT(request: NextRequest) {
 // =============================================
 
 export async function DELETE(request: NextRequest) {
+  // ✅ Autenticação
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase } = auth;
+  
   try {
     const { searchParams } = new URL(request.url);
     const ruleId = searchParams.get('ruleId');
@@ -340,15 +413,43 @@ export async function DELETE(request: NextRequest) {
       );
     }
     
-    const supabase = getSupabaseAdmin();
+    const supabaseAdmin = getSupabaseAdmin();
     
-    const { error } = await supabase
+    // Verificar se regra existe e pegar store_id
+    const { data: existingRule, error: findError } = await supabaseAdmin
+      .from('shopify_transition_rules')
+      .select('id, store_id, rule_name')
+      .eq('id', ruleId)
+      .single();
+    
+    if (findError || !existingRule) {
+      return NextResponse.json(
+        { error: 'Rule not found' },
+        { status: 404 }
+      );
+    }
+    
+    // Verificar acesso à loja via RLS
+    const { data: store, error: storeError } = await supabase
+      .from('shopify_stores')
+      .select('id')
+      .eq('id', existingRule.store_id)
+      .single();
+    
+    if (storeError || !store) {
+      return NextResponse.json(
+        { error: 'Access denied' },
+        { status: 403 }
+      );
+    }
+    
+    const { error } = await supabaseAdmin
       .from('shopify_transition_rules')
       .delete()
       .eq('id', ruleId);
     
     if (error) {
-      console.error('Error deleting transition rule:', error);
+      console.error('[TransitionRules API] Error deleting rule:', error);
       return NextResponse.json(
         { error: 'Failed to delete rule', details: error.message },
         { status: 500 }
@@ -357,11 +458,11 @@ export async function DELETE(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      message: 'Regra deletada com sucesso',
+      message: `Regra "${existingRule.rule_name}" deletada com sucesso`,
     });
     
   } catch (error: any) {
-    console.error('Error in DELETE /api/shopify/transition-rules:', error);
+    console.error('[TransitionRules API] Error in DELETE:', error);
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }

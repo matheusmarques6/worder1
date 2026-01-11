@@ -25,12 +25,10 @@ import {
   Trash2,
   GripVertical,
   ChevronRight,
-  Zap,
 } from 'lucide-react'
 import { useDeals, usePipelines } from '@/hooks'
 import { useAuthStore } from '@/stores'
 import { PipelineModal } from '@/components/crm'
-import { PipelineAutomationBadges, PipelineAutomationConfig } from '@/components/crm/automation'
 
 // Sortable Stage Item
 function SortableStage({ stage, index }: { stage: any; index: number }) {
@@ -83,10 +81,6 @@ export default function PipelinesPage() {
   const [editingPipeline, setEditingPipeline] = useState<any>(null)
   const [expandedPipeline, setExpandedPipeline] = useState<string | null>(null)
   const [localPipelines, setLocalPipelines] = useState<any[]>([])
-  
-  // Automação
-  const [automationPipeline, setAutomationPipeline] = useState<any>(null)
-  const [pipelineRules, setPipelineRules] = useState<Record<string, any[]>>({})
 
   // Sync local state with fetched pipelines
   useEffect(() => {
@@ -94,33 +88,6 @@ export default function PipelinesPage() {
       setLocalPipelines(pipelines)
     }
   }, [pipelines])
-
-  // Fetch automation rules for all pipelines
-  useEffect(() => {
-    const fetchAllRules = async () => {
-      if (!user?.organization_id || pipelines.length === 0) return
-      
-      const rulesMap: Record<string, any[]> = {}
-      
-      for (const pipeline of pipelines) {
-        try {
-          const res = await fetch(
-            `/api/pipelines/${pipeline.id}/automations?organizationId=${user.organization_id}`
-          )
-          const data = await res.json()
-          if (data.rules) {
-            rulesMap[pipeline.id] = data.rules
-          }
-        } catch (e) {
-          // Ignore errors
-        }
-      }
-      
-      setPipelineRules(rulesMap)
-    }
-    
-    fetchAllRules()
-  }, [user?.organization_id, pipelines])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -261,25 +228,12 @@ export default function PipelinesPage() {
                 
                 <div className="flex-1 min-w-0">
                   <h3 className="text-white font-medium">{pipeline.name}</h3>
-                  <div className="flex items-center gap-3 mt-1">
-                    <p className="text-dark-400 text-sm">
-                      {pipeline.stages?.length || 0} estágios
-                    </p>
-                    <PipelineAutomationBadges 
-                      rules={pipelineRules[pipeline.id] || []} 
-                      compact={false}
-                    />
-                  </div>
+                  <p className="text-dark-400 text-sm mt-1">
+                    {pipeline.stages?.length || 0} estágios
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setAutomationPipeline(pipeline)}
-                    className="p-2 rounded-lg text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 transition-colors"
-                    title="Configurar automações"
-                  >
-                    <Zap className="w-4 h-4" />
-                  </button>
                   <button
                     onClick={() => setEditingPipeline(pipeline)}
                     className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors"
@@ -350,32 +304,6 @@ export default function PipelinesPage() {
         pipeline={editingPipeline}
         onClose={() => setEditingPipeline(null)}
         onSave={handleUpdate}
-      />
-
-      {/* Automation Config Modal */}
-      <PipelineAutomationConfig
-        isOpen={!!automationPipeline}
-        onClose={() => setAutomationPipeline(null)}
-        pipeline={automationPipeline}
-        onSave={async () => {
-          // Refetch rules for this pipeline
-          if (automationPipeline && user?.organization_id) {
-            try {
-              const res = await fetch(
-                `/api/pipelines/${automationPipeline.id}/automations?organizationId=${user.organization_id}`
-              )
-              const data = await res.json()
-              if (data.rules) {
-                setPipelineRules(prev => ({
-                  ...prev,
-                  [automationPipeline.id]: data.rules
-                }))
-              }
-            } catch (e) {
-              // Ignore
-            }
-          }
-        }}
       />
     </div>
   )

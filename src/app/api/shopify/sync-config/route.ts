@@ -7,9 +7,10 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // TYPES
@@ -54,6 +55,11 @@ interface SyncConfig {
 // =============================================
 
 export async function GET(request: NextRequest) {
+  // ✅ Autenticação
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+  
   try {
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('storeId');
@@ -65,7 +71,19 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    const supabase = getSupabaseAdmin();
+    // Verificar se o usuário tem acesso à loja (via RLS)
+    const { data: store, error: storeError } = await supabase
+      .from('shopify_stores')
+      .select('id, organization_id')
+      .eq('id', storeId)
+      .single();
+    
+    if (storeError || !store) {
+      return NextResponse.json(
+        { error: 'Store not found or access denied' },
+        { status: 404 }
+      );
+    }
     
     // Buscar configuração existente
     const { data: config, error } = await supabase
@@ -76,7 +94,7 @@ export async function GET(request: NextRequest) {
     
     if (error && error.code !== 'PGRST116') {
       // PGRST116 = no rows returned (not an error, just no config yet)
-      console.error('Error fetching sync config:', error);
+      console.error('[SyncConfig API] Error fetching config:', error);
       return NextResponse.json(
         { error: 'Failed to fetch config' },
         { status: 500 }
@@ -85,17 +103,10 @@ export async function GET(request: NextRequest) {
     
     // Se não existe config, retornar defaults
     if (!config) {
-      // Buscar organization_id da store
-      const { data: store } = await supabase
-        .from('shopify_stores')
-        .select('organization_id')
-        .eq('id', storeId)
-        .single();
-      
       return NextResponse.json({
         config: {
           store_id: storeId,
-          organization_id: store?.organization_id || null,
+          organization_id: store.organization_id,
           sync_new_customers: true,
           customer_contact_type: 'auto',
           customer_pipeline_id: null,
@@ -124,7 +135,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ config, isNew: false });
     
   } catch (error: any) {
-    console.error('Error in GET /api/shopify/sync-config:', error);
+    console.error('[SyncConfig API] Error in GET:', error);
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
@@ -137,6 +148,11 @@ export async function GET(request: NextRequest) {
 // =============================================
 
 export async function POST(request: NextRequest) {
+  // ✅ Autenticação
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+  
   try {
     const body = await request.json();
     const { storeId, organizationId, ...configData } = body;
@@ -148,19 +164,27 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    if (!organizationId) {
+    // Verificar se o usuário tem acesso à loja (via RLS)
+    const { data: store, error: storeError } = await supabase
+      .from('shopify_stores')
+      .select('id, organization_id')
+      .eq('id', storeId)
+      .single();
+    
+    if (storeError || !store) {
       return NextResponse.json(
-        { error: 'organizationId is required' },
-        { status: 400 }
+        { error: 'Store not found or access denied' },
+        { status: 404 }
       );
     }
     
-    const supabase = getSupabaseAdmin();
+    // Usar organization_id da loja (mais seguro que confiar no client)
+    const orgId = store.organization_id;
     
     // Preparar dados para upsert
     const syncConfig = {
       store_id: storeId,
-      organization_id: organizationId,
+      organization_id: orgId,
       
       // Customer sync
       sync_new_customers: configData.syncNewCustomers ?? true,
@@ -193,8 +217,11 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
     
+    // Usar admin para upsert (RLS pode bloquear insert em algumas configs)
+    const supabaseAdmin = getSupabaseAdmin();
+    
     // Upsert (insert ou update se já existir)
-    const { data: config, error } = await supabase
+    const { data: config, error } = await supabaseAdmin
       .from('shopify_sync_config')
       .upsert(syncConfig, {
         onConflict: 'store_id',
@@ -204,7 +231,7 @@ export async function POST(request: NextRequest) {
       .single();
     
     if (error) {
-      console.error('Error upserting sync config:', error);
+      console.error('[SyncConfig API] Error upserting config:', error);
       return NextResponse.json(
         { error: 'Failed to save config', details: error.message },
         { status: 500 }
@@ -212,7 +239,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Também atualizar a loja para marcar como configurada
-    await supabase
+    await supabaseAdmin
       .from('shopify_stores')
       .update({ 
         is_configured: true,
@@ -227,7 +254,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error: any) {
-    console.error('Error in POST /api/shopify/sync-config:', error);
+    console.error('[SyncConfig API] Error in POST:', error);
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
