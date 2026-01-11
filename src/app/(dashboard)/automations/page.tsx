@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { useHydratedStoreId } from '@/hooks'; // ✅ NOVO
 import { FlowBuilder, getFlowDataForSave } from '@/components/flow-builder';
 
 // ============================================
@@ -48,10 +47,10 @@ interface Automation {
 // ============================================
 
 const stats = [
-  { label: 'Automações Ativas', value: '8', icon: Zap, color: 'emerald' },
-  { label: 'Processados Hoje', value: '2.4k', icon: Mail, color: 'violet' },
-  { label: 'Conversões', value: '342', icon: Users, color: 'cyan' },
-  { label: 'Receita (30d)', value: 'R$ 180k', icon: DollarSign, color: 'amber' },
+  { label: 'Automações Ativas', value: '8', icon: Zap, color: 'primary' },
+  { label: 'Processados Hoje', value: '2.4k', icon: Mail, color: 'primary' },
+  { label: 'Conversões', value: '342', icon: Users, color: 'primary' },
+  { label: 'Receita (30d)', value: 'R$ 180k', icon: DollarSign, color: 'primary' },
 ];
 
 // ============================================
@@ -104,21 +103,18 @@ export default function AutomationsPage() {
   const [loading, setLoading] = useState(true);
 
   const organizationId = user?.organization_id;
-  const { storeId, ready } = useHydratedStoreId(); // ✅ NOVO
 
   // Fetch automations
   useEffect(() => {
     async function fetchAutomations() {
-      // ✅ MODIFICADO: Esperar hydration e ter storeId
-      if (!organizationId || !ready || !storeId) {
+      if (!organizationId) {
         setLoading(false);
         return;
       }
 
       setLoading(true);
       try {
-        // ✅ MODIFICADO: Incluir storeId na URL
-        const res = await fetch(`/api/automations?organizationId=${organizationId}&storeId=${storeId}`);
+        const res = await fetch(`/api/automations?organizationId=${organizationId}`);
         if (res.ok) {
           const data = await res.json();
           setAutomations(data.automations || []);
@@ -131,7 +127,7 @@ export default function AutomationsPage() {
     }
 
     fetchAutomations();
-  }, [organizationId, storeId, ready]); // ✅ MODIFICADO: Dependências
+  }, [organizationId]);
 
   // Filter automations
   const filteredAutomations = automations.filter((automation) => {
@@ -194,7 +190,6 @@ export default function AutomationsPage() {
 
     const payload = {
       organizationId,
-      store_id: storeId, // ✅ NOVO: Incluir store_id
       name: flowData.name,
       trigger_type: triggerType,
       trigger_config: triggerNode?.data.config || {},
@@ -326,13 +321,13 @@ export default function AutomationsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Automações</h1>
-          <p className="text-white/50 mt-1">Gerencie seus fluxos automatizados</p>
+          <p className="text-dark-400 mt-1">Gerencie seus fluxos automatizados</p>
         </div>
         <button
           onClick={() => setShowNewModal(true)}
           className={cn(
             'flex items-center gap-2 px-4 py-2.5 rounded-xl',
-            'bg-blue-600 hover:bg-blue-500 text-white font-medium',
+            'bg-primary-500 hover:bg-primary-600 text-white font-medium',
             'transition-colors'
           )}
         >
@@ -348,31 +343,15 @@ export default function AutomationsPage() {
             key={stat.label}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-[#111111] border border-white/10 rounded-xl"
+            className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
           >
             <div className="flex items-center gap-3">
-              <div
-                className={cn(
-                  'p-2.5 rounded-lg',
-                  stat.color === 'emerald' && 'bg-emerald-500/15',
-                  stat.color === 'violet' && 'bg-violet-500/15',
-                  stat.color === 'cyan' && 'bg-cyan-500/15',
-                  stat.color === 'amber' && 'bg-amber-500/15'
-                )}
-              >
-                <stat.icon
-                  className={cn(
-                    'w-5 h-5',
-                    stat.color === 'emerald' && 'text-emerald-400',
-                    stat.color === 'violet' && 'text-violet-400',
-                    stat.color === 'cyan' && 'text-cyan-400',
-                    stat.color === 'amber' && 'text-amber-400'
-                  )}
-                />
+              <div className="p-2.5 rounded-lg bg-primary-500/15">
+                <stat.icon className="w-5 h-5 text-primary-400" />
               </div>
               <div>
                 <p className="text-xl font-bold text-white">{stat.value}</p>
-                <p className="text-xs text-white/50">{stat.label}</p>
+                <p className="text-xs text-dark-400">{stat.label}</p>
               </div>
             </div>
           </motion.div>
@@ -382,7 +361,7 @@ export default function AutomationsPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
           <input
             type="text"
             placeholder="Buscar automações..."
@@ -390,9 +369,9 @@ export default function AutomationsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
               'w-full pl-10 pr-4 py-2.5 rounded-xl',
-              'bg-[#111111] border border-white/10',
-              'text-white placeholder-white/30',
-              'focus:outline-none focus:border-blue-500/50',
+              'bg-dark-800/60 border border-dark-700/50',
+              'text-white placeholder-dark-500',
+              'focus:outline-none focus:border-primary-500/50',
               'transition-colors'
             )}
           />
@@ -400,7 +379,7 @@ export default function AutomationsPage() {
 
         <div className="flex items-center gap-2">
           {/* Status Filter */}
-          <div className="flex items-center bg-[#111111] border border-white/10 rounded-xl p-1">
+          <div className="flex items-center bg-dark-800/60 border border-dark-700/50 rounded-xl p-1">
             {(['all', 'active', 'paused', 'draft'] as const).map((status) => (
               <button
                 key={status}
@@ -408,8 +387,8 @@ export default function AutomationsPage() {
                 className={cn(
                   'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                   statusFilter === status
-                    ? 'bg-blue-600 text-white'
-                    : 'text-white/50 hover:text-white hover:bg-white/5'
+                    ? 'bg-primary-500 text-white'
+                    : 'text-dark-400 hover:text-white hover:bg-dark-700/50'
                 )}
               >
                 {status === 'all' && 'Todas'}
@@ -421,7 +400,7 @@ export default function AutomationsPage() {
           </div>
 
           {/* View Toggle */}
-          <div className="flex items-center bg-[#111111] border border-white/10 rounded-xl p-1">
+          <div className="flex items-center bg-dark-800/60 border border-dark-700/50 rounded-xl p-1">
             <button
               onClick={() => setView('list')}
               className={cn(
@@ -447,15 +426,15 @@ export default function AutomationsPage() {
       {/* Automations List */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : filteredAutomations.length === 0 ? (
         <div className="text-center py-20">
-          <Zap className="w-12 h-12 text-white/20 mx-auto mb-4" />
-          <p className="text-white/50">Nenhuma automação encontrada</p>
+          <Zap className="w-12 h-12 text-dark-600 mx-auto mb-4" />
+          <p className="text-dark-400">Nenhuma automação encontrada</p>
           <button
             onClick={() => setShowNewModal(true)}
-            className="mt-4 text-blue-400 hover:text-blue-300 text-sm"
+            className="mt-4 text-primary-400 hover:text-primary-300 text-sm"
           >
             Criar sua primeira automação
           </button>
@@ -507,9 +486,9 @@ interface AutomationCardProps {
 
 function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: AutomationCardProps) {
   const statusConfig = {
-    active: { label: 'Ativa', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-    paused: { label: 'Pausada', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
-    draft: { label: 'Rascunho', color: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
+    active: { label: 'Ativa', color: 'bg-success-500/20 text-success-400 border-success-500/30' },
+    paused: { label: 'Pausada', color: 'bg-warning-500/20 text-warning-400 border-warning-500/30' },
+    draft: { label: 'Rascunho', color: 'bg-dark-600/50 text-dark-400 border-dark-500/30' },
   };
 
   const { label, color } = statusConfig[automation.status];
@@ -519,21 +498,21 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'bg-[#111111] border border-white/10 rounded-xl',
-        'hover:border-white/20 transition-colors',
+        'bg-dark-800/60 border border-dark-700/50 rounded-xl',
+        'hover:border-dark-600 transition-colors',
         view === 'list' ? 'p-4' : 'p-5'
       )}
     >
       <div className={cn('flex', view === 'list' ? 'items-center justify-between' : 'flex-col gap-4')}>
         {/* Info */}
         <div className={cn('flex items-center gap-4', view === 'grid' && 'w-full')}>
-          <div className="p-3 bg-blue-500/15 rounded-xl">
-            <Zap className="w-5 h-5 text-blue-400" />
+          <div className="p-3 bg-primary-500/15 rounded-xl">
+            <Zap className="w-5 h-5 text-primary-400" />
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-white truncate">{automation.name}</h3>
             {automation.description && (
-              <p className="text-sm text-white/50 truncate">{automation.description}</p>
+              <p className="text-sm text-dark-400 truncate">{automation.description}</p>
             )}
           </div>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-medium border', color)}>
@@ -543,7 +522,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
 
         {/* Stats */}
         {view === 'grid' && (
-          <div className="flex items-center gap-4 text-xs text-white/40">
+          <div className="flex items-center gap-4 text-xs text-dark-400">
             {automation.total_runs !== undefined && (
               <span className="flex items-center gap-1">
                 <Play className="w-3 h-3" />
@@ -551,7 +530,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
               </span>
             )}
             {automation.successful_runs !== undefined && (
-              <span className="flex items-center gap-1 text-green-400">
+              <span className="flex items-center gap-1 text-success-400">
                 <CheckCircle className="w-3 h-3" />
                 {automation.successful_runs}
               </span>
@@ -566,7 +545,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             disabled={automation.status === 'draft'}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-white/10 text-white/50 hover:text-white',
+              'hover:bg-dark-700/50 text-dark-400 hover:text-white',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
@@ -580,7 +559,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             onClick={onEdit}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-white/10 text-white/50 hover:text-white'
+              'hover:bg-dark-700/50 text-dark-400 hover:text-white'
             )}
           >
             <Edit className="w-4 h-4" />
@@ -589,7 +568,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             onClick={onDelete}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-red-500/20 text-white/50 hover:text-red-400'
+              'hover:bg-error-500/20 text-dark-400 hover:text-error-400'
             )}
           >
             <Trash2 className="w-4 h-4" />
@@ -624,14 +603,14 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-[#111111] border border-white/10 rounded-2xl overflow-hidden"
+        className="w-full max-w-2xl bg-dark-900 border border-dark-700/50 rounded-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
+        <div className="flex items-center justify-between p-5 border-b border-dark-700/50">
           <h2 className="text-lg font-semibold text-white">Nova Automação</h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+            className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -644,27 +623,27 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
             onClick={onSelectBlank}
             className={cn(
               'w-full p-4 rounded-xl text-left',
-              'bg-[#0a0a0a] border border-white/10',
-              'hover:border-blue-500/50 hover:bg-blue-500/5',
+              'bg-dark-800/60 border border-dark-700/50',
+              'hover:border-primary-500/50 hover:bg-primary-500/5',
               'transition-colors group'
             )}
           >
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-500/15 rounded-xl">
-                <Plus className="w-5 h-5 text-blue-400" />
+              <div className="p-3 bg-primary-500/15 rounded-xl">
+                <Plus className="w-5 h-5 text-primary-400" />
               </div>
               <div>
-                <h3 className="font-semibold text-white group-hover:text-blue-400 transition-colors">
+                <h3 className="font-semibold text-white group-hover:text-primary-400 transition-colors">
                   Começar do Zero
                 </h3>
-                <p className="text-sm text-white/50">Criar uma automação em branco</p>
+                <p className="text-sm text-dark-400">Criar uma automação em branco</p>
               </div>
             </div>
           </button>
 
           {/* Templates */}
           <div>
-            <h3 className="text-sm font-medium text-white/60 mb-3">Ou escolha um template</h3>
+            <h3 className="text-sm font-medium text-dark-400 mb-3">Ou escolha um template</h3>
             <div className="grid grid-cols-2 gap-3">
               {AUTOMATION_TEMPLATES.map((template) => (
                 <button
@@ -672,16 +651,16 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
                   onClick={() => onSelectTemplate(template.id)}
                   className={cn(
                     'p-4 rounded-xl text-left',
-                    'bg-[#0a0a0a] border border-white/10',
-                    'hover:border-white/20 hover:bg-white/5',
+                    'bg-dark-800/60 border border-dark-700/50',
+                    'hover:border-dark-600 hover:bg-dark-700/30',
                     'transition-colors group'
                   )}
                 >
                   <div className="text-2xl mb-2">{template.icon}</div>
-                  <h4 className="font-medium text-white group-hover:text-blue-400 transition-colors">
+                  <h4 className="font-medium text-white group-hover:text-primary-400 transition-colors">
                     {template.name}
                   </h4>
-                  <p className="text-xs text-white/40 mt-1">{template.description}</p>
+                  <p className="text-xs text-dark-500 mt-1">{template.description}</p>
                 </button>
               ))}
             </div>
