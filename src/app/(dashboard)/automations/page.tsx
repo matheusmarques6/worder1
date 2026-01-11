@@ -322,8 +322,12 @@ export default function AutomationsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Action Button */}
-      <div className="flex justify-end">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Automações</h1>
+          <p className="text-white/50 mt-1">Gerencie seus fluxos automatizados</p>
+        </div>
         <button
           onClick={() => setShowNewModal(true)}
           className={cn(
