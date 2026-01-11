@@ -27,6 +27,7 @@ import {
 
 // Import do modal de importação
 import ShopifyImportModal from '@/components/integrations/shopify/ShopifyImportModal'
+import { ShopifySettingsModal } from '@/components/integrations/shopify/ShopifySettingsModal'
 
 // =============================================
 // Types
@@ -212,7 +213,8 @@ export default function ActiveIntegrationsSection({
       {/* Modal de Configuração do Shopify */}
       <AnimatePresence>
         {configModalOpen && selectedIntegration === 'shopify' && shopifyStore && (
-          <ShopifyConfigModal
+          <ShopifySettingsModal
+            isOpen={configModalOpen}
             store={shopifyStore}
             organizationId={organizationId}
             onClose={handleCloseConfig}

@@ -31,6 +31,15 @@ export {
 // Webhook Processor
 export { processShopifyWebhook } from './webhook-processor';
 
+// Sync Config Integration (NEW)
+export {
+  getSyncConfig,
+  getActiveTransitionRules,
+  applyTransitionRules,
+  createDealFromSyncConfig,
+  logAutomation,
+} from './sync-config-integration';
+
 // Jobs
 export { 
   detectAbandonedCarts,
