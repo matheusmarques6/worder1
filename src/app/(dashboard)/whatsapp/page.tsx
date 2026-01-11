@@ -25,14 +25,6 @@ export default function WhatsAppPage() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="px-6 pt-6 pb-0">
-        <h1 className="text-2xl font-bold text-white mb-1">WhatsApp</h1>
-        <p className="text-dark-400 text-sm">
-          {isAgent ? 'Atenda suas conversas' : 'Gerencie suas conversas, campanhas e agentes'}
-        </p>
-      </div>
-
       {/* Tabs - só mostra se tiver mais de uma aba */}
       {tabs.length > 1 && (
         <div className="px-6 pt-4">

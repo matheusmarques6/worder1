@@ -109,12 +109,6 @@ export default function CampaignsPage() {
   if (connectionLoading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Campanhas</h1>
-            <p className="text-dark-400 mt-1">Gerencie suas campanhas de WhatsApp Marketing</p>
-          </div>
-        </div>
         <WhatsAppConnectionLoading />
       </div>
     )
@@ -124,12 +118,6 @@ export default function CampaignsPage() {
   if (!connected) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Campanhas</h1>
-            <p className="text-dark-400 mt-1">Gerencie suas campanhas de WhatsApp Marketing</p>
-          </div>
-        </div>
         <WhatsAppConnectionRequired 
           title="Conecte o WhatsApp para ver campanhas"
           description="Para criar e gerenciar campanhas de WhatsApp Marketing, você precisa conectar sua conta do WhatsApp Business API."
@@ -140,12 +128,8 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Campanhas</h1>
-          <p className="text-dark-400 mt-1">Gerencie suas campanhas de WhatsApp Marketing</p>
-        </div>
+      {/* Action Button */}
+      <div className="flex justify-end">
         <button onClick={() => router.push('/whatsapp/campaigns/new')}
           className="flex items-center gap-2 px-4 py-2.5 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors font-medium">
           <Plus className="w-5 h-5" /> Nova Campanha

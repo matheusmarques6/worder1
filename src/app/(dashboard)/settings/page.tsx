@@ -818,12 +818,6 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Configurações</h1>
-        <p className="text-dark-400 mt-1">Gerencie sua conta e integrações</p>
-      </div>
-
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Sidebar */}
         <div className="lg:w-64 flex-shrink-0">

@@ -433,46 +433,40 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Financeiro</h1>
-          <p className="text-dark-400 mt-1">Visão geral das suas métricas financeiras</p>
+      {/* Filters */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {/* Filter Button */}
+        <button className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all">
+          <Filter className="w-4 h-4" />
+          Filtrar
+        </button>
+
+        {/* Date Range Selector */}
+        <div className="flex items-center bg-dark-800/50 border border-dark-700/50 rounded-xl p-1">
+          {dateRanges.map((range) => (
+            <button
+              key={range.id}
+              onClick={() => handleRangeChange(range.id)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
+                (selectedRange === range.id && !customDateRange) || (range.id === 'custom' && customDateRange)
+                  ? 'bg-dark-700 text-white'
+                  : 'text-dark-400 hover:text-white'
+              }`}
+            >
+              {range.label}
+            </button>
+          ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Filter Button */}
-          <button className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all">
-            <Filter className="w-4 h-4" />
-            Filtrar
+        {/* Actions Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowActionsMenu(!showActionsMenu)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all"
+          >
+            Ações
+            <ChevronDown className={`w-4 h-4 transition-transform ${showActionsMenu ? 'rotate-180' : ''}`} />
           </button>
-
-          {/* Date Range Selector */}
-          <div className="flex items-center bg-dark-800/50 border border-dark-700/50 rounded-xl p-1">
-            {dateRanges.map((range) => (
-              <button
-                key={range.id}
-                onClick={() => handleRangeChange(range.id)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                  (selectedRange === range.id && !customDateRange) || (range.id === 'custom' && customDateRange)
-                    ? 'bg-dark-700 text-white'
-                    : 'text-dark-400 hover:text-white'
-                }`}
-              >
-                {range.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Actions Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowActionsMenu(!showActionsMenu)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all"
-            >
-              Ações
-              <ChevronDown className={`w-4 h-4 transition-transform ${showActionsMenu ? 'rotate-180' : ''}`} />
-            </button>
             
             {showActionsMenu && (
               <>
@@ -507,7 +501,6 @@ export default function DashboardPage() {
               </>
             )}
           </div>
-        </div>
       </div>
 
       {/* No Store Connected State */}

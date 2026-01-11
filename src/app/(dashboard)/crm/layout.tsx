@@ -27,14 +27,6 @@ export default function CRMLayout({
 
   return (
     <div className="space-y-6">
-      {/* Header with Tabs */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">CRM</h1>
-          <p className="text-dark-400 mt-1">Gerencie seus deals, contatos e pipelines</p>
-        </div>
-      </div>
-
       {/* Tabs */}
       <div className="border-b border-dark-700/50">
         <nav className="flex gap-1">
