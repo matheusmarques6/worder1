@@ -27,7 +27,7 @@ export default function WhatsAppPage() {
     <div className="h-full flex flex-col">
       {/* Tabs - só mostra se tiver mais de uma aba */}
       {tabs.length > 1 && (
-        <div className="px-6 pt-4">
+        <div className="px-6">
           <div className="flex items-center gap-1 border-b border-dark-700/50">
             {tabs.map((tab) => {
               const Icon = tab.icon
