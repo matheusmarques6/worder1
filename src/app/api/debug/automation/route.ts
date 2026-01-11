@@ -14,6 +14,9 @@ import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+// Configurar para permitir execução mais longa
+export const maxDuration = 60; // 60 segundos
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action') || 'status';
