@@ -323,7 +323,7 @@ export default function DashboardPage() {
   const [customDateRange, setCustomDateRange] = useState<{ start: string; end: string } | null>(null)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   
-  const { currentStore, stores } = useStoreStore()
+  const { currentStore, stores, _hasHydrated } = useStoreStore()
   
   // Data states
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
@@ -383,9 +383,11 @@ export default function DashboardPage() {
   }, [selectedRange, customDateRange, currentStore, stores.length])
 
   // Initial load and when filters change
+  // ✅ CORREÇÃO: Esperar Zustand rehydration para evitar dados da loja errada
   useEffect(() => {
+    if (!_hasHydrated) return // Esperar rehydration do localStorage
     fetchDashboardData()
-  }, [fetchDashboardData])
+  }, [fetchDashboardData, _hasHydrated])
 
   // Handle date range change
   const handleRangeChange = (rangeId: string) => {
