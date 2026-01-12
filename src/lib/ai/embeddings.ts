@@ -1,14 +1,42 @@
 // =====================================================
-// SERVIÇO DE EMBEDDINGS
+// SERVIÇO DE EMBEDDINGS COM CACHE REDIS
 // Gera embeddings usando OpenAI text-embedding-ada-002
+// Cache via Upstash Redis para economia de custos
 // =====================================================
+
+import crypto from 'crypto'
+import { getRedis, isRedisConfigured, CACHE_TTL, CACHE_PREFIX } from '@/lib/redis'
 
 const OPENAI_EMBEDDING_MODEL = 'text-embedding-ada-002'
 const OPENAI_EMBEDDING_DIMENSIONS = 1536
 const MAX_TOKENS_PER_REQUEST = 8191
 
+// Estatísticas de cache (para monitoramento)
+let cacheStats = {
+  hits: 0,
+  misses: 0,
+  errors: 0,
+}
+
+/**
+ * Gera hash SHA256 do texto para usar como chave de cache
+ */
+function hashText(text: string): string {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+  
+  return crypto
+    .createHash('sha256')
+    .update(normalized)
+    .digest('hex')
+    .substring(0, 32)
+}
+
 /**
  * Gera embedding para um texto usando OpenAI
+ * Usa cache Redis para evitar chamadas repetidas (economia de ~90%)
  */
 export async function generateEmbedding(
   text: string,
@@ -25,6 +53,35 @@ export async function generateEmbedding(
   // Limpar e truncar texto se necessário
   const cleanText = text.trim().replace(/\n+/g, ' ')
   const truncatedText = truncateToTokenLimit(cleanText, MAX_TOKENS_PER_REQUEST)
+
+  // Gerar hash para cache
+  const hash = hashText(truncatedText)
+  const cacheKey = `${CACHE_PREFIX.EMBEDDING}${hash}`
+
+  // ============================================
+  // 1. TENTAR BUSCAR DO CACHE
+  // ============================================
+  if (isRedisConfigured()) {
+    try {
+      const redis = getRedis()
+      const cached = await redis.get<number[]>(cacheKey)
+      
+      if (cached && Array.isArray(cached) && cached.length === OPENAI_EMBEDDING_DIMENSIONS) {
+        cacheStats.hits++
+        console.log(`[Embeddings] ✅ Cache HIT (${cacheStats.hits} hits, ${cacheStats.misses} misses)`)
+        return cached
+      }
+    } catch (cacheError) {
+      cacheStats.errors++
+      console.warn('[Embeddings] ⚠️ Erro ao ler cache:', cacheError)
+    }
+  }
+
+  // ============================================
+  // 2. CACHE MISS - GERAR NOVO EMBEDDING
+  // ============================================
+  cacheStats.misses++
+  console.log(`[Embeddings] 🔄 Cache MISS - Gerando embedding (${cacheStats.hits} hits, ${cacheStats.misses} misses)`)
 
   try {
     const response = await fetch('https://api.openai.com/v1/embeddings', {
@@ -45,15 +102,32 @@ export async function generateEmbedding(
     }
 
     const data = await response.json()
-    return data.data[0].embedding
+    const embedding = data.data[0].embedding as number[]
+
+    // ============================================
+    // 3. SALVAR NO CACHE (async, não bloqueia)
+    // ============================================
+    if (isRedisConfigured()) {
+      try {
+        const redis = getRedis()
+        await redis.setex(cacheKey, CACHE_TTL.EMBEDDING, embedding)
+        console.log(`[Embeddings] 💾 Salvo no cache: ${cacheKey.substring(0, 20)}...`)
+      } catch (cacheError) {
+        console.warn('[Embeddings] ⚠️ Erro ao salvar cache:', cacheError)
+      }
+    }
+
+    return embedding
+
   } catch (error: any) {
-    console.error('Error generating embedding:', error)
+    console.error('[Embeddings] ❌ Erro ao gerar embedding:', error)
     throw new Error(`Erro ao gerar embedding: ${error.message}`)
   }
 }
 
 /**
  * Gera embeddings para múltiplos textos em batch
+ * Usa cache para textos já processados anteriormente
  */
 export async function generateEmbeddingsBatch(
   texts: string[],
@@ -67,50 +141,95 @@ export async function generateEmbeddingsBatch(
     throw new Error('API key da OpenAI não configurada')
   }
 
-  // Limpar e truncar textos
-  const cleanTexts = texts.map(t => {
-    const clean = t.trim().replace(/\n+/g, ' ')
-    return truncateToTokenLimit(clean, MAX_TOKENS_PER_REQUEST)
-  })
+  const results: number[][] = new Array(texts.length)
+  const toGenerate: { index: number; text: string; hash: string; cacheKey: string }[] = []
 
-  // OpenAI permite até 2048 textos por requisição
-  const batchSize = 100
-  const results: number[][] = []
+  // ============================================
+  // 1. VERIFICAR CACHE PARA CADA TEXTO
+  // ============================================
+  const redisAvailable = isRedisConfigured()
+  
+  for (let i = 0; i < texts.length; i++) {
+    const cleanText = texts[i].trim().replace(/\n+/g, ' ')
+    const truncated = truncateToTokenLimit(cleanText, MAX_TOKENS_PER_REQUEST)
+    const hash = hashText(truncated)
+    const cacheKey = `${CACHE_PREFIX.EMBEDDING}${hash}`
 
-  for (let i = 0; i < cleanTexts.length; i += batchSize) {
-    const batch = cleanTexts.slice(i, i + batchSize)
-
-    try {
-      const response = await fetch('https://api.openai.com/v1/embeddings', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: OPENAI_EMBEDDING_MODEL,
-          input: batch,
-        }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error?.message || `OpenAI API error: ${response.status}`)
+    if (redisAvailable) {
+      try {
+        const redis = getRedis()
+        const cached = await redis.get<number[]>(cacheKey)
+        
+        if (cached && Array.isArray(cached) && cached.length === OPENAI_EMBEDDING_DIMENSIONS) {
+          results[i] = cached
+          cacheStats.hits++
+          continue
+        }
+      } catch (e) {
+        // Ignorar erro de cache
       }
-
-      const data = await response.json()
-      
-      // Ordenar por índice (OpenAI retorna na mesma ordem, mas por segurança)
-      const sortedData = data.data.sort((a: any, b: any) => a.index - b.index)
-      results.push(...sortedData.map((d: any) => d.embedding))
-    } catch (error: any) {
-      console.error('Error generating batch embeddings:', error)
-      throw new Error(`Erro ao gerar embeddings em batch: ${error.message}`)
     }
 
-    // Rate limiting: pequena pausa entre batches
-    if (i + batchSize < cleanTexts.length) {
-      await new Promise(resolve => setTimeout(resolve, 100))
+    toGenerate.push({ index: i, text: truncated, hash, cacheKey })
+  }
+
+  console.log(`[Embeddings Batch] ✅ Cache: ${texts.length - toGenerate.length}/${texts.length} | 🔄 Gerar: ${toGenerate.length}`)
+
+  // ============================================
+  // 2. GERAR EMBEDDINGS PARA TEXTOS NÃO CACHEADOS
+  // ============================================
+  if (toGenerate.length > 0) {
+    const batchSize = 100 // OpenAI permite até 2048, mas 100 é mais seguro
+
+    for (let i = 0; i < toGenerate.length; i += batchSize) {
+      const batch = toGenerate.slice(i, i + batchSize)
+      const batchTexts = batch.map(b => b.text)
+
+      try {
+        const response = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: OPENAI_EMBEDDING_MODEL,
+            input: batchTexts,
+          }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error?.message || `OpenAI API error: ${response.status}`)
+        }
+
+        const data = await response.json()
+        const sortedData = data.data.sort((a: any, b: any) => a.index - b.index)
+
+        // Processar resultados e salvar no cache
+        for (let j = 0; j < batch.length; j++) {
+          const embedding = sortedData[j].embedding
+          const item = batch[j]
+          
+          results[item.index] = embedding
+          cacheStats.misses++
+
+          // Salvar no cache (async, não esperar)
+          if (redisAvailable) {
+            const redis = getRedis()
+            redis.setex(item.cacheKey, CACHE_TTL.EMBEDDING, embedding).catch(() => {})
+          }
+        }
+
+      } catch (error: any) {
+        console.error('[Embeddings Batch] ❌ Erro:', error)
+        throw new Error(`Erro ao gerar embeddings em batch: ${error.message}`)
+      }
+
+      // Rate limiting entre batches
+      if (i + batchSize < toGenerate.length) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
     }
   }
 
@@ -172,3 +291,74 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  */
 export const EMBEDDING_MODEL = OPENAI_EMBEDDING_MODEL
 export const EMBEDDING_DIMENSIONS = OPENAI_EMBEDDING_DIMENSIONS
+
+/**
+ * Retorna estatísticas do cache de embeddings
+ */
+export function getEmbeddingCacheStats() {
+  return {
+    ...cacheStats,
+    hitRate: cacheStats.hits + cacheStats.misses > 0 
+      ? Math.round((cacheStats.hits / (cacheStats.hits + cacheStats.misses)) * 100) 
+      : 0,
+  }
+}
+
+/**
+ * Reseta estatísticas (para testes)
+ */
+export function resetCacheStats() {
+  cacheStats = { hits: 0, misses: 0, errors: 0 }
+}
+
+/**
+ * Limpa todo o cache de embeddings
+ */
+export async function clearEmbeddingsCache(): Promise<number> {
+  if (!isRedisConfigured()) {
+    return 0
+  }
+
+  try {
+    const redis = getRedis()
+    const keys = await redis.keys(`${CACHE_PREFIX.EMBEDDING}*`)
+    
+    if (keys.length === 0) {
+      return 0
+    }
+
+    await redis.del(...keys)
+    console.log(`[Embeddings] 🗑️ Cache limpo: ${keys.length} chaves removidas`)
+    return keys.length
+  } catch (error) {
+    console.error('[Embeddings] Erro ao limpar cache:', error)
+    return 0
+  }
+}
+
+/**
+ * Busca embedding do cache (sem gerar se não existir)
+ */
+export async function getEmbeddingFromCache(text: string): Promise<number[] | null> {
+  if (!isRedisConfigured()) {
+    return null
+  }
+
+  const cleanText = text.trim().replace(/\n+/g, ' ')
+  const truncated = truncateToTokenLimit(cleanText, MAX_TOKENS_PER_REQUEST)
+  const hash = hashText(truncated)
+  const cacheKey = `${CACHE_PREFIX.EMBEDDING}${hash}`
+
+  try {
+    const redis = getRedis()
+    const cached = await redis.get<number[]>(cacheKey)
+    
+    if (cached && Array.isArray(cached) && cached.length === OPENAI_EMBEDDING_DIMENSIONS) {
+      return cached
+    }
+  } catch (error) {
+    // Ignorar
+  }
+
+  return null
+}
