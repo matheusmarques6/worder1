@@ -1,5 +1,6 @@
 // Main Components
 export { default as AIAgentList } from './AIAgentList'
+export { default as AIAgentListUpdated } from './AIAgentListUpdated'
 export { default as AIAgentEditor } from './AIAgentEditor'
 export { default as CreateAgentModal } from './CreateAgentModal'
 export { default as AgentPreview } from './AgentPreview'
@@ -8,6 +9,9 @@ export { CreateAgentWizard } from './CreateAgentWizard'
 export { EditAgentModal } from './EditAgentModal'
 export { default as PermissionsEditor } from './PermissionsEditor'
 export { default as AIAgentConfig } from './AIAgentConfig'
+
+// New Create Flow (v2)
+export * from './create'
 
 // Tabs
 export { default as SourcesTab } from './tabs/SourcesTab'
