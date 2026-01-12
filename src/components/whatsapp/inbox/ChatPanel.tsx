@@ -22,6 +22,7 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react'
+import { AIToggleButton } from './AIToggleButton'
 import type { InboxConversation, InboxMessage } from '@/types/inbox'
 
 interface ChatPanelProps {
@@ -316,6 +317,13 @@ export function ChatPanel({
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {/* AI Toggle - NOVO */}
+          <AIToggleButton
+            conversationId={conversation.id}
+            initialEnabled={conversation.ai_enabled !== false}
+            variant="default"
+          />
+
           {/* Bot Toggle */}
           <button
             onClick={onToggleBot}

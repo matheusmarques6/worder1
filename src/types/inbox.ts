@@ -75,6 +75,12 @@ export interface InboxConversation {
   bot_disabled_reason?: string
   bot_disabled_by?: string
   
+  // IA (Agentes)
+  ai_enabled?: boolean
+  ai_agent_id?: string
+  ai_disabled_at?: string
+  ai_disabled_reason?: string
+  
   // Última mensagem
   last_message_at?: string
   last_message_preview?: string
@@ -321,6 +327,7 @@ export interface ConversationFilters {
   assignedTo?: 'all' | 'me' | 'unassigned' | string
   priority?: 'all' | 'low' | 'normal' | 'high' | 'urgent'
   botActive?: boolean
+  aiActive?: boolean
   tag?: string
   search?: string
 }
