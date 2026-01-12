@@ -80,11 +80,29 @@ export async function POST(request: NextRequest) {
       
       case 'test_rag':
         return handleTestRAG(body)
+
+      case 'enable_ai':
+        return handleEnableAI(body)
+
+      case 'disable_ai':
+        return handleDisableAI(body)
+
+      case 'conversation_status':
+        return handleConversationStatus(body)
       
       default:
         return NextResponse.json({ 
           error: 'Ação inválida',
-          available_actions: ['test_redis', 'cache_stats', 'list_agents', 'process', 'test_rag']
+          available_actions: [
+            'test_redis', 
+            'cache_stats', 
+            'list_agents', 
+            'process', 
+            'test_rag',
+            'enable_ai',
+            'disable_ai',
+            'conversation_status'
+          ]
         }, { status: 400 })
     }
 
@@ -302,4 +320,226 @@ async function handleTestRAG(body: any) {
       search_time_ms: Date.now() - startTime,
     }, { status: 500 })
   }
+}
+
+// =====================================================
+// HABILITAR IA PARA CONVERSA
+// =====================================================
+
+async function handleEnableAI(body: any) {
+  const { conversationId, phoneNumber, organizationId } = body
+
+  if (!conversationId && !phoneNumber) {
+    return NextResponse.json({ 
+      error: 'Informe conversationId ou phoneNumber + organizationId',
+      example: {
+        action: 'enable_ai',
+        conversationId: 'uuid-da-conversa',
+        // OU
+        phoneNumber: '5511999999999',
+        organizationId: 'uuid-da-org',
+      }
+    }, { status: 400 })
+  }
+
+  const { supabaseAdmin } = await import('@/lib/supabase-admin')
+
+  try {
+    let query = supabaseAdmin
+      .from('whatsapp_conversations')
+      .update({
+        ai_enabled: true,
+        ai_disabled_at: null,
+        ai_disabled_reason: null,
+      })
+
+    if (conversationId) {
+      query = query.eq('id', conversationId)
+    } else {
+      query = query.eq('phone_number', phoneNumber).eq('organization_id', organizationId)
+    }
+
+    const { data, error } = await query.select()
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '✅ IA habilitada para a conversa',
+      updated: data?.length || 0,
+    })
+
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+}
+
+// =====================================================
+// DESABILITAR IA PARA CONVERSA
+// =====================================================
+
+async function handleDisableAI(body: any) {
+  const { conversationId, phoneNumber, organizationId, reason = 'manual' } = body
+
+  if (!conversationId && !phoneNumber) {
+    return NextResponse.json({ 
+      error: 'Informe conversationId ou phoneNumber + organizationId',
+      example: {
+        action: 'disable_ai',
+        conversationId: 'uuid-da-conversa',
+        reason: 'manual',
+      }
+    }, { status: 400 })
+  }
+
+  const { supabaseAdmin } = await import('@/lib/supabase-admin')
+
+  try {
+    let query = supabaseAdmin
+      .from('whatsapp_conversations')
+      .update({
+        ai_enabled: false,
+        ai_disabled_at: new Date().toISOString(),
+        ai_disabled_reason: reason,
+      })
+
+    if (conversationId) {
+      query = query.eq('id', conversationId)
+    } else {
+      query = query.eq('phone_number', phoneNumber).eq('organization_id', organizationId)
+    }
+
+    const { data, error } = await query.select()
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '⏸️ IA desabilitada para a conversa',
+      reason,
+      updated: data?.length || 0,
+    })
+
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+}
+
+// =====================================================
+// STATUS DA CONVERSA (DEBUG)
+// =====================================================
+
+async function handleConversationStatus(body: any) {
+  const { conversationId, phoneNumber, organizationId } = body
+
+  if (!conversationId && !phoneNumber) {
+    return NextResponse.json({ 
+      error: 'Informe conversationId ou phoneNumber + organizationId',
+      example: {
+        action: 'conversation_status',
+        conversationId: 'uuid-da-conversa',
+      }
+    }, { status: 400 })
+  }
+
+  const { supabaseAdmin } = await import('@/lib/supabase-admin')
+
+  try {
+    let query = supabaseAdmin
+      .from('whatsapp_conversations')
+      .select(`
+        id,
+        phone_number,
+        status,
+        ai_enabled,
+        ai_agent_id,
+        ai_disabled_at,
+        ai_disabled_reason,
+        pipeline_stage_id,
+        last_message_at,
+        last_message_preview,
+        unread_count,
+        created_at
+      `)
+
+    if (conversationId) {
+      query = query.eq('id', conversationId)
+    } else {
+      query = query.eq('phone_number', phoneNumber).eq('organization_id', organizationId)
+    }
+
+    const { data: conversation, error } = await query.single()
+
+    if (error || !conversation) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Conversa não encontrada',
+        details: error?.message 
+      }, { status: 404 })
+    }
+
+    // Buscar agente ativo se houver
+    let activeAgent = null
+    if (conversation.ai_enabled) {
+      const { data: agentData } = await supabaseAdmin
+        .rpc('get_active_agent_for_conversation', {
+          p_organization_id: organizationId || (await getOrgFromConversation(conversation.id)),
+          p_channel_id: null,
+          p_pipeline_stage_id: conversation.pipeline_stage_id,
+        })
+      
+      if (agentData && agentData.length > 0) {
+        activeAgent = {
+          id: agentData[0].agent_id,
+          name: agentData[0].agent_name,
+        }
+      }
+    }
+
+    // Contar mensagens recentes
+    const { count: totalMessages } = await supabaseAdmin
+      .from('whatsapp_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('conversation_id', conversation.id)
+
+    const { count: aiMessages } = await supabaseAdmin
+      .from('whatsapp_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('conversation_id', conversation.id)
+      .eq('direction', 'outbound')
+      .contains('metadata', { sent_by: 'ai_agent' })
+
+    return NextResponse.json({
+      success: true,
+      conversation: {
+        ...conversation,
+        activeAgent,
+      },
+      stats: {
+        totalMessages,
+        aiMessages,
+      },
+      ai_status: conversation.ai_enabled 
+        ? (activeAgent ? '✅ IA ativa' : '⚠️ IA habilitada mas sem agente')
+        : `⏸️ IA desabilitada (${conversation.ai_disabled_reason || 'sem motivo'})`,
+    })
+
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+}
+
+// Helper para buscar org de uma conversa
+async function getOrgFromConversation(conversationId: string): Promise<string | null> {
+  const { supabaseAdmin } = await import('@/lib/supabase-admin')
+  const { data } = await supabaseAdmin
+    .from('whatsapp_conversations')
+    .select('organization_id')
+    .eq('id', conversationId)
+    .single()
+  return data?.organization_id || null
 }
