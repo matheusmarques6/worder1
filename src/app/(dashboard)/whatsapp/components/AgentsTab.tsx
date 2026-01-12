@@ -34,7 +34,7 @@ import {
   Check,
 } from 'lucide-react'
 import { useAuthStore, useStoreStore } from '@/stores' // ✅ MODIFICADO
-import { CreateAgentWizard } from '@/components/agents/CreateAgentWizard'
+import { CreateAgentFlow } from '@/components/agents/create'
 import { EditAgentModal } from '@/components/agents/EditAgentModal'
 
 // Types
@@ -408,18 +408,15 @@ export default function AgentsTab() {
 
       {/* Create Modal */}
       <AnimatePresence>
-        {showCreateModal && organizationId && storeId && (
-          <CreateAgentWizard
+        {showCreateModal && organizationId && (
+          <CreateAgentFlow
             organizationId={organizationId}
-            storeId={storeId} // ✅ NOVO
+            storeId={storeId}
             onClose={() => setShowCreateModal(false)}
             onSuccess={() => {
               setShowCreateModal(false)
               fetchAgents()
             }}
-            aiModels={aiModels}
-            apiKeys={apiKeys}
-            humanAgentsCount={stats.humans}
           />
         )}
       </AnimatePresence>
