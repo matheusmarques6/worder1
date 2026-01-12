@@ -105,13 +105,7 @@ export async function GET(request: NextRequest) {
     
     let query = supabaseAdmin
       .from('shopify_transition_rules')
-      .select(`
-        *,
-        from_pipeline:pipelines!shopify_transition_rules_from_pipeline_id_fkey(id, name),
-        from_stage:pipeline_stages!shopify_transition_rules_from_stage_id_fkey(id, name, color),
-        to_pipeline:pipelines!shopify_transition_rules_to_pipeline_id_fkey(id, name),
-        to_stage:pipeline_stages!shopify_transition_rules_to_stage_id_fkey(id, name, color)
-      `)
+      .select('*')
       .eq('store_id', storeId)
       .order('sort_order', { ascending: true });
     
@@ -242,13 +236,7 @@ export async function POST(request: NextRequest) {
     const { data: createdRule, error } = await supabaseAdmin
       .from('shopify_transition_rules')
       .insert(rule)
-      .select(`
-        *,
-        from_pipeline:pipelines!shopify_transition_rules_from_pipeline_id_fkey(id, name),
-        from_stage:pipeline_stages!shopify_transition_rules_from_stage_id_fkey(id, name, color),
-        to_pipeline:pipelines!shopify_transition_rules_to_pipeline_id_fkey(id, name),
-        to_stage:pipeline_stages!shopify_transition_rules_to_stage_id_fkey(id, name, color)
-      `)
+      .select('*')
       .single();
     
     if (error) {
@@ -360,13 +348,7 @@ export async function PUT(request: NextRequest) {
       .from('shopify_transition_rules')
       .update(updateData)
       .eq('id', ruleId)
-      .select(`
-        *,
-        from_pipeline:pipelines!shopify_transition_rules_from_pipeline_id_fkey(id, name),
-        from_stage:pipeline_stages!shopify_transition_rules_from_stage_id_fkey(id, name, color),
-        to_pipeline:pipelines!shopify_transition_rules_to_pipeline_id_fkey(id, name),
-        to_stage:pipeline_stages!shopify_transition_rules_to_stage_id_fkey(id, name, color)
-      `)
+      .select('*')
       .single();
     
     if (error) {
