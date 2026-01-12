@@ -23,7 +23,7 @@ import {
   ChevronDown,
 } from 'lucide-react'
 import AIAgentEditor from './AIAgentEditor'
-import CreateAgentModal from './CreateAgentModal'
+import { CreateAgentFlow } from './create'
 import { AIAgent } from '@/lib/ai/types'
 
 interface AIAgentListProps {
@@ -37,7 +37,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
-  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showCreateFlow, setShowCreateFlow] = useState(false)
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
 
   // Fetch agents
@@ -137,7 +137,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
         </div>
 
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => setShowCreateFlow(true)}
           className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 text-white rounded-xl font-medium transition-all"
         >
           <Plus className="w-4 h-4" />
@@ -242,7 +242,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
             </p>
             {!searchQuery && filterStatus === 'all' && (
               <button
-                onClick={() => setShowCreateModal(true)}
+                onClick={() => setShowCreateFlow(true)}
                 className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 text-white rounded-xl font-medium transition-all"
               >
                 <Plus className="w-5 h-5" />
@@ -384,14 +384,14 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
         )}
       </AnimatePresence>
 
-      {/* Create Agent Modal */}
+      {/* Create Agent Flow - Fullscreen */}
       <AnimatePresence>
-        {showCreateModal && (
-          <CreateAgentModal
+        {showCreateFlow && (
+          <CreateAgentFlow
             organizationId={organizationId}
-            onClose={() => setShowCreateModal(false)}
-            onCreate={(newAgentId) => {
-              setShowCreateModal(false)
+            onClose={() => setShowCreateFlow(false)}
+            onSuccess={(newAgentId) => {
+              setShowCreateFlow(false)
               setSelectedAgentId(newAgentId)
               fetchAgents()
             }}
