@@ -143,6 +143,14 @@ Use uma linguagem formal e corporativa.
 - Evite gírias e coloquialismos
 - Não use emojis
 - Mantenha distância profissional adequada`,
+
+      luxury: `## Tom de Voz: Luxo
+Use uma linguagem sofisticada e exclusiva.
+- Seja elegante e refinado
+- Transmita exclusividade e prestígio
+- Evite emojis ou use apenas ✨ com muita moderação
+- Trate cada cliente como VIP
+- Use vocabulário rico e cuidadoso`,
     }
 
     return toneDescriptions[this.persona.tone] || toneDescriptions.friendly
