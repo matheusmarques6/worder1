@@ -29,7 +29,7 @@ export interface AIAgent {
 
 export interface AgentPersona {
   role_description: string
-  tone: 'casual' | 'friendly' | 'professional'
+  tone: 'casual' | 'friendly' | 'professional' | 'luxury'
   response_length: 'short' | 'medium' | 'long'
   language: 'pt-BR' | 'en' | 'es' | 'auto'
   reply_delay: number
