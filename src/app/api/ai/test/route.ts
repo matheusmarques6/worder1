@@ -18,7 +18,10 @@ import {
 export async function GET() {
   // Testar conexão Redis
   const redisConfigured = isRedisConfigured()
-  let redisStatus = { connected: false, error: 'Não configurado' }
+  let redisStatus: { connected: boolean; latencyMs?: number; error?: string } = { 
+    connected: false, 
+    error: 'Não configurado' 
+  }
   
   if (redisConfigured) {
     redisStatus = await testRedisConnection()
