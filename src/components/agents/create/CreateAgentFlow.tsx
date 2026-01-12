@@ -67,9 +67,13 @@ export function CreateAgentFlow({
   const [formData, setFormData] = useState<Record<string, string>>({});
 
   // Persona
-  const [persona, setPersona] = useState({
-    tone: 'friendly' as const,
-    responseLength: 'medium' as const,
+  const [persona, setPersona] = useState<{
+    tone: 'casual' | 'friendly' | 'professional' | 'luxury';
+    responseLength: 'short' | 'medium' | 'long';
+    replyDelay: number;
+  }>({
+    tone: 'friendly',
+    responseLength: 'medium',
     replyDelay: 3,
   });
 
