@@ -119,6 +119,7 @@ async function processMessage(body: any) {
         phone_number: phoneNumber,
         status: 'open',
         is_bot_active: false,
+        ai_enabled: true, // Habilitar IA por padrão
         last_message_at: new Date().toISOString(),
         last_message_preview: content.substring(0, 100),
         unread_count: 1,
@@ -180,8 +181,72 @@ async function processMessage(body: any) {
   } else {
     console.log('[Webhook] Mensagem salva com sucesso')
   }
+
+  // =====================================================
+  // 6. PROCESSAR COM AGENTE DE IA
+  // =====================================================
+  
+  // Só processar mensagens de texto
+  if (messageType !== 'text') {
+    console.log('[Webhook] 📷 Mensagem não é texto, pulando IA')
+    return
+  }
+
+  // Processar com IA em background (não bloquear webhook)
+  processWithAI({
+    organizationId: orgId,
+    conversationId: conversation.id,
+    contactId: contact.id,
+    instanceId: instance.id,
+    instanceName: instance.unique_id,
+    phoneNumber: phoneNumber,
+    message: content,
+    messageId: key?.id,
+    contactName: pushName,
+  }).catch((aiError) => {
+    console.error('[Webhook] ❌ Erro ao processar com IA:', aiError)
+  })
+}
+
+// =====================================================
+// PROCESSADOR DE IA (ASYNC)
+// =====================================================
+
+async function processWithAI(params: {
+  organizationId: string
+  conversationId: string
+  contactId: string
+  instanceId: string
+  instanceName: string
+  phoneNumber: string
+  message: string
+  messageId?: string
+  contactName?: string
+}) {
+  try {
+    const { processWebhookWithAI } = await import('@/lib/ai/webhook-processor')
+    
+    const result = await processWebhookWithAI(params)
+
+    console.log('[Webhook] 🤖 Resultado IA:', {
+      processed: result.processed,
+      replied: result.replied,
+      transferred: result.transferred,
+      agentName: result.agentName,
+      error: result.error,
+    })
+
+  } catch (error) {
+    console.error('[Webhook] ❌ Erro no processador de IA:', error)
+  }
 }
 
 export async function GET() {
-  return NextResponse.json({ status: 'Webhook WhatsApp ativo' })
+  return NextResponse.json({ 
+    status: 'Webhook WhatsApp ativo',
+    ai_enabled: true,
+    version: '2.0',
+    features: ['message_processing', 'ai_agent_response', 'typing_indicator'],
+    timestamp: new Date().toISOString(),
+  })
 }
