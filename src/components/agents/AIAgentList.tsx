@@ -384,7 +384,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
         )}
       </AnimatePresence>
 
-      {/* Create Agent Flow - Fullscreen */}
+      {/* Create Agent Modal */}
       <AnimatePresence>
         {showCreateFlow && (
           <CreateAgentFlow
