@@ -4,6 +4,21 @@
 // =====================================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { 
+  sendTypingIndicator, 
+  calculateTypingTime,
+  simulateHumanResponse 
+} from './typing'
+
+// Re-exportar funções de typing para conveniência
+export { 
+  sendTypingIndicator, 
+  calculateTypingTime,
+  simulateHumanResponse,
+  calculateReadingTime,
+  waitWithTyping,
+  delay,
+} from './typing'
 
 // =====================================================
 // TIPOS
@@ -196,59 +211,4 @@ export async function sendAndSaveMessage(params: {
   })
 
   return sendResult
-}
-
-// =====================================================
-// TYPING INDICATOR
-// =====================================================
-
-/**
- * Envia indicador de "digitando..." para o WhatsApp
- */
-export async function sendTypingIndicator(
-  instanceName: string,
-  phone: string,
-  durationMs: number = 3000
-): Promise<void> {
-  const evolutionUrl = process.env.EVOLUTION_API_URL
-  const evolutionKey = process.env.EVOLUTION_API_KEY
-
-  if (!evolutionUrl || !evolutionKey) {
-    return
-  }
-
-  try {
-    const formattedPhone = phone.replace(/\D/g, '')
-
-    await fetch(`${evolutionUrl}/chat/presence/${instanceName}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': evolutionKey,
-      },
-      body: JSON.stringify({
-        number: formattedPhone,
-        delay: durationMs,
-        presence: 'composing',
-      }),
-    })
-
-    console.log(`[Typing] ⌨️ Indicador enviado: ${formattedPhone} (${durationMs}ms)`)
-
-  } catch (error) {
-    // Não falhar por erro de typing
-    console.warn('[Typing] ⚠️ Erro ao enviar indicador:', error)
-  }
-}
-
-/**
- * Calcula tempo de digitação baseado no tamanho da mensagem
- */
-export function calculateTypingTime(message: string): number {
-  // Média: 40 caracteres por segundo (digitação rápida)
-  // Mínimo: 1.5 segundos | Máximo: 5 segundos
-  const charsPerSecond = 40
-  const calculatedTime = (message.length / charsPerSecond) * 1000
-  
-  return Math.min(Math.max(calculatedTime, 1500), 5000)
 }

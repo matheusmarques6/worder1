@@ -4,7 +4,10 @@
 // =====================================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { sendAndSaveMessage, sendTypingIndicator, calculateTypingTime } from '@/lib/whatsapp/send-message'
+import { 
+  sendAndSaveMessage, 
+  simulateHumanResponse 
+} from '@/lib/whatsapp/send-message'
 
 // =====================================================
 // TIPOS
@@ -158,20 +161,7 @@ export async function processWebhookWithAI(
     }
 
     // =====================================================
-    // 7. ENVIAR TYPING INDICATOR (parecer humano)
-    // =====================================================
-    const replyDelay = agent.persona?.reply_delay || 2
-    
-    // Enviar "digitando..." 
-    await sendTypingIndicator(instanceName, phoneNumber, replyDelay * 1000)
-    
-    // Aguardar delay configurado
-    if (replyDelay > 0) {
-      await new Promise(resolve => setTimeout(resolve, replyDelay * 1000))
-    }
-
-    // =====================================================
-    // 8. PROCESSAR COM MOTOR DE IA
+    // 7. PROCESSAR COM MOTOR DE IA
     // =====================================================
     console.log('[WebhookAI] 🧠 Processando com motor de IA...')
 
@@ -214,13 +204,26 @@ export async function processWebhookWithAI(
     }
 
     // =====================================================
-    // 10. SE TEM RESPOSTA, ENVIAR VIA WHATSAPP
+    // 10. SE TEM RESPOSTA, SIMULAR HUMANO E ENVIAR
     // =====================================================
     if (aiResult.reply) {
-      // Calcular typing adicional baseado no tamanho da resposta
-      const additionalTyping = calculateTypingTime(aiResult.reply)
-      await sendTypingIndicator(instanceName, phoneNumber, additionalTyping)
-      await new Promise(resolve => setTimeout(resolve, additionalTyping))
+      // Buscar configuração de delay do agente
+      const replyDelay = agent.persona?.reply_delay || 2
+      const minDelay = replyDelay * 1000
+      const maxDelay = Math.max(minDelay, 6000)
+
+      // Simular comportamento humano (leitura + digitação)
+      await simulateHumanResponse(
+        instanceName,
+        phoneNumber,
+        message,           // Mensagem do usuário (para calcular tempo de "leitura")
+        aiResult.reply,    // Resposta da IA (para calcular tempo de "digitação")
+        {
+          skipReading: false,
+          minDelay,
+          maxDelay,
+        }
+      )
 
       // Enviar mensagem
       const sendResult = await sendAndSaveMessage({
