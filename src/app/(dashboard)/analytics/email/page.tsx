@@ -180,7 +180,7 @@ const EmptyState = ({
   </motion.div>
 )
 
-// KPI Card Component
+// KPI Card Component - Proposta A: Com Barra de Progresso
 const KPICard = ({
   title,
   value,
@@ -188,6 +188,9 @@ const KPICard = ({
   icon: Icon,
   color,
   loading = false,
+  maxValue = 100,
+  suffix = '',
+  showProgress = true,
 }: {
   title: string
   value: string
@@ -195,30 +198,121 @@ const KPICard = ({
   icon: React.ElementType
   color: string
   loading?: boolean
+  maxValue?: number
+  suffix?: string
+  showProgress?: boolean
 }) => {
   const isPositive = (change || 0) >= 0
+  const numericValue = parseFloat(value.replace(/[^0-9.,]/g, '').replace(',', '.')) || 0
+  const progressPercent = Math.min((numericValue / maxValue) * 100, 100)
+  
+  // Extrair cor base do gradiente para a barra
+  const getBarColor = () => {
+    if (color.includes('blue')) return 'bg-blue-500'
+    if (color.includes('green')) return 'bg-green-500'
+    if (color.includes('purple')) return 'bg-purple-500'
+    if (color.includes('cyan')) return 'bg-cyan-500'
+    if (color.includes('primary')) return 'bg-primary-500'
+    if (color.includes('accent')) return 'bg-accent-500'
+    if (color.includes('red')) return 'bg-red-500'
+    if (color.includes('gray')) return 'bg-gray-500'
+    return 'bg-primary-500'
+  }
   
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50"
+      className="bg-dark-800/50 rounded-xl p-5 border border-dark-700/50 hover:border-dark-600/50 transition-all"
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className={`p-2 rounded-lg bg-gradient-to-br ${color}`}>
-          <Icon className="w-4 h-4 text-white" />
+      {/* Header com ícone e variação */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-xl bg-gradient-to-br ${color} shadow-lg`}>
+            <Icon className="w-5 h-5 text-white" />
+          </div>
+          <span className="text-sm text-dark-400 font-medium">{title}</span>
         </div>
         {change !== undefined && (
-          <div className={`flex items-center gap-1 text-xs ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+            isPositive 
+              ? 'bg-green-500/10 text-green-400' 
+              : 'bg-red-500/10 text-red-400'
+          }`}>
             {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
             {Math.abs(change).toFixed(1)}%
           </div>
         )}
       </div>
-      <div className="text-2xl font-bold text-white mb-1">
-        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : value}
+      
+      {/* Valor principal */}
+      <div className="mb-4">
+        {loading ? (
+          <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
+        ) : (
+          <span className="text-3xl font-bold text-white">
+            {value}{suffix}
+          </span>
+        )}
       </div>
-      <div className="text-xs text-dark-400">{title}</div>
+      
+      {/* Barra de progresso */}
+      {showProgress && !loading && (
+        <div className="space-y-2">
+          <div className="h-2 bg-dark-700/50 rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPercent}%` }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className={`h-full rounded-full ${getBarColor()}`}
+            />
+          </div>
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
+// KPI Card Simples para valores absolutos (sem barra de progresso)
+const KPICardSimple = ({
+  title,
+  value,
+  icon: Icon,
+  color,
+  loading = false,
+  subtitle,
+}: {
+  title: string
+  value: string
+  icon: React.ElementType
+  color: string
+  loading?: boolean
+  subtitle?: string
+}) => {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-dark-800/50 rounded-xl p-5 border border-dark-700/50 hover:border-dark-600/50 transition-all"
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <span className="text-sm text-dark-400 font-medium">{title}</span>
+          <div className="mt-2">
+            {loading ? (
+              <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
+            ) : (
+              <span className="text-2xl font-bold text-white">{value}</span>
+            )}
+          </div>
+          {subtitle && (
+            <span className="text-xs text-dark-500 mt-1 block">{subtitle}</span>
+          )}
+        </div>
+        <div className={`p-2.5 rounded-xl bg-gradient-to-br ${color} shadow-lg`}>
+          <Icon className="w-5 h-5 text-white" />
+        </div>
+      </div>
     </motion.div>
   )
 }
@@ -313,7 +407,6 @@ export default function EmailAnalyticsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [data, setData] = useState<EmailData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [syncProgress, setSyncProgress] = useState<string | null>(null)
 
   // Get current store
   const { currentStore } = useStoreStore()
@@ -357,70 +450,12 @@ export default function EmailAnalyticsPage() {
     setError(null)
     
     try {
-      // Sync campaigns in batches using sync-one
-      let campaignsRemaining = 99
-      let campaignsSynced = 0
-      let maxCampaignCalls = 20 // Max 20 calls = 100 campaigns
-      
-      setSyncProgress('Sincronizando campanhas...')
-      
-      while (campaignsRemaining > 0 && maxCampaignCalls > 0) {
-        try {
-          const res = await fetch('/api/klaviyo?action=sync-one')
-          const data = await res.json()
-          
-          if (data.success) {
-            campaignsRemaining = data.remaining || 0
-            campaignsSynced += data.synced || 1
-            setSyncProgress(`Campanhas: ${campaignsSynced} sincronizadas, ${campaignsRemaining} restantes...`)
-          } else {
-            break
-          }
-          maxCampaignCalls--
-        } catch (e) {
-          console.error('Sync campaign error:', e)
-          break
-        }
-      }
-      
-      // Sync flows in batches using sync-flows
-      let flowsRemaining = 99
-      let flowsSynced = 0
-      let maxFlowCalls = 10 // Max 10 calls = 30 flows
-      
-      setSyncProgress('Sincronizando automações...')
-      
-      while (flowsRemaining > 0 && maxFlowCalls > 0) {
-        try {
-          const res = await fetch('/api/klaviyo?action=sync-flows')
-          const data = await res.json()
-          
-          if (data.success) {
-            flowsRemaining = data.remaining || 0
-            flowsSynced += data.synced || 1
-            setSyncProgress(`Automações: ${flowsSynced} sincronizadas, ${flowsRemaining} restantes...`)
-          } else {
-            break
-          }
-          maxFlowCalls--
-        } catch (e) {
-          console.error('Sync flow error:', e)
-          break
-        }
-      }
-      
-      setSyncProgress(`Concluído! ${campaignsSynced} campanhas e ${flowsSynced} automações.`)
-      
-      // Small delay before fetching data
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
+      await fetchData()
     } catch (err) {
-      console.error('[Email Analytics] Sync error:', err)
+      console.error('[Email Analytics] Refresh error:', err)
     }
     
-    // Fetch updated data
-    await fetchData()
-    setSyncProgress(null)
+    setIsRefreshing(false)
   }
 
   // Not connected state - show better UI with connection option
@@ -545,116 +580,137 @@ export default function EmailAnalyticsPage() {
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
-
-        {/* Sync Progress */}
-        {syncProgress && (
-          <div className="mt-2 px-4 py-2 bg-primary-500/20 border border-primary-500/30 rounded-lg">
-            <p className="text-sm text-primary-300 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {syncProgress}
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPICard
-          title="Taxa de Abertura"
-          value={`${kpis?.openRate?.value || 0}%`}
-          change={kpis?.openRate?.change}
-          icon={Eye}
-          color="from-blue-500 to-blue-600"
-          loading={isLoading}
-        />
-        <KPICard
-          title="Taxa de Clique"
-          value={`${kpis?.clickRate?.value || 0}%`}
-          change={kpis?.clickRate?.change}
-          icon={MousePointer}
-          color="from-green-500 to-green-600"
-          loading={isLoading}
-        />
-        <KPICard
-          title="Taxa de Conversão"
-          value={`${kpis?.conversionRate?.value || 0}%`}
-          change={kpis?.conversionRate?.change}
-          icon={Target}
-          color="from-purple-500 to-purple-600"
-          loading={isLoading}
-        />
-        <KPICard
-          title="Receita Gerada"
-          value={formatCurrency(Number(kpis?.revenue?.value) || 0)}
-          change={kpis?.revenue?.change}
-          icon={DollarSign}
-          color="from-primary-500 to-accent-500"
-          loading={isLoading}
-        />
+      {/* KPI Cards - Taxas Principais */}
+      <div className="space-y-2">
+        <h2 className="text-sm font-medium text-dark-400 uppercase tracking-wider">Performance</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPICard
+            title="Taxa de Abertura"
+            value={`${kpis?.openRate?.value || 0}`}
+            suffix="%"
+            change={kpis?.openRate?.change}
+            icon={Eye}
+            color="from-blue-500 to-blue-600"
+            loading={isLoading}
+            maxValue={100}
+          />
+          <KPICard
+            title="Taxa de Clique"
+            value={`${kpis?.clickRate?.value || 0}`}
+            suffix="%"
+            change={kpis?.clickRate?.change}
+            icon={MousePointer}
+            color="from-green-500 to-green-600"
+            loading={isLoading}
+            maxValue={100}
+          />
+          <KPICard
+            title="Taxa de Conversão"
+            value={`${kpis?.conversionRate?.value || 0}`}
+            suffix="%"
+            change={kpis?.conversionRate?.change}
+            icon={Target}
+            color="from-purple-500 to-purple-600"
+            loading={isLoading}
+            maxValue={100}
+          />
+          <KPICard
+            title="Receita Gerada"
+            value={formatCurrency(Number(kpis?.revenue?.value) || 0)}
+            change={kpis?.revenue?.change}
+            icon={DollarSign}
+            color="from-primary-500 to-accent-500"
+            loading={isLoading}
+            showProgress={false}
+          />
+        </div>
       </div>
 
-      {/* Second row of KPIs - Totais */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPICard
-          title="Emails Enviados"
-          value={formatNumber(data?.totals?.sent || 0)}
-          icon={Send}
-          color="from-blue-500 to-blue-600"
-          loading={isLoading}
-        />
-        <KPICard
-          title="Entregues"
-          value={formatNumber(data?.totals?.delivered || 0)}
-          icon={CheckCircle}
-          color="from-cyan-500 to-blue-500"
-          loading={isLoading}
-        />
-        <KPICard
-          title="Abertos"
-          value={formatNumber(data?.totals?.opened || 0)}
-          icon={Eye}
-          color="from-green-500 to-green-600"
-          loading={isLoading}
-        />
-        <KPICard
-          title="Clicados"
-          value={formatNumber(data?.totals?.clicked || 0)}
-          icon={MousePointer}
-          color="from-purple-500 to-purple-600"
-          loading={isLoading}
-        />
+      {/* KPI Cards - Volume de Emails */}
+      <div className="space-y-2">
+        <h2 className="text-sm font-medium text-dark-400 uppercase tracking-wider">Volume de Emails</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPICardSimple
+            title="Emails Enviados"
+            value={formatNumber(data?.totals?.sent || 0)}
+            icon={Send}
+            color="from-blue-500 to-blue-600"
+            loading={isLoading}
+          />
+          <KPICardSimple
+            title="Entregues"
+            value={formatNumber(data?.totals?.delivered || 0)}
+            icon={CheckCircle}
+            color="from-cyan-500 to-cyan-600"
+            loading={isLoading}
+            subtitle={data?.totals?.delivered && data?.totals?.sent 
+              ? `${((data.totals.delivered / data.totals.sent) * 100).toFixed(1)}% de entrega`
+              : undefined}
+          />
+          <KPICardSimple
+            title="Abertos"
+            value={formatNumber(data?.totals?.opened || 0)}
+            icon={Eye}
+            color="from-green-500 to-green-600"
+            loading={isLoading}
+            subtitle={data?.totals?.opened && data?.totals?.delivered
+              ? `${((data.totals.opened / data.totals.delivered) * 100).toFixed(1)}% dos entregues`
+              : undefined}
+          />
+          <KPICardSimple
+            title="Clicados"
+            value={formatNumber(data?.totals?.clicked || 0)}
+            icon={MousePointer}
+            color="from-purple-500 to-purple-600"
+            loading={isLoading}
+            subtitle={data?.totals?.clicked && data?.totals?.opened
+              ? `${((data.totals.clicked / data.totals.opened) * 100).toFixed(1)}% dos abertos`
+              : undefined}
+          />
+        </div>
       </div>
 
-      {/* Third row of KPIs - Subscribers & Bounces */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPICard
-          title="Lista Ativa"
-          value={formatNumber(Number(kpis?.subscribers?.value) || 0)}
-          icon={Users}
-          color="from-cyan-500 to-blue-500"
-          loading={isLoading}
-        />
-        <KPICard
-          title="Conversões"
-          value={formatNumber(data?.totals?.conversions || 0)}
-          icon={Target}
-          color="from-yellow-500 to-orange-500"
-          loading={isLoading}
-        />
-        <KPICard
-          title="Taxa de Bounce"
-          value={`${kpis?.bounceRate?.value || 0}%`}
-          icon={XCircle}
-          color="from-red-500 to-rose-600"
-          loading={isLoading}
-        />
-        <KPICard
-          title="Unsubscribes"
-          value={`${kpis?.unsubscribeRate?.value || 0}%`}
-          icon={UserMinus}
-          color="from-gray-500 to-gray-600"
-          loading={isLoading}
-        />
+      {/* KPI Cards - Audiência e Saúde */}
+      <div className="space-y-2">
+        <h2 className="text-sm font-medium text-dark-400 uppercase tracking-wider">Audiência</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPICardSimple
+            title="Lista Ativa"
+            value={formatNumber(Number(kpis?.subscribers?.value) || 0)}
+            icon={Users}
+            color="from-cyan-500 to-blue-500"
+            loading={isLoading}
+            subtitle="inscritos ativos"
+          />
+          <KPICardSimple
+            title="Conversões"
+            value={formatNumber(data?.totals?.conversions || 0)}
+            icon={Target}
+            color="from-yellow-500 to-orange-500"
+            loading={isLoading}
+            subtitle="no período"
+          />
+          <KPICard
+            title="Taxa de Bounce"
+            value={`${kpis?.bounceRate?.value || 0}`}
+            suffix="%"
+            icon={XCircle}
+            color="from-red-500 to-rose-600"
+            loading={isLoading}
+            maxValue={10}
+          />
+          <KPICard
+            title="Descadastros"
+            value={`${kpis?.unsubscribeRate?.value || 0}`}
+            suffix="%"
+            icon={UserMinus}
+            color="from-gray-500 to-gray-600"
+            loading={isLoading}
+            maxValue={5}
+          />
+        </div>
       </div>
 
       {/* Diagnostic Alert - When no data */}

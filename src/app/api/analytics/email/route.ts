@@ -1033,15 +1033,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const flowInfo = allFlows.find(f => f.id === fr.flowId);
       return {
         id: fr.flowId,
-        name: flowInfo?.name || 'Unknown Flow',
+        name: flowInfo?.name || 'Automação sem nome',
         status: flowInfo?.status || 'unknown',
         triggered: fr.delivered,
         opened: fr.opens,
         clicked: fr.clicks,
         revenue: fr.revenue,
         conversions: fr.conversions,
-        open_rate: fr.openRate,
-        click_rate: fr.clickRate
+        openRate: fr.openRate?.toFixed(1) || '0',
+        clickRate: fr.clickRate?.toFixed(1) || '0'
       };
     }).filter(f => f.revenue > 0 || f.triggered > 0);
 
@@ -1052,17 +1052,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const campInfo = allCampaigns.find(c => c.id === cr.campaignId);
       return {
         id: cr.campaignId,
-        name: campInfo?.name || 'Unknown Campaign',
+        name: campInfo?.name || 'Campanha sem nome',
         status: campInfo?.status || 'sent',
-        sent_at: campInfo?.sendTime,
+        sentAt: campInfo?.sendTime || null,
         sent: cr.delivered,
         delivered: cr.delivered,
         opened: cr.opens,
         clicked: cr.clicks,
         revenue: cr.revenue,
         conversions: cr.conversions,
-        open_rate: cr.openRate,
-        click_rate: cr.clickRate
+        openRate: cr.openRate?.toFixed(1) || '0',
+        clickRate: cr.clickRate?.toFixed(1) || '0'
       };
     }).filter(c => c.revenue > 0 || c.sent > 0);
 
