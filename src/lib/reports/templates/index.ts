@@ -1,14 +1,10 @@
 /**
  * Templates de Relatórios PDF
- * 
- * TODO: Fase 4 - Criar templates:
- * - GeneralReport
- * - SalesReport
- * - ForecastReport
- * - ShopifyReport
- * - EmailReport
- * - AdsReport
  */
 
-// Placeholder - será preenchido na Fase 4
-export {}
+export { GeneralReport } from './GeneralReport'
+export { SalesReport } from './SalesReport'
+export { ForecastReport } from './ForecastReport'
+export { ShopifyReport } from './ShopifyReport'
+export { EmailReport } from './EmailReport'
+export { AdsReport } from './AdsReport'
