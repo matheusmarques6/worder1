@@ -408,19 +408,32 @@ export default function DashboardPage() {
   // Handle export
   const handleExport = async (format: 'csv' | 'pdf') => {
     try {
-      const params = new URLSearchParams()
-      params.append('range', selectedRange)
-      params.append('format', format)
-      
-      const response = await fetch(`/api/dashboard/export?${params.toString()}`)
-      
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `dashboard-${selectedRange}.${format}`
-        a.click()
+      if (format === 'pdf') {
+        // Usar nova API de relatórios PDF
+        const params = new URLSearchParams()
+        params.append('period', selectedRange)
+        if (currentStore?.id) {
+          params.append('storeId', currentStore.id)
+        }
+        
+        const response = await fetch(`/api/reports/general?${params.toString()}`)
+        
+        if (response.ok) {
+          const blob = await response.blob()
+          const url = window.URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `relatorio-geral-${new Date().toISOString().split('T')[0]}.pdf`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          window.URL.revokeObjectURL(url)
+        } else {
+          console.error('Erro ao gerar PDF:', await response.text())
+        }
+      } else {
+        // CSV - manter lógica existente ou implementar depois
+        console.log('Export CSV não implementado')
       }
     } catch (error) {
       console.error('Export error:', error)
