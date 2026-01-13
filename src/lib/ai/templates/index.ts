@@ -178,6 +178,85 @@ export function getTemplateDefaults(template: NicheTemplate): Record<string, str
 }
 
 /**
+ * Interface para FAQ items no fluxo de criação
+ */
+interface FAQItem {
+  id: string;
+  question: string;
+  answer: string;
+  category: string;
+  enabled: boolean;
+  isCustom?: boolean;
+}
+
+/**
+ * Interface para persona no fluxo de criação
+ */
+interface PersonaDefaults {
+  tone: 'casual' | 'friendly' | 'professional' | 'luxury';
+  responseLength: 'short' | 'medium' | 'long';
+  replyDelay: number;
+}
+
+/**
+ * Interface para retorno de getTemplateDefaultsExtended
+ */
+interface TemplateDefaultsExtended {
+  formData: Record<string, string>;
+  persona: PersonaDefaults;
+  faqItems: FAQItem[];
+}
+
+/**
+ * Retorna defaults estendidos para o fluxo de criação de agente
+ * Inclui formData, persona e faqItems baseado no template e análise da loja
+ */
+export function getTemplateDefaultsExtended(
+  template: NicheTemplate,
+  storeAnalysis?: { suggestedFAQ?: Array<{ question: string; answer: string; category: string }> } | null
+): TemplateDefaultsExtended {
+  // Get form data defaults
+  const formData: Record<string, string> = {};
+  template.customFields.forEach(field => {
+    if (field.defaultValue) {
+      formData[field.id] = field.defaultValue;
+    }
+  });
+
+  // Get persona defaults from template
+  const persona: PersonaDefaults = {
+    tone: template.persona?.tone || 'friendly',
+    responseLength: template.persona?.responseLength || 'medium',
+    replyDelay: template.persona?.replyDelay || 3,
+  };
+
+  // Get FAQ items - prefer store analysis if available
+  let faqItems: FAQItem[] = [];
+  
+  if (storeAnalysis?.suggestedFAQ?.length) {
+    faqItems = storeAnalysis.suggestedFAQ.map((f, i) => ({
+      id: `store-faq-${i}`,
+      question: f.question,
+      answer: f.answer,
+      category: f.category || 'general',
+      enabled: true,
+      isCustom: false,
+    }));
+  } else if (template.suggestedFAQ?.length) {
+    faqItems = template.suggestedFAQ.map((f) => ({
+      id: f.id,
+      question: f.question,
+      answer: f.answer,
+      category: f.category,
+      enabled: f.enabled,
+      isCustom: false,
+    }));
+  }
+
+  return { formData, persona, faqItems };
+}
+
+/**
  * Detecta template sugerido baseado em palavras-chave
  */
 export function suggestTemplate(keywords: string[]): NicheTemplate | null {

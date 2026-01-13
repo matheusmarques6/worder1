@@ -27,7 +27,7 @@ import {
 import {
   NicheTemplate,
   getTemplateById,
-  getTemplateDefaults,
+  getTemplateDefaultsExtended,
   generatePromptFromTemplate,
 } from '@/lib/ai/templates';
 import type { StoreAnalysis } from '@/types/store-analysis';
@@ -225,7 +225,7 @@ export function CreateAgentFlow({
     setSelectedTemplate(template);
     
     // Load defaults
-    const defaults = getTemplateDefaults(template, storeAnalysis || undefined);
+    const defaults = getTemplateDefaultsExtended(template, storeAnalysis || undefined);
     setFormData(defaults.formData);
     setPersona(defaults.persona);
     setFAQItems(defaults.faqItems);
