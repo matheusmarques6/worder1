@@ -305,7 +305,7 @@ export default function ShopifyAnalyticsPage() {
               try {
                 const params = new URLSearchParams()
                 params.append('period', selectedPeriod)
-                if (selectedStore) params.append('storeId', selectedStore)
+                if (storeId) params.append('storeId', storeId)
                 
                 const response = await fetch(`/api/reports/shopify?${params.toString()}`)
                 if (response.ok) {
