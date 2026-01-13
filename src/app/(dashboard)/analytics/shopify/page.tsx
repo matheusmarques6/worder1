@@ -302,14 +302,22 @@ export default function ShopifyAnalyticsPage() {
           {/* Export PDF Button */}
           <button
             onClick={async () => {
+              const btn = document.getElementById('export-pdf-btn')
+              if (btn) btn.textContent = 'Gerando...'
+              
               try {
                 const params = new URLSearchParams()
                 params.append('period', selectedPeriod)
                 if (storeId) params.append('storeId', storeId)
                 
+                console.log('[PDF] Chamando API:', `/api/reports/shopify?${params.toString()}`)
                 const response = await fetch(`/api/reports/shopify?${params.toString()}`)
+                
+                console.log('[PDF] Response status:', response.status)
+                
                 if (response.ok) {
                   const blob = await response.blob()
+                  console.log('[PDF] Blob size:', blob.size)
                   const url = window.URL.createObjectURL(blob)
                   const a = document.createElement('a')
                   a.href = url
@@ -318,11 +326,20 @@ export default function ShopifyAnalyticsPage() {
                   a.click()
                   document.body.removeChild(a)
                   window.URL.revokeObjectURL(url)
+                } else {
+                  const errorText = await response.text()
+                  console.error('[PDF] Erro da API:', errorText)
+                  alert(`Erro ao gerar PDF: ${response.status}`)
                 }
               } catch (error) {
-                console.error('Erro ao exportar:', error)
+                console.error('[PDF] Erro ao exportar:', error)
+                alert('Erro ao exportar PDF. Veja o console.')
+              } finally {
+                const btn = document.getElementById('export-pdf-btn')
+                if (btn) btn.textContent = 'Exportar PDF'
               }
             }}
+            id="export-pdf-btn"
             className="flex items-center gap-2 px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
