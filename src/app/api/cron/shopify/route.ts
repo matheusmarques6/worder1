@@ -162,28 +162,27 @@ async function runCleanupJob(supabase: ReturnType<typeof createClient>) {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
   // Limpar logs de sync antigos
-  const { count: syncLogsDeleted } = await supabase
+  const { error: syncError } = await supabase
     .from('shopify_sync_logs')
     .delete()
-    .lt('started_at', thirtyDaysAgo.toISOString())
-    .select('id', { count: 'exact' });
+    .lt('started_at', thirtyDaysAgo.toISOString());
 
   // Limpar webhook events antigos (se existir tabela)
-  let webhookEventsDeleted = 0;
+  let webhookCleanupStatus = 'skipped';
   try {
-    const { count } = await supabase
+    const { error } = await supabase
       .from('shopify_webhook_events')
       .delete()
-      .lt('created_at', thirtyDaysAgo.toISOString())
-      .select('id', { count: 'exact' });
-    webhookEventsDeleted = count || 0;
+      .lt('created_at', thirtyDaysAgo.toISOString());
+    webhookCleanupStatus = error ? 'error' : 'success';
   } catch {
     // Tabela pode não existir
+    webhookCleanupStatus = 'table_not_found';
   }
 
   return {
-    syncLogsDeleted: syncLogsDeleted || 0,
-    webhookEventsDeleted,
+    syncLogsCleanup: syncError ? 'error' : 'success',
+    webhookCleanup: webhookCleanupStatus,
     cutoffDate: thirtyDaysAgo.toISOString(),
   };
 }
