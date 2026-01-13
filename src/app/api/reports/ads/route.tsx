@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     // Validar platform
     if (!['meta', 'google', 'tiktok'].includes(platform)) {
-      return ReportErrors.VALIDATION_ERROR('Platform inválida. Use: meta, google ou tiktok')
+      return ReportErrors.BAD_REQUEST('Platform inválida. Use: meta, google ou tiktok')
     }
 
     // 3. Buscar métricas com cache
