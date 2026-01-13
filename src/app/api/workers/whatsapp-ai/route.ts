@@ -77,22 +77,27 @@ export async function POST(request: NextRequest) {
 
     // Registrar log de processamento para idempotência
     if (messageId) {
-      await supabaseAdmin
-        .from('ai_message_logs')
-        .insert({
-          message_id: messageId,
-          conversation_id: conversationId,
-          organization_id: organizationId,
-          processed: result.processed,
-          replied: result.replied,
-          transferred: result.transferred,
-          agent_id: result.agentId,
-          error: result.error,
-        })
-        .catch(err => {
-          // Não falhar se o log não puder ser inserido
-          console.warn('[Worker/WhatsApp-AI] ⚠️ Erro ao registrar log:', err);
-        });
+      try {
+        const { error: logError } = await supabaseAdmin
+          .from('ai_message_logs')
+          .insert({
+            message_id: messageId,
+            conversation_id: conversationId,
+            organization_id: organizationId,
+            processed: result.processed,
+            replied: result.replied,
+            transferred: result.transferred,
+            agent_id: result.agentId,
+            error: result.error,
+          });
+        
+        if (logError) {
+          console.warn('[Worker/WhatsApp-AI] ⚠️ Erro ao registrar log:', logError);
+        }
+      } catch (err) {
+        // Não falhar se o log não puder ser inserido
+        console.warn('[Worker/WhatsApp-AI] ⚠️ Erro ao registrar log:', err);
+      }
     }
 
     console.log('[Worker/WhatsApp-AI] ✅ Processado:', {
