@@ -24,12 +24,11 @@ const styles = StyleSheet.create({
 interface SectionProps {
   title: string
   children: ReactNode
-  style?: object
 }
 
-export function Section({ title, children, style }: SectionProps) {
+export function Section({ title, children }: SectionProps) {
   return (
-    <View style={style ? [styles.section, style] : styles.section} wrap={false}>
+    <View style={styles.section} wrap={false}>
       <Text style={styles.title}>{title}</Text>
       <View style={styles.content}>
         {children}
