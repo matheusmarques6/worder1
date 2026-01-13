@@ -1,10 +1,6 @@
 // =============================================
-// API: Shopify Cron Jobs (CORRIGIDO)
+// API: Shopify Cron Jobs
 // src/app/api/cron/shopify/route.ts
-//
-// CORREÇÃO D: Fail-closed em prod
-// - Se CRON_SECRET não existe → 403 SEMPRE
-// - Não há "modo dev aberto"
 // =============================================
 
 export const dynamic = 'force-dynamic';
@@ -20,22 +16,19 @@ import { createClient } from '@supabase/supabase-js';
 function verifyCronAuth(request: NextRequest): { valid: boolean; error?: string } {
   const cronSecret = process.env.CRON_SECRET;
   
-  // ✅ CORREÇÃO D: Fail-closed - sem secret = SEMPRE bloqueado
   if (!cronSecret) {
-    console.error('[Cron] CRON_SECRET not configured - blocking request (fail-closed)');
+    console.error('[Cron] CRON_SECRET not configured - blocking request');
     return { 
       valid: false, 
       error: 'CRON_SECRET not configured. Set it in environment variables.' 
     };
   }
   
-  // Verificar header Authorization
   const authHeader = request.headers.get('authorization');
   if (authHeader === `Bearer ${cronSecret}`) {
     return { valid: true };
   }
   
-  // Verificar query param (fallback para alguns cron services)
   const { searchParams } = new URL(request.url);
   const secretParam = searchParams.get('secret');
   if (secretParam === cronSecret) {
@@ -59,11 +52,11 @@ function getSupabaseAdmin() {
 }
 
 // =============================================
-// JOB HANDLERS (importar dinamicamente para evitar erros de build)
+// JOB HANDLERS
 // =============================================
 
-async function runSyncJob(supabase: ReturnType<typeof createClient>) {
-  // Buscar todas as stores ativas com todos os campos
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function runSyncJob(supabase: any) {
   const { data: stores, error } = await supabase
     .from('shopify_stores')
     .select('*')
@@ -73,29 +66,31 @@ async function runSyncJob(supabase: ReturnType<typeof createClient>) {
     return { storesProcessed: 0, message: 'No active stores' };
   }
 
-  // Import dinâmico para evitar erros de build circular
   const { runFullSync } = await import('@/lib/services/shopify/full-sync');
   
-  const results: Array<{ store: string; success?: boolean; error?: string; [key: string]: any }> = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const results: any[] = [];
   for (const store of stores) {
     try {
-      const result = await runFullSync(store as any, {
+      const result = await runFullSync(store, {
         syncProducts: false,
         syncLocations: false,
         syncCustomers: true,
         syncOrders: true,
         syncCheckouts: true,
       });
-      results.push({ store: (store as any).shop_domain || 'unknown', ...result });
-    } catch (e: any) {
-      results.push({ store: (store as any).shop_domain || 'unknown', success: false, error: e.message });
+      results.push({ store: store.shop_domain || 'unknown', ...result });
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+      results.push({ store: store.shop_domain || 'unknown', success: false, error: errorMessage });
     }
   }
 
   return { storesProcessed: stores.length, results };
 }
 
-async function runRFMJob(supabase: ReturnType<typeof createClient>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function runRFMJob(supabase: any) {
   const { data: stores, error } = await supabase
     .from('shopify_stores')
     .select('id, organization_id, shop_domain')
@@ -107,26 +102,28 @@ async function runRFMJob(supabase: ReturnType<typeof createClient>) {
 
   const { calculateRFMScores } = await import('@/lib/services/shopify/analytics/rfm');
   
-  const results: Array<{ store: string; success: boolean; customersAnalyzed?: number; segments?: any; error?: string }> = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const results: any[] = [];
   for (const store of stores) {
-    const storeData = store as { id: string; organization_id: string; shop_domain: string };
     try {
-      const result = await calculateRFMScores(storeData.id, storeData.organization_id);
+      const result = await calculateRFMScores(store.id, store.organization_id);
       results.push({
-        store: storeData.shop_domain,
+        store: store.shop_domain,
         success: result.success,
         customersAnalyzed: result.customersAnalyzed,
         segments: result.segmentCounts,
       });
-    } catch (e: any) {
-      results.push({ store: storeData.shop_domain, success: false, error: e.message });
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+      results.push({ store: store.shop_domain, success: false, error: errorMessage });
     }
   }
 
   return { storesProcessed: stores.length, results };
 }
 
-async function runCohortJob(supabase: ReturnType<typeof createClient>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function runCohortJob(supabase: any) {
   const { data: stores, error } = await supabase
     .from('shopify_stores')
     .select('id, organization_id, shop_domain')
@@ -138,36 +135,36 @@ async function runCohortJob(supabase: ReturnType<typeof createClient>) {
 
   const { calculateCohortAnalysis } = await import('@/lib/services/shopify/analytics/cohort');
   
-  const results: Array<{ store: string; success: boolean; cohortsAnalyzed?: number; dataPoints?: number; error?: string }> = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const results: any[] = [];
   for (const store of stores) {
-    const storeData = store as { id: string; organization_id: string; shop_domain: string };
     try {
-      const result = await calculateCohortAnalysis(storeData.id, storeData.organization_id);
+      const result = await calculateCohortAnalysis(store.id, store.organization_id);
       results.push({
-        store: storeData.shop_domain,
+        store: store.shop_domain,
         success: result.success,
         cohortsAnalyzed: result.cohortsAnalyzed,
         dataPoints: result.dataPoints,
       });
-    } catch (e: any) {
-      results.push({ store: storeData.shop_domain, success: false, error: e.message });
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+      results.push({ store: store.shop_domain, success: false, error: errorMessage });
     }
   }
 
   return { storesProcessed: stores.length, results };
 }
 
-async function runCleanupJob(supabase: ReturnType<typeof createClient>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function runCleanupJob(supabase: any) {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
-  // Limpar logs de sync antigos
   const { error: syncError } = await supabase
     .from('shopify_sync_logs')
     .delete()
     .lt('started_at', thirtyDaysAgo.toISOString());
 
-  // Limpar webhook events antigos (se existir tabela)
   let webhookCleanupStatus = 'skipped';
   try {
     const { error } = await supabase
@@ -176,7 +173,6 @@ async function runCleanupJob(supabase: ReturnType<typeof createClient>) {
       .lt('created_at', thirtyDaysAgo.toISOString());
     webhookCleanupStatus = error ? 'error' : 'success';
   } catch {
-    // Tabela pode não existir
     webhookCleanupStatus = 'table_not_found';
   }
 
@@ -194,7 +190,6 @@ async function runCleanupJob(supabase: ReturnType<typeof createClient>) {
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   
-  // ✅ CORREÇÃO D: Verificar auth (fail-closed)
   const authResult = verifyCronAuth(request);
   if (!authResult.valid) {
     return NextResponse.json(
@@ -219,6 +214,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let result: any;
 
     console.log(`[Cron] Starting job: ${job}`);
@@ -236,17 +232,18 @@ export async function GET(request: NextRequest) {
         result = await runCohortJob(supabase);
         break;
         
-      case 'analytics':
+      case 'analytics': {
         const rfmResult = await runRFMJob(supabase);
         const cohortResult = await runCohortJob(supabase);
         result = { rfm: rfmResult, cohort: cohortResult };
         break;
+      }
         
       case 'cleanup':
         result = await runCleanupJob(supabase);
         break;
         
-      case 'all':
+      case 'all': {
         const allSync = await runSyncJob(supabase);
         const allRfm = await runRFMJob(supabase);
         const allCohort = await runCohortJob(supabase);
@@ -258,6 +255,7 @@ export async function GET(request: NextRequest) {
           cleanup: allCleanup,
         };
         break;
+      }
         
       default:
         return NextResponse.json(
@@ -280,15 +278,16 @@ export async function GET(request: NextRequest) {
       durationMs,
     });
 
-  } catch (error: any) {
+  } catch (error) {
     const durationMs = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[Cron] Job ${job} failed after ${durationMs}ms:`, error);
 
     return NextResponse.json(
       {
         success: false,
         job,
-        error: error.message,
+        error: errorMessage,
         durationMs,
       },
       { status: 500 }
@@ -296,7 +295,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST também aceita (para flexibilidade)
 export async function POST(request: NextRequest) {
   return GET(request);
 }
