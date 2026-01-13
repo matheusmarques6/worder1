@@ -1,8 +1,6 @@
 // =============================================
-// API: Shopify Cohort Analytics (CORRIGIDO)
+// API: Shopify Cohort Analytics
 // src/app/api/shopify/analytics/cohort/route.ts
-//
-// CORREÇÃO B: Usa getAuthClient() centralizado
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,14 +16,12 @@ export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
   try {
-    // ✅ CORREÇÃO B: Usar helper centralizado
     const auth = await getAuthClient();
     if (!auth) return authError();
 
     const { supabase, user } = auth;
     const organizationId = user.organization_id;
 
-    // Parse body
     let storeId: string | null = null;
     let maxMonths = 12;
     try {
@@ -36,7 +32,6 @@ export async function POST(request: NextRequest) {
       // Body vazio
     }
 
-    // Se não passou storeId, buscar a store ativa
     if (!storeId) {
       const { data: stores } = await supabase
         .from('shopify_stores')
@@ -53,7 +48,14 @@ export async function POST(request: NextRequest) {
       storeId = stores[0].id;
     }
 
-    // Validar acesso à store
+    // TypeScript guard - garantir que storeId é string
+    if (!storeId) {
+      return NextResponse.json(
+        { success: false, error: 'storeId não encontrado' },
+        { status: 400 }
+      );
+    }
+
     const validation = await validateStoreAccess(supabase, organizationId, storeId);
     if (!validation.valid) {
       return NextResponse.json(
@@ -62,7 +64,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calcular Cohort
     const result = await calculateCohortAnalysis(storeId, organizationId, maxMonths);
 
     if (!result.success) {
@@ -83,10 +84,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Cohort POST] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
@@ -98,7 +100,6 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ CORREÇÃO B: Usar helper centralizado
     const auth = await getAuthClient();
     if (!auth) return authError();
 
@@ -111,7 +112,6 @@ export async function GET(request: NextRequest) {
     const view = searchParams.get('view') || 'matrix';
     const maxCohorts = parseInt(searchParams.get('maxCohorts') || '12', 10);
 
-    // Se não passou storeId, buscar a store ativa
     let resolvedStoreId = storeId;
     if (!resolvedStoreId) {
       const { data: stores } = await supabase
@@ -129,7 +129,14 @@ export async function GET(request: NextRequest) {
       resolvedStoreId = stores[0].id;
     }
 
-    // Validar acesso à store
+    // TypeScript guard
+    if (!resolvedStoreId) {
+      return NextResponse.json(
+        { success: false, error: 'storeId não encontrado' },
+        { status: 400 }
+      );
+    }
+
     const validation = await validateStoreAccess(supabase, organizationId, resolvedStoreId);
     if (!validation.valid) {
       return NextResponse.json(
@@ -153,10 +160,11 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     );
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Cohort GET] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
