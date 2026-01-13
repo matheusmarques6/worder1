@@ -1,8 +1,6 @@
 // =============================================
-// API: Shopify RFM Analytics (CORRIGIDO)
+// API: Shopify RFM Analytics
 // src/app/api/shopify/analytics/rfm/route.ts
-//
-// CORREÇÃO B: Usa getAuthClient() centralizado
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,23 +16,20 @@ export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
   try {
-    // ✅ CORREÇÃO B: Usar helper centralizado
     const auth = await getAuthClient();
     if (!auth) return authError();
 
     const { supabase, user } = auth;
     const organizationId = user.organization_id;
 
-    // Parse body
     let storeId: string | null = null;
     try {
       const body = await request.json();
       storeId = body.storeId || null;
     } catch {
-      // Body vazio - buscar primeira store
+      // Body vazio
     }
 
-    // Se não passou storeId, buscar a store ativa
     if (!storeId) {
       const { data: stores } = await supabase
         .from('shopify_stores')
@@ -51,7 +46,14 @@ export async function POST(request: NextRequest) {
       storeId = stores[0].id;
     }
 
-    // Validar acesso à store
+    // TypeScript guard
+    if (!storeId) {
+      return NextResponse.json(
+        { success: false, error: 'storeId não encontrado' },
+        { status: 400 }
+      );
+    }
+
     const validation = await validateStoreAccess(supabase, organizationId, storeId);
     if (!validation.valid) {
       return NextResponse.json(
@@ -60,7 +62,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calcular RFM
     const result = await calculateRFMScores(storeId, organizationId);
 
     if (!result.success) {
@@ -81,10 +82,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('[RFM POST] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
@@ -96,7 +98,6 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ CORREÇÃO B: Usar helper centralizado
     const auth = await getAuthClient();
     if (!auth) return authError();
 
@@ -108,7 +109,6 @@ export async function GET(request: NextRequest) {
     const segment = searchParams.get('segment');
     const view = searchParams.get('view') || 'summary';
 
-    // Se não passou storeId, buscar a store ativa
     let resolvedStoreId = storeId;
     if (!resolvedStoreId) {
       const { data: stores } = await supabase
@@ -126,7 +126,14 @@ export async function GET(request: NextRequest) {
       resolvedStoreId = stores[0].id;
     }
 
-    // Validar acesso à store
+    // TypeScript guard
+    if (!resolvedStoreId) {
+      return NextResponse.json(
+        { success: false, error: 'storeId não encontrado' },
+        { status: 400 }
+      );
+    }
+
     const validation = await validateStoreAccess(supabase, organizationId, resolvedStoreId);
     if (!validation.valid) {
       return NextResponse.json(
@@ -150,10 +157,11 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     );
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('[RFM GET] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
