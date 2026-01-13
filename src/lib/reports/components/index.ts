@@ -1,16 +1,13 @@
 /**
  * Componentes React-PDF reutilizáveis
- * 
- * TODO: Fase 2 - Criar componentes:
- * - Header
- * - Footer
- * - KPICard
- * - KPIRow
- * - Table
- * - Section
- * - InsightCard
- * - PageWrapper
+ * Exporta todos os componentes para uso nas rotas de relatórios
  */
 
-// Placeholder - será preenchido na Fase 2
-export {}
+export { ReportHeader } from './Header'
+export { ReportFooter } from './Footer'
+export { KPICard } from './KPICard'
+export { KPIRow } from './KPIRow'
+export { Table } from './Table'
+export { Section } from './Section'
+export { InsightCard } from './InsightCard'
+export { PageWrapper } from './PageWrapper'
