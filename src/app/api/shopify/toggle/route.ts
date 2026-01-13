@@ -1,15 +1,24 @@
 // =============================================
-// API: Toggle Shopify Store Active Status
+// API: Toggle Shopify Store Active Status (SEGURO)
 // src/app/api/shopify/toggle/route.ts
+//
+// ⚠️ CORRIGIDO: Usa autenticação obrigatória
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseClient } from '@/lib/api-utils'
+import { getAuthClient, authError, validateStoreAccess, getSupabaseClient } from '@/lib/api-utils'
 
 export async function POST(request: NextRequest) {
-  const supabase = getSupabaseClient()
+  // ✅ SEGURO: Autenticação obrigatória
+  const auth = await getAuthClient()
+  if (!auth) return authError()
+  
+  const { user } = auth
+  const organizationId = user.organization_id
 
-  if (!supabase) {
+  // Usar service_role para update (após validação)
+  const supabaseAdmin = getSupabaseClient()
+  if (!supabaseAdmin) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
   }
 
@@ -21,8 +30,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'storeId required' }, { status: 400 })
     }
 
-    // Atualizar status
-    const { data: store, error } = await supabase
+    // ✅ SEGURO: Validar que a loja pertence à organização do usuário
+    const validation = await validateStoreAccess(auth.supabase, organizationId, storeId)
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.error },
+        { status: validation.status || 403 }
+      )
+    }
+
+    // Atualizar status (agora seguro - validado acima)
+    const { data: store, error } = await supabaseAdmin
       .from('shopify_stores')
       .update({
         is_active: isActive,
@@ -30,6 +48,7 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', storeId)
+      .eq('organization_id', organizationId) // ✅ Double-check
       .select()
       .single()
 

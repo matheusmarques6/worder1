@@ -1,196 +1,245 @@
-# 🔥 Fase 0: Spike Técnico - Sistema de Relatórios PDF
+# 🛒 Shopify Integration - Security Patch & Implementation (v2 HARDENED)
 
-## 📋 Checklist de Implementação
+> **Versão corrigida** com os 4 ajustes de segurança paranóica:
+> - ✅ A) UNIQUE(user_id) em organization_members
+> - ✅ B) Todas rotas usam getAuthClient() centralizado
+> - ✅ C) /api/shopify/sync exige storeId
+> - ✅ D) Cron fail-closed (sem modo dev aberto)
 
-### 1. Instalar Dependência
+## 📦 Conteúdo do Pacote
+
+### SQL (Executar PRIMEIRO)
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `sql/SECURITY_PATCH_V3_SUPABASE.sql` | Patch de segurança multi-tenant |
+| `sql/SHOPIFY_COMPLETE_TABLES_V3.sql` | Tabelas adicionais (checkouts, RFM, cohort, etc.) |
+| `sql/FIX_ONE_ORG_PER_USER.sql` | **NOVO** - Garante 1 usuário = 1 org (UNIQUE constraint) |
+
+### Services (`src/lib/services/shopify/`)
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `api-client.ts` | **NOVO** - Cliente API com rate limiting (40 req/min), paginação cursor-based |
+| `full-sync.ts` | **NOVO** - Orquestrador de sync completo |
+| `index.ts` | **ATUALIZADO** - Exports centralizados |
+| `analytics/rfm.ts` | **NOVO** - Cálculo RFM com 11 segmentos |
+| `analytics/cohort.ts` | **NOVO** - Análise de retenção por cohort |
+| `analytics/index.ts` | **NOVO** - Exports do módulo analytics |
+
+### API Routes (`src/app/api/shopify/`)
+
+| Endpoint | Arquivo | Status |
+|----------|---------|--------|
+| `/api/shopify/sync` | `sync/route.ts` | 🔒 **CORRIGIDO** - Segurança |
+| `/api/shopify/full-sync` | `full-sync/route.ts` | ✨ **NOVO** |
+| `/api/shopify/analytics/rfm` | `analytics/rfm/route.ts` | ✨ **NOVO** |
+| `/api/shopify/analytics/cohort` | `analytics/cohort/route.ts` | ✨ **NOVO** |
+| `/api/shopify/toggle` | `toggle/route.ts` | 🔒 **CORRIGIDO** - Segurança |
+| `/api/shopify/configure` | `configure/route.ts` | 🔒 **CORRIGIDO** - Segurança |
+| `/api/cron/shopify` | `cron/shopify/route.ts` | 🔄 **ATUALIZADO** - RFM/Cohort |
+
+---
+
+## 🚀 Instruções de Instalação
+
+### 1. Executar SQL no Supabase (ORDEM IMPORTANTE!)
 
 ```bash
-npm install @react-pdf/renderer
+# 1. Primeiro o patch de segurança
+# Cole o conteúdo de sql/SECURITY_PATCH_V3_SUPABASE.sql no SQL Editor
+
+# 2. Depois as tabelas adicionais
+# Cole o conteúdo de sql/SHOPIFY_COMPLETE_TABLES_V3.sql no SQL Editor
+
+# 3. Por último, garantir 1-org-por-user (CRÍTICO!)
+# Cole o conteúdo de sql/FIX_ONE_ORG_PER_USER.sql no SQL Editor
 ```
 
-### 2. Copiar Arquivos
+### 2. Copiar Arquivos TypeScript
 
-Copie os arquivos para o projeto Worder:
+Copie os arquivos mantendo a estrutura de diretórios:
 
 ```
-# Criar pasta se não existir
-mkdir -p src/lib/reports/assets
-mkdir -p src/app/api/reports/poc
-
-# Copiar arquivos
-cp src/lib/reports/assets/logo.ts      → seu-projeto/src/lib/reports/assets/logo.ts
-cp src/lib/reports/assets/index.ts     → seu-projeto/src/lib/reports/assets/index.ts
-cp src/lib/reports/index.ts            → seu-projeto/src/lib/reports/index.ts
-cp src/app/api/reports/poc/route.ts    → seu-projeto/src/app/api/reports/poc/route.ts
+src/
+├── lib/services/shopify/
+│   ├── api-client.ts        (sobrescrever/criar)
+│   ├── full-sync.ts         (sobrescrever/criar)
+│   ├── index.ts             (sobrescrever)
+│   └── analytics/
+│       ├── rfm.ts           (criar)
+│       ├── cohort.ts        (criar)
+│       └── index.ts         (criar)
+└── app/api/
+    ├── shopify/
+    │   ├── sync/route.ts        (sobrescrever)
+    │   ├── full-sync/route.ts   (criar)
+    │   ├── toggle/route.ts      (sobrescrever)
+    │   ├── configure/route.ts   (sobrescrever)
+    │   └── analytics/
+    │       ├── rfm/route.ts     (criar)
+    │       └── cohort/route.ts  (criar)
+    └── cron/shopify/route.ts    (sobrescrever)
 ```
 
-### 3. Verificar Tipos
+### 3. Verificar Compilação
 
 ```bash
-npm run type-check
+npm run build
 # ou
 npx tsc --noEmit
 ```
 
-### 4. Build
-
-```bash
-npm run build
-```
-
-### 5. Testar Local
-
-```bash
-npm run start
-```
-
-Abrir no browser:
-```
-http://localhost:3000/api/reports/poc
-```
-
-O PDF deve baixar automaticamente!
-
 ---
 
-## 📁 Estrutura de Arquivos
+## 🔒 Correções de Segurança Aplicadas
 
-```
-src/
-├── lib/
-│   └── reports/
-│       ├── index.ts                    # Exports públicos
-│       └── assets/
-│           ├── index.ts                # Export do logo
-│           └── logo.ts                 # Logo em base64
-│
-└── app/
-    └── api/
-        └── reports/
-            └── poc/
-                └── route.ts            # Rota de teste
-```
+### Vulnerabilidades Corrigidas
 
----
+1. **RLS Policies com USING(true)** → Corrigido para `organization_id = get_user_org_id()`
+2. **Rotas sem autenticação** → Adicionado `getAuthClient()` obrigatório
+3. **Service role exposto** → Validação de ownership antes de usar admin
+4. **Cross-org access** → FORCE ROW LEVEL SECURITY em todas as tabelas
+5. **FK constraints faltando** → Adicionado com ON DELETE CASCADE
 
-## ✅ Validações da Fase 0
+### Padrão de Segurança nas APIs
 
-| Validação | Comando/Ação | Esperado |
-|-----------|--------------|----------|
-| TypeScript | `npm run type-check` | Sem erros |
-| Build | `npm run build` | Build passa |
-| Servidor | `npm run start` | Inicia sem erros |
-| Download | `GET /api/reports/poc` | PDF baixa |
-| Conteúdo | Abrir PDF | Logo, KPIs, Tabela visíveis |
-| Paginação | Ver rodapé | "Página 1 de 1" aparece |
-
----
-
-## 🐛 Troubleshooting
-
-### Erro: "Cannot find module '@react-pdf/renderer'"
-```bash
-# Reinstalar
-npm install @react-pdf/renderer
-```
-
-### Erro: "Dynamic server usage"
 ```typescript
-// Garantir que a rota tem:
-export const dynamic = 'force-dynamic'
-```
-
-### Erro: Build falha com "Top-level await"
-```typescript
-// Garantir que a rota tem:
-export const runtime = 'nodejs'
-```
-
-### Erro: PDF corrompido
-```typescript
-// Verificar headers:
-headers: {
-  'Content-Type': 'application/pdf',
-  'Content-Disposition': 'attachment; filename="..."',
+// ✅ PADRÃO CORRETO
+export async function POST(request: NextRequest) {
+  // 1. Autenticar usuário
+  const auth = await getAuthClient()
+  if (!auth) return authError()
+  
+  // 2. Validar acesso à loja
+  const validation = await validateStoreAccess(auth.supabase, auth.user.organization_id, storeId)
+  if (!validation.valid) return NextResponse.json({ error: validation.error }, { status: 403 })
+  
+  // 3. Só então usar admin client
+  const supabaseAdmin = getSupabaseClient()
+  // ...
 }
 ```
 
-### Erro: Logo não aparece
-```typescript
-// Verificar se o base64 é válido
-// Testar em: https://codebeautify.org/base64-to-image-converter
+---
+
+## 📊 Uso das APIs
+
+### Full Sync
+```bash
+# Executar sync completo
+curl -X POST http://localhost:3000/api/shopify/full-sync \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json"
+
+# Ver status
+curl http://localhost:3000/api/shopify/full-sync \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### RFM Analytics
+```bash
+# Calcular RFM
+curl -X POST http://localhost:3000/api/shopify/analytics/rfm \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Ver resumo
+curl http://localhost:3000/api/shopify/analytics/rfm \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Ver scores por segmento
+curl "http://localhost:3000/api/shopify/analytics/rfm?view=scores&segment=champion" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Cohort Analytics
+```bash
+# Calcular cohorts
+curl -X POST http://localhost:3000/api/shopify/analytics/cohort \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Ver matriz
+curl http://localhost:3000/api/shopify/analytics/cohort \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Cron Jobs
+```bash
+# Jobs disponíveis: abandoned, reconcile, health, cleanup, rfm, cohort, analytics, all
+curl "http://localhost:3000/api/cron/shopify?job=rfm" \
+  -H "Authorization: Bearer CRON_SECRET"
 ```
 
 ---
 
-## 🔄 Substituir Logo Placeholder
+## ⏰ Configuração de Cron (Vercel)
 
-O logo atual é um placeholder SVG. Para usar o logo real do Worder:
+Adicione ao `vercel.json`:
 
-### Opção 1: Online
-1. Acesse https://www.base64-image.de/
-2. Upload do logo PNG (recomendado: 240x80px)
-3. Copie o resultado
-4. Substitua em `src/lib/reports/assets/logo.ts`
-
-### Opção 2: Via Script
-```javascript
-// No terminal do projeto:
-node -e "
-const fs = require('fs');
-const logo = fs.readFileSync('./public/logo.png');
-console.log('data:image/png;base64,' + logo.toString('base64'));
-"
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/shopify?job=abandoned",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/shopify?job=reconcile",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/shopify?job=analytics",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}
 ```
 
-### Opção 3: Via Browser DevTools
-```javascript
-// Abra a imagem no browser, depois no Console:
-const img = document.querySelector('img'); // selecione a imagem
-const canvas = document.createElement('canvas');
-canvas.width = img.naturalWidth;
-canvas.height = img.naturalHeight;
-canvas.getContext('2d').drawImage(img, 0, 0);
-console.log(canvas.toDataURL('image/png'));
-```
+E adicione `CRON_SECRET` nas environment variables.
 
 ---
 
-## 📊 O que o PDF de Teste Mostra
+## 📈 RFM Segmentos
 
-1. **Header** - Logo + Título + Data de geração
-2. **KPIs** - 3 cards com valores, labels e variações
-3. **Tabela** - Top 5 Deals com colunas
-4. **Validação** - Box verde confirmando que tudo funciona
-5. **Footer** - "Worder CRM" + Paginação
-
----
-
-## ✅ GO/NO-GO Decision
-
-Após validar todos os itens:
-
-**GO** ✅ - Se tudo funcionar:
-- Prosseguir para Fase 1
-- Commit: `git commit -m "feat(reports): Fase 0 - Spike técnico @react-pdf/renderer"`
-
-**NO-GO** ❌ - Se houver problemas críticos:
-- Documentar o erro
-- Avaliar alternativas:
-  - `puppeteer` (mais pesado, mas mais flexível)
-  - `pdfkit` (mais baixo nível)
-  - `jspdf` (client-side)
+| Segmento | Cor | Descrição |
+|----------|-----|-----------|
+| champion | 🟢 | Compraram recentemente, frequentemente e muito |
+| loyal | 🔵 | Gastam bem e compram frequentemente |
+| potential_loyalist | 🟣 | Clientes recentes com boa frequência |
+| recent | 🔵 | Compraram recentemente mas sem histórico |
+| promising | 🟡 | Compradores recentes com potencial |
+| need_attention | 🟠 | Clientes acima da média esfriando |
+| about_to_sleep | 🟣 | Abaixo da média em recência e frequência |
+| at_risk | 🔴 | Gastaram muito mas não compram há tempo |
+| cant_lose | 🔴 | Grandes compradores inativos |
+| hibernating | ⚫ | Última compra há muito tempo |
+| lost | ⚫ | Menor recência, frequência e valor |
 
 ---
 
-## 🚀 Próximos Passos (após Fase 0)
+## ✅ Checklist de Implementação
 
-1. **Fase 1**: Criar estrutura completa de pastas + contracts
-2. **Fase 2**: Criar componentes reutilizáveis (Header, Table, etc)
-3. **Fase 3**: Criar rotas reais com auth
-4. **Fase 4**: Criar templates de relatório
-5. **Fase 5**: Integrar ExportButton nas páginas
+- [ ] Executar `SECURITY_PATCH_V3_SUPABASE.sql`
+- [ ] Executar `SHOPIFY_COMPLETE_TABLES_V3.sql`
+- [ ] Copiar arquivos TypeScript
+- [ ] Verificar build (`npm run build`)
+- [ ] Testar endpoint `/api/shopify/full-sync`
+- [ ] Testar endpoint `/api/shopify/analytics/rfm`
+- [ ] Configurar cron jobs
+- [ ] Adicionar `CRON_SECRET` nas env vars
 
 ---
 
-**Boa sorte! 🍀**
+## 🆘 Troubleshooting
+
+### Erro: "permission denied for schema auth"
+O SQL Editor do Supabase não permite criar funções no schema `auth`. O patch V3 já usa `public.get_user_org_id()` como workaround.
+
+### Erro: "function auth.organization_id() does not exist"
+Execute o patch V3 que cria a função alternativa `public.get_user_org_id()`.
+
+### Erro: "column notification_count does not exist"
+Execute `SHOPIFY_COMPLETE_TABLES_V3.sql` que adiciona colunas faltantes.
+
+### Erro 401 nas APIs
+Verifique se o token Bearer está sendo enviado corretamente no header Authorization.
