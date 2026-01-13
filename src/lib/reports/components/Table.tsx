@@ -32,12 +32,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.text.primary,
   },
-  cellRight: {
-    textAlign: 'right',
-  },
-  cellCenter: {
-    textAlign: 'center',
-  },
   emptyState: {
     padding: SPACING.xl,
     alignItems: 'center',
@@ -57,13 +51,15 @@ const styles = StyleSheet.create({
   },
 })
 
-type CellAlignment = 'left' | 'center' | 'right'
+interface TableColumn {
+  header: string
+  width?: string
+  align?: 'left' | 'center' | 'right'
+}
 
 interface TableProps {
-  headers: string[]
+  columns: TableColumn[]
   rows: (string | number | null | undefined)[][]
-  columnWidths?: string[]
-  columnAligns?: CellAlignment[]
   emptyMessage?: string
   truncatedMessage?: string
   zebra?: boolean
@@ -71,16 +67,14 @@ interface TableProps {
 }
 
 export function Table({
-  headers,
+  columns,
   rows,
-  columnWidths,
-  columnAligns,
   emptyMessage = REPORT_MESSAGES.NO_DATA,
   truncatedMessage,
   zebra = false,
   maxRows,
 }: TableProps) {
-  const defaultWidth = `${100 / headers.length}%`
+  const defaultWidth = `${100 / columns.length}%`
   
   // Aplicar limite de linhas se especificado
   const displayRows = maxRows && rows.length > maxRows 
@@ -88,39 +82,21 @@ export function Table({
     : rows
   const wasTruncated = maxRows && rows.length > maxRows
 
-  // Renderizar célula com alinhamento
-  const getCellStyle = (index: number) => {
-    const align = columnAligns?.[index] || 'left'
-    const width = columnWidths?.[index] || defaultWidth
-    
-    return [
-      styles.cell,
-      { width },
-      align === 'right' && styles.cellRight,
-      align === 'center' && styles.cellCenter,
-    ].filter(Boolean)
-  }
-
-  const getHeaderStyle = (index: number) => {
-    const align = columnAligns?.[index] || 'left'
-    const width = columnWidths?.[index] || defaultWidth
-    
-    return [
-      styles.headerCell,
-      { width },
-      align === 'right' && styles.cellRight,
-      align === 'center' && styles.cellCenter,
-    ].filter(Boolean)
-  }
-
   // Estado vazio
   if (rows.length === 0) {
     return (
       <View style={styles.table}>
         <View style={styles.headerRow}>
-          {headers.map((header, i) => (
-            <Text key={i} style={getHeaderStyle(i) as object[]}>
-              {header}
+          {columns.map((col, i) => (
+            <Text 
+              key={i} 
+              style={{
+                ...styles.headerCell,
+                width: col.width || defaultWidth,
+                textAlign: col.align || 'left',
+              }}
+            >
+              {col.header}
             </Text>
           ))}
         </View>
@@ -135,9 +111,16 @@ export function Table({
     <View style={styles.table}>
       {/* Header */}
       <View style={styles.headerRow}>
-        {headers.map((header, i) => (
-          <Text key={i} style={getHeaderStyle(i) as object[]}>
-            {header}
+        {columns.map((col, i) => (
+          <Text 
+            key={i} 
+            style={{
+              ...styles.headerCell,
+              width: col.width || defaultWidth,
+              textAlign: col.align || 'left',
+            }}
+          >
+            {col.header}
           </Text>
         ))}
       </View>
@@ -146,17 +129,28 @@ export function Table({
       {displayRows.map((row, rowIndex) => (
         <View 
           key={rowIndex} 
-          style={[
-            styles.row,
-            zebra && rowIndex % 2 === 1 && styles.rowAlternate,
-          ]}
+          style={
+            zebra && rowIndex % 2 === 1 
+              ? { ...styles.row, ...styles.rowAlternate }
+              : styles.row
+          }
           wrap={false}
         >
-          {row.map((cell, cellIndex) => (
-            <Text key={cellIndex} style={getCellStyle(cellIndex) as object[]}>
-              {cell ?? '-'}
-            </Text>
-          ))}
+          {row.map((cell, cellIndex) => {
+            const col = columns[cellIndex]
+            return (
+              <Text 
+                key={cellIndex} 
+                style={{
+                  ...styles.cell,
+                  width: col?.width || defaultWidth,
+                  textAlign: col?.align || 'left',
+                }}
+              >
+                {cell ?? '-'}
+              </Text>
+            )
+          })}
         </View>
       ))}
 
