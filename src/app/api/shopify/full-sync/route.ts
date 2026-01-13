@@ -1,12 +1,10 @@
 // =============================================
-// API: Shopify Full Sync (CORRIGIDO)
+// API: Shopify Full Sync
 // src/app/api/shopify/full-sync/route.ts
-//
-// CORREÇÃO B: Usa getAuthClient() centralizado
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthClient, authError, validateStoreAccess, getSupabaseClient } from '@/lib/api-utils';
+import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
 import { runFullSync, runIncrementalSync } from '@/lib/services/shopify/full-sync';
 
 export const dynamic = 'force-dynamic';
@@ -18,14 +16,12 @@ export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   try {
-    // ✅ CORREÇÃO B: Usar helper centralizado
     const auth = await getAuthClient();
     if (!auth) return authError();
 
     const { supabase, user } = auth;
     const organizationId = user.organization_id;
 
-    // Parse options from body
     let storeId: string | null = null;
     let options = {
       syncProducts: true,
@@ -44,7 +40,6 @@ export async function POST(request: NextRequest) {
       // Body vazio
     }
 
-    // Se não passou storeId, buscar a store ativa
     if (!storeId) {
       const { data: stores } = await supabase
         .from('shopify_stores')
@@ -61,7 +56,14 @@ export async function POST(request: NextRequest) {
       storeId = stores[0].id;
     }
 
-    // Validar acesso à store
+    // TypeScript guard
+    if (!storeId) {
+      return NextResponse.json(
+        { success: false, error: 'storeId não encontrado' },
+        { status: 400 }
+      );
+    }
+
     const validation = await validateStoreAccess(supabase, organizationId, storeId);
     if (!validation.valid) {
       return NextResponse.json(
@@ -70,7 +72,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar dados completos da store
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
       .select('*')
@@ -91,15 +92,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Executar sync
-    const syncFn = options.incremental ? runIncrementalSync : runFullSync;
-    const result = await syncFn(store, {
+    // Executar sync - chamar funções separadamente
+    const syncOptions = {
       syncProducts: options.syncProducts,
       syncCustomers: options.syncCustomers,
       syncOrders: options.syncOrders,
       syncCheckouts: options.syncCheckouts,
       syncLocations: options.syncLocations,
-    });
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let result: any;
+    if (options.incremental) {
+      const since = new Date();
+      since.setDate(since.getDate() - 1); // Last 24 hours
+      result = await runIncrementalSync(store, since, syncOptions);
+    } else {
+      result = await runFullSync(store, syncOptions);
+    }
 
     if (!result.success) {
       return NextResponse.json({
@@ -124,18 +134,19 @@ export async function POST(request: NextRequest) {
         productsCount: result.productsCount,
         checkoutsCount: result.checkoutsCount,
         locationsCount: result.locationsCount,
-        totalRevenue: result.metrics.totalRevenue,
-        averageOrderValue: result.metrics.averageOrderValue,
-        recurringCustomerRate: result.metrics.recurringCustomerRate,
+        totalRevenue: result.metrics?.totalRevenue || result.totalRevenue,
+        averageOrderValue: result.metrics?.averageOrderValue || result.averageOrderValue,
+        recurringCustomerRate: result.metrics?.recurringCustomerRate || result.recurringCustomerRate,
         durationMs: result.durationMs,
         syncedAt: new Date().toISOString(),
       },
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Full Sync POST] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
@@ -147,7 +158,6 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ CORREÇÃO B: Usar helper centralizado
     const auth = await getAuthClient();
     if (!auth) return authError();
 
@@ -156,7 +166,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('storeId');
 
-    // RLS filtra automaticamente
     let query = supabase
       .from('shopify_stores')
       .select(`
@@ -184,7 +193,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Se pediu uma store específica, retornar objeto único
     if (storeId && stores && stores.length > 0) {
       return NextResponse.json({
         success: true,
@@ -197,10 +205,11 @@ export async function GET(request: NextRequest) {
       stores: stores || [],
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Full Sync GET] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
