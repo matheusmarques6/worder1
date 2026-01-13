@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { toast } from 'sonner'
+import { useToast } from '@/components/ui/Toast'
 import type { ReportParams, ReportType } from './types'
 
 interface UseReportExportOptions {
@@ -22,6 +22,7 @@ interface UseReportExportReturn {
 export function useReportExport(options?: UseReportExportOptions): UseReportExportReturn {
   const [isExporting, setIsExporting] = useState(false)
   const [exportingType, setExportingType] = useState<ReportType | null>(null)
+  const toast = useToast()
 
   const buildUrl = useCallback((params: ReportParams): string => {
     const baseUrl = `/api/reports/${params.type}`
@@ -73,19 +74,19 @@ export function useReportExport(options?: UseReportExportOptions): UseReportExpo
       
       window.URL.revokeObjectURL(downloadUrl)
 
-      toast.success('Relatório gerado com sucesso!')
+      toast.success('Relatório gerado', 'Download iniciado com sucesso!')
       options?.onSuccess?.(params.type)
 
     } catch (error) {
       console.error('[REPORT_EXPORT_ERROR]', error)
       const err = error instanceof Error ? error : new Error('Erro desconhecido')
-      toast.error(err.message)
+      toast.error('Erro ao gerar relatório', err.message)
       options?.onError?.(err)
     } finally {
       setIsExporting(false)
       setExportingType(null)
     }
-  }, [buildUrl, options])
+  }, [buildUrl, options, toast])
 
   // Alias para downloadReport
   const exportReport = downloadReport

@@ -1,7 +1,7 @@
 'use client'
 
 import { FileDown, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui'
 import { useReportExport } from './useReportExport'
 import type { ReportType, ReportParams, PeriodOption, AdsPlatform } from './types'
 
@@ -19,9 +19,9 @@ interface ExportSingleButtonProps {
   /** Plataforma de ads */
   platform?: AdsPlatform
   /** Variante do botão */
-  variant?: 'default' | 'outline' | 'ghost' | 'secondary' | 'destructive' | 'link'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
   /** Tamanho do botão */
-  size?: 'default' | 'sm' | 'lg' | 'icon'
+  size?: 'sm' | 'md' | 'lg'
   /** Classe CSS adicional */
   className?: string
   /** Mostrar ícone */
@@ -42,8 +42,8 @@ export function ExportSingleButton({
   pipelineId,
   period = '30d',
   platform = 'meta',
-  variant = 'outline',
-  size = 'default',
+  variant = 'secondary',
+  size = 'md',
   className,
   showIcon = true,
   onSuccess,
@@ -76,14 +76,10 @@ export function ExportSingleButton({
       className={className}
       onClick={handleExport}
       disabled={isExporting}
+      leftIcon={showIcon ? (
+        isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />
+      ) : undefined}
     >
-      {showIcon && (
-        isExporting ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <FileDown className="mr-2 h-4 w-4" />
-        )
-      )}
       {isExporting ? 'Gerando...' : label}
     </Button>
   )

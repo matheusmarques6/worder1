@@ -1,25 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { FileDown, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Label } from '@/components/ui/label'
+import { useState, useEffect, useRef } from 'react'
+import { FileDown, Loader2, X } from 'lucide-react'
+import { Button, Input } from '@/components/ui'
+import { cn } from '@/lib/utils'
 import { useReportExport } from './useReportExport'
 import type { ReportType, PeriodOption, AdsPlatform } from './types'
 import { REPORT_OPTIONS, PERIOD_OPTIONS, ADS_PLATFORM_OPTIONS } from './types'
@@ -57,6 +41,7 @@ export function ReportExportDialog({
   const [selectedType, setSelectedType] = useState<ReportType>('general')
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(defaultPeriod)
   const [selectedPlatform, setSelectedPlatform] = useState<AdsPlatform>(defaultPlatform)
+  const modalRef = useRef<HTMLDivElement>(null)
 
   const { isExporting, downloadReport } = useReportExport({
     onSuccess: (type) => {
@@ -64,6 +49,21 @@ export function ReportExportDialog({
       onSuccess?.(type)
     },
   })
+
+  // Fechar com ESC
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    if (open) {
+      document.addEventListener('keydown', handleEsc)
+      document.body.style.overflow = 'hidden'
+    }
+    return () => {
+      document.removeEventListener('keydown', handleEsc)
+      document.body.style.overflow = 'unset'
+    }
+  }, [open])
 
   const options = availableTypes
     ? REPORT_OPTIONS.filter(opt => availableTypes.includes(opt.type))
@@ -80,109 +80,134 @@ export function ReportExportDialog({
   }
 
   const defaultTrigger = (
-    <Button variant="outline">
-      <FileDown className="mr-2 h-4 w-4" />
+    <Button variant="secondary" leftIcon={<FileDown className="w-4 h-4" />}>
       Exportar Relatório
     </Button>
   )
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <>
+      {/* Trigger */}
+      <div onClick={() => setOpen(true)}>
         {trigger || defaultTrigger}
-      </DialogTrigger>
-      
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Exportar Relatório PDF</DialogTitle>
-          <DialogDescription>
-            Selecione o tipo de relatório e o período desejado.
-          </DialogDescription>
-        </DialogHeader>
+      </div>
 
-        <div className="grid gap-4 py-4">
-          {/* Tipo de Relatório */}
-          <div className="grid gap-2">
-            <Label htmlFor="report-type">Tipo de Relatório</Label>
-            <Select 
-              value={selectedType} 
-              onValueChange={(v) => setSelectedType(v as ReportType)}
-            >
-              <SelectTrigger id="report-type">
-                <SelectValue placeholder="Selecione o relatório" />
-              </SelectTrigger>
-              <SelectContent>
-                {options.map((opt) => (
-                  <SelectItem key={opt.type} value={opt.type}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Período */}
-          <div className="grid gap-2">
-            <Label htmlFor="period">Período</Label>
-            <Select 
-              value={selectedPeriod} 
-              onValueChange={(v) => setSelectedPeriod(v as PeriodOption)}
-            >
-              <SelectTrigger id="period">
-                <SelectValue placeholder="Selecione o período" />
-              </SelectTrigger>
-              <SelectContent>
-                {PERIOD_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Plataforma de Ads (condicional) */}
-          {selectedType === 'ads' && (
-            <div className="grid gap-2">
-              <Label htmlFor="platform">Plataforma de Ads</Label>
-              <Select 
-                value={selectedPlatform} 
-                onValueChange={(v) => setSelectedPlatform(v as AdsPlatform)}
+      {/* Modal Backdrop */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Overlay */}
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
+          />
+          
+          {/* Modal */}
+          <div 
+            ref={modalRef}
+            className="relative bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-dark-700">
+              <div>
+                <h2 className="text-lg font-semibold text-dark-100">Exportar Relatório PDF</h2>
+                <p className="text-sm text-dark-400 mt-0.5">Selecione o tipo e período</p>
+              </div>
+              <button 
+                onClick={() => setOpen(false)}
+                className="p-2 hover:bg-dark-800 rounded-lg transition-colors"
               >
-                <SelectTrigger id="platform">
-                  <SelectValue placeholder="Selecione a plataforma" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ADS_PLATFORM_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <X className="w-5 h-5 text-dark-400" />
+              </button>
             </div>
-          )}
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={handleExport} disabled={isExporting}>
-            {isExporting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Gerando...
-              </>
-            ) : (
-              <>
-                <FileDown className="mr-2 h-4 w-4" />
-                Exportar PDF
-              </>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              {/* Tipo de Relatório */}
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">
+                  Tipo de Relatório
+                </label>
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value as ReportType)}
+                  className={cn(
+                    "w-full bg-dark-800/50 border border-dark-600 rounded-xl px-4 py-3",
+                    "text-dark-100 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20",
+                    "transition-all duration-300"
+                  )}
+                >
+                  {options.map((opt) => (
+                    <option key={opt.type} value={opt.type}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Período */}
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">
+                  Período
+                </label>
+                <select
+                  value={selectedPeriod}
+                  onChange={(e) => setSelectedPeriod(e.target.value as PeriodOption)}
+                  className={cn(
+                    "w-full bg-dark-800/50 border border-dark-600 rounded-xl px-4 py-3",
+                    "text-dark-100 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20",
+                    "transition-all duration-300"
+                  )}
+                >
+                  {PERIOD_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Plataforma de Ads (condicional) */}
+              {selectedType === 'ads' && (
+                <div>
+                  <label className="block text-sm font-medium text-dark-300 mb-2">
+                    Plataforma de Ads
+                  </label>
+                  <select
+                    value={selectedPlatform}
+                    onChange={(e) => setSelectedPlatform(e.target.value as AdsPlatform)}
+                    className={cn(
+                      "w-full bg-dark-800/50 border border-dark-600 rounded-xl px-4 py-3",
+                      "text-dark-100 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20",
+                      "transition-all duration-300"
+                    )}
+                  >
+                    {ADS_PLATFORM_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-dark-700 bg-dark-800/50">
+              <Button variant="ghost" onClick={() => setOpen(false)}>
+                Cancelar
+              </Button>
+              <Button 
+                variant="primary" 
+                onClick={handleExport} 
+                disabled={isExporting}
+                leftIcon={isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+              >
+                {isExporting ? 'Gerando...' : 'Exportar PDF'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

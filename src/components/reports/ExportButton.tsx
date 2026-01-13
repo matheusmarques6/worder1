@@ -1,16 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { FileDown, ChevronDown, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Button } from '@/components/ui'
+import { cn } from '@/lib/utils'
 import { useReportExport } from './useReportExport'
 import type { ReportType, ReportParams, PeriodOption, AdsPlatform } from './types'
 import { REPORT_OPTIONS } from './types'
@@ -27,9 +20,9 @@ interface ExportButtonProps {
   /** Plataforma de ads selecionada */
   platform?: AdsPlatform
   /** Variante do botão */
-  variant?: 'default' | 'outline' | 'ghost' | 'secondary'
+  variant?: 'primary' | 'secondary' | 'ghost'
   /** Tamanho do botão */
-  size?: 'default' | 'sm' | 'lg' | 'icon'
+  size?: 'sm' | 'md' | 'lg'
   /** Classe CSS adicional */
   className?: string
   /** Callback após sucesso */
@@ -47,13 +40,15 @@ export function ExportButton({
   pipelineId,
   period = '30d',
   platform = 'meta',
-  variant = 'outline',
-  size = 'default',
+  variant = 'secondary',
+  size = 'md',
   className,
   onSuccess,
   onError,
 }: ExportButtonProps) {
   const [open, setOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  
   const { isExporting, exportingType, downloadReport } = useReportExport({
     onSuccess: (type) => {
       setOpen(false)
@@ -61,6 +56,17 @@ export function ExportButton({
     },
     onError,
   })
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Filtrar opções disponíveis
   const options = availableTypes
@@ -75,7 +81,6 @@ export function ExportButton({
       period,
     }
 
-    // Adicionar platform apenas para ads
     if (type === 'ads') {
       params.platform = platform
     }
@@ -84,51 +89,54 @@ export function ExportButton({
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button 
-          variant={variant} 
-          size={size} 
-          className={className}
-          disabled={isExporting}
-        >
-          {isExporting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <FileDown className="mr-2 h-4 w-4" />
-          )}
-          Exportar PDF
-          <ChevronDown className="ml-2 h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
+    <div className="relative inline-block" ref={dropdownRef}>
+      <Button 
+        variant={variant} 
+        size={size} 
+        className={className}
+        disabled={isExporting}
+        onClick={() => setOpen(!open)}
+        leftIcon={isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+        rightIcon={<ChevronDown className={cn("w-4 h-4 transition-transform", open && "rotate-180")} />}
+      >
+        Exportar PDF
+      </Button>
       
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Escolha o relatório</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        
-        {options.map((option) => (
-          <DropdownMenuItem
-            key={option.type}
-            onClick={() => handleExport(option.type)}
-            disabled={isExporting || option.disabled}
-            className="flex flex-col items-start gap-1 py-2"
-          >
-            <div className="flex items-center gap-2 w-full">
-              {exportingType === option.type ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <FileDown className="h-4 w-4" />
-              )}
-              <span className="font-medium">{option.label}</span>
-            </div>
-            {option.description && (
-              <span className="text-xs text-muted-foreground ml-6">
-                {option.description}
-              </span>
-            )}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      {open && (
+        <div className="absolute right-0 mt-2 w-64 bg-dark-800 border border-dark-600 rounded-xl shadow-xl z-50 overflow-hidden">
+          <div className="px-3 py-2 border-b border-dark-600">
+            <span className="text-xs font-medium text-dark-400">Escolha o relatório</span>
+          </div>
+          
+          <div className="py-1">
+            {options.map((option) => (
+              <button
+                key={option.type}
+                onClick={() => handleExport(option.type)}
+                disabled={isExporting || option.disabled}
+                className={cn(
+                  "w-full px-3 py-2 text-left hover:bg-dark-700 transition-colors",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  {exportingType === option.type ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
+                  ) : (
+                    <FileDown className="w-4 h-4 text-dark-400" />
+                  )}
+                  <span className="text-sm font-medium text-dark-100">{option.label}</span>
+                </div>
+                {option.description && (
+                  <p className="text-xs text-dark-500 mt-0.5 ml-6">
+                    {option.description}
+                  </p>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
