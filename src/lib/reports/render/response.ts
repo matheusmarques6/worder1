@@ -16,10 +16,8 @@ export function pdfResponse(
     ? `inline; filename="${filename}"`
     : `attachment; filename="${filename}"`
 
-  // Garantir que é Uint8Array
-  const body = pdfData instanceof Buffer 
-    ? new Uint8Array(pdfData) 
-    : pdfData
+  // Sempre converter para Uint8Array para compatibilidade com Response
+  const body = new Uint8Array(pdfData)
 
   return new Response(body, {
     headers: {
