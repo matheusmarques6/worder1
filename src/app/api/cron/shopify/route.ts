@@ -63,40 +63,32 @@ function getSupabaseAdmin() {
 // =============================================
 
 async function runSyncJob(supabase: ReturnType<typeof createClient>) {
-  const { data: stores } = await supabase
+  // Buscar todas as stores ativas com todos os campos
+  const { data: stores, error } = await supabase
     .from('shopify_stores')
-    .select('id, organization_id, shop_domain')
+    .select('*')
     .eq('is_active', true);
 
-  if (!stores || stores.length === 0) {
+  if (error || !stores || stores.length === 0) {
     return { storesProcessed: 0, message: 'No active stores' };
   }
 
   // Import dinâmico para evitar erros de build circular
   const { runFullSync } = await import('@/lib/services/shopify/full-sync');
   
-  const results = [];
+  const results: Array<{ store: string; success?: boolean; error?: string; [key: string]: any }> = [];
   for (const store of stores) {
     try {
-      // Buscar dados completos da store
-      const { data: fullStore } = await supabase
-        .from('shopify_stores')
-        .select('*')
-        .eq('id', store.id)
-        .single();
-      
-      if (fullStore) {
-        const result = await runFullSync(fullStore, {
-          syncProducts: false,
-          syncLocations: false,
-          syncCustomers: true,
-          syncOrders: true,
-          syncCheckouts: true,
-        });
-        results.push({ store: store.shop_domain, ...result });
-      }
+      const result = await runFullSync(store as any, {
+        syncProducts: false,
+        syncLocations: false,
+        syncCustomers: true,
+        syncOrders: true,
+        syncCheckouts: true,
+      });
+      results.push({ store: (store as any).shop_domain || 'unknown', ...result });
     } catch (e: any) {
-      results.push({ store: store.shop_domain, success: false, error: e.message });
+      results.push({ store: (store as any).shop_domain || 'unknown', success: false, error: e.message });
     }
   }
 
@@ -104,29 +96,30 @@ async function runSyncJob(supabase: ReturnType<typeof createClient>) {
 }
 
 async function runRFMJob(supabase: ReturnType<typeof createClient>) {
-  const { data: stores } = await supabase
+  const { data: stores, error } = await supabase
     .from('shopify_stores')
     .select('id, organization_id, shop_domain')
     .eq('is_active', true);
 
-  if (!stores || stores.length === 0) {
+  if (error || !stores || stores.length === 0) {
     return { storesProcessed: 0, results: [] };
   }
 
   const { calculateRFMScores } = await import('@/lib/services/shopify/analytics/rfm');
   
-  const results = [];
+  const results: Array<{ store: string; success: boolean; customersAnalyzed?: number; segments?: any; error?: string }> = [];
   for (const store of stores) {
+    const storeData = store as { id: string; organization_id: string; shop_domain: string };
     try {
-      const result = await calculateRFMScores(store.id, store.organization_id);
+      const result = await calculateRFMScores(storeData.id, storeData.organization_id);
       results.push({
-        store: store.shop_domain,
+        store: storeData.shop_domain,
         success: result.success,
         customersAnalyzed: result.customersAnalyzed,
         segments: result.segmentCounts,
       });
     } catch (e: any) {
-      results.push({ store: store.shop_domain, success: false, error: e.message });
+      results.push({ store: storeData.shop_domain, success: false, error: e.message });
     }
   }
 
@@ -134,29 +127,30 @@ async function runRFMJob(supabase: ReturnType<typeof createClient>) {
 }
 
 async function runCohortJob(supabase: ReturnType<typeof createClient>) {
-  const { data: stores } = await supabase
+  const { data: stores, error } = await supabase
     .from('shopify_stores')
     .select('id, organization_id, shop_domain')
     .eq('is_active', true);
 
-  if (!stores || stores.length === 0) {
+  if (error || !stores || stores.length === 0) {
     return { storesProcessed: 0, results: [] };
   }
 
   const { calculateCohortAnalysis } = await import('@/lib/services/shopify/analytics/cohort');
   
-  const results = [];
+  const results: Array<{ store: string; success: boolean; cohortsAnalyzed?: number; dataPoints?: number; error?: string }> = [];
   for (const store of stores) {
+    const storeData = store as { id: string; organization_id: string; shop_domain: string };
     try {
-      const result = await calculateCohortAnalysis(store.id, store.organization_id);
+      const result = await calculateCohortAnalysis(storeData.id, storeData.organization_id);
       results.push({
-        store: store.shop_domain,
+        store: storeData.shop_domain,
         success: result.success,
         cohortsAnalyzed: result.cohortsAnalyzed,
         dataPoints: result.dataPoints,
       });
     } catch (e: any) {
-      results.push({ store: store.shop_domain, success: false, error: e.message });
+      results.push({ store: storeData.shop_domain, success: false, error: e.message });
     }
   }
 
