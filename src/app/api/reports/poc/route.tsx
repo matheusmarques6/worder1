@@ -248,8 +248,8 @@ export async function GET(request: NextRequest) {
       size: `${(pdfBuffer.length / 1024).toFixed(2)}KB`,
     })
 
-    // Retornar PDF
-    return new Response(pdfBuffer, {
+    // Retornar PDF (converter Buffer para Uint8Array para compatibilidade com Response)
+    return new Response(new Uint8Array(pdfBuffer), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="poc-report-${new Date().toISOString().split('T')[0]}.pdf"`,
