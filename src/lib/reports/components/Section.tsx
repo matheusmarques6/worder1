@@ -29,7 +29,7 @@ interface SectionProps {
 
 export function Section({ title, children, style }: SectionProps) {
   return (
-    <View style={[styles.section, style]} wrap={false}>
+    <View style={style ? [styles.section, style] : styles.section} wrap={false}>
       <Text style={styles.title}>{title}</Text>
       <View style={styles.content}>
         {children}
