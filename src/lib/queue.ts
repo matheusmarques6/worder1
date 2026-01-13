@@ -179,6 +179,28 @@ export function isQStashConfigured(): boolean {
 }
 
 /**
+ * Obtém a URL base da aplicação com protocolo garantido
+ * VERCEL_URL vem sem protocolo, então precisamos adicionar https://
+ */
+function getBaseUrl(): string | null {
+  let baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  
+  if (!baseUrl) {
+    return null;
+  }
+  
+  // Garantir que tem protocolo (VERCEL_URL vem sem)
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = `https://${baseUrl}`;
+  }
+  
+  // Remover trailing slash
+  baseUrl = baseUrl.replace(/\/$/, '');
+  
+  return baseUrl;
+}
+
+/**
  * Enfileira execução de automação
  */
 export async function enqueueAutomationRun(
@@ -191,7 +213,7 @@ export async function enqueueAutomationRun(
     return null;
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  const baseUrl = getBaseUrl();
   if (!baseUrl) {
     console.warn('[Queue] APP_URL not configured');
     return null;
@@ -227,7 +249,7 @@ export async function enqueueAutomationStep(
     return null;
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  const baseUrl = getBaseUrl();
   if (!baseUrl) {
     console.warn('[Queue] APP_URL not configured');
     return null;
@@ -259,7 +281,7 @@ export async function enqueueEmailSend(
   const client = getQStashClient();
   if (!client) return null;
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  const baseUrl = getBaseUrl();
   if (!baseUrl) return null;
 
   const response = await client.publishJSON({
@@ -286,7 +308,7 @@ export async function enqueueWhatsAppSend(
   const client = getQStashClient();
   if (!client) return null;
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  const baseUrl = getBaseUrl();
   if (!baseUrl) return null;
 
   const response = await client.publishJSON({
@@ -299,6 +321,60 @@ export async function enqueueWhatsAppSend(
   });
 
   return response.messageId;
+}
+
+/**
+ * Parâmetros para processamento de IA via WhatsApp
+ */
+export interface WhatsAppAIParams {
+  organizationId: string;
+  conversationId: string;
+  contactId: string;
+  instanceId: string;
+  instanceName: string;
+  phoneNumber: string;
+  message: string;
+  messageId?: string;
+  contactName?: string;
+}
+
+/**
+ * Enfileira processamento de IA para mensagem WhatsApp
+ * Isso garante que o processamento seja durável em ambiente serverless
+ */
+export async function enqueueWhatsAppAI(
+  params: WhatsAppAIParams
+): Promise<string | null> {
+  const client = getQStashClient();
+  
+  // Se QStash não está configurado, retorna null (fallback para sync)
+  if (!client) {
+    console.warn('[Queue] QStash not configured for WhatsApp AI');
+    return null;
+  }
+
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    console.warn('[Queue] APP_URL not configured');
+    return null;
+  }
+
+  try {
+    const response = await client.publishJSON({
+      url: `${baseUrl}/api/workers/whatsapp-ai`,
+      body: {
+        type: 'whatsapp_ai',
+        data: params,
+      },
+      retries: 3,
+    });
+
+    console.log(`[Queue] WhatsApp AI enqueued: ${response.messageId} for ${params.phoneNumber}`);
+    return response.messageId;
+  } catch (error) {
+    console.error('[Queue] Failed to enqueue WhatsApp AI:', error);
+    return null;
+  }
 }
 
 /**
@@ -425,7 +501,7 @@ export async function enqueueShopifyWebhook(
     return null;
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  const baseUrl = getBaseUrl();
   if (!baseUrl) {
     console.warn('[Queue] APP_URL not configured');
     return null;

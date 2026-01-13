@@ -72,8 +72,8 @@ export function Step4Activate({
         const data = await res.json();
         const connected = (data.numbers || []).filter((n: WhatsAppChannel) => n.is_connected);
         setChannels(connected);
-        // Auto-selecionar todos os canais conectados
-        setSelectedChannels(connected.map((c: WhatsAppChannel) => c.id));
+        // NÃO auto-selecionar - usuário deve escolher explicitamente
+        // setSelectedChannels(connected.map((c: WhatsAppChannel) => c.id));
       }
     } catch (err) {
       console.error('Error fetching channels:', err);
@@ -81,6 +81,10 @@ export function Step4Activate({
       setLoadingChannels(false);
     }
   };
+
+  // Validação: precisa selecionar pelo menos 1 canal se ativar agora
+  const canCreate = !activateNow || selectedChannels.length > 0;
+  const showChannelWarning = activateNow && selectedChannels.length === 0 && channels.length > 0;
 
   // Toggle channel selection
   const toggleChannel = (channelId: string) => {
@@ -289,7 +293,7 @@ export function Step4Activate({
           className="space-y-3"
         >
           <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wide">
-            Canais para ativar
+            Canais para ativar <span className="text-red-400">*</span>
           </h3>
 
           {loadingChannels ? (
@@ -299,6 +303,16 @@ export function Step4Activate({
             </div>
           ) : channels.length > 0 ? (
             <div className="space-y-2">
+              {/* Aviso de seleção obrigatória */}
+              {showChannelWarning && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-300">
+                    Selecione pelo menos um número para o agente responder.
+                  </p>
+                </div>
+              )}
+              
               {channels.map((channel) => (
                 <button
                   key={channel.id}
@@ -331,6 +345,12 @@ export function Step4Activate({
                   </div>
                 </button>
               ))}
+              
+              {/* Aviso de segurança */}
+              <p className="text-xs text-zinc-500 flex items-start gap-1.5 mt-2">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                O agente só responderá nos números selecionados. Nunca responderá em números não autorizados.
+              </p>
             </div>
           ) : (
             <div className="p-4 bg-zinc-800/50 border border-zinc-700 rounded-lg">
@@ -361,8 +381,8 @@ export function Step4Activate({
         </button>
         <button
           onClick={handleCreate}
-          disabled={creating}
-          className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+          disabled={creating || !canCreate}
+          className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
         >
           {creating ? (
             <>

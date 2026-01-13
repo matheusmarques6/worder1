@@ -9,16 +9,23 @@ export async function POST(
   try {
     const conversationId = params.id
     const body = await request.json()
-    const { agentId, isActive } = body
+    const { agentId, isActive, reason } = body
 
-    // Se desativando o bot
+    // =====================================================
+    // PAUSAR - Desativar IA para esta conversa
+    // =====================================================
     if (isActive === false || !agentId) {
       const { data, error } = await supabase
         .from('whatsapp_conversations')
         .update({
+          // AMBOS os campos para garantir pause imediato
           is_bot_active: false,
+          ai_enabled: false,
           ai_agent_id: null,
-          bot_stopped_at: new Date().toISOString(), // Marca quando foi parado
+          // Metadados do pause
+          ai_disabled_at: new Date().toISOString(),
+          ai_disabled_reason: reason || 'manually_paused',
+          bot_stopped_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', conversationId)
@@ -27,14 +34,19 @@ export async function POST(
 
       if (error) throw error
 
+      console.log(`[Bot] ⏸️ IA pausada para conversa ${conversationId}`)
+
       return NextResponse.json({ 
         conversation: data,
         botActive: false,
+        aiEnabled: false,
         agent: null,
       })
     }
 
-    // Se ativando o bot com um agente
+    // =====================================================
+    // RETOMAR - Ativar IA com um agente específico
+    // =====================================================
     const { data: agent } = await supabase
       .from('ai_agents')
       .select('*')
@@ -48,9 +60,14 @@ export async function POST(
     const { data, error } = await supabase
       .from('whatsapp_conversations')
       .update({
+        // AMBOS os campos para reativar
         is_bot_active: true,
+        ai_enabled: true,
         ai_agent_id: agentId,
-        bot_stopped_at: null, // Limpa a flag de parado
+        // Limpar metadados de pause
+        ai_disabled_at: null,
+        ai_disabled_reason: null,
+        bot_stopped_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', conversationId)
@@ -59,9 +76,12 @@ export async function POST(
 
     if (error) throw error
 
+    console.log(`[Bot] ▶️ IA ativada para conversa ${conversationId} com agente ${agent.name}`)
+
     return NextResponse.json({ 
       conversation: data,
       botActive: true,
+      aiEnabled: true,
       agent: agent,
     })
   } catch (error: any) {
@@ -88,6 +108,9 @@ export async function GET(
 
     return NextResponse.json({ 
       botActive: conversation.is_bot_active,
+      aiEnabled: conversation.ai_enabled,
+      aiDisabledAt: conversation.ai_disabled_at,
+      aiDisabledReason: conversation.ai_disabled_reason,
       agent: conversation.agent,
     })
   } catch (error: any) {

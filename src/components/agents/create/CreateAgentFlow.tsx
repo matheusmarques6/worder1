@@ -1,19 +1,29 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
   Check,
   ChevronRight,
   Sparkles,
+  Target,
   User,
-  MessageSquare,
+  FileText,
+  Database,
   Rocket,
   Store,
   AlertCircle,
 } from 'lucide-react';
-import { Step1Niche, Step2Personalize, Step3Knowledge, Step4Activate } from './steps';
+import { 
+  Step1Niche, 
+  Step2Function,
+  Step3Personalize, 
+  Step4PromptPreview,
+  Step5Knowledge, 
+  Step6Activate,
+  type AgentFunction,
+} from './steps';
 import {
   NicheTemplate,
   getTemplateById,
@@ -29,12 +39,14 @@ interface CreateAgentFlowProps {
   onSuccess: (agentId: string) => void;
 }
 
-// Steps configuration
+// Steps configuration - 6 steps
 const STEPS = [
   { id: 1, name: 'Nicho', icon: Sparkles },
-  { id: 2, name: 'Personalizar', icon: User },
-  { id: 3, name: 'Conhecimento', icon: MessageSquare },
-  { id: 4, name: 'Ativar', icon: Rocket },
+  { id: 2, name: 'Função', icon: Target },
+  { id: 3, name: 'Personalizar', icon: User },
+  { id: 4, name: 'Prompt', icon: FileText },
+  { id: 5, name: 'Conhecimento', icon: Database },
+  { id: 6, name: 'Ativar', icon: Rocket },
 ];
 
 interface FAQItem {
@@ -45,6 +57,18 @@ interface FAQItem {
   enabled: boolean;
   isCustom?: boolean;
 }
+
+// Default agent function
+const DEFAULT_AGENT_FUNCTION: AgentFunction = {
+  objective: 'sales',
+  mainTasks: [
+    'Responder dúvidas sobre produtos',
+    'Recomendar produtos baseado nas necessidades',
+    'Informar preços e disponibilidade',
+  ],
+  limitations: [],
+  handoffRules: 'Transferir para humano quando o cliente estiver irritado ou pedir para falar com atendente.',
+};
 
 export function CreateAgentFlow({
   organizationId,
@@ -66,6 +90,9 @@ export function CreateAgentFlow({
   // Form data
   const [formData, setFormData] = useState<Record<string, string>>({});
 
+  // Agent function (NEW)
+  const [agentFunction, setAgentFunction] = useState<AgentFunction>(DEFAULT_AGENT_FUNCTION);
+
   // Persona
   const [persona, setPersona] = useState<{
     tone: 'casual' | 'friendly' | 'professional' | 'luxury';
@@ -80,6 +107,13 @@ export function CreateAgentFlow({
   // FAQ
   const [faqItems, setFAQItems] = useState<FAQItem[]>([]);
 
+  // Prompt (NEW)
+  const [generatedPrompt, setGeneratedPrompt] = useState('');
+  const [editedPrompt, setEditedPrompt] = useState('');
+
+  // Draft agent (NEW) - created early to allow knowledge upload
+  const [draftAgentId, setDraftAgentId] = useState<string | null>(null);
+
   // Creating state
   const [creating, setCreating] = useState(false);
   const [createdAgentId, setCreatedAgentId] = useState<string | null>(null);
@@ -91,6 +125,36 @@ export function CreateAgentFlow({
       loadExistingAnalysis();
     }
   }, [storeId]);
+
+  // Close on ESC key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Generate prompt when entering step 4
+  useEffect(() => {
+    if (currentStep === 4 && selectedTemplate) {
+      const prompt = buildFullPrompt();
+      setGeneratedPrompt(prompt);
+      if (!editedPrompt) {
+        setEditedPrompt(prompt);
+      }
+    }
+  }, [currentStep, selectedTemplate, formData, persona, agentFunction]);
+
+  // Garantir draft quando entrar no Step 5 (mesmo via indicador)
+  useEffect(() => {
+    if (currentStep === 5 && !draftAgentId && selectedTemplate) {
+      createDraftAgent();
+    }
+  }, [currentStep, draftAgentId, selectedTemplate]);
 
   // Load existing analysis
   const loadExistingAnalysis = async () => {
@@ -128,7 +192,10 @@ export function CreateAgentFlow({
       const res = await fetch('/api/ai/analyze-store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId }),
+        body: JSON.stringify({
+          store_id: storeId,
+          organization_id: organizationId,
+        }),
       });
       
       const data = await res.json();
@@ -153,65 +220,98 @@ export function CreateAgentFlow({
     }
   };
 
-  // Handle template selection
+  // Select template
   const handleSelectTemplate = (template: NicheTemplate) => {
     setSelectedTemplate(template);
     
-    // Set default values
-    const defaults = getTemplateDefaults(template);
-    setFormData(defaults);
+    // Load defaults
+    const defaults = getTemplateDefaults(template, storeAnalysis || undefined);
+    setFormData(defaults.formData);
+    setPersona(defaults.persona);
+    setFAQItems(defaults.faqItems);
     
-    // Set persona defaults
-    setPersona({
-      tone: template.persona.tone,
-      responseLength: template.persona.responseLength,
-      replyDelay: template.persona.replyDelay,
-    });
-    
-    // Initialize FAQ from template
-    setFAQItems(
-      template.suggestedFAQ.map((f) => ({
-        id: f.id,
-        question: f.question,
-        answer: f.answer,
-        category: f.category,
-        enabled: f.enabled,
-        isCustom: false,
-      }))
-    );
+    // Update agent function based on template
+    if (template.id !== 'custom') {
+      const templateObjectives: Record<string, string> = {
+        'moda-feminina': 'sales',
+        'pet-shop': 'sales',
+        'fitness': 'sales',
+        'beleza': 'sales',
+        'delivery': 'support',
+        'casa': 'sales',
+        'baby': 'sales',
+        'joias': 'sales',
+      };
+      setAgentFunction({
+        ...DEFAULT_AGENT_FUNCTION,
+        objective: templateObjectives[template.id] || 'sales',
+      });
+    }
   };
 
-  // Create agent
-  const handleCreateAgent = async (activateNow: boolean, channelIds: string[]) => {
-    if (!selectedTemplate) return;
+  // Build full prompt with all sections
+  const buildFullPrompt = (): string => {
+    if (!selectedTemplate) return '';
     
-    setCreating(true);
-    setCreateError(null);
+    // Generate base prompt from template
+    const templateData = {
+      templateId: selectedTemplate.id,
+      agentName: formData.storeName || formData.agentName || 'Assistente',
+      storeId,
+      customFieldValues: formData,
+      persona,
+      selectedFAQ: faqItems.filter((f) => f.enabled).map((f) => f.id),
+      enabledActions: selectedTemplate.defaultActions?.filter((a) => a.enabled)?.map((a) => a.id) || [],
+      storeAnalysis: storeAnalysis ? {
+        storeName: storeAnalysis.storeName,
+        storeDescription: storeAnalysis.storeDescription,
+        detectedNiche: storeAnalysis.detectedNiche,
+        products: storeAnalysis.products?.total || 0,
+        categories: storeAnalysis.categories?.map((c) => c.name) || [],
+        priceRange: storeAnalysis.priceRange,
+        policies: storeAnalysis.policies,
+      } : undefined,
+    };
+    
+    const generated = generatePromptFromTemplate(selectedTemplate, templateData);
+    let prompt = generated.systemPrompt;
+    
+    // Add agent function section
+    const objectiveLabels: Record<string, string> = {
+      sales: 'Vendas e conversão',
+      support: 'Atendimento e suporte',
+      leads: 'Qualificação de leads',
+      scheduling: 'Agendamento',
+      faq: 'FAQ e informações',
+      custom: agentFunction.objectiveCustom || 'Personalizado',
+    };
+    
+    const functionSection = `
+
+## SEU OBJETIVO PRINCIPAL
+${objectiveLabels[agentFunction.objective] || agentFunction.objective}
+
+## SUAS TAREFAS
+${agentFunction.mainTasks.map(t => `- ${t}`).join('\n')}
+
+${agentFunction.limitations.length > 0 ? `## LIMITAÇÕES IMPORTANTES
+${agentFunction.limitations.map(l => `⚠️ ${l}`).join('\n')}
+` : ''}
+## QUANDO TRANSFERIR PARA HUMANO
+${agentFunction.handoffRules}
+`;
+    
+    prompt = prompt + functionSection;
+    
+    return prompt.trim();
+  };
+
+  // Create draft agent (for knowledge upload)
+  const createDraftAgent = async (): Promise<string | null> => {
+    if (draftAgentId) return draftAgentId;
+    if (!selectedTemplate) return null;
     
     try {
-      // Generate prompt
-      const templateData = {
-        templateId: selectedTemplate.id,
-        agentName: formData.storeName || 'Assistente',
-        storeId,
-        customFieldValues: formData,
-        persona,
-        selectedFAQ: faqItems.filter((f) => f.enabled).map((f) => f.id),
-        enabledActions: selectedTemplate.defaultActions.filter((a) => a.enabled).map((a) => a.id),
-        storeAnalysis: storeAnalysis ? {
-          storeName: storeAnalysis.storeName,
-          storeDescription: storeAnalysis.storeDescription,
-          detectedNiche: storeAnalysis.detectedNiche,
-          products: storeAnalysis.products.total,
-          categories: storeAnalysis.categories.map((c) => c.name),
-          priceRange: storeAnalysis.priceRange,
-          policies: storeAnalysis.policies,
-        } : undefined,
-      };
-      
-      const generated = generatePromptFromTemplate(selectedTemplate, templateData);
-      
-      // Create agent via API
       const res = await fetch('/api/ai/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -219,17 +319,24 @@ export function CreateAgentFlow({
           organization_id: organizationId,
           name: formData.storeName || formData.agentName || `Assistente ${selectedTemplate.name}`,
           description: formData.storeDescription || selectedTemplate.description,
-          system_prompt: generated.systemPrompt,
+          system_prompt: editedPrompt || generatedPrompt,
           provider: 'openai',
           model: 'gpt-4o-mini',
           temperature: 0.7,
           max_tokens: 500,
-          is_active: activateNow,
-          persona: generated.persona,
+          is_active: false, // Draft - not active yet
+          persona: {
+            role_description: editedPrompt || generatedPrompt,
+            tone: persona.tone,
+            response_length: persona.responseLength,
+            language: 'pt-BR',
+            reply_delay: persona.replyDelay,
+            guidelines: agentFunction.mainTasks,
+          },
           settings: {
             channels: {
-              all_channels: channelIds.length === 0,
-              channel_ids: channelIds,
+              all_channels: false,
+              channel_ids: [], // Empty for now, will be set on activation
             },
             pipelines: {
               all_pipelines: true,
@@ -255,13 +362,135 @@ export function CreateAgentFlow({
       const data = await res.json();
       
       if (!res.ok) {
-        throw new Error(data.error || 'Erro ao criar agente');
+        throw new Error(data.error || 'Erro ao criar draft do agente');
       }
       
-      setCreatedAgentId(data.agent.id);
-      
-      // Create FAQ as sources (optional - could be separate API)
-      // For now, FAQ is embedded in the prompt
+      setDraftAgentId(data.agent.id);
+      return data.agent.id;
+    } catch (err: any) {
+      console.error('Error creating draft agent:', err);
+      setCreateError(err.message);
+      return null;
+    }
+  };
+
+  // Create/activate final agent
+  const handleCreateAgent = async (activateNow: boolean, channelIds: string[]) => {
+    if (!selectedTemplate) return;
+    
+    setCreating(true);
+    setCreateError(null);
+    
+    try {
+      // If we have a draft, update it; otherwise create new
+      if (draftAgentId) {
+        // Update existing draft
+        const res = await fetch(`/api/ai/agents/${draftAgentId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: formData.storeName || formData.agentName || `Assistente ${selectedTemplate.name}`,
+            description: formData.storeDescription || selectedTemplate.description,
+            system_prompt: editedPrompt,
+            is_active: activateNow,
+            persona: {
+              role_description: editedPrompt,
+              tone: persona.tone,
+              response_length: persona.responseLength,
+              language: 'pt-BR',
+              reply_delay: persona.replyDelay,
+              guidelines: agentFunction.mainTasks,
+            },
+            settings: {
+              channels: {
+                all_channels: false,
+                channel_ids: channelIds,
+              },
+              pipelines: {
+                all_pipelines: true,
+                pipeline_ids: [],
+                stage_ids: [],
+              },
+              schedule: {
+                always_active: true,
+                timezone: 'America/Sao_Paulo',
+                hours: { start: '08:00', end: '22:00' },
+                days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
+              },
+              behavior: {
+                activate_on: 'new_message',
+                stop_on_human_reply: true,
+                cooldown_after_transfer: 300,
+                max_messages_per_conversation: 0,
+              },
+            },
+          }),
+        });
+        
+        const data = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(data.error || 'Erro ao atualizar agente');
+        }
+        
+        setCreatedAgentId(draftAgentId);
+      } else {
+        // Create new agent
+        const res = await fetch('/api/ai/agents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organization_id: organizationId,
+            name: formData.storeName || formData.agentName || `Assistente ${selectedTemplate.name}`,
+            description: formData.storeDescription || selectedTemplate.description,
+            system_prompt: editedPrompt,
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            temperature: 0.7,
+            max_tokens: 500,
+            is_active: activateNow,
+            persona: {
+              role_description: editedPrompt,
+              tone: persona.tone,
+              response_length: persona.responseLength,
+              language: 'pt-BR',
+              reply_delay: persona.replyDelay,
+              guidelines: agentFunction.mainTasks,
+            },
+            settings: {
+              channels: {
+                all_channels: false,
+                channel_ids: channelIds,
+              },
+              pipelines: {
+                all_pipelines: true,
+                pipeline_ids: [],
+                stage_ids: [],
+              },
+              schedule: {
+                always_active: true,
+                timezone: 'America/Sao_Paulo',
+                hours: { start: '08:00', end: '22:00' },
+                days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
+              },
+              behavior: {
+                activate_on: 'new_message',
+                stop_on_human_reply: true,
+                cooldown_after_transfer: 300,
+                max_messages_per_conversation: 0,
+              },
+            },
+          }),
+        });
+        
+        const data = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(data.error || 'Erro ao criar agente');
+        }
+        
+        setCreatedAgentId(data.agent.id);
+      }
       
     } catch (err: any) {
       setCreateError(err.message);
@@ -282,12 +511,23 @@ export function CreateAgentFlow({
       case 1:
         return selectedTemplate !== null;
       case 2:
-        return formData.storeName?.trim() !== '';
+        return agentFunction.objective !== '' && agentFunction.mainTasks.length > 0;
       case 3:
-        return true;
+        return formData.storeName?.trim() !== '' || formData.agentName?.trim() !== '';
+      case 4:
+        return editedPrompt.trim() !== '';
+      case 5:
+        return true; // Knowledge is optional
       default:
         return true;
     }
+  };
+
+  // Handle step 5 entry - create draft if needed
+  const handleEnterStep5 = async () => {
+    // Create draft agent for knowledge upload
+    await createDraftAgent();
+    setCurrentStep(5);
   };
 
   // Render current step content
@@ -307,38 +547,66 @@ export function CreateAgentFlow({
         );
       case 2:
         return selectedTemplate ? (
-          <Step2Personalize
+          <Step2Function
             template={selectedTemplate}
             storeAnalysis={storeAnalysis}
-            formData={formData}
-            onFormDataChange={setFormData}
-            persona={persona}
-            onPersonaChange={setPersona}
+            agentFunction={agentFunction}
+            onFunctionChange={setAgentFunction}
             onNext={() => setCurrentStep(3)}
             onBack={() => setCurrentStep(1)}
           />
         ) : null;
       case 3:
         return selectedTemplate ? (
-          <Step3Knowledge
+          <Step3Personalize
             template={selectedTemplate}
             storeAnalysis={storeAnalysis}
-            faqItems={faqItems}
-            onFAQChange={setFAQItems}
+            formData={formData}
+            onFormDataChange={setFormData}
+            persona={persona}
+            onPersonaChange={setPersona}
             onNext={() => setCurrentStep(4)}
             onBack={() => setCurrentStep(2)}
           />
         ) : null;
       case 4:
         return selectedTemplate ? (
-          <Step4Activate
+          <Step4PromptPreview
+            template={selectedTemplate}
+            storeAnalysis={storeAnalysis}
+            formData={formData}
+            persona={persona}
+            agentFunction={agentFunction}
+            generatedPrompt={generatedPrompt}
+            editedPrompt={editedPrompt}
+            onPromptChange={setEditedPrompt}
+            onNext={handleEnterStep5}
+            onBack={() => setCurrentStep(3)}
+          />
+        ) : null;
+      case 5:
+        return selectedTemplate ? (
+          <Step5Knowledge
+            template={selectedTemplate}
+            storeAnalysis={storeAnalysis}
+            faqItems={faqItems}
+            onFAQChange={setFAQItems}
+            onNext={() => setCurrentStep(6)}
+            onBack={() => setCurrentStep(4)}
+            draftAgentId={draftAgentId}
+            organizationId={organizationId}
+          />
+        ) : null;
+      case 6:
+        return selectedTemplate ? (
+          <Step6Activate
             template={selectedTemplate}
             formData={formData}
             persona={persona}
             faqCount={faqItems.filter((f) => f.enabled).length}
             storeAnalysis={storeAnalysis}
             organizationId={organizationId}
-            onBack={() => setCurrentStep(3)}
+            onBack={() => setCurrentStep(5)}
             onCreateAgent={handleCreateAgent}
             creating={creating}
             createdAgentId={createdAgentId}
@@ -350,117 +618,132 @@ export function CreateAgentFlow({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-zinc-900">
-      {/* Header */}
-      <div className="h-16 border-b border-zinc-800 flex items-center justify-between px-6">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          <h1 className="text-lg font-semibold text-white">Criar Agente de IA</h1>
-        </div>
-
-        {/* Steps indicator */}
-        <div className="hidden md:flex items-center gap-2">
-          {STEPS.map((step, index) => {
-            const Icon = step.icon;
-            const isCompleted = currentStep > step.id;
-            const isCurrent = currentStep === step.id;
-            
-            return (
-              <div key={step.id} className="flex items-center">
-                <button
-                  onClick={() => goToStep(step.id)}
-                  disabled={step.id > currentStep && !canProceed(step.id - 1)}
-                  className={`
-                    flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-all
-                    ${isCompleted
-                      ? 'bg-green-500/20 text-green-400'
-                      : isCurrent
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'bg-zinc-800 text-zinc-500'
-                    }
-                  `}
-                >
-                  {isCompleted ? (
-                    <Check className="w-4 h-4" />
-                  ) : (
-                    <Icon className="w-4 h-4" />
-                  )}
-                  <span className="hidden lg:inline">{step.name}</span>
-                </button>
-                
-                {index < STEPS.length - 1 && (
-                  <ChevronRight className="w-4 h-4 text-zinc-600 mx-1" />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Store indicator */}
-        {storeId && storeAnalysis && (
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-zinc-800 rounded-full">
-            <Store className="w-4 h-4 text-green-400" />
-            <span className="text-sm text-zinc-300">{storeAnalysis.storeName}</span>
+    <motion.div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div 
+        className="relative w-full max-w-5xl max-h-[90vh] bg-zinc-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-zinc-800"
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ duration: 0.2 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header - fixo */}
+        <div className="flex-shrink-0 h-16 border-b border-zinc-800 flex items-center justify-between px-6">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onClose}
+              className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h1 className="text-lg font-semibold text-white">Criar Agente de IA</h1>
           </div>
-        )}
-      </div>
 
-      {/* Content */}
-      <div className="h-[calc(100vh-4rem)] overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-6 py-8">
-          {/* Error display */}
-          {(analysisError || createError) && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3"
-            >
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-              <div>
-                <p className="text-sm text-red-400 font-medium">Erro</p>
-                <p className="text-sm text-red-300">{analysisError || createError}</p>
-              </div>
-            </motion.div>
+          {/* Steps indicator */}
+          <div className="hidden md:flex items-center gap-1">
+            {STEPS.map((step, index) => {
+              const Icon = step.icon;
+              const isCompleted = currentStep > step.id;
+              const isCurrent = currentStep === step.id;
+              
+              return (
+                <div key={step.id} className="flex items-center">
+                  <button
+                    onClick={() => goToStep(step.id)}
+                    disabled={step.id > currentStep && !canProceed(step.id - 1)}
+                    className={`
+                      flex items-center gap-1.5 px-2 py-1 rounded-full text-xs transition-all
+                      ${isCompleted
+                        ? 'bg-green-500/20 text-green-400'
+                        : isCurrent
+                        ? 'bg-blue-500/20 text-blue-400'
+                        : 'bg-zinc-800 text-zinc-500'
+                      }
+                    `}
+                  >
+                    {isCompleted ? (
+                      <Check className="w-3 h-3" />
+                    ) : (
+                      <Icon className="w-3 h-3" />
+                    )}
+                    <span className="hidden lg:inline">{step.name}</span>
+                  </button>
+                  
+                  {index < STEPS.length - 1 && (
+                    <ChevronRight className="w-3 h-3 text-zinc-600 mx-0.5" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Store indicator */}
+          {storeId && storeAnalysis && (
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-zinc-800 rounded-full">
+              <Store className="w-4 h-4 text-green-400" />
+              <span className="text-sm text-zinc-300">{storeAnalysis.storeName}</span>
+            </div>
           )}
-
-          {/* Step content */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentStep}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              {renderStep()}
-            </motion.div>
-          </AnimatePresence>
         </div>
-      </div>
 
-      {/* Mobile step indicator */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 border-t border-zinc-800 bg-zinc-900 flex items-center justify-center gap-2 px-4">
-        {STEPS.map((step) => (
-          <div
-            key={step.id}
-            className={`
-              w-2 h-2 rounded-full transition-all
-              ${currentStep === step.id
-                ? 'w-8 bg-blue-500'
-                : currentStep > step.id
-                ? 'bg-green-500'
-                : 'bg-zinc-700'
-              }
-            `}
-          />
-        ))}
-      </div>
-    </div>
+        {/* Content - scroll interno */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto px-6 py-8">
+            {/* Error display */}
+            {(analysisError || createError) && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3"
+              >
+                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                <div>
+                  <p className="text-sm text-red-400 font-medium">Erro</p>
+                  <p className="text-sm text-red-300">{analysisError || createError}</p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Step content */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentStep}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                {renderStep()}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Mobile step indicator - fixo no bottom */}
+        <div className="md:hidden flex-shrink-0 h-14 border-t border-zinc-800 bg-zinc-900 flex items-center justify-center gap-2 px-4">
+          {STEPS.map((step) => (
+            <div
+              key={step.id}
+              className={`
+                w-2 h-2 rounded-full transition-all
+                ${currentStep === step.id
+                  ? 'w-6 bg-blue-500'
+                  : currentStep > step.id
+                  ? 'bg-green-500'
+                  : 'bg-zinc-700'
+                }
+              `}
+            />
+          ))}
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

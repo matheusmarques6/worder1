@@ -183,7 +183,7 @@ async function processMessage(body: any) {
   }
 
   // =====================================================
-  // 6. PROCESSAR COM AGENTE DE IA
+  // 6. PROCESSAR COM AGENTE DE IA (VIA FILA OU SYNC)
   // =====================================================
   
   // Só processar mensagens de texto
@@ -192,8 +192,7 @@ async function processMessage(body: any) {
     return
   }
 
-  // Processar com IA em background (não bloquear webhook)
-  processWithAI({
+  const aiParams = {
     organizationId: orgId,
     conversationId: conversation.id,
     contactId: contact.id,
@@ -203,13 +202,32 @@ async function processMessage(body: any) {
     message: content,
     messageId: key?.id,
     contactName: pushName,
-  }).catch((aiError) => {
+  }
+
+  // Tentar enfileirar para processamento durável
+  const { enqueueWhatsAppAI, isQStashConfigured } = await import('@/lib/queue')
+  
+  if (isQStashConfigured()) {
+    // Produção: usar fila para garantir durabilidade
+    const messageQueueId = await enqueueWhatsAppAI(aiParams)
+    
+    if (messageQueueId) {
+      console.log(`[Webhook] 📤 Enfileirado para processamento: ${messageQueueId}`)
+      return
+    }
+    
+    // Fallback se falhar ao enfileirar
+    console.warn('[Webhook] ⚠️ Falha ao enfileirar, processando sync')
+  }
+
+  // Dev/Fallback: processar síncrono
+  processWithAI(aiParams).catch((aiError) => {
     console.error('[Webhook] ❌ Erro ao processar com IA:', aiError)
   })
 }
 
 // =====================================================
-// PROCESSADOR DE IA (ASYNC)
+// PROCESSADOR DE IA (SYNC FALLBACK)
 // =====================================================
 
 async function processWithAI(params: {
@@ -242,11 +260,14 @@ async function processWithAI(params: {
 }
 
 export async function GET() {
+  const { isQStashConfigured } = await import('@/lib/queue')
+  
   return NextResponse.json({ 
     status: 'Webhook WhatsApp ativo',
     ai_enabled: true,
-    version: '2.0',
-    features: ['message_processing', 'ai_agent_response', 'typing_indicator'],
+    queue_enabled: isQStashConfigured(),
+    version: '2.1',
+    features: ['message_processing', 'ai_agent_response', 'typing_indicator', 'durable_queue'],
     timestamp: new Date().toISOString(),
   })
 }

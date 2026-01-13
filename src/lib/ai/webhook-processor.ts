@@ -62,15 +62,23 @@ export async function processWebhookWithAI(
   try {
     // =====================================================
     // 1. VERIFICAR SE IA ESTÁ HABILITADA PARA ESTA CONVERSA
+    //    Gate duplo: ai_enabled E is_bot_active
     // =====================================================
     const { data: conversation } = await supabaseAdmin
       .from('whatsapp_conversations')
-      .select('ai_enabled, ai_agent_id, pipeline_stage_id')
+      .select('ai_enabled, is_bot_active, ai_agent_id, pipeline_stage_id, ai_disabled_reason')
       .eq('id', conversationId)
       .single()
 
+    // Gate 1: ai_enabled
     if (conversation?.ai_enabled === false) {
-      console.log('[WebhookAI] ⏸️ IA desabilitada para esta conversa')
+      console.log(`[WebhookAI] ⏸️ ai_enabled=false (motivo: ${conversation?.ai_disabled_reason || 'não especificado'})`)
+      return { processed: false, replied: false, transferred: false }
+    }
+
+    // Gate 2: is_bot_active
+    if (conversation?.is_bot_active === false) {
+      console.log('[WebhookAI] ⏸️ is_bot_active=false - IA pausada manualmente')
       return { processed: false, replied: false, transferred: false }
     }
 
@@ -125,6 +133,25 @@ export async function processWebhookWithAI(
     if (fetchError || !agent) {
       console.error('[WebhookAI] ❌ Agente não encontrado:', fetchError)
       return { processed: false, replied: false, transferred: false, error: 'Agent not found' }
+    }
+
+    // =====================================================
+    // 4.1 GATE DE SEGURANÇA: VERIFICAR SE CANAL ESTÁ AUTORIZADO
+    // =====================================================
+    const channelSettings = agent.settings?.channels
+    if (channelSettings && !channelSettings.all_channels) {
+      const authorizedChannels = channelSettings.channel_ids || []
+      if (!authorizedChannels.includes(instanceId)) {
+        console.error(`[WebhookAI] 🚫 Canal ${instanceId} NÃO autorizado para agente ${agentId}`)
+        console.error(`[WebhookAI] 🔒 Canais autorizados: ${authorizedChannels.join(', ') || 'nenhum'}`)
+        return { 
+          processed: false, 
+          replied: false, 
+          transferred: false, 
+          error: 'unauthorized_channel' 
+        }
+      }
+      console.log(`[WebhookAI] ✅ Canal ${instanceId} autorizado`)
     }
 
     // =====================================================
