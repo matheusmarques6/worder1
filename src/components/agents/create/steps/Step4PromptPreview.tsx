@@ -324,7 +324,7 @@ export function Step4PromptPreview({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-zinc-500">Coleções</span>
-                  <span className="text-white">{storeAnalysis.collections?.length || 0}</span>
+                  <span className="text-white">{storeAnalysis.categories?.length || 0}</span>
                 </div>
               </div>
             </Accordion>
