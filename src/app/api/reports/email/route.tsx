@@ -1,15 +1,19 @@
+/**
+ * API Route: Relatório de Email Marketing (Klaviyo)
+ * v2.1 - Auth padronizada + dados reais da API Klaviyo + cache
+ */
+
 import { NextRequest } from 'next/server'
 import { Document } from '@react-pdf/renderer'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { getAuthClient, authError } from '@/lib/api-utils'
 import { 
   generatePdf, 
   pdfResponse, 
   ReportErrors,
   generateReportFilename,
   formatCurrency,
-  formatPercent,
   formatNumber,
+  formatPercent,
   formatDateTime,
   formatReportPeriod,
   calculatePeriodDates,
@@ -24,6 +28,8 @@ import {
   Table,
   PageWrapper,
 } from '@/lib/reports/components'
+import { withReportCache, shouldSkipCache, addCacheHeader } from '@/lib/reports/cache'
+import { getKlaviyoMetrics } from '@/lib/services/klaviyo-metrics'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,153 +38,148 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    const supabase = createServerComponentClient({ cookies })
-    
-    // 1. Auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return ReportErrors.UNAUTHORIZED()
+    // 1. Auth padronizada
+    const auth = await getAuthClient()
+    if (!auth) {
+      return authError('Não autorizado', 401)
     }
 
-    // 2. Profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, organization_id')
-      .eq('id', user.id)
-      .single()
+    const { supabase, user } = auth
+    const organizationId = user.organization_id
 
-    if (!profile?.organization_id) {
-      return ReportErrors.FORBIDDEN()
-    }
-
-    // 3. Params
+    // 2. Params
     const searchParams = request.nextUrl.searchParams
-    const storeId = searchParams.get('storeId')
+    const storeId = searchParams.get('storeId') || undefined
     const period = searchParams.get('period') || '30d'
+    const skipCache = shouldSkipCache(searchParams)
     const { startDate, endDate } = calculatePeriodDates(period)
 
-    // 4. Buscar integração Klaviyo
-    let integrationQuery = supabase
-      .from('integrations')
-      .select('id, config')
-      .eq('organization_id', profile.organization_id)
-      .eq('type', 'klaviyo')
-      .eq('status', 'active')
-
-    if (storeId) {
-      integrationQuery = integrationQuery.eq('store_id', storeId)
-    }
-
-    const { data: integrations } = await integrationQuery
-    const integration = integrations?.[0]
-
-    // 5. Buscar métricas de email (tabela de cache ou API)
-    // Por enquanto usando dados de exemplo
-    const reportData = {
-      period: formatReportPeriod(startDate, endDate),
-      generatedAt: formatDateTime(new Date()),
-      accountName: 'Klaviyo',
-      kpis: {
-        totalSent: 0,
-        totalOpens: 0,
-        totalClicks: 0,
-        totalRevenue: 0,
-        openRate: 0,
-        clickRate: 0,
-        conversionRate: 0,
-        unsubscribeRate: 0,
+    // 3. Buscar métricas com cache
+    const { data: reportData, fromCache } = await withReportCache(
+      {
+        type: 'email',
+        organizationId,
+        storeId,
+        period,
+        skipCache,
       },
-      campaigns: [] as Array<{
-        name: string
-        sent: number
-        opens: number
-        clicks: number
-        revenue: number
-        openRate: number
-        clickRate: number
-      }>,
-    }
+      async () => {
+        const metrics = await getKlaviyoMetrics({
+          supabase,
+          organizationId,
+          storeId,
+          startDate,
+          endDate,
+        })
 
-    // Se tiver integração, buscar dados reais
-    if (integration) {
-      // TODO: Buscar dados da API Klaviyo ou tabela de cache
-      // Por enquanto mantém zeros
-    }
+        const hasIntegration = metrics !== null
+        const hasData = hasIntegration && metrics.kpis.totalSent > 0
 
-    // 6. Gerar PDF
+        return {
+          period: formatReportPeriod(startDate, endDate),
+          generatedAt: formatDateTime(new Date()),
+          hasIntegration,
+          hasData,
+          kpis: {
+            enviados: metrics?.kpis.totalSent || 0,
+            aberturas: metrics?.kpis.totalOpens || 0,
+            cliques: metrics?.kpis.totalClicks || 0,
+            receita: metrics?.kpis.totalRevenue || 0,
+            taxaAbertura: metrics?.kpis.openRate || 0,
+            taxaClique: metrics?.kpis.clickRate || 0,
+            taxaDescadastro: metrics?.kpis.unsubscribeRate || 0,
+          },
+          campaigns: metrics?.campaigns || [],
+        }
+      }
+    )
+
+    // 4. Gerar PDF
     const EmailReportDocument = (
       <Document>
         <PageWrapper>
           <ReportHeader 
-            title="RELATÓRIO DE EMAIL"
-            subtitle={reportData.accountName}
+            title="RELATÓRIO DE EMAIL MARKETING"
+            subtitle="Klaviyo"
             period={reportData.period}
             generatedAt={reportData.generatedAt}
           />
 
-          <Section title="MÉTRICAS GERAIS">
-            <KPIRow>
-              <KPICard 
-                value={formatNumber(reportData.kpis.totalSent)} 
-                label="Emails Enviados"
-              />
-              <KPICard 
-                value={formatPercent(reportData.kpis.openRate)} 
-                label="Taxa de Abertura"
-              />
-              <KPICard 
-                value={formatPercent(reportData.kpis.clickRate)} 
-                label="Taxa de Clique"
-              />
-            </KPIRow>
-            <KPIRow>
-              <KPICard 
-                value={formatCurrency(reportData.kpis.totalRevenue)} 
-                label="Receita Atribuída"
-              />
-              <KPICard 
-                value={formatPercent(reportData.kpis.conversionRate)} 
-                label="Taxa de Conversão"
-              />
-              <KPICard 
-                value={formatPercent(reportData.kpis.unsubscribeRate)} 
-                label="Taxa de Descadastro"
-              />
-            </KPIRow>
-          </Section>
-
-          {reportData.campaigns.length > 0 && (
-            <Section title="CAMPANHAS">
-              <Table
-                columns={[
-                  { header: 'Campanha', width: '30%' },
-                  { header: 'Enviados', width: '12%', align: 'right' },
-                  { header: 'Aberturas', width: '12%', align: 'right' },
-                  { header: 'Cliques', width: '12%', align: 'right' },
-                  { header: 'Receita', width: '17%', align: 'right' },
-                  { header: 'CTR', width: '17%', align: 'right' },
-                ]}
-                rows={reportData.campaigns.map(c => [
-                  truncateText(c.name, 25),
-                  formatNumber(c.sent),
-                  formatNumber(c.opens),
-                  formatNumber(c.clicks),
-                  formatCurrency(c.revenue),
-                  formatPercent(c.clickRate),
-                ])}
-                zebra
-                maxRows={REPORT_LIMITS.TOP_N_CAMPAIGNS}
-              />
-            </Section>
-          )}
-
-          {!integration && (
-            <Section title="AVISO">
+          {!reportData.hasIntegration ? (
+            <Section title="INTEGRAÇÃO NÃO CONFIGURADA">
               <Table
                 columns={[{ header: 'Informação', width: '100%' }]}
-                rows={[['Integração Klaviyo não encontrada. Conecte sua conta para ver dados reais.']]}
+                rows={[
+                  ['Integração Klaviyo não encontrada ou inativa.'],
+                  ['Configure a integração para visualizar métricas de email.'],
+                ]}
               />
             </Section>
+          ) : !reportData.hasData ? (
+            <Section title="SEM DADOS">
+              <Table
+                columns={[{ header: 'Informação', width: '100%' }]}
+                rows={[
+                  ['Nenhuma campanha encontrada no período selecionado.'],
+                ]}
+              />
+            </Section>
+          ) : (
+            <>
+              <Section title="MÉTRICAS GERAIS">
+                <KPIRow>
+                  <KPICard 
+                    value={formatNumber(reportData.kpis.enviados)} 
+                    label="Emails Enviados"
+                  />
+                  <KPICard 
+                    value={formatNumber(reportData.kpis.aberturas)} 
+                    label="Aberturas"
+                  />
+                  <KPICard 
+                    value={formatNumber(reportData.kpis.cliques)} 
+                    label="Cliques"
+                  />
+                </KPIRow>
+                <KPIRow>
+                  <KPICard 
+                    value={formatPercent(reportData.kpis.taxaAbertura)} 
+                    label="Taxa de Abertura"
+                  />
+                  <KPICard 
+                    value={formatPercent(reportData.kpis.taxaClique)} 
+                    label="Taxa de Clique"
+                  />
+                  <KPICard 
+                    value={formatCurrency(reportData.kpis.receita)} 
+                    label="Receita Atribuída"
+                  />
+                </KPIRow>
+              </Section>
+
+              {reportData.campaigns.length > 0 && (
+                <Section title="CAMPANHAS">
+                  <Table
+                    columns={[
+                      { header: 'Campanha', width: '35%' },
+                      { header: 'Enviados', width: '15%', align: 'right' },
+                      { header: 'Aberturas', width: '15%', align: 'right' },
+                      { header: 'Tx. Abertura', width: '15%', align: 'right' },
+                      { header: 'Receita', width: '20%', align: 'right' },
+                    ]}
+                    rows={reportData.campaigns.slice(0, 15).map(c => [
+                      truncateText(c.name, 30),
+                      formatNumber(c.sent),
+                      formatNumber(c.opens),
+                      formatPercent(c.openRate),
+                      formatCurrency(c.revenue),
+                    ])}
+                    zebra
+                    maxRows={15}
+                  />
+                </Section>
+              )}
+            </>
           )}
         </PageWrapper>
       </Document>
@@ -190,13 +191,18 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     console.log('[REPORT_EMAIL] Gerado com sucesso', {
       userId: user.id,
-      orgId: profile.organization_id,
+      orgId: organizationId,
       storeId,
       period,
+      fromCache,
+      hasIntegration: reportData.hasIntegration,
+      hasData: reportData.hasData,
+      enviados: reportData.kpis.enviados,
       duration: `${duration}ms`,
     })
 
-    return pdfResponse(pdfData, filename)
+    const response = pdfResponse(pdfData, filename)
+    return addCacheHeader(response, fromCache)
 
   } catch (error) {
     console.error('[REPORT_EMAIL] Erro:', error)

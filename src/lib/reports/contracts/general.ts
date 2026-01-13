@@ -1,5 +1,6 @@
 /**
  * Contrato de dados para Relatório Geral (Dashboard)
+ * v2.1 - Campos financeiros opcionais (number | null)
  */
 
 export interface GeneralReportData {
@@ -8,22 +9,25 @@ export interface GeneralReportData {
   
   // KPIs principais
   kpis: {
+    // Campos reais (sempre preenchidos com dados do CRM)
     receita: number
     receitaChange: number
-    custos: number
-    custosChange: number
-    marketing: number
-    marketingChange: number
-    impostos: number
-    impostosChange: number
-    margem: number
-    margemChange: number
-    lucro: number
-    lucroChange: number
     pedidos: number
     pedidosChange: number
     ticketMedio: number
     ticketMedioChange: number
+    
+    // Campos financeiros (opcionais - podem não existir no banco)
+    custos: number | null
+    custosChange: number | null
+    marketing: number | null
+    marketingChange: number | null
+    impostos: number | null
+    impostosChange: number | null
+    margem: number | null
+    margemChange: number | null
+    lucro: number | null
+    lucroChange: number | null
   }
   
   // Performance por loja
@@ -33,19 +37,20 @@ export interface GeneralReportData {
     domain?: string
     pedidos: number
     receita: number
-    custos: number
-    lucro: number
-    margem: number
+    // Campos financeiros opcionais por loja
+    custos: number | null
+    lucro: number | null
+    margem: number | null
   }>
   
   // Timeline (opcional, para gráficos futuros)
   timeline?: Array<{
     date: string
     receita: number
-    custos: number
-    marketing: number
-    impostos: number
-    lucro: number
+    custos: number | null
+    marketing: number | null
+    impostos: number | null
+    lucro: number | null
   }>
 }
 
@@ -58,20 +63,21 @@ export const DEFAULT_GENERAL_REPORT: GeneralReportData = {
   kpis: {
     receita: 0,
     receitaChange: 0,
-    custos: 0,
-    custosChange: 0,
-    marketing: 0,
-    marketingChange: 0,
-    impostos: 0,
-    impostosChange: 0,
-    margem: 0,
-    margemChange: 0,
-    lucro: 0,
-    lucroChange: 0,
     pedidos: 0,
     pedidosChange: 0,
     ticketMedio: 0,
     ticketMedioChange: 0,
+    // Financeiros como null (não disponíveis)
+    custos: null,
+    custosChange: null,
+    marketing: null,
+    marketingChange: null,
+    impostos: null,
+    impostosChange: null,
+    margem: null,
+    margemChange: null,
+    lucro: null,
+    lucroChange: null,
   },
   stores: [],
 }

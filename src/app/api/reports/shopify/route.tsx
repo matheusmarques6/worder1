@@ -1,14 +1,17 @@
+/**
+ * API Route: Relatório Shopify
+ * v2.1 - Auth padronizada + query via shopify_stores + dados reais + cache
+ */
+
 import { NextRequest } from 'next/server'
 import { Document } from '@react-pdf/renderer'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { getAuthClient, authError } from '@/lib/api-utils'
 import { 
   generatePdf, 
   pdfResponse, 
   ReportErrors,
   generateReportFilename,
   formatCurrency,
-  formatPercent,
   formatNumber,
   formatDateTime,
   formatReportPeriod,
@@ -24,6 +27,8 @@ import {
   Table,
   PageWrapper,
 } from '@/lib/reports/components'
+import { withReportCache, shouldSkipCache, addCacheHeader } from '@/lib/reports/cache'
+import { getShopifyMetrics } from '@/lib/services/shopify-metrics'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,78 +37,62 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    const supabase = createServerComponentClient({ cookies })
-    
-    // 1. Auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return ReportErrors.UNAUTHORIZED()
+    // 1. Auth padronizada
+    const auth = await getAuthClient()
+    if (!auth) {
+      return authError('Não autorizado', 401)
     }
 
-    // 2. Profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, organization_id')
-      .eq('id', user.id)
-      .single()
+    const { supabase, user } = auth
+    const organizationId = user.organization_id
 
-    if (!profile?.organization_id) {
-      return ReportErrors.FORBIDDEN()
-    }
-
-    // 3. Params
+    // 2. Params
     const searchParams = request.nextUrl.searchParams
-    const storeId = searchParams.get('storeId')
+    const storeId = searchParams.get('storeId') || undefined
     const period = searchParams.get('period') || '30d'
+    const skipCache = shouldSkipCache(searchParams)
     const { startDate, endDate } = calculatePeriodDates(period)
 
-    // 4. Buscar integração Shopify
-    let integrationQuery = supabase
-      .from('integrations')
-      .select('id, config, store_id')
-      .eq('organization_id', profile.organization_id)
-      .eq('type', 'shopify')
-      .eq('status', 'active')
-
-    if (storeId) {
-      integrationQuery = integrationQuery.eq('store_id', storeId)
-    }
-
-    const { data: integrations } = await integrationQuery
-    const integration = integrations?.[0]
-
-    // 5. Buscar dados de analytics (se existir tabela de métricas cacheadas)
-    // Por enquanto, buscamos orders da tabela de contatos/deals
-    const { data: orders } = await supabase
-      .from('shopify_orders')
-      .select('*')
-      .eq('organization_id', profile.organization_id)
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString())
-
-    // Calcular métricas (dados de exemplo se não houver orders)
-    const allOrders = orders || []
-    const totalOrders = allOrders.length
-    const totalRevenue = allOrders.reduce((sum, o) => sum + (o.total_price || 0), 0)
-    const avgTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0
-
-    // Simular dados se não houver integração real
-    const reportData = {
-      period: formatReportPeriod(startDate, endDate),
-      generatedAt: formatDateTime(new Date()),
-      storeName: (integration?.config as { shop_name?: string })?.shop_name || 'Loja Shopify',
-      kpis: {
-        vendasBrutas: totalRevenue,
-        vendasLiquidas: totalRevenue * 0.95,
-        pedidos: totalOrders,
-        ticketMedio: avgTicket,
-        novosClientes: Math.floor(totalOrders * 0.4),
-        recorrentes: Math.floor(totalOrders * 0.6),
+    // 3. Buscar métricas com cache
+    const { data: reportData, fromCache } = await withReportCache(
+      {
+        type: 'shopify',
+        organizationId,
+        storeId,
+        period,
+        skipCache,
       },
-      topProducts: [] as Array<{ name: string; vendas: number; quantidade: number }>,
-    }
+      async () => {
+        const metrics = await getShopifyMetrics({
+          supabase,
+          organizationId,
+          storeId,
+          startDate,
+          endDate,
+        })
 
-    // 6. Gerar PDF
+        return {
+          period: formatReportPeriod(startDate, endDate),
+          generatedAt: formatDateTime(new Date()),
+          storeName: metrics?.storeName || 'Shopify',
+          hasData: metrics !== null && metrics.orderCount > 0,
+          kpis: {
+            vendasBrutas: metrics?.kpis.vendasBrutas || 0,
+            vendasLiquidas: metrics?.kpis.vendasLiquidas || 0,
+            pedidos: metrics?.kpis.pedidos || 0,
+            ticketMedio: metrics?.kpis.ticketMedio || 0,
+          },
+          financial: {
+            descontos: metrics?.financial.descontos || 0,
+            frete: metrics?.financial.frete || 0,
+            tributos: metrics?.financial.tributos || 0,
+          },
+          topProducts: metrics?.topProducts || [],
+        }
+      }
+    )
+
+    // 4. Gerar PDF
     const ShopifyReportDocument = (
       <Document>
         <PageWrapper>
@@ -114,61 +103,66 @@ export async function GET(request: NextRequest) {
             generatedAt={reportData.generatedAt}
           />
 
-          <Section title="VENDAS">
-            <KPIRow>
-              <KPICard 
-                value={formatCurrency(reportData.kpis.vendasBrutas)} 
-                label="Vendas Brutas"
-              />
-              <KPICard 
-                value={formatCurrency(reportData.kpis.vendasLiquidas)} 
-                label="Vendas Líquidas"
-              />
-              <KPICard 
-                value={formatNumber(reportData.kpis.pedidos)} 
-                label="Pedidos"
-              />
-            </KPIRow>
-            <KPIRow>
-              <KPICard 
-                value={formatCurrency(reportData.kpis.ticketMedio)} 
-                label="Ticket Médio"
-              />
-              <KPICard 
-                value={formatNumber(reportData.kpis.novosClientes)} 
-                label="Novos Clientes"
-              />
-              <KPICard 
-                value={formatNumber(reportData.kpis.recorrentes)} 
-                label="Clientes Recorrentes"
-              />
-            </KPIRow>
-          </Section>
+          {reportData.hasData ? (
+            <>
+              <Section title="VENDAS">
+                <KPIRow>
+                  <KPICard 
+                    value={formatCurrency(reportData.kpis.vendasBrutas)} 
+                    label="Vendas Brutas"
+                  />
+                  <KPICard 
+                    value={formatCurrency(reportData.kpis.vendasLiquidas)} 
+                    label="Vendas Líquidas"
+                  />
+                  <KPICard 
+                    value={formatNumber(reportData.kpis.pedidos)} 
+                    label="Pedidos"
+                  />
+                </KPIRow>
+                <KPIRow>
+                  <KPICard 
+                    value={formatCurrency(reportData.kpis.ticketMedio)} 
+                    label="Ticket Médio"
+                  />
+                  <KPICard 
+                    value={formatCurrency(reportData.financial.descontos)} 
+                    label="Descontos"
+                  />
+                  <KPICard 
+                    value={formatCurrency(reportData.financial.frete)} 
+                    label="Frete"
+                  />
+                </KPIRow>
+              </Section>
 
-          {reportData.topProducts.length > 0 && (
-            <Section title="TOP PRODUTOS">
-              <Table
-                columns={[
-                  { header: 'Produto', width: '50%' },
-                  { header: 'Vendas', width: '25%', align: 'right' },
-                  { header: 'Qtd', width: '25%', align: 'right' },
-                ]}
-                rows={reportData.topProducts.map(p => [
-                  truncateText(p.name, 40),
-                  formatCurrency(p.vendas),
-                  formatNumber(p.quantidade),
-                ])}
-                zebra
-                maxRows={REPORT_LIMITS.TOP_N_PRODUCTS}
-              />
-            </Section>
-          )}
-
-          {!integration && (
-            <Section title="AVISO">
+              {reportData.topProducts.length > 0 && (
+                <Section title="TOP PRODUTOS">
+                  <Table
+                    columns={[
+                      { header: 'Produto', width: '50%' },
+                      { header: 'Vendas', width: '25%', align: 'right' },
+                      { header: 'Qtd', width: '25%', align: 'right' },
+                    ]}
+                    rows={reportData.topProducts.map(p => [
+                      truncateText(p.name, 40),
+                      formatCurrency(p.vendas),
+                      formatNumber(p.quantidade),
+                    ])}
+                    zebra
+                    maxRows={REPORT_LIMITS.TOP_N_PRODUCTS}
+                  />
+                </Section>
+              )}
+            </>
+          ) : (
+            <Section title="SEM DADOS">
               <Table
                 columns={[{ header: 'Informação', width: '100%' }]}
-                rows={[['Integração Shopify não encontrada. Conecte sua loja para ver dados reais.']]}
+                rows={[
+                  ['Nenhum pedido encontrado no período selecionado.'],
+                  ['Verifique se a integração Shopify está configurada e ativa.'],
+                ]}
               />
             </Section>
           )}
@@ -182,13 +176,17 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     console.log('[REPORT_SHOPIFY] Gerado com sucesso', {
       userId: user.id,
-      orgId: profile.organization_id,
+      orgId: organizationId,
       storeId,
       period,
+      fromCache,
+      hasData: reportData.hasData,
+      pedidos: reportData.kpis.pedidos,
       duration: `${duration}ms`,
     })
 
-    return pdfResponse(pdfData, filename)
+    const response = pdfResponse(pdfData, filename)
+    return addCacheHeader(response, fromCache)
 
   } catch (error) {
     console.error('[REPORT_SHOPIFY] Erro:', error)

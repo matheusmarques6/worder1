@@ -40,6 +40,8 @@ export {
   formatChange,
   generateReportFilename,
   calculatePeriodDates,
+  calculateChange,
+  calculatePreviousPeriod,
   formatDays,
   formatROAS,
 } from './utils'

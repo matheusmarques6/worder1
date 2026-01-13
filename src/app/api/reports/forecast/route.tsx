@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { Document } from '@react-pdf/renderer'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { getAuthClient, authError } from '@/lib/api-utils'
 import { 
   generatePdf, 
   pdfResponse, 
@@ -29,26 +28,16 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    const supabase = createServerComponentClient({ cookies })
-    
-    // 1. Verificar autenticação
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return ReportErrors.UNAUTHORIZED()
+    // 1. Auth padronizada
+    const auth = await getAuthClient()
+    if (!auth) {
+      return authError('Não autorizado', 401)
     }
 
-    // 2. Buscar perfil
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, organization_id')
-      .eq('id', user.id)
-      .single()
+    const { supabase, user } = auth
+    const organizationId = user.organization_id
 
-    if (!profile?.organization_id) {
-      return ReportErrors.FORBIDDEN()
-    }
-
-    // 3. Parâmetros
+    // 2. Parâmetros
     const searchParams = request.nextUrl.searchParams
     const storeId = searchParams.get('storeId')
     const pipelineId = searchParams.get('pipelineId')
@@ -71,7 +60,7 @@ export async function GET(request: NextRequest) {
       endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
     }
 
-    // 5. Buscar deals em aberto
+    // 4. Buscar deals em aberto
     let dealsQuery = supabase
       .from('deals')
       .select(`
@@ -84,7 +73,7 @@ export async function GET(request: NextRequest) {
         expected_close_date,
         contact:contacts(name, email)
       `)
-      .eq('organization_id', profile.organization_id)
+      .eq('organization_id', organizationId)
       .eq('status', 'open')
 
     if (storeId) {
@@ -96,11 +85,11 @@ export async function GET(request: NextRequest) {
 
     const { data: deals } = await dealsQuery
 
-    // 6. Buscar stages
+    // 5. Buscar stages
     const { data: stages } = await supabase
       .from('pipeline_stages')
       .select('id, name, color, probability, position')
-      .eq('organization_id', profile.organization_id)
+      .eq('organization_id', organizationId)
       .order('position')
 
     // 7. Calcular métricas
@@ -270,7 +259,7 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     console.log('[REPORT_FORECAST] Gerado com sucesso', {
       userId: user.id,
-      orgId: profile.organization_id,
+      orgId: organizationId,
       period,
       dealsCount: allDeals.length,
       duration: `${duration}ms`,

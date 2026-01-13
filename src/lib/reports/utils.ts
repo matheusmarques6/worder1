@@ -172,3 +172,41 @@ export function formatROAS(value: number | null | undefined): string {
   }
   return `${value.toFixed(2)}x`
 }
+
+/**
+ * Calcula variação percentual entre dois valores (atual vs anterior)
+ * @param current Valor atual
+ * @param previous Valor do período anterior
+ * @returns Variação percentual (ex: 20 para +20%, -15 para -15%)
+ */
+export function calculateChange(current: number, previous: number): number {
+  if (previous === 0) {
+    // Se anterior é 0, retornar 100 se atual > 0, senão 0
+    return current > 0 ? 100 : 0
+  }
+  // Calcular variação percentual com 1 casa decimal
+  return Math.round(((current - previous) / previous) * 100 * 10) / 10
+}
+
+/**
+ * Calcula período anterior baseado no período atual
+ * @param startDate Data início do período atual
+ * @param endDate Data fim do período atual
+ * @returns Datas do período anterior com mesma duração
+ */
+export function calculatePreviousPeriod(
+  startDate: Date,
+  endDate: Date
+): { previousStartDate: Date; previousEndDate: Date } {
+  const periodDays = Math.round(
+    (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+  )
+  
+  const previousEndDate = new Date(startDate)
+  previousEndDate.setDate(previousEndDate.getDate() - 1)
+  
+  const previousStartDate = new Date(previousEndDate)
+  previousStartDate.setDate(previousStartDate.getDate() - periodDays)
+  
+  return { previousStartDate, previousEndDate }
+}

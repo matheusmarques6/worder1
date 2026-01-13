@@ -1,25 +1,26 @@
+/**
+ * API Route: Relatório de Ads (Meta, Google, TikTok)
+ * v2.1 - Auth padronizada + conversion_value + Map de campaigns + cache
+ */
+
 import { NextRequest } from 'next/server'
 import { Document } from '@react-pdf/renderer'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { getAuthClient, authError } from '@/lib/api-utils'
 import { 
   generatePdf, 
   pdfResponse, 
   ReportErrors,
   generateReportFilename,
   formatCurrency,
-  formatPercent,
   formatNumber,
+  formatPercent,
   formatDateTime,
   formatReportPeriod,
   formatROAS,
   calculatePeriodDates,
   truncateText,
   REPORT_LIMITS,
-  ADS_PLATFORMS,
-  type AdsPlatform,
 } from '@/lib/reports'
-import { PLATFORM_LABELS } from '@/lib/reports/contracts/ads'
 import { 
   ReportHeader, 
   KPICard, 
@@ -28,193 +29,184 @@ import {
   Table,
   PageWrapper,
 } from '@/lib/reports/components'
+import { withReportCache, shouldSkipCache, addCacheHeader } from '@/lib/reports/cache'
+import { getAdsMetrics, AdsPlatform } from '@/lib/services/ads-metrics'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const PLATFORM_LABELS: Record<AdsPlatform, string> = {
+  meta: 'Meta Ads (Facebook/Instagram)',
+  google: 'Google Ads',
+  tiktok: 'TikTok Ads',
+}
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    const supabase = createServerComponentClient({ cookies })
-    
-    // 1. Auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return ReportErrors.UNAUTHORIZED()
+    // 1. Auth padronizada
+    const auth = await getAuthClient()
+    if (!auth) {
+      return authError('Não autorizado', 401)
     }
 
-    // 2. Profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, organization_id')
-      .eq('id', user.id)
-      .single()
+    const { supabase, user } = auth
+    const organizationId = user.organization_id
 
-    if (!profile?.organization_id) {
-      return ReportErrors.FORBIDDEN()
-    }
-
-    // 3. Params
+    // 2. Params
     const searchParams = request.nextUrl.searchParams
-    const platformParam = searchParams.get('platform') || 'meta'
-    const storeId = searchParams.get('storeId')
+    const platform = (searchParams.get('platform') || 'meta') as AdsPlatform
     const period = searchParams.get('period') || '30d'
-
-    // Validar plataforma
-    const platform = ADS_PLATFORMS.includes(platformParam as AdsPlatform) 
-      ? platformParam as AdsPlatform 
-      : 'meta'
-
-    const platformLabel = PLATFORM_LABELS[platform]
+    const skipCache = shouldSkipCache(searchParams)
     const { startDate, endDate } = calculatePeriodDates(period)
 
-    // 4. Buscar integração da plataforma
-    const integrationType = platform === 'meta' ? 'facebook_ads' : `${platform}_ads`
-    
-    let integrationQuery = supabase
-      .from('integrations')
-      .select('id, config')
-      .eq('organization_id', profile.organization_id)
-      .eq('type', integrationType)
-      .eq('status', 'active')
-
-    if (storeId) {
-      integrationQuery = integrationQuery.eq('store_id', storeId)
+    // Validar platform
+    if (!['meta', 'google', 'tiktok'].includes(platform)) {
+      return ReportErrors.VALIDATION_ERROR('Platform inválida. Use: meta, google ou tiktok')
     }
 
-    const { data: integrations } = await integrationQuery
-    const integration = integrations?.[0]
-
-    // 5. Buscar métricas de ads
-    // Por enquanto usando dados de exemplo
-    const reportData = {
-      platform,
-      platformLabel,
-      period: formatReportPeriod(startDate, endDate),
-      generatedAt: formatDateTime(new Date()),
-      kpis: {
-        spend: 0,
-        impressions: 0,
-        clicks: 0,
-        conversions: 0,
-        revenue: 0,
-        ctr: 0,
-        cpc: 0,
-        cpm: 0,
-        cpa: 0,
-        roas: 0,
+    // 3. Buscar métricas com cache
+    const { data: reportData, fromCache } = await withReportCache(
+      {
+        type: 'ads',
+        organizationId,
+        platform,
+        period,
+        skipCache,
       },
-      campaigns: [] as Array<{
-        name: string
-        status: string
-        spend: number
-        impressions: number
-        clicks: number
-        conversions: number
-        revenue: number
-        ctr: number
-        roas: number
-      }>,
-    }
+      async () => {
+        const metrics = await getAdsMetrics({
+          supabase,
+          organizationId,
+          platform,
+          startDate,
+          endDate,
+        })
 
-    // Se tiver integração, buscar dados reais
-    if (integration) {
-      // TODO: Buscar dados da API da plataforma ou tabela de cache
-    }
+        const hasData = metrics !== null && metrics.kpis.spend > 0
 
-    // 6. Gerar PDF
+        return {
+          period: formatReportPeriod(startDate, endDate),
+          generatedAt: formatDateTime(new Date()),
+          platform,
+          platformLabel: PLATFORM_LABELS[platform],
+          hasData,
+          kpis: {
+            spend: metrics?.kpis.spend || 0,
+            impressions: metrics?.kpis.impressions || 0,
+            clicks: metrics?.kpis.clicks || 0,
+            conversions: metrics?.kpis.conversions || 0,
+            revenue: metrics?.kpis.revenue || 0,
+            ctr: metrics?.kpis.ctr || 0,
+            cpc: metrics?.kpis.cpc || 0,
+            cpm: metrics?.kpis.cpm || 0,
+            roas: metrics?.kpis.roas || 0,
+          },
+          campaigns: metrics?.campaigns || [],
+        }
+      }
+    )
+
+    // 4. Gerar PDF
     const AdsReportDocument = (
       <Document>
         <PageWrapper>
           <ReportHeader 
-            title={`RELATÓRIO ${platformLabel.toUpperCase()}`}
+            title="RELATÓRIO DE ADS"
+            subtitle={reportData.platformLabel}
             period={reportData.period}
             generatedAt={reportData.generatedAt}
           />
 
-          <Section title="PERFORMANCE">
-            <KPIRow>
-              <KPICard 
-                value={formatCurrency(reportData.kpis.spend)} 
-                label="Investimento"
-              />
-              <KPICard 
-                value={formatNumber(reportData.kpis.impressions)} 
-                label="Impressões"
-              />
-              <KPICard 
-                value={formatNumber(reportData.kpis.clicks)} 
-                label="Cliques"
-              />
-            </KPIRow>
-            <KPIRow>
-              <KPICard 
-                value={formatNumber(reportData.kpis.conversions)} 
-                label="Conversões"
-              />
-              <KPICard 
-                value={formatCurrency(reportData.kpis.revenue)} 
-                label="Receita"
-              />
-              <KPICard 
-                value={formatROAS(reportData.kpis.roas)} 
-                label="ROAS"
-              />
-            </KPIRow>
-          </Section>
-
-          <Section title="MÉTRICAS CALCULADAS">
-            <KPIRow>
-              <KPICard 
-                value={formatPercent(reportData.kpis.ctr)} 
-                label="CTR"
-              />
-              <KPICard 
-                value={formatCurrency(reportData.kpis.cpc)} 
-                label="CPC"
-              />
-              <KPICard 
-                value={formatCurrency(reportData.kpis.cpm)} 
-                label="CPM"
-              />
-            </KPIRow>
-          </Section>
-
-          {reportData.campaigns.length > 0 && (
-            <Section title="CAMPANHAS">
-              <Table
-                columns={[
-                  { header: 'Campanha', width: '25%' },
-                  { header: 'Status', width: '12%' },
-                  { header: 'Gasto', width: '15%', align: 'right' },
-                  { header: 'Cliques', width: '12%', align: 'right' },
-                  { header: 'Conv.', width: '12%', align: 'right' },
-                  { header: 'Receita', width: '14%', align: 'right' },
-                  { header: 'ROAS', width: '10%', align: 'right' },
-                ]}
-                rows={reportData.campaigns.map(c => [
-                  truncateText(c.name, 20),
-                  c.status,
-                  formatCurrency(c.spend),
-                  formatNumber(c.clicks),
-                  formatNumber(c.conversions),
-                  formatCurrency(c.revenue),
-                  formatROAS(c.roas),
-                ])}
-                zebra
-                maxRows={REPORT_LIMITS.TOP_N_CAMPAIGNS}
-              />
-            </Section>
-          )}
-
-          {!integration && (
-            <Section title="AVISO">
+          {!reportData.hasData ? (
+            <Section title="SEM DADOS">
               <Table
                 columns={[{ header: 'Informação', width: '100%' }]}
-                rows={[[`Integração ${platformLabel} não encontrada. Conecte sua conta para ver dados reais.`]]}
+                rows={[
+                  [`Nenhum dado encontrado para ${reportData.platformLabel} no período.`],
+                  ['Verifique se a integração está configurada e sincronizada.'],
+                ]}
               />
             </Section>
+          ) : (
+            <>
+              <Section title="INVESTIMENTO E ALCANCE">
+                <KPIRow>
+                  <KPICard 
+                    value={formatCurrency(reportData.kpis.spend)} 
+                    label="Investimento"
+                  />
+                  <KPICard 
+                    value={formatNumber(reportData.kpis.impressions)} 
+                    label="Impressões"
+                  />
+                  <KPICard 
+                    value={formatNumber(reportData.kpis.clicks)} 
+                    label="Cliques"
+                  />
+                </KPIRow>
+              </Section>
+
+              <Section title="PERFORMANCE">
+                <KPIRow>
+                  <KPICard 
+                    value={formatPercent(reportData.kpis.ctr)} 
+                    label="CTR"
+                  />
+                  <KPICard 
+                    value={formatCurrency(reportData.kpis.cpc)} 
+                    label="CPC"
+                  />
+                  <KPICard 
+                    value={formatCurrency(reportData.kpis.cpm)} 
+                    label="CPM"
+                  />
+                </KPIRow>
+              </Section>
+
+              <Section title="CONVERSÕES">
+                <KPIRow>
+                  <KPICard 
+                    value={formatNumber(reportData.kpis.conversions)} 
+                    label="Conversões"
+                  />
+                  <KPICard 
+                    value={formatCurrency(reportData.kpis.revenue)} 
+                    label="Receita Atribuída"
+                  />
+                  <KPICard 
+                    value={formatROAS(reportData.kpis.roas)} 
+                    label="ROAS"
+                  />
+                </KPIRow>
+              </Section>
+
+              {reportData.campaigns.length > 0 && (
+                <Section title="CAMPANHAS">
+                  <Table
+                    columns={[
+                      { header: 'Campanha', width: '30%' },
+                      { header: 'Invest.', width: '15%', align: 'right' },
+                      { header: 'Cliques', width: '12%', align: 'right' },
+                      { header: 'CTR', width: '12%', align: 'right' },
+                      { header: 'Receita', width: '16%', align: 'right' },
+                      { header: 'ROAS', width: '15%', align: 'right' },
+                    ]}
+                    rows={reportData.campaigns.slice(0, 15).map(c => [
+                      truncateText(c.name, 25),
+                      formatCurrency(c.spend),
+                      formatNumber(c.clicks),
+                      formatPercent(c.ctr),
+                      formatCurrency(c.revenue),
+                      formatROAS(c.roas),
+                    ])}
+                    zebra
+                    maxRows={15}
+                  />
+                </Section>
+              )}
+            </>
           )}
         </PageWrapper>
       </Document>
@@ -226,14 +218,18 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     console.log('[REPORT_ADS] Gerado com sucesso', {
       userId: user.id,
-      orgId: profile.organization_id,
+      orgId: organizationId,
       platform,
-      storeId,
       period,
+      fromCache,
+      hasData: reportData.hasData,
+      spend: reportData.kpis.spend,
+      roas: reportData.kpis.roas,
       duration: `${duration}ms`,
     })
 
-    return pdfResponse(pdfData, filename)
+    const response = pdfResponse(pdfData, filename)
+    return addCacheHeader(response, fromCache)
 
   } catch (error) {
     console.error('[REPORT_ADS] Erro:', error)

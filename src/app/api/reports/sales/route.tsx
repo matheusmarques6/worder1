@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { Document } from '@react-pdf/renderer'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { getAuthClient, authError } from '@/lib/api-utils'
 import { 
   generatePdf, 
   pdfResponse, 
@@ -33,36 +32,25 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    const supabase = createServerComponentClient({ cookies })
-    
-    // 1. Verificar autenticação
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      console.error('[REPORT_SALES] Auth error:', authError)
-      return ReportErrors.UNAUTHORIZED()
+    // 1. Auth padronizada
+    const auth = await getAuthClient()
+    if (!auth) {
+      return authError('Não autorizado', 401)
     }
 
-    // 2. Buscar perfil com organização
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, organization_id')
-      .eq('id', user.id)
-      .single()
+    const { supabase, user } = auth
+    const organizationId = user.organization_id
 
-    if (!profile?.organization_id) {
-      return ReportErrors.FORBIDDEN()
-    }
-
-    // 3. Extrair parâmetros
+    // 2. Extrair parâmetros
     const searchParams = request.nextUrl.searchParams
     const storeId = searchParams.get('storeId')
     const pipelineId = searchParams.get('pipelineId')
     const period = searchParams.get('period') || '30d'
     
-    // 4. Calcular datas do período
+    // 3. Calcular datas do período
     const { startDate, endDate } = calculatePeriodDates(period)
 
-    // 5. Buscar deals do período
+    // 4. Buscar deals do período
     let dealsQuery = supabase
       .from('deals')
       .select(`
@@ -76,7 +64,7 @@ export async function GET(request: NextRequest) {
         closed_at,
         contact:contacts(name, email)
       `)
-      .eq('organization_id', profile.organization_id)
+      .eq('organization_id', organizationId)
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString())
 
@@ -89,11 +77,11 @@ export async function GET(request: NextRequest) {
 
     const { data: deals } = await dealsQuery
 
-    // 6. Buscar stages para funil
+    // 5. Buscar stages para funil
     let stagesQuery = supabase
       .from('pipeline_stages')
       .select('id, name, color, position, probability')
-      .eq('organization_id', profile.organization_id)
+      .eq('organization_id', organizationId)
       .order('position')
 
     if (pipelineId) {
@@ -306,7 +294,7 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     console.log('[REPORT_SALES] Gerado com sucesso', {
       userId: user.id,
-      orgId: profile.organization_id,
+      orgId: organizationId,
       storeId,
       pipelineId,
       period,
