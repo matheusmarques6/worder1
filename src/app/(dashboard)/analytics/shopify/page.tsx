@@ -468,7 +468,7 @@ export default function ShopifyAnalyticsPage() {
             <DetailRow label="Cobranças de frete" value={data?.totalFrete || 0} change={data?.freteChange} />
             <DetailRow label="Tributos" value={data?.totalTributos || 0} change={data?.tributosChange} />
             <div className="pt-2 mt-2 border-t border-dark-600">
-              <DetailRow label="Total de vendas" value={data?.vendasBrutas || 0} change={data?.vendasBrutasChange} />
+              <DetailRow label="Total de vendas" value={data?.totalVendas || 0} change={data?.totalVendasChange} />
             </div>
           </div>
         </motion.div>

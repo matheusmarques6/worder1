@@ -1,128 +1,89 @@
-# 🔍 Diagnóstico Shopify Analytics
+# 🔧 Correções Shopify Analytics - v5
 
-## O Problema
+## Problemas Corrigidos
 
-Há uma diferença significativa entre os valores da Shopify e da Worder:
+### 1. ✅ Total de Vendas (Frontend)
 
-| Métrica | Shopify | Worder | Diferença |
-|---------|---------|--------|-----------|
-| Vendas brutas | R$ 62.868,60 | R$ 53.257,76 | -R$ 9.610 |
-| Pedidos | 339 | 289 | -50 |
+**Problema:** O campo "Total de vendas" mostrava o valor de "Vendas Brutas" ao invés do cálculo correto.
 
-## Como Usar a API de Diagnóstico
-
-### 1. Deploy
-
-Extraia o ZIP e faça deploy no Vercel.
-
-### 2. Acesse a API
-
+**Antes (errado):**
 ```
-https://seu-site.vercel.app/api/analytics/shopify/diagnostico?storeId=XXX
+Total de vendas = Vendas Brutas = R$ 6.728,66
 ```
 
-### 3. O que a API retorna
+**Depois (correto):**
+```
+Total de vendas = Vendas Líquidas + Frete + Tributos
+Total de vendas = R$ 5.246,76 + R$ 225,40 + R$ 0,00 = R$ 5.472,16
+```
 
-A API faz uma análise completa de todos os pedidos e retorna:
+**Arquivo:** `src/app/(dashboard)/analytics/shopify/page.tsx`
 
-```json
-{
-  "diagnostico": {
-    "periodo": {
-      "solicitado": "2026-01-07 a 2026-01-13",
-      "startISO": "...",
-      "endISO": "..."
-    },
-    
-    "contagem": {
-      "total": 339,           // Total de pedidos
-      "teste": 0,             // Pedidos de teste
-      "cancelados": 50,       // Pedidos cancelados
-      "validos": 289,         // Não teste e não cancelados
-      
-      "shopifyDeveMostrar": {
-        "pedidos": 339,       // Shopify mostra: total - teste
-        "nota": "Shopify inclui cancelados, pending, unpaid. Exclui apenas test."
-      }
-    },
-    
-    "vendasBrutas": {
-      "metodo1_totalLineItemsPrice": {
-        "todos": "R$ 65.000,00",
-        "semTeste": "R$ 62.868,60",           // ← ESTE é o valor correto
-        "semTesteNemCancelado": "R$ 53.257,76" // ← ESTE é o que Worder calcula hoje
-      },
-      
-      "conclusao": {
-        "valorCorretoParaShopify": "R$ 62.868,60",
-        "nota": "Shopify Gross Sales = total_line_items_price de pedidos não-teste (inclui cancelados)"
-      }
-    },
-    
-    "porStatus": {
-      "financial": {
-        "paid": { "count": 280, "value": 50000 },
-        "pending": { "count": 20, "value": 5000 },
-        "refunded": { "count": 39, "value": 7868.60 }
-      }
-    },
-    
-    "pedidosCancelados": [
-      { "id": 123, "name": "#1001", "total_line_items_price": "R$ 200,00" }
-    ]
-  },
-  
-  "comparativo": {
-    "shopifyEsperado": {
-      "vendasBrutas": "R$ 62.868,60",
-      "pedidos": 339
-    },
-    "worderCalculado": {
-      "vendasBrutas_metodoAtual": "R$ 53.257,76",      // Errado
-      "vendasBrutas_metodoCorreto": "R$ 62.868,60",    // Correto
-      "pedidos_metodoAtual": 289,                       // Errado
-      "pedidos_metodoCorreto": 339                      // Correto
-    }
-  }
+---
+
+### 2. ✅ Taxa de Clientes Recorrentes (API)
+
+**Problema:** A Worder usava `orders_count > 1` para determinar se cliente era recorrente, mas a Shopify usa outra lógica.
+
+**Definição Shopify:**
+- **Cliente Recorrente:** Cliente que foi criado ANTES do início do período
+- **Cliente Novo:** Cliente que foi criado DURANTE o período
+
+**Antes (errado):**
+```typescript
+// Usava apenas orders_count
+const ordersCount = customer.orders_count || 1;
+if (ordersCount > 1) {
+  // É recorrente
 }
 ```
 
-## O Que Descobrimos
-
-### Definição Oficial da Shopify
-
-> **Gross Sales** = product price × quantity (before taxes, shipping, discounts, and returns).
-> 
-> **Canceled, pending, and unpaid orders are INCLUDED.**
-> 
-> Test and deleted orders are NOT included.
-
-### O Erro da Worder
-
-A Worder estava **excluindo pedidos cancelados** das vendas brutas e da contagem de pedidos.
-
-### A Correção
-
+**Depois (correto):**
 ```typescript
-// ERRADO (o que Worder fazia)
-const validOrders = orders.filter(o => !o.test && !o.cancelled_at);
-vendasBrutas = soma de validOrders; // Exclui cancelados
+// Compara data de criação do cliente com início do período
+const customerCreatedAt = new Date(customer.created_at);
+const periodStart = new Date(startDate);
 
-// CORRETO (como Shopify faz)
-const allNonTestOrders = orders.filter(o => !o.test);
-vendasBrutas = soma de allNonTestOrders; // Inclui cancelados
+if (customerCreatedAt < periodStart) {
+  // É recorrente (existia ANTES do período)
+} else {
+  // É novo (criado DURANTE o período)
+}
 ```
 
-## Próximos Passos
+**Arquivo:** `src/app/api/analytics/shopify/route.ts`
 
-1. Execute a API de diagnóstico
-2. Compare os valores com a Shopify
-3. Se `vendasBrutas.metodo1_totalLineItemsPrice.semTeste` bater com a Shopify, a correção está correta
-4. Aplique a correção na API principal
+---
 
-## Contato
+## Arquivos Incluídos
 
-Se os valores ainda não baterem após a correção, verifique:
-1. Se o período está correto (timezone)
-2. Se há pedidos de teste sendo contados
-3. Se há algum filtro adicional na query
+```
+src/
+├── app/
+│   ├── api/
+│   │   └── analytics/
+│   │       └── shopify/
+│   │           └── route.ts          # API corrigida
+│   └── (dashboard)/
+│       └── analytics/
+│           └── shopify/
+│               └── page.tsx          # Frontend corrigido
+```
+
+---
+
+## Resultado Esperado
+
+| Métrica | Antes | Depois | Shopify |
+|---------|-------|--------|---------|
+| Total de vendas | R$ 6.728,66 | R$ 5.472,16 | R$ 5.472,16 ✅ |
+| Taxa recorrentes | 35.14% | ~37.84% | 37.84% ✅ |
+
+---
+
+## Como Aplicar
+
+1. Extraia o ZIP na raiz do projeto
+2. Faça deploy no Vercel
+3. Teste com "Hoje" e "Ontem" primeiro
+4. Depois teste "7 dias"

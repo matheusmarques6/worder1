@@ -146,7 +146,7 @@ async function fetchCustomersBatch(
       const { body } = await shopifyFetch(
         shopDomain,
         accessToken,
-        `/customers.json?ids=${idsParam}&fields=id,email,orders_count&limit=250`
+        `/customers.json?ids=${idsParam}&fields=id,email,orders_count,created_at&limit=250`
       );
 
       for (const customer of body.customers || []) {
@@ -166,6 +166,7 @@ function getDateRange(period: string): {
   endDate: string; 
   startISO: string; 
   endISO: string;
+  prevStartDate: string;
   prevStartISO: string;
   prevEndISO: string;
   daysInPeriod: number;
@@ -242,6 +243,7 @@ function getDateRange(period: string): {
     endDate: endDateStr, 
     startISO, 
     endISO,
+    prevStartDate: prevStartDateStr,
     prevStartISO,
     prevEndISO,
     daysInPeriod,
@@ -269,7 +271,8 @@ interface KPIResult {
 
 function calculateKPIsFromOrders(
   orders: any[],
-  customerMap: Map<number, any>
+  customerMap: Map<number, any>,
+  periodStartDate?: string
 ): KPIResult {
   // Filtrar pedidos (excluindo apenas teste)
   // IMPORTANTE: Shopify INCLUI pedidos cancelados nas vendas brutas!
@@ -287,6 +290,9 @@ function calculateKPIsFromOrders(
   const uniqueCustomerIds = new Set<number>();
   const returningCustomerIds = new Set<number>();
   const firstTimeCustomerIds = new Set<number>();
+  
+  // Data de início do período para comparar
+  const periodStart = periodStartDate ? new Date(periodStartDate) : null;
 
   // VENDAS BRUTAS: Inclui TODOS os pedidos (inclusive cancelados), como Shopify faz
   for (const o of allNonTestOrders) {
@@ -344,15 +350,29 @@ function calculateKPIsFromOrders(
       }
     }
 
-    // Customer tracking
+    // Customer tracking - LÓGICA AJUSTADA
+    // Shopify: Recorrente = cliente que JÁ EXISTIA antes do período
+    // Shopify: Novo = cliente criado DURANTE o período
     const customer = o.customer;
     if (customer?.id) {
       uniqueCustomerIds.add(customer.id);
       
       const customerData = customerMap.get(customer.id);
-      const ordersCount = customerData?.orders_count || customer.orders_count || 1;
+      const customerCreatedAt = customerData?.created_at || customer.created_at;
       
-      if (ordersCount > 1) {
+      let isReturning = false;
+      
+      if (periodStart && customerCreatedAt) {
+        // Se o cliente foi criado ANTES do início do período, é recorrente
+        const customerDate = new Date(customerCreatedAt);
+        isReturning = customerDate < periodStart;
+      } else {
+        // Fallback: usa orders_count se não tiver data de criação
+        const ordersCount = customerData?.orders_count || customer.orders_count || 1;
+        isReturning = ordersCount > 1;
+      }
+      
+      if (isReturning) {
         returningCustomerIds.add(customer.id);
       } else {
         firstTimeCustomerIds.add(customer.id);
@@ -433,6 +453,7 @@ export async function GET(request: NextRequest) {
       endDate, 
       startISO, 
       endISO, 
+      prevStartDate,
       prevStartISO, 
       prevEndISO,
       daysInPeriod,
@@ -524,8 +545,8 @@ export async function GET(request: NextRequest) {
     // ========================================
     // 6. CALCULATE KPIs FOR BOTH PERIODS
     // ========================================
-    const currentKPIs = calculateKPIsFromOrders(currentOrders, customerMap);
-    const previousKPIs = calculateKPIsFromOrders(previousOrders, prevCustomerMap);
+    const currentKPIs = calculateKPIsFromOrders(currentOrders, customerMap, startDate);
+    const previousKPIs = calculateKPIsFromOrders(previousOrders, prevCustomerMap, prevStartDate);
 
     console.log(`[Analytics] Current KPIs:`, {
       vendasBrutas: currentKPIs.vendasBrutas,
