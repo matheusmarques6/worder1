@@ -68,23 +68,38 @@ async function shopifyqlQuery(
 async function fetchCustomerMetricsFromShopifyQL(
   shopDomain: string,
   accessToken: string,
-  sinceDate: string,
-  untilDate: string
+  daysBack: number
 ): Promise<{ newCustomers: number; returningCustomers: number; rate: number } | null> {
   try {
-    // Query para buscar new vs returning customers
-    const query = `FROM sales SHOW new_customers, returning_customers SINCE ${sinceDate} UNTIL ${untilDate}`;
+    // Query com formato correto sugerido pelo senior
+    // Usando "X days ago" ao invés de datas específicas
+    const query = `FROM sales SHOW new_customers, returning_customers SINCE ${daysBack} days ago UNTIL today`;
     
     console.log('[ShopifyQL] Query:', query);
     
     const result = await shopifyqlQuery(shopDomain, accessToken, query);
     
-    if (result.errors || !result.data?.shopifyqlQuery?.tableData) {
-      console.error('[ShopifyQL] Query failed:', result.errors || 'No data');
+    // Log detalhado para debug
+    console.log('[ShopifyQL] Raw result:', JSON.stringify(result, null, 2));
+    
+    if (result.errors) {
+      console.error('[ShopifyQL] Query errors:', result.errors);
+      return null;
+    }
+    
+    if (!result.data?.shopifyqlQuery?.tableData) {
+      console.error('[ShopifyQL] No tableData in response');
+      // Verificar se há parseErrors
+      if (result.data?.shopifyqlQuery?.parseErrors) {
+        console.error('[ShopifyQL] Parse errors:', result.data.shopifyqlQuery.parseErrors);
+      }
       return null;
     }
     
     const { columns, rows } = result.data.shopifyqlQuery.tableData;
+    
+    console.log('[ShopifyQL] Columns:', columns);
+    console.log('[ShopifyQL] Rows:', rows);
     
     if (!rows || rows.length === 0) {
       console.log('[ShopifyQL] No rows returned');
@@ -96,7 +111,7 @@ async function fetchCustomerMetricsFromShopifyQL(
     const retIdx = columns.findIndex((c: any) => c.name === 'returning_customers');
     
     if (newIdx === -1 || retIdx === -1) {
-      console.error('[ShopifyQL] Columns not found:', columns);
+      console.error('[ShopifyQL] Columns not found. Available:', columns.map((c: any) => c.name));
       return null;
     }
     
@@ -107,11 +122,11 @@ async function fetchCustomerMetricsFromShopifyQL(
     const total = newCustomers + returningCustomers;
     const rate = total > 0 ? Number(((returningCustomers / total) * 100).toFixed(2)) : 0;
     
-    console.log('[ShopifyQL] Results:', { newCustomers, returningCustomers, rate });
+    console.log('[ShopifyQL] Final Results:', { newCustomers, returningCustomers, total, rate });
     
     return { newCustomers, returningCustomers, rate };
   } catch (error) {
-    console.error('[ShopifyQL] Error:', error);
+    console.error('[ShopifyQL] Exception:', error);
     return null;
   }
 }
@@ -652,29 +667,36 @@ export async function GET(request: NextRequest) {
     let shopifyqlPreviousRate: number | null = null;
     
     try {
-      // Converter datas para formato ShopifyQL (YYYY-MM-DD)
-      const currentSince = startDate;
-      const currentUntil = endDate;
-      const prevSince = prevStartDate;
-      const prevUntil = startDate.split('T')[0]; // Um dia antes do período atual
-      
       console.log('[ShopifyQL] Fetching customer metrics...');
-      console.log('[ShopifyQL] Current period:', currentSince, 'to', currentUntil);
-      console.log('[ShopifyQL] Previous period:', prevSince, 'to', prevUntil);
+      console.log('[ShopifyQL] Period days:', daysInPeriod);
       
-      const [currentMetrics, previousMetrics] = await Promise.all([
-        fetchCustomerMetricsFromShopifyQL(shop_domain, access_token, currentSince, currentUntil),
-        fetchCustomerMetricsFromShopifyQL(shop_domain, access_token, prevSince, prevUntil)
-      ]);
+      // Buscar métricas do período atual
+      // Para período anterior, dobramos o daysInPeriod e depois calculamos
+      const currentMetrics = await fetchCustomerMetricsFromShopifyQL(
+        shop_domain, 
+        access_token, 
+        daysInPeriod
+      );
+      
+      // Para o período anterior, buscamos o dobro e subtraímos
+      const doubleMetrics = await fetchCustomerMetricsFromShopifyQL(
+        shop_domain, 
+        access_token, 
+        daysInPeriod * 2
+      );
       
       if (currentMetrics) {
         shopifyqlCurrentRate = currentMetrics.rate;
         console.log('[ShopifyQL] Current rate from Shopify:', shopifyqlCurrentRate);
       }
       
-      if (previousMetrics) {
-        shopifyqlPreviousRate = previousMetrics.rate;
-        console.log('[ShopifyQL] Previous rate from Shopify:', shopifyqlPreviousRate);
+      // Calcular taxa do período anterior (se temos os dois dados)
+      if (doubleMetrics && currentMetrics) {
+        const prevNew = doubleMetrics.newCustomers - currentMetrics.newCustomers;
+        const prevRet = doubleMetrics.returningCustomers - currentMetrics.returningCustomers;
+        const prevTotal = prevNew + prevRet;
+        shopifyqlPreviousRate = prevTotal > 0 ? Number(((prevRet / prevTotal) * 100).toFixed(2)) : 0;
+        console.log('[ShopifyQL] Previous rate calculated:', shopifyqlPreviousRate);
       }
     } catch (error) {
       console.error('[ShopifyQL] Failed to fetch metrics, using calculated values:', error);
@@ -798,6 +820,18 @@ export async function GET(request: NextRequest) {
           p.numero_pedidos += 1;
         }
       }
+    }
+
+    // Log debug para produtos
+    console.log('[Analytics] Products debug - Total unique products:', produtosMap.size);
+    const topProduct = Array.from(produtosMap.values()).sort((a, b) => b.receita_liquida - a.receita_liquida)[0];
+    if (topProduct) {
+      console.log('[Analytics] Top product:', {
+        nome: topProduct.product_title,
+        receita_bruta: topProduct.receita_bruta,
+        descontos: topProduct.descontos_aplicados,
+        receita_liquida: topProduct.receita_liquida,
+      });
     }
 
     // Top products by NET revenue (como Shopify faz em "Total de vendas por produto")

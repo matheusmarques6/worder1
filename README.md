@@ -1,44 +1,141 @@
-# ✅ Correção FINAL - Vendas por Produto
+# 🔧 Correção Shopify Analytics - Revisado pelo Senior
 
-## Confirmado pelo Diagnóstico
+**Data:** 14 de Janeiro de 2026  
+**Status:** Aprovado para Deploy
 
-O diagnóstico mostrou que o método **v3 (gross - discount_allocations)** é o correto:
+---
 
-| Produto | v3 Calculado | Shopify |
-|---------|--------------|---------|
-| Kalib™ | R$ 379,36 | R$ 379,36 ✅ |
-| Santorini™ | R$ 251,82 | R$ 251,82 ✅ |
-| Vintage Gatinho™ | R$ 209,83 | R$ 209,83 ✅ |
+## 📋 Resumo das Correções
 
-## Como Verificar se o Deploy Funcionou
+### 1. Taxa de Clientes Recorrentes
 
-1. Faça o deploy deste arquivo
-2. Acesse a página de analytics da Shopify
-3. Selecione o período "Ontem" 
-4. Compare os valores
-
-Se continuar diferente, limpe o cache do browser (Ctrl+Shift+R).
-
-## O Que Este Arquivo Faz
+**Solução:** ShopifyQL via GraphQL API
 
 ```typescript
-// Para cada item do pedido:
+// Query usando formato correto
+const query = `FROM sales SHOW new_customers, returning_customers SINCE ${daysBack} days ago UNTIL today`;
+```
+
+**Fallback:** Se ShopifyQL falhar (falta de scopes), usa cálculo baseado em `orders_count`.
+
+### 2. Total de Vendas por Produto
+
+**Solução:** Usar `discount_allocations` para calcular NET sales
+
+```typescript
+// Cálculo correto
 const grossAmount = price * quantity;
 
-// Subtrai os descontos alocados
 let discountAmount = 0;
 for (const alloc of item.discount_allocations) {
   discountAmount += alloc.amount;
 }
 
-// Resultado = NET SALES (como Shopify mostra)
-const netAmount = grossAmount - discountAmount;
+const netAmount = grossAmount - discountAmount;  // ✅ Valor correto
 ```
 
-## Arquivo
+---
+
+## 📁 Arquivos Incluídos
 
 ```
-src/app/api/analytics/shopify/route.ts  (936 linhas)
+src/
+├── app/
+│   └── api/
+│       ├── analytics/
+│       │   └── shopify/
+│       │       ├── route.ts                    # API principal (969 linhas)
+│       │       └── diagnostico-produtos/
+│       │           └── route.ts                # Endpoint de debug
+│       └── shopify/
+│           └── lojas/
+│               └── route.ts                    # Lista lojas/IDs
 ```
 
-Substitua o arquivo existente completamente.
+---
+
+## 🚀 Instruções de Deploy
+
+### Passo 1: Substituir Arquivos
+
+Copie os arquivos para as respectivas pastas no projeto, substituindo os existentes.
+
+### Passo 2: Verificar Scopes do App Shopify
+
+Para ShopifyQL funcionar, o app precisa dos scopes:
+- `read_reports`
+- `read_analytics`
+
+Se não tiver, as lojas precisarão re-autorizar o app.
+
+### Passo 3: Deploy
+
+```bash
+git add .
+git commit -m "fix: correção taxa recorrentes e vendas por produto"
+git push
+```
+
+### Passo 4: Testar
+
+1. Acesse `/api/shopify/lojas` para pegar o `storeId`
+2. Acesse `/api/analytics/shopify/diagnostico-produtos?storeId=XXX&periodo=yesterday`
+3. Compare os valores com o dashboard Shopify
+
+---
+
+## 📊 Logs de Debug
+
+A API agora inclui logs detalhados:
+
+```
+[ShopifyQL] Query: FROM sales SHOW new_customers, returning_customers SINCE 7 days ago UNTIL today
+[ShopifyQL] Columns: [...]
+[ShopifyQL] Rows: [...]
+[ShopifyQL] Final Results: { newCustomers: 110, returningCustomers: 70, rate: 38.89 }
+
+[Analytics] Products debug - Total unique products: 45
+[Analytics] Top product: { nome: "Kalib™", receita_bruta: 450.33, descontos: 70.97, receita_liquida: 379.36 }
+```
+
+---
+
+## ⚠️ Possíveis Problemas
+
+### ShopifyQL retorna null
+
+**Causa:** App não tem scopes `read_reports` / `read_analytics`
+
+**Solução:** 
+1. Adicionar scopes no Partner Dashboard
+2. Pedir para lojistas re-autorizar o app
+
+### Valores ainda diferentes
+
+**Causa:** Cache do browser ou período diferente
+
+**Solução:**
+1. Limpar cache (Ctrl+Shift+R)
+2. Verificar período selecionado (Ontem vs 7 dias)
+3. Checar logs no Vercel/servidor
+
+---
+
+## ✅ Checklist de Validação
+
+- [ ] API deployada com sucesso
+- [ ] Logs de ShopifyQL aparecem no servidor
+- [ ] Taxa de recorrentes bate com Shopify
+- [ ] Vendas por produto batem com Shopify
+- [ ] Todos os períodos testados (Hoje, Ontem, 7d, 30d)
+
+---
+
+## 📞 Suporte
+
+Se os valores continuarem diferentes após o deploy:
+
+1. Verifique os logs do servidor
+2. Execute o endpoint de diagnóstico
+3. Compare com dashboard Shopify no mesmo período
+4. Reporte com screenshots de ambos os dashboards
