@@ -203,6 +203,13 @@ export default function ShopifyAnalyticsPage() {
       const response = await fetch(`/api/analytics/shopify?period=${selectedPeriod}&storeId=${storeId}`)
       const result = await response.json()
       
+      // 🔍 DEBUG: Ver o que a API retorna
+      console.log('[DEBUG] API Response:', {
+        success: result.success,
+        produtos: result.data?.vendasPorProduto?.slice(0, 3),
+        periodo: selectedPeriod,
+      })
+      
       if (result.success) {
         setHasStore(true)
         setData(result.data)
