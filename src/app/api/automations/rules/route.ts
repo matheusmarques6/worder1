@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
   const pipelineId = searchParams.get('pipelineId')
   const sourceType = searchParams.get('source')
   const actionType = searchParams.get('action')
+  const storeId = searchParams.get('storeId') // ✅ NOVO: Filtro por loja
 
   try {
     // RLS filtra automaticamente por organization_id
@@ -31,6 +32,11 @@ export async function GET(request: NextRequest) {
       `)
       .order('created_at', { ascending: false })
 
+    // ✅ CRÍTICO: Filtrar por store_id para multi-tenant
+    if (storeId) {
+      query = query.eq('store_id', storeId)
+    }
+    
     if (pipelineId) {
       query = query.eq('pipeline_id', pipelineId)
     }
@@ -73,10 +79,24 @@ export async function POST(request: NextRequest) {
       mark_as_won,
       mark_as_lost,
       is_enabled,
+      store_id, // ✅ NOVO: Receber store_id
     } = body
 
     if (!name || !source_type || !trigger_event || !action_type) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // ✅ NOVO: Validar store_id se fornecido
+    if (store_id) {
+      const { data: store, error: storeError } = await supabase
+        .from('stores')
+        .select('id')
+        .eq('id', store_id)
+        .single()
+      
+      if (storeError || !store) {
+        return NextResponse.json({ error: 'Store not found or access denied' }, { status: 403 })
+      }
     }
 
     // Get max position - RLS filtra automaticamente
@@ -94,6 +114,7 @@ export async function POST(request: NextRequest) {
       .from('automation_rules')
       .insert({
         organization_id: user.organization_id,
+        store_id: store_id || null, // ✅ NOVO: Salvar store_id
         name,
         source_type,
         trigger_event,

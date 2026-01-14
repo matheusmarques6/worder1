@@ -1,141 +1,96 @@
-# 🔧 Correção Shopify Analytics - Revisado pelo Senior
+# CRM Bugfixes v97 → v98
 
-**Data:** 14 de Janeiro de 2026  
-**Status:** Aprovado para Deploy
+## Bugs Corrigidos
+
+| Bug | Problema | Solução |
+|-----|----------|---------|
+| **#4** 🔴 | Automações de uma loja aparecendo em outra | Adicionado filtro `store_id` na API + modais |
+| **#3** | Sai da pipeline selecionada ao atualizar | Refatorado para `activePipelineId` + `useMemo` |
+| **#1** | Nova coluna não aparece após criar | `useMemo` sincroniza automaticamente |
+| **#2** | Demora na mudança de cor do pipeline | Removido `setTimeout` e chamadas extras |
+| **#5** | Deal card ocupando muito espaço | Novo layout compacto (3 linhas) |
 
 ---
 
-## 📋 Resumo das Correções
+## Arquivos Modificados
 
-### 1. Taxa de Clientes Recorrentes
-
-**Solução:** ShopifyQL via GraphQL API
-
-```typescript
-// Query usando formato correto
-const query = `FROM sales SHOW new_customers, returning_customers SINCE ${daysBack} days ago UNTIL today`;
 ```
-
-**Fallback:** Se ShopifyQL falhar (falta de scopes), usa cálculo baseado em `orders_count`.
-
-### 2. Total de Vendas por Produto
-
-**Solução:** Usar `discount_allocations` para calcular NET sales
-
-```typescript
-// Cálculo correto
-const grossAmount = price * quantity;
-
-let discountAmount = 0;
-for (const alloc of item.discount_allocations) {
-  discountAmount += alloc.amount;
-}
-
-const netAmount = grossAmount - discountAmount;  // ✅ Valor correto
+src/app/api/automations/rules/route.ts          # Bug 4: Filtro store_id
+src/components/crm/automations/AutomationsPanel.tsx   # Bug 4: Filtro store_id
+src/components/crm/automations/CreateDealRuleModal.tsx # Bug 4: store_id no payload
+src/components/crm/automations/MoveStageRuleModal.tsx  # Bug 4: store_id no payload
+src/app/(dashboard)/crm/page.tsx                # Bugs 1,2,3,5
 ```
 
 ---
 
-## 📁 Arquivos Incluídos
+## Instruções de Instalação
 
-```
-src/
-├── app/
-│   └── api/
-│       ├── analytics/
-│       │   └── shopify/
-│       │       ├── route.ts                    # API principal (969 linhas)
-│       │       └── diagnostico-produtos/
-│       │           └── route.ts                # Endpoint de debug
-│       └── shopify/
-│           └── lojas/
-│               └── route.ts                    # Lista lojas/IDs
-```
+### 1. Substituir Arquivos
 
----
-
-## 🚀 Instruções de Deploy
-
-### Passo 1: Substituir Arquivos
-
-Copie os arquivos para as respectivas pastas no projeto, substituindo os existentes.
-
-### Passo 2: Verificar Scopes do App Shopify
-
-Para ShopifyQL funcionar, o app precisa dos scopes:
-- `read_reports`
-- `read_analytics`
-
-Se não tiver, as lojas precisarão re-autorizar o app.
-
-### Passo 3: Deploy
+Copie os arquivos deste ZIP para o projeto, mantendo a estrutura de pastas:
 
 ```bash
-git add .
-git commit -m "fix: correção taxa recorrentes e vendas por produto"
-git push
+cp -r src/* /seu-projeto/src/
+cp -r supabase/* /seu-projeto/supabase/
 ```
 
-### Passo 4: Testar
+### 2. Executar Migração SQL (OBRIGATÓRIO)
 
-1. Acesse `/api/shopify/lojas` para pegar o `storeId`
-2. Acesse `/api/analytics/shopify/diagnostico-produtos?storeId=XXX&periodo=yesterday`
-3. Compare os valores com o dashboard Shopify
+Execute no Supabase SQL Editor **ANTES** de fazer deploy:
 
----
+```sql
+-- Arquivo: supabase/migrations/20260114_add_store_id_to_automation_rules.sql
 
-## 📊 Logs de Debug
+ALTER TABLE automation_rules 
+ADD COLUMN IF NOT EXISTS store_id UUID REFERENCES stores(id) ON DELETE CASCADE;
 
-A API agora inclui logs detalhados:
+CREATE INDEX IF NOT EXISTS idx_automation_rules_store 
+ON automation_rules(store_id);
 
+-- Vincular regras existentes à loja do pipeline
+UPDATE automation_rules ar
+SET store_id = p.store_id
+FROM pipelines p
+WHERE ar.pipeline_id = p.id
+  AND ar.store_id IS NULL
+  AND p.store_id IS NOT NULL;
 ```
-[ShopifyQL] Query: FROM sales SHOW new_customers, returning_customers SINCE 7 days ago UNTIL today
-[ShopifyQL] Columns: [...]
-[ShopifyQL] Rows: [...]
-[ShopifyQL] Final Results: { newCustomers: 110, returningCustomers: 70, rate: 38.89 }
 
-[Analytics] Products debug - Total unique products: 45
-[Analytics] Top product: { nome: "Kalib™", receita_bruta: 450.33, descontos: 70.97, receita_liquida: 379.36 }
+### 3. Deploy
+
+```bash
+npm run build
+# ou
+vercel --prod
 ```
 
 ---
 
-## ⚠️ Possíveis Problemas
+## Novo Layout do Deal Card
 
-### ShopifyQL retorna null
+**Antes (5 linhas):**
+```
+Título                    ⋮
+👤 Contato
+R$ 1.500    ████░ 60%
+🏷️ tag1 tag2
+🕐 15/01/2025
+```
 
-**Causa:** App não tem scopes `read_reports` / `read_analytics`
-
-**Solução:** 
-1. Adicionar scopes no Partner Dashboard
-2. Pedir para lojistas re-autorizar o app
-
-### Valores ainda diferentes
-
-**Causa:** Cache do browser ou período diferente
-
-**Solução:**
-1. Limpar cache (Ctrl+Shift+R)
-2. Verificar período selecionado (Ontem vs 7 dias)
-3. Checar logs no Vercel/servidor
-
----
-
-## ✅ Checklist de Validação
-
-- [ ] API deployada com sucesso
-- [ ] Logs de ShopifyQL aparecem no servidor
-- [ ] Taxa de recorrentes bate com Shopify
-- [ ] Vendas por produto batem com Shopify
-- [ ] Todos os períodos testados (Hoje, Ontem, 7d, 30d)
+**Depois (3 linhas):**
+```
+Título              R$ 1.500
+👤 Contato
+🏷️ tag1 tag2     🕐 15/01
+```
 
 ---
 
-## 📞 Suporte
+## Checklist de Testes
 
-Se os valores continuarem diferentes após o deploy:
-
-1. Verifique os logs do servidor
-2. Execute o endpoint de diagnóstico
-3. Compare com dashboard Shopify no mesmo período
-4. Reporte com screenshots de ambos os dashboards
+- [ ] Criar nova pipeline e verificar se colunas aparecem
+- [ ] Mudar cor de pipeline e verificar se atualiza imediatamente  
+- [ ] Criar automação na Loja A, verificar se NÃO aparece na Loja B
+- [ ] Verificar layout compacto dos deal cards
+- [ ] Testar drag & drop de deals entre colunas

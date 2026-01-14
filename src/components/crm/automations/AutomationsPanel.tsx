@@ -31,7 +31,7 @@ import {
   Link,
   ShoppingBag,
 } from 'lucide-react'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores' // ✅ CORRIGIDO: Adicionar useStoreStore
 import { CreateDealRuleModal } from './CreateDealRuleModal'
 import { MoveStageRuleModal } from './MoveStageRuleModal'
 import { AutomationLogsModal } from './AutomationLogsModal'
@@ -136,7 +136,9 @@ const SOURCE_NAMES: Record<string, string> = {
 
 export function AutomationsPanel() {
   const { user } = useAuthStore()
+  const { currentStore } = useStoreStore() // ✅ NOVO: Pegar loja atual
   const organizationId = user?.organization_id
+  const storeId = currentStore?.id // ✅ NOVO: Store ID para filtrar
 
   // State
   const [loading, setLoading] = useState(true)
@@ -167,16 +169,17 @@ export function AutomationsPanel() {
 
   const fetchData = useCallback(async () => {
     if (!organizationId) return
+    if (!storeId) return // ✅ NOVO: Não buscar sem loja selecionada
 
     setLoading(true)
     try {
-      // Fetch all data in parallel
+      // ✅ CORRIGIDO: Adicionar storeId em todas as chamadas
       const [rulesRes, integrationsRes, pipelinesRes, logsRes, statsRes] = await Promise.all([
-        fetch(`/api/automations/rules?organizationId=${organizationId}`),
-        fetch(`/api/integrations/connected?organizationId=${organizationId}`),
-        fetch(`/api/deals?organizationId=${organizationId}&type=pipelines`),
-        fetch(`/api/automations/logs?organizationId=${organizationId}&limit=10`),
-        fetch(`/api/automations/stats?organizationId=${organizationId}`),
+        fetch(`/api/automations/rules?organizationId=${organizationId}&storeId=${storeId}`),
+        fetch(`/api/integrations/connected?organizationId=${organizationId}&storeId=${storeId}`),
+        fetch(`/api/deals?organizationId=${organizationId}&type=pipelines&storeId=${storeId}`),
+        fetch(`/api/automations/logs?organizationId=${organizationId}&storeId=${storeId}&limit=10`),
+        fetch(`/api/automations/stats?organizationId=${organizationId}&storeId=${storeId}`),
       ])
 
       const [rulesData, integrationsData, pipelinesData, logsData, statsData] = await Promise.all([
@@ -223,7 +226,7 @@ export function AutomationsPanel() {
     } finally {
       setLoading(false)
     }
-  }, [organizationId])
+  }, [organizationId, storeId]) // ✅ CORRIGIDO: Adicionar storeId como dependência
 
   useEffect(() => {
     fetchData()

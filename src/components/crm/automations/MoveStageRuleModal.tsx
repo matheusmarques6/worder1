@@ -19,7 +19,7 @@ import {
   ShoppingBag,
   Link,
 } from 'lucide-react'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores' // ✅ CORRIGIDO: Adicionar useStoreStore
 
 // =============================================
 // TYPES
@@ -130,7 +130,9 @@ export function MoveStageRuleModal({
   pipelines,
 }: MoveStageRuleModalProps) {
   const { user } = useAuthStore()
+  const { currentStore } = useStoreStore() // ✅ NOVO: Pegar loja atual
   const organizationId = user?.organization_id
+  const storeId = currentStore?.id // ✅ NOVO: Store ID para a regra
 
   // Form state
   const [name, setName] = useState('')
@@ -211,6 +213,7 @@ export function MoveStageRuleModal({
     try {
       const payload = {
         organizationId,
+        store_id: storeId, // ✅ NOVO: Incluir store_id para multi-tenant
         name: name.trim(),
         source_type: sourceType,
         trigger_event: triggerEvent,
