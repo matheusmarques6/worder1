@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   DndContext,
@@ -79,7 +79,7 @@ const customCollisionDetection: CollisionDetection = (args) => {
 }
 
 // ==========================================
-// DEAL CARD COMPONENT - Layout Compacto
+// DEAL CARD COMPONENT
 // ==========================================
 
 interface DealCardProps {
@@ -97,64 +97,78 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
     <div
       onClick={onClick}
       className={`
-        p-3 bg-dark-800/60 border border-dark-700/50 rounded-xl cursor-pointer
+        p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl cursor-pointer
         hover:border-dark-600 hover:bg-dark-800/80 transition-all group
         ${isDragging ? 'opacity-50 scale-105 shadow-xl shadow-primary-500/10 rotate-2' : ''}
       `}
     >
-      {/* ✅ LINHA 1: Título + Valor (lado a lado) */}
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h4 className="text-sm font-medium text-white line-clamp-1 flex-1 group-hover:text-primary-300 transition-colors">
+      <div className="flex items-start justify-between mb-3">
+        <h4 className="text-sm font-medium text-white line-clamp-2 group-hover:text-primary-300 transition-colors">
           {deal.title}
         </h4>
-        <span className="text-sm font-semibold text-success-400 whitespace-nowrap flex-shrink-0">
-          {formatCurrency(deal.value)}
-        </span>
+        <button 
+          onClick={(e) => e.stopPropagation()}
+          className="p-1 rounded hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* ✅ LINHA 2: Contato (se existir) */}
       {deal.contact && (
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
-            <span className="text-[8px] font-bold text-white">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
+            <span className="text-[10px] font-bold text-white">
               {getInitials(deal.contact.first_name, deal.contact.last_name)}
             </span>
           </div>
-          <span className="text-xs text-dark-300 truncate">{contactName}</span>
+          <div className="min-w-0">
+            <p className="text-xs text-white truncate">{contactName}</p>
+            {deal.contact.company && (
+              <p className="text-[10px] text-dark-400 truncate">{deal.contact.company}</p>
+            )}
+          </div>
         </div>
       )}
 
-      {/* ✅ LINHA 3: Tags + Data (juntos) */}
-      <div className="flex items-center justify-between gap-2">
-        {/* Tags */}
-        {deal.tags && deal.tags.length > 0 ? (
-          <div className="flex flex-wrap gap-1 flex-1 min-w-0">
-            {deal.tags.slice(0, 2).map((tag, i) => (
-              <span
-                key={i}
-                className="px-1.5 py-0.5 rounded-full bg-primary-500/20 text-primary-400 text-[10px] truncate max-w-[70px]"
-              >
-                {tag}
-              </span>
-            ))}
-            {deal.tags.length > 2 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-dark-700/50 text-dark-400 text-[10px]">
-                +{deal.tags.length - 2}
-              </span>
-            )}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-semibold text-success-400">{formatCurrency(deal.value)}</span>
+        <div className="flex items-center gap-1">
+          <div className="w-12 h-1.5 rounded-full bg-dark-700 overflow-hidden">
+            <div 
+              className="h-full rounded-full bg-gradient-to-r from-primary-500 to-accent-500 transition-all duration-300"
+              style={{ width: `${deal.probability}%` }}
+            />
           </div>
-        ) : (
-          <div className="flex-1" />
-        )}
-        
-        {/* Data */}
-        {deal.expected_close_date && (
-          <div className="flex items-center gap-1 text-[10px] text-dark-500 flex-shrink-0">
-            <Clock className="w-3 h-3" />
-            <span>{new Date(deal.expected_close_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
-          </div>
-        )}
+          <span className="text-[10px] text-dark-400">{deal.probability}%</span>
+        </div>
       </div>
+
+      {/* Tags */}
+      {deal.tags && deal.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {deal.tags.slice(0, 2).map((tag, i) => (
+            <span
+              key={i}
+              className="px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-400 text-[10px]"
+            >
+              {tag}
+            </span>
+          ))}
+          {deal.tags.length > 2 && (
+            <span className="px-2 py-0.5 rounded-full bg-dark-700/50 text-dark-400 text-[10px]">
+              +{deal.tags.length - 2}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Footer */}
+      {deal.expected_close_date && (
+        <div className="flex items-center gap-1.5 text-xs text-dark-400">
+          <Clock className="w-3 h-3" />
+          <span>{new Date(deal.expected_close_date).toLocaleDateString('pt-BR')}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -367,8 +381,7 @@ export default function CRMPage() {
   } = useDeals()
   const { createPipeline: createPipelineHook, updatePipeline, deletePipeline: deletePipelineHook, createStage, updateStage, deleteStage } = usePipelines()
   
-  // ✅ CORREÇÃO BUGS 1,2,3: Usar ID ao invés de objeto para evitar dessincronização
-  const [activePipelineId, setActivePipelineId] = useState<string | null>(null)
+  const [activePipeline, setActivePipeline] = useState<Pipeline | null>(null)
   const [showPipelineDropdown, setShowPipelineDropdown] = useState(false)
   const [showPipelineModal, setShowPipelineModal] = useState(false)
   const [editingPipeline, setEditingPipeline] = useState<Pipeline | null>(null)
@@ -377,7 +390,7 @@ export default function CRMPage() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeDeal, setActiveDeal] = useState<Deal | null>(null)
-  const [isMovingDeal, setIsMovingDeal] = useState(false)
+  const [isMovingDeal, setIsMovingDeal] = useState(false) // ✅ NOVO: Controlar movimento em progresso
   const [showEditStageModal, setShowEditStageModal] = useState(false)
   const [editingStage, setEditingStage] = useState<PipelineStage | null>(null)
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
@@ -385,23 +398,15 @@ export default function CRMPage() {
     minValue: '',
     maxValue: '',
     hasContact: 'all' as 'all' | 'yes' | 'no',
-    status: 'open' as 'all' | 'open' | 'won' | 'lost',
+    status: 'open' as 'all' | 'open' | 'won' | 'lost', // Default: só deals abertos
   })
 
-  // ✅ CORREÇÃO BUG 1,3: Derivar activePipeline do array (sempre atualizado)
-  const activePipeline = useMemo(() => {
-    if (!activePipelineId && pipelines.length > 0) {
-      return pipelines[0]
-    }
-    return pipelines.find(p => p.id === activePipelineId) || pipelines[0] || null
-  }, [pipelines, activePipelineId])
-
-  // ✅ CORREÇÃO BUG 3: Inicializar ID apenas uma vez
+  // Set active pipeline when pipelines load
   useEffect(() => {
-    if (pipelines.length > 0 && !activePipelineId) {
-      setActivePipelineId(pipelines[0].id)
+    if (pipelines.length > 0 && !activePipeline) {
+      setActivePipeline(pipelines[0])
     }
-  }, [pipelines, activePipelineId])
+  }, [pipelines, activePipeline])
 
   // DnD sensors
   const sensors = useSensors(
@@ -471,7 +476,7 @@ export default function CRMPage() {
   // DnD handlers
   const handleDragStart = (event: DragStartEvent) => {
     const dealId = event.active.id as string
-    const deal = deals.find(d => d.id === dealId)
+    const deal = deals.find((d: Deal) => d.id === dealId)
     if (deal) setActiveDeal(deal)
   }
 
@@ -498,7 +503,7 @@ export default function CRMPage() {
     if (dealId === overId) return
     
     // Encontrar o deal que está sendo arrastado
-    const draggedDeal = deals.find(d => d.id === dealId)
+    const draggedDeal = deals.find((d: Deal) => d.id === dealId)
     if (!draggedDeal) return
     
     // Função auxiliar para mover deal com controle de loading
@@ -521,16 +526,16 @@ export default function CRMPage() {
     }
     
     // Primeiro: verificar se soltou em um estágio (coluna)
-    const targetStage = stages.find(s => s.id === overId)
+    const targetStage = stages.find((s: PipelineStage) => s.id === overId)
     if (targetStage) {
       await executeMove(targetStage.id, targetStage.name)
       return
     }
     
     // Segundo: verificar se soltou em outro deal
-    const targetDeal = deals.find(d => d.id === overId)
+    const targetDeal = deals.find((d: Deal) => d.id === overId)
     if (targetDeal) {
-      const stage = stages.find(s => s.id === targetDeal.stage_id)
+      const stage = stages.find((s: PipelineStage) => s.id === targetDeal.stage_id)
       await executeMove(targetDeal.stage_id, stage?.name || 'unknown')
       return
     }
@@ -550,11 +555,13 @@ export default function CRMPage() {
 
   // Pipeline handlers
   const handlePipelineSelect = (pipeline: Pipeline) => {
-    setActivePipelineId(pipeline.id) // ✅ CORRIGIDO: Usar ID
+    setActivePipeline(pipeline)
     setShowPipelineDropdown(false)
   }
 
   const handleCreatePipeline = async (data: { name: string; description?: string; color?: string; stages: { id?: string; name: string; color: string; position: number }[] }) => {
+    const pipelineIdToUpdate = editingPipeline?.id
+    
     if (editingPipeline) {
       // Atualizar pipeline
       const { stages: newStages, ...pipelineData } = data
@@ -592,8 +599,30 @@ export default function CRMPage() {
       await createPipelineHook(data)
     }
     
-    // ✅ CORREÇÃO BUGS 1,2,3: Apenas refetch - o useMemo sincroniza automaticamente
+    // Refetch e atualizar activePipeline
     await refetchPipelines()
+    
+    // Aguardar um tick para o state atualizar e depois atualizar activePipeline
+    // Usar setTimeout 0 para permitir que o React processe o update do state
+    setTimeout(async () => {
+      // Buscar pipeline atualizado diretamente da API
+      if (pipelineIdToUpdate) {
+        try {
+          const response = await fetch(
+            `/api/deals?organizationId=${user?.organization_id}&type=pipelines`
+          )
+          if (response.ok) {
+            const result = await response.json()
+            const updatedPipeline = result.pipelines?.find((p: any) => p.id === pipelineIdToUpdate)
+            if (updatedPipeline) {
+              setActivePipeline(updatedPipeline)
+            }
+          }
+        } catch (e) {
+          console.error('Error fetching updated pipeline:', e)
+        }
+      }
+    }, 100)
     
     setShowPipelineModal(false)
     setEditingPipeline(null)
@@ -615,9 +644,9 @@ export default function CRMPage() {
       await refetchPipelines()
       
       // Se deletou o pipeline ativo, seleciona o primeiro disponível
-      if (activePipelineId === pipeline.id) {
+      if (activePipeline?.id === pipeline.id) {
         const remainingPipelines = pipelines.filter(p => p.id !== pipeline.id)
-        setActivePipelineId(remainingPipelines[0]?.id || null)
+        setActivePipeline(remainingPipelines[0] || null)
       }
     } catch (error) {
       console.error('Error deleting pipeline:', error)
