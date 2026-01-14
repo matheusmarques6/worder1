@@ -21,9 +21,7 @@ import {
   CreditCard,
   BarChart3,
   PieChart,
-  Sparkles,
 } from 'lucide-react'
-import Link from 'next/link'
 import {
   XAxis,
   YAxis,
@@ -40,6 +38,7 @@ import {
   Legend,
 } from 'recharts'
 import { useStoreStore } from '@/stores' // ✅ NOVO
+import { AdvancedMetricsSection } from '@/components/shopify'
 
 // Types
 interface ShopifyAnalytics {
@@ -350,15 +349,6 @@ export default function ShopifyAnalyticsPage() {
             Exportar PDF
           </button>
 
-          {/* Advanced Metrics Button */}
-          <Link
-            href="/analytics/shopify/advanced"
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-violet-500/20"
-          >
-            <Sparkles className="w-4 h-4" />
-            RFM & Cohort
-          </Link>
-
           {/* Refresh Button */}
           <button
             onClick={handleRefresh}
@@ -629,6 +619,9 @@ export default function ShopifyAnalyticsPage() {
           small
         />
       </div>
+
+      {/* Advanced Metrics Section - Expansível */}
+      <AdvancedMetricsSection storeId={storeId || null} />
     </div>
   )
 }

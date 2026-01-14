@@ -1,2 +1,7 @@
 export { RFMDashboard } from './RFMDashboard'
 export { CohortMatrix } from './CohortMatrix'
+export { AdvancedMetricsSection } from './AdvancedMetricsSection'
+export { RFMSection } from './RFMSection'
+export { CohortSection } from './CohortSection'
+
+export { AdvancedMetrics } from './AdvancedMetrics'
