@@ -1,29 +1,56 @@
-# 📊 Shopify Analytics - CORREÇÃO COMPLETA v3
+# 📊 Shopify Analytics - CORREÇÃO v4
 
-## ⚠️ PROBLEMAS CORRIGIDOS
+## ⚠️ PROBLEMA PRINCIPAL CORRIGIDO
 
-### 1. Variações sempre +0%
-**Antes:** Hardcoded `vendasBrutasChange: 0`
-**Depois:** Busca período anterior e calcula variação real
+**A Shopify INCLUI pedidos cancelados** nas métricas de:
+- Vendas brutas
+- Contagem de pedidos
+- Descontos
 
-### 2. Nomes de colunas errados (RFM/Cohort)
-| Código buscava | Tabela tem |
-|----------------|------------|
-| `customer_id` | `customer_shopify_id` |
-| `customer_email` | `email` |
-| `created_at` | `shopify_created_at` |
-
-### 3. Loop errado na API principal
-**Antes:** `for (const o of orders)` (incluía cancelados 2x)
-**Depois:** `for (const o of validOrders)` (pedidos filtrados)
-
-### 4. Cálculo de período
-**Antes:** `daysBack = 7` (8 dias)
-**Depois:** `daysBack = 6` (7 dias corretos)
+A Worder estava **excluindo** esses pedidos, causando diferenças significativas.
 
 ---
 
-## 📁 Arquivos (10 arquivos)
+## 🔧 Correções nesta versão
+
+### 1. Pedidos cancelados incluídos
+```typescript
+// ANTES (errado)
+const validOrders = orders.filter(o => !o.test && !o.cancelled_at);
+for (const o of validOrders) {
+  vendasBrutas += o.total_line_items_price; // Excluía cancelados
+}
+
+// DEPOIS (correto)
+const allNonTestOrders = orders.filter(o => !o.test);
+for (const o of allNonTestOrders) {
+  vendasBrutas += o.total_line_items_price; // Inclui cancelados
+}
+```
+
+### 2. Contagem de pedidos
+```typescript
+// ANTES
+pedidosTotal = validOrders.length; // Excluía cancelados
+
+// DEPOIS  
+pedidosTotal = allNonTestOrders.length; // Inclui cancelados
+```
+
+### 3. API de Debug (nova)
+Acesse: `/api/analytics/shopify/debug?storeId=XXX`
+
+Retorna análise detalhada:
+- Quantos pedidos total
+- Quantos são teste
+- Quantos são cancelados
+- Vendas com/sem cancelados
+- Por status financeiro
+- Por canal de venda
+
+---
+
+## 📁 Arquivos (11 arquivos)
 
 ```
 src/
@@ -31,15 +58,17 @@ src/
 │   ├── api/
 │   │   ├── analytics/
 │   │   │   └── shopify/
-│   │   │       └── route.ts              # ⭐ API PRINCIPAL REESCRITA
+│   │   │       ├── route.ts          # ⭐ API PRINCIPAL (v4)
+│   │   │       └── debug/
+│   │   │           └── route.ts      # 🆕 API DEBUG
 │   │   └── shopify/
 │   │       └── analytics/
 │   │           └── advanced/
-│   │               └── route.ts          # API métricas avançadas
+│   │               └── route.ts
 │   └── (dashboard)/
 │       └── analytics/
 │           └── shopify/
-│               └── page.tsx              # Página atualizada
+│               └── page.tsx
 ├── components/
 │   └── shopify/
 │       ├── index.ts
@@ -50,90 +79,68 @@ src/
     └── services/
         └── shopify/
             └── analytics/
-                ├── rfm.ts                # ⭐ CORRIGIDO
-                └── cohort.ts             # ⭐ CORRIGIDO
-```
-
----
-
-## 🔧 Principais mudanças na API principal
-
-### Função `calcChange` (nova)
-```typescript
-const calcChange = (current: number, previous: number): number => {
-  if (previous === 0) return current > 0 ? 100 : 0;
-  return Number((((current - previous) / previous) * 100).toFixed(1));
-};
-```
-
-### Busca período anterior
-```typescript
-// Busca pedidos do período atual
-const currentOrders = await fetchAllOrders(shop_domain, access_token, startISO, endISO);
-
-// Busca pedidos do período anterior (mesmo tamanho)
-const previousOrders = await fetchAllOrders(shop_domain, access_token, prevStartISO, prevEndISO);
-
-// Calcula KPIs para ambos
-const currentKPIs = calculateKPIsFromOrders(currentOrders, customerMap);
-const previousKPIs = calculateKPIsFromOrders(previousOrders, prevCustomerMap);
-
-// Calcula variações
-const vendasBrutasChange = calcChange(currentKPIs.vendasBrutas, previousKPIs.vendasBrutas);
-```
-
-### Retorno com variações reais
-```typescript
-return NextResponse.json({
-  data: {
-    vendasBrutas: currentKPIs.vendasBrutas,
-    vendasBrutasChange,  // Agora é calculado!
-    
-    pedidos: currentKPIs.pedidosTotal,
-    pedidosChange,       // Agora é calculado!
-    
-    // ... etc
-  }
-});
+                ├── rfm.ts
+                └── cohort.ts
 ```
 
 ---
 
 ## 🚀 Como usar
 
-1. **Extraia o ZIP na raiz do projeto** (sobrescreve os arquivos existentes)
-2. **Faça commit e push**
-3. **Teste no navegador:**
-   - Acesse `/analytics/shopify`
-   - Verifique se os números batem com a Shopify
-   - Verifique se as variações (%) aparecem corretamente
-   - Role até o final e teste as "Métricas Avançadas"
+1. **Extraia o ZIP** na raiz do projeto
+2. **Deploy** para Vercel
+3. **Teste a API de debug** primeiro:
+   ```
+   https://seu-site.vercel.app/api/analytics/shopify/debug?storeId=XXX
+   ```
+4. Compare os números com a Shopify
+
+---
+
+## 🔍 Usando a API de Debug
+
+A API de debug retorna:
+
+```json
+{
+  "debug": {
+    "periodo": {
+      "solicitado": "2026-01-07 a 2026-01-13"
+    },
+    "pedidos": {
+      "total": 339,
+      "teste": 0,
+      "cancelados": 69,
+      "validos": 270
+    },
+    "vendas": {
+      "comTudo": "62868.60",
+      "semCancelados": "50500.85",
+      "semTesteNemCancelados": "50500.85"
+    }
+  }
+}
+```
+
+Se `comTudo` bater com a Shopify, a correção está funcionando!
 
 ---
 
 ## ✅ Resultado esperado
 
-| Métrica | Antes | Depois |
-|---------|-------|--------|
-| Variações | +0% sempre | Calculadas vs período anterior |
-| RFM/Cohort | 0 clientes | Dados reais |
-| Pedidos | Podiam estar errados | Filtrados corretamente |
+| Métrica | Shopify | Worder (antes) | Worder (depois) |
+|---------|---------|----------------|-----------------|
+| Vendas brutas | R$ 62.868,60 | R$ 50.500,85 | R$ 62.868,60 |
+| Pedidos | 339 | 270 | 339 |
 
 ---
 
-## 🐛 Debug
+## ⚠️ Se ainda não bater
 
-A API agora retorna um objeto `debug` com informações úteis:
+Se depois desta correção os valores ainda não baterem, pode ser:
 
-```json
-{
-  "debug": {
-    "currentPeriodOrders": 337,
-    "previousPeriodOrders": 295,
-    "validOrders": 313,
-    "customersFound": 221
-  }
-}
-```
+1. **Timezone diferente** - verificar se o período está correto na API de debug
+2. **Pedidos de teste** - a Shopify pode estar incluindo ou excluindo
+3. **Status financeiro** - alguns status podem ser tratados diferente
 
-Acesse `https://seu-site.vercel.app/api/analytics/shopify?storeId=XXX&period=7d` para ver os dados brutos.
+Use a API de debug para investigar!

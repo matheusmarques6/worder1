@@ -257,6 +257,7 @@ interface KPIResult {
   tributos: number;
   pedidosTotal: number;
   pedidosCancelados: number;
+  pedidosValidos: number;
   vendasLiquidas: number;
   totalVendas: number;
   ticketMedio: number;
@@ -270,7 +271,9 @@ function calculateKPIsFromOrders(
   orders: any[],
   customerMap: Map<number, any>
 ): KPIResult {
-  // Filtrar pedidos válidos (não teste, não cancelado)
+  // Filtrar pedidos (excluindo apenas teste)
+  // IMPORTANTE: Shopify INCLUI pedidos cancelados nas vendas brutas!
+  const allNonTestOrders = orders.filter((o: any) => !o.test);
   const validOrders = orders.filter((o: any) => !o.test && !o.cancelled_at);
   const cancelledOrders = orders.filter((o: any) => !o.test && o.cancelled_at);
   
@@ -285,8 +288,8 @@ function calculateKPIsFromOrders(
   const returningCustomerIds = new Set<number>();
   const firstTimeCustomerIds = new Set<number>();
 
-  for (const o of validOrders) {
-    // Vendas brutas = soma dos itens (antes de descontos)
+  // VENDAS BRUTAS: Inclui TODOS os pedidos (inclusive cancelados), como Shopify faz
+  for (const o of allNonTestOrders) {
     vendasBrutas += toNum(o.total_line_items_price);
     descontos += toNum(o.total_discounts || 0);
 
@@ -359,7 +362,9 @@ function calculateKPIsFromOrders(
 
   const vendasLiquidas = vendasBrutas - descontos - devolucoes;
   const totalVendas = vendasLiquidas + frete + tributos;
-  const pedidosTotal = validOrders.length;
+  
+  // IMPORTANTE: Shopify conta TODOS os pedidos (inclusive cancelados) no KPI "Pedidos"
+  const pedidosTotal = allNonTestOrders.length;
   const ticketMedio = pedidosTotal > 0 ? vendasLiquidas / pedidosTotal : 0;
 
   const clientesUnicos = uniqueCustomerIds.size;
@@ -378,6 +383,7 @@ function calculateKPIsFromOrders(
     tributos,
     pedidosTotal,
     pedidosCancelados: cancelledOrders.length,
+    pedidosValidos: validOrders.length,
     vendasLiquidas,
     totalVendas,
     ticketMedio,
