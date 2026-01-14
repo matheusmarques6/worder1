@@ -290,9 +290,10 @@ function calculateKPIsFromOrders(
   const uniqueCustomerIds = new Set<number>();
   const returningCustomerIds = new Set<number>();
   const firstTimeCustomerIds = new Set<number>();
+  const customerOrdersInPeriod = new Map<number, number>();
   
-  // Data de início do período para comparar
-  const periodStart = periodStartDate ? new Date(periodStartDate) : null;
+  // Data de início do período para comparar (não mais necessário com nova lógica)
+  // const periodStart = periodStartDate ? new Date(periodStartDate) : null;
 
   // VENDAS BRUTAS: Inclui TODOS os pedidos (inclusive cancelados), como Shopify faz
   for (const o of allNonTestOrders) {
@@ -350,33 +351,34 @@ function calculateKPIsFromOrders(
       }
     }
 
-    // Customer tracking - LÓGICA AJUSTADA
-    // Shopify: Recorrente = cliente que JÁ EXISTIA antes do período
-    // Shopify: Novo = cliente criado DURANTE o período
+    // Contar pedidos por cliente no período
     const customer = o.customer;
     if (customer?.id) {
-      uniqueCustomerIds.add(customer.id);
-      
-      const customerData = customerMap.get(customer.id);
-      const customerCreatedAt = customerData?.created_at || customer.created_at;
-      
-      let isReturning = false;
-      
-      if (periodStart && customerCreatedAt) {
-        // Se o cliente foi criado ANTES do início do período, é recorrente
-        const customerDate = new Date(customerCreatedAt);
-        isReturning = customerDate < periodStart;
-      } else {
-        // Fallback: usa orders_count se não tiver data de criação
-        const ordersCount = customerData?.orders_count || customer.orders_count || 1;
-        isReturning = ordersCount > 1;
+      if (!customerOrdersInPeriod.has(customer.id)) {
+        customerOrdersInPeriod.set(customer.id, 0);
       }
-      
-      if (isReturning) {
-        returningCustomerIds.add(customer.id);
-      } else {
-        firstTimeCustomerIds.add(customer.id);
-      }
+      customerOrdersInPeriod.set(customer.id, customerOrdersInPeriod.get(customer.id)! + 1);
+    }
+  }
+
+  // Agora calcular clientes novos vs recorrentes
+  // Lógica Shopify:
+  // - Recorrente = cliente que já tinha pedidos ANTES do período
+  // - Novo = cliente cujo primeiro pedido foi DURANTE o período
+  for (const [customerId, ordersInPeriod] of customerOrdersInPeriod) {
+    uniqueCustomerIds.add(customerId);
+    
+    const customerData = customerMap.get(customerId);
+    const totalOrdersCount = customerData?.orders_count || ordersInPeriod;
+    
+    // Se total de pedidos do cliente > pedidos no período → tinha pedidos antes → recorrente
+    // Se total de pedidos do cliente == pedidos no período → todos são do período → novo
+    const ordersBeforePeriod = totalOrdersCount - ordersInPeriod;
+    
+    if (ordersBeforePeriod > 0) {
+      returningCustomerIds.add(customerId);
+    } else {
+      firstTimeCustomerIds.add(customerId);
     }
   }
 

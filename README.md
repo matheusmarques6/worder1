@@ -1,61 +1,60 @@
-# 🔧 Correções Shopify Analytics - v5
+# 🔧 Correção Taxa de Clientes Recorrentes - v6
 
-## Problemas Corrigidos
+## O Problema
 
-### 1. ✅ Total de Vendas (Frontend)
+| Métrica | Worder (antes) | Shopify |
+|---------|----------------|---------|
+| Taxa recorrentes | 52.78% | 38.89% |
 
-**Problema:** O campo "Total de vendas" mostrava o valor de "Vendas Brutas" ao invés do cálculo correto.
-
-**Antes (errado):**
-```
-Total de vendas = Vendas Brutas = R$ 6.728,66
-```
-
-**Depois (correto):**
-```
-Total de vendas = Vendas Líquidas + Frete + Tributos
-Total de vendas = R$ 5.246,76 + R$ 225,40 + R$ 0,00 = R$ 5.472,16
-```
-
-**Arquivo:** `src/app/(dashboard)/analytics/shopify/page.tsx`
+A Worder estava usando a **data de criação do cliente**, mas a Shopify usa outra lógica.
 
 ---
 
-### 2. ✅ Taxa de Clientes Recorrentes (API)
-
-**Problema:** A Worder usava `orders_count > 1` para determinar se cliente era recorrente, mas a Shopify usa outra lógica.
+## Nova Lógica (Correta)
 
 **Definição Shopify:**
-- **Cliente Recorrente:** Cliente que foi criado ANTES do início do período
-- **Cliente Novo:** Cliente que foi criado DURANTE o período
+- **Novo** = cliente cujo PRIMEIRO pedido foi feito DURANTE o período
+- **Recorrente** = cliente que já tinha pedidos ANTES do período
 
-**Antes (errado):**
+**Cálculo:**
 ```typescript
-// Usava apenas orders_count
-const ordersCount = customer.orders_count || 1;
-if (ordersCount > 1) {
-  // É recorrente
-}
-```
+// Para cada cliente no período:
+totalOrdersCount = orders_count do cliente (total histórico)
+ordersInPeriod = pedidos do cliente no período atual
+ordersBeforePeriod = totalOrdersCount - ordersInPeriod
 
-**Depois (correto):**
-```typescript
-// Compara data de criação do cliente com início do período
-const customerCreatedAt = new Date(customer.created_at);
-const periodStart = new Date(startDate);
-
-if (customerCreatedAt < periodStart) {
-  // É recorrente (existia ANTES do período)
+if (ordersBeforePeriod > 0) {
+  // Tinha pedidos antes → RECORRENTE
 } else {
-  // É novo (criado DURANTE o período)
+  // Todos os pedidos são do período → NOVO
 }
 ```
 
-**Arquivo:** `src/app/api/analytics/shopify/route.ts`
+**Exemplo:**
+- Cliente A: orders_count=5, pedidos_no_periodo=1 → 5-1=4 antes → **Recorrente**
+- Cliente B: orders_count=2, pedidos_no_periodo=2 → 2-2=0 antes → **Novo**
+- Cliente C: orders_count=1, pedidos_no_periodo=1 → 1-1=0 antes → **Novo**
 
 ---
 
-## Arquivos Incluídos
+## O Que Estava Errado Antes
+
+**v5 (errada):** Usava data de criação do cliente
+```typescript
+// Se cliente foi criado antes do período = recorrente
+if (customerCreatedAt < periodStart) → recorrente
+```
+Problema: Um cliente pode ter sido criado há 1 ano e nunca ter comprado. Quando faz a primeira compra, deveria ser "novo", não "recorrente".
+
+**v6 (correta):** Usa histórico de pedidos
+```typescript
+// Se cliente tinha pedidos antes do período = recorrente
+if (ordersBeforePeriod > 0) → recorrente
+```
+
+---
+
+## Arquivos
 
 ```
 src/
@@ -67,23 +66,13 @@ src/
 │   └── (dashboard)/
 │       └── analytics/
 │           └── shopify/
-│               └── page.tsx          # Frontend corrigido
+│               └── page.tsx          # Frontend
 ```
 
 ---
 
 ## Resultado Esperado
 
-| Métrica | Antes | Depois | Shopify |
-|---------|-------|--------|---------|
-| Total de vendas | R$ 6.728,66 | R$ 5.472,16 | R$ 5.472,16 ✅ |
-| Taxa recorrentes | 35.14% | ~37.84% | 37.84% ✅ |
-
----
-
-## Como Aplicar
-
-1. Extraia o ZIP na raiz do projeto
-2. Faça deploy no Vercel
-3. Teste com "Hoje" e "Ontem" primeiro
-4. Depois teste "7 dias"
+| Métrica | v5 (errado) | v6 (correto) | Shopify |
+|---------|-------------|--------------|---------|
+| Taxa recorrentes | 52.78% | ~38.89% | 38.89% ✅ |
