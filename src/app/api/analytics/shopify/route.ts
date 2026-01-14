@@ -15,6 +15,12 @@ const toNum = (v: any): number => {
 
 const normEmail = (e: any): string => String(e || '').trim().toLowerCase();
 
+// Calcular variação percentual
+const calcChange = (current: number, previous: number): number => {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return Number((((current - previous) / previous) * 100).toFixed(1));
+};
+
 // ===== Shopify API Client =====
 async function shopifyFetch(
   shopDomain: string,
@@ -155,8 +161,15 @@ async function fetchCustomersBatch(
 }
 
 // ===== Get Date Range =====
-// Corrigido para usar timezone do Brasil (UTC-3)
-function getDateRange(period: string): { startDate: string; endDate: string; startISO: string; endISO: string } {
+function getDateRange(period: string): { 
+  startDate: string; 
+  endDate: string; 
+  startISO: string; 
+  endISO: string;
+  prevStartISO: string;
+  prevEndISO: string;
+  daysInPeriod: number;
+} {
   // Calcular a data atual no Brasil (UTC-3)
   const nowUTC = new Date();
   const brazilOffset = -3 * 60; // -3 horas em minutos
@@ -181,36 +194,198 @@ function getDateRange(period: string): { startDate: string; endDate: string; sta
       endDateStr = yesterday.toISOString().split('T')[0];
       break;
     case '7d':
-      daysBack = 7; // 8 dias total (hoje + 7 anteriores)
+      daysBack = 6; // 7 dias total (hoje + 6 anteriores)
       endDateStr = todayBrazil;
       break;
     case '30d':
-      daysBack = 30;
+      daysBack = 29; // 30 dias total
       endDateStr = todayBrazil;
       break;
     case '90d':
-      daysBack = 90;
+      daysBack = 89; // 90 dias total
       endDateStr = todayBrazil;
       break;
     default:
-      daysBack = 7;
+      daysBack = 6;
       endDateStr = todayBrazil;
   }
 
-  // Calcular data de início
-  const endDate = new Date(endDateStr + 'T12:00:00Z'); // Meio-dia para evitar problemas de timezone
+  // Calcular data de início do período atual
+  const endDate = new Date(endDateStr + 'T12:00:00Z');
   const startDate = new Date(endDate);
   startDate.setDate(startDate.getDate() - daysBack);
   
   const startDateStr = startDate.toISOString().split('T')[0];
 
+  // Calcular período anterior (mesmo tamanho)
+  const daysInPeriod = daysBack + 1;
+  const prevEndDate = new Date(startDate);
+  prevEndDate.setDate(prevEndDate.getDate() - 1);
+  const prevStartDate = new Date(prevEndDate);
+  prevStartDate.setDate(prevStartDate.getDate() - daysBack);
+
+  const prevStartDateStr = prevStartDate.toISOString().split('T')[0];
+  const prevEndDateStr = prevEndDate.toISOString().split('T')[0];
+
   // Format with timezone for Shopify API
   const startISO = `${startDateStr}T00:00:00${TZ_OFFSET}`;
   const endISO = `${endDateStr}T23:59:59${TZ_OFFSET}`;
+  const prevStartISO = `${prevStartDateStr}T00:00:00${TZ_OFFSET}`;
+  const prevEndISO = `${prevEndDateStr}T23:59:59${TZ_OFFSET}`;
 
-  console.log(`Period: ${period}, Brazil today: ${todayBrazil}, Range: ${startDateStr} to ${endDateStr}`);
+  console.log(`[Analytics] Period: ${period}`);
+  console.log(`[Analytics] Current: ${startDateStr} to ${endDateStr} (${daysInPeriod} days)`);
+  console.log(`[Analytics] Previous: ${prevStartDateStr} to ${prevEndDateStr}`);
 
-  return { startDate: startDateStr, endDate: endDateStr, startISO, endISO };
+  return { 
+    startDate: startDateStr, 
+    endDate: endDateStr, 
+    startISO, 
+    endISO,
+    prevStartISO,
+    prevEndISO,
+    daysInPeriod,
+  };
+}
+
+// ===== Calculate KPIs from orders =====
+interface KPIResult {
+  vendasBrutas: number;
+  descontos: number;
+  devolucoes: number;
+  frete: number;
+  tributos: number;
+  pedidosTotal: number;
+  pedidosCancelados: number;
+  vendasLiquidas: number;
+  totalVendas: number;
+  ticketMedio: number;
+  clientesUnicos: number;
+  clientesRecorrentes: number;
+  clientesPrimeiraVez: number;
+  taxaRecorrentes: number;
+}
+
+function calculateKPIsFromOrders(
+  orders: any[],
+  customerMap: Map<number, any>
+): KPIResult {
+  // Filtrar pedidos válidos (não teste, não cancelado)
+  const validOrders = orders.filter((o: any) => !o.test && !o.cancelled_at);
+  const cancelledOrders = orders.filter((o: any) => !o.test && o.cancelled_at);
+  
+  let vendasBrutas = 0;
+  let descontos = 0;
+  let devolucoes = 0;
+  let frete = 0;
+  let tributos = 0;
+
+  // Tracking de clientes
+  const uniqueCustomerIds = new Set<number>();
+  const returningCustomerIds = new Set<number>();
+  const firstTimeCustomerIds = new Set<number>();
+
+  for (const o of validOrders) {
+    // Vendas brutas = soma dos itens (antes de descontos)
+    vendasBrutas += toNum(o.total_line_items_price);
+    descontos += toNum(o.total_discounts || 0);
+
+    // Shipping
+    if (Array.isArray(o.shipping_lines)) {
+      for (const sl of o.shipping_lines) {
+        let shippingAmount = toNum(sl.price || 0);
+        if (Array.isArray(sl.discount_allocations)) {
+          for (const da of sl.discount_allocations) {
+            shippingAmount -= toNum(da.amount || 0);
+          }
+        }
+        frete += shippingAmount;
+      }
+    }
+
+    // Taxes
+    if (Array.isArray(o.tax_lines)) {
+      for (const tl of o.tax_lines) {
+        tributos += toNum(tl.price || 0);
+      }
+    }
+
+    // Refunds
+    if (Array.isArray(o.refunds)) {
+      for (const refund of o.refunds) {
+        let mercadoriaRefund = 0;
+        let freteRefund = 0;
+
+        if (Array.isArray(refund.refund_line_items)) {
+          for (const rli of refund.refund_line_items) {
+            mercadoriaRefund += toNum(rli.subtotal || 0);
+          }
+        }
+
+        if (refund.shipping) {
+          freteRefund += toNum(refund.shipping.amount || 0);
+        }
+
+        if (mercadoriaRefund === 0 && freteRefund === 0 && Array.isArray(refund.transactions)) {
+          let transTotal = 0;
+          for (const t of refund.transactions) {
+            if (t.kind === 'refund' && t.status === 'success') {
+              transTotal += Math.abs(toNum(t.amount));
+            }
+          }
+          if (transTotal > 0) mercadoriaRefund = transTotal;
+        }
+
+        devolucoes += mercadoriaRefund;
+        if (freteRefund > 0) frete = Math.max(0, frete - freteRefund);
+      }
+    }
+
+    // Customer tracking
+    const customer = o.customer;
+    if (customer?.id) {
+      uniqueCustomerIds.add(customer.id);
+      
+      const customerData = customerMap.get(customer.id);
+      const ordersCount = customerData?.orders_count || customer.orders_count || 1;
+      
+      if (ordersCount > 1) {
+        returningCustomerIds.add(customer.id);
+      } else {
+        firstTimeCustomerIds.add(customer.id);
+      }
+    }
+  }
+
+  const vendasLiquidas = vendasBrutas - descontos - devolucoes;
+  const totalVendas = vendasLiquidas + frete + tributos;
+  const pedidosTotal = validOrders.length;
+  const ticketMedio = pedidosTotal > 0 ? vendasLiquidas / pedidosTotal : 0;
+
+  const clientesUnicos = uniqueCustomerIds.size;
+  const clientesRecorrentes = returningCustomerIds.size;
+  const clientesPrimeiraVez = firstTimeCustomerIds.size;
+  const denomRec = clientesRecorrentes + clientesPrimeiraVez;
+  const taxaRecorrentes = denomRec > 0 
+    ? Number(((clientesRecorrentes / denomRec) * 100).toFixed(2)) 
+    : 0;
+
+  return {
+    vendasBrutas,
+    descontos,
+    devolucoes,
+    frete,
+    tributos,
+    pedidosTotal,
+    pedidosCancelados: cancelledOrders.length,
+    vendasLiquidas,
+    totalVendas,
+    ticketMedio,
+    clientesUnicos,
+    clientesRecorrentes,
+    clientesPrimeiraVez,
+    taxaRecorrentes,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -220,53 +395,59 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Database not configured' });
     }
 
-    const searchParams = request.nextUrl.searchParams;
+    // Get parameters
+    const { searchParams } = new URL(request.url);
+    const storeId = searchParams.get('storeId');
     const period = searchParams.get('period') || '7d';
-    const storeId = searchParams.get('storeId'); // ✅ NOVO
-    const { startDate, endDate, startISO, endISO } = getDateRange(period);
 
-    // Get store credentials - ✅ MODIFICADO: Filtrar por storeId
-    let storeQuery = supabase
+    if (!storeId) {
+      return NextResponse.json({ success: false, error: 'storeId is required' });
+    }
+
+    // Get store from database
+    const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
-      .select('id, shop_domain, access_token, shop_name')
-      .eq('is_active', true);
-    
-    // ✅ NOVO: Filtrar por storeId se fornecido
-    if (storeId) {
-      storeQuery = storeQuery.eq('id', storeId);
-    }
-    
-    const { data: stores, error: storesError } = await storeQuery.limit(1);
+      .select('*')
+      .eq('id', storeId)
+      .single();
 
-    if (storesError || !stores || stores.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: 'Nenhuma loja conectada',
-        needsConnection: true,
-      });
+    if (storeError || !store) {
+      return NextResponse.json({ success: false, error: 'Store not found' });
     }
 
-    const store = stores[0];
     const { shop_domain, access_token } = store;
 
-    if (!access_token) {
-      return NextResponse.json({
-        success: false,
-        error: 'Token de acesso não encontrado',
-        needsConnection: true,
-      });
+    if (!shop_domain || !access_token) {
+      return NextResponse.json({ success: false, error: 'Store credentials missing' });
     }
 
-    console.log(`Fetching orders from ${startISO} to ${endISO}`);
+    // Get date ranges (current + previous period)
+    const { 
+      startDate, 
+      endDate, 
+      startISO, 
+      endISO, 
+      prevStartISO, 
+      prevEndISO,
+      daysInPeriod,
+    } = getDateRange(period);
 
     // ========================================
-    // 1. FETCH ALL ORDERS IN PERIOD
+    // 1. FETCH CURRENT PERIOD ORDERS
     // ========================================
-    const orders = await fetchAllOrders(shop_domain, access_token, startISO, endISO);
-    console.log(`Total orders: ${orders.length}`);
+    console.log(`[Analytics] Fetching current period orders: ${startISO} to ${endISO}`);
+    const currentOrders = await fetchAllOrders(shop_domain, access_token, startISO, endISO);
+    console.log(`[Analytics] Current period orders: ${currentOrders.length}`);
 
     // ========================================
-    // 2. FETCH ORDERS WITH FULFILLMENTS
+    // 2. FETCH PREVIOUS PERIOD ORDERS (for comparison)
+    // ========================================
+    console.log(`[Analytics] Fetching previous period orders: ${prevStartISO} to ${prevEndISO}`);
+    const previousOrders = await fetchAllOrders(shop_domain, access_token, prevStartISO, prevEndISO);
+    console.log(`[Analytics] Previous period orders: ${previousOrders.length}`);
+
+    // ========================================
+    // 3. FETCH ORDERS WITH FULFILLMENTS
     // ========================================
     const ordersWithFulfillments = await fetchOrdersWithFulfillments(
       shop_domain,
@@ -276,7 +457,7 @@ export async function GET(request: NextRequest) {
     );
 
     // ========================================
-    // 3. COUNT FULFILLED ORDERS IN PERIOD
+    // 4. COUNT FULFILLED ORDERS IN PERIOD
     // ========================================
     const inicio = new Date(startISO);
     const fim = new Date(endISO);
@@ -298,111 +479,81 @@ export async function GET(request: NextRequest) {
     }
 
     const pedidosProcessados = fulfilledOrderIds.size;
-    console.log(`Fulfilled orders: ${pedidosProcessados}`);
+    console.log(`[Analytics] Fulfilled orders: ${pedidosProcessados}`);
 
     // ========================================
-    // 4. CUSTOMER RECURRENCE ANALYSIS
+    // 5. FETCH CUSTOMER DATA
     // ========================================
-    const periodOrders = orders.filter((o: any) => !o.test && !o.cancelled_at);
-    const emailToIdMap = new Map<string, number>();
+    const validOrders = currentOrders.filter((o: any) => !o.test && !o.cancelled_at);
     const uniqueCustomerIds = new Set<number>();
 
-    for (const order of periodOrders) {
+    for (const order of validOrders) {
       const c = order.customer || {};
       if (c.id) {
         uniqueCustomerIds.add(c.id);
-        if (c.email) {
-          emailToIdMap.set(normEmail(c.email), c.id);
-        }
       }
     }
 
-    // Fetch customers
-    console.log(`Fetching ${uniqueCustomerIds.size} customers...`);
+    console.log(`[Analytics] Fetching ${uniqueCustomerIds.size} customers...`);
     const customerMap = await fetchCustomersBatch(
       shop_domain,
       access_token,
       Array.from(uniqueCustomerIds)
     );
 
-    // ========================================
-    // 5. CALCULATE RECURRENCE
-    // ========================================
-    const canonicalKeyOf = (o: any): string | null => {
-      const c = o?.customer || {};
-      if (c.id) return `id:${c.id}`;
-      const em = normEmail(c.email);
-      if (em && emailToIdMap.has(em)) return `id:${emailToIdMap.get(em)}`;
-      return em ? `em:${em}` : null;
-    };
-
-    const inPeriodCount = new Map<string, number>();
-
-    for (const o of periodOrders) {
-      const key = canonicalKeyOf(o);
-      if (!key) continue;
-      inPeriodCount.set(key, (inPeriodCount.get(key) || 0) + 1);
+    // Also fetch customers from previous period
+    const prevValidOrders = previousOrders.filter((o: any) => !o.test && !o.cancelled_at);
+    const prevUniqueCustomerIds = new Set<number>();
+    for (const order of prevValidOrders) {
+      const c = order.customer || {};
+      if (c.id) prevUniqueCustomerIds.add(c.id);
     }
-
-    const uniqueKeys = Array.from(inPeriodCount.keys());
-    const clientesTotalPeriodo = uniqueKeys.length;
-
-    const returningKeys = new Set<string>();
-    const firstTimeKeys = new Set<string>();
-
-    for (const key of uniqueKeys) {
-      const qtyInPeriod = inPeriodCount.get(key) || 0;
-
-      if (key.startsWith('id:')) {
-        const id = Number(key.slice(3));
-        const customer = customerMap.get(id);
-        const ocLifetime = customer ? Number(customer.orders_count || 0) : qtyInPeriod;
-
-        let isReturning = false;
-
-        // Cliente é recorrente se já comprou antes deste período
-        if (ocLifetime > qtyInPeriod) {
-          isReturning = true;
-        } else if (ocLifetime === qtyInPeriod && qtyInPeriod >= 2) {
-          // Todos os pedidos do cliente são neste período, mas fez 2+
-          isReturning = true;
-        }
-
-        if (isReturning) {
-          returningKeys.add(key);
-        } else {
-          firstTimeKeys.add(key);
-        }
-      } else {
-        // Email only (guest checkout) - se comprou 2+ vezes no período
-        if (qtyInPeriod >= 2) {
-          returningKeys.add(key);
-        } else {
-          firstTimeKeys.add(key);
-        }
-      }
-    }
-
-    const clientesRecorrentes = returningKeys.size;
-    const clientesPrimeiraVez = firstTimeKeys.size;
-    const denomRec = clientesRecorrentes + clientesPrimeiraVez;
-    const taxaClientesRecorrentes = denomRec > 0 
-      ? Number(((clientesRecorrentes / denomRec) * 100).toFixed(2)) 
-      : 0;
-
-    console.log(`Customers: total=${clientesTotalPeriodo}, returning=${clientesRecorrentes}, firstTime=${clientesPrimeiraVez}, rate=${taxaClientesRecorrentes}%`);
+    
+    const prevCustomerMap = await fetchCustomersBatch(
+      shop_domain,
+      access_token,
+      Array.from(prevUniqueCustomerIds)
+    );
 
     // ========================================
-    // 6. CALCULATE SALES KPIs
+    // 6. CALCULATE KPIs FOR BOTH PERIODS
     // ========================================
-    const pedidosTotal = periodOrders.length;
-    let vendasBrutas = 0;
-    let descontos = 0;
-    let devolucoes = 0;
-    let frete = 0;
-    let tributos = 0;
-    let pedidosCancelados = 0;
+    const currentKPIs = calculateKPIsFromOrders(currentOrders, customerMap);
+    const previousKPIs = calculateKPIsFromOrders(previousOrders, prevCustomerMap);
 
+    console.log(`[Analytics] Current KPIs:`, {
+      vendasBrutas: currentKPIs.vendasBrutas,
+      pedidos: currentKPIs.pedidosTotal,
+      taxaRecorrentes: currentKPIs.taxaRecorrentes,
+    });
+    console.log(`[Analytics] Previous KPIs:`, {
+      vendasBrutas: previousKPIs.vendasBrutas,
+      pedidos: previousKPIs.pedidosTotal,
+      taxaRecorrentes: previousKPIs.taxaRecorrentes,
+    });
+
+    // ========================================
+    // 7. CALCULATE VARIATIONS
+    // ========================================
+    const vendasBrutasChange = calcChange(currentKPIs.vendasBrutas, previousKPIs.vendasBrutas);
+    const pedidosChange = calcChange(currentKPIs.pedidosTotal, previousKPIs.pedidosTotal);
+    const taxaRecorrentesChange = calcChange(currentKPIs.taxaRecorrentes, previousKPIs.taxaRecorrentes);
+    const descontosChange = calcChange(currentKPIs.descontos, previousKPIs.descontos);
+    const devolucoesChange = calcChange(currentKPIs.devolucoes, previousKPIs.devolucoes);
+    const vendasLiquidasChange = calcChange(currentKPIs.vendasLiquidas, previousKPIs.vendasLiquidas);
+    const freteChange = calcChange(currentKPIs.frete, previousKPIs.frete);
+    const tributosChange = calcChange(currentKPIs.tributos, previousKPIs.tributos);
+    const ticketMedioChange = calcChange(currentKPIs.ticketMedio, previousKPIs.ticketMedio);
+
+    console.log(`[Analytics] Variations:`, {
+      vendasBrutasChange,
+      pedidosChange,
+      taxaRecorrentesChange,
+    });
+
+    // ========================================
+    // 8. BUILD PRODUCTS AND CHANNELS DATA
+    // ========================================
     const produtosMap = new Map<string, {
       product_title: string;
       variant_title: string;
@@ -414,23 +565,9 @@ export async function GET(request: NextRequest) {
 
     const channelMap = new Map<string, number>();
 
-    for (const o of orders) {
-      // Ignorar pedidos de teste
-      if (o.test) continue;
-      
-      // Contar cancelados mas NÃO incluir nas métricas (igual Shopify)
-      if (o.cancelled_at) {
-        pedidosCancelados++;
-        continue; // IMPORTANTE: não incluir nas vendas
-      }
-
-      // Vendas brutas = soma dos itens (antes de descontos)
-      vendasBrutas += toNum(o.total_line_items_price);
-      descontos += toNum(o.total_discounts || 0);
-
-      // Channel tracking - usar nome legível
+    for (const o of validOrders) {
+      // Channel tracking
       let channelName = o.source_name || 'web';
-      // Mapear nomes de canais conhecidos
       if (channelName === 'shopify_draft_order') {
         channelName = 'Draft Orders';
       } else if (channelName === 'web') {
@@ -438,8 +575,6 @@ export async function GET(request: NextRequest) {
       } else if (channelName === 'pos') {
         channelName = 'POS';
       } else if (/^\d+$/.test(channelName)) {
-        // Se for ID numérico de app, usar app_id ou nome do referring_site
-        // O Shopify usa o nome do app que está registrado
         const appName = o.app_title || o.source_identifier || null;
         if (appName) {
           channelName = appName;
@@ -449,7 +584,7 @@ export async function GET(request: NextRequest) {
       }
       channelMap.set(channelName, (channelMap.get(channelName) || 0) + toNum(o.total_price || 0));
 
-      // Products - só pedidos não cancelados
+      // Products
       if (Array.isArray(o.line_items)) {
         for (const item of o.line_items) {
           const key = `${item.product_id}_${item.variant_id}`;
@@ -469,84 +604,11 @@ export async function GET(request: NextRequest) {
           p.numero_pedidos += 1;
         }
       }
-
-      // Shipping
-      if (Array.isArray(o.shipping_lines)) {
-        for (const sl of o.shipping_lines) {
-          let shippingAmount = toNum(sl.price || 0);
-          if (Array.isArray(sl.discount_allocations)) {
-            for (const da of sl.discount_allocations) {
-              shippingAmount -= toNum(da.amount || 0);
-            }
-          }
-          if (sl.discounted_price !== undefined && sl.discounted_price !== null) {
-            shippingAmount = toNum(sl.discounted_price);
-          }
-          frete += Math.max(0, shippingAmount);
-        }
-      }
-
-      // Taxes
-      tributos += toNum(o.total_tax || 0);
-
-      // Refunds
-      if (Array.isArray(o.refunds) && o.refunds.length) {
-        for (const refund of o.refunds) {
-          let mercadoriaRefund = 0;
-          let freteRefund = 0;
-
-          if (Array.isArray(refund.refund_line_items)) {
-            for (const rli of refund.refund_line_items) {
-              if (rli.subtotal_set?.shop_money) {
-                mercadoriaRefund += toNum(rli.subtotal_set.shop_money.amount || 0);
-              } else {
-                mercadoriaRefund += toNum(rli.subtotal || 0);
-              }
-            }
-          }
-
-          if (Array.isArray(refund.order_adjustments)) {
-            for (const adj of refund.order_adjustments) {
-              if (adj.kind !== 'shipping_refund' && adj.reason !== 'Shipping refund') {
-                const adjAmount = Math.abs(toNum(adj.amount || 0));
-                const taxAmount = toNum(adj.tax_amount || 0);
-                mercadoriaRefund += adjAmount - Math.abs(taxAmount);
-              } else {
-                freteRefund += Math.abs(toNum(adj.amount || 0));
-              }
-            }
-          }
-
-          if (refund.shipping) {
-            freteRefund += toNum(refund.shipping.amount || 0);
-          }
-
-          if (mercadoriaRefund === 0 && freteRefund === 0 && Array.isArray(refund.transactions)) {
-            let transTotal = 0;
-            for (const t of refund.transactions) {
-              if (t.kind === 'refund' && t.status === 'success') {
-                transTotal += Math.abs(toNum(t.amount));
-              }
-            }
-            if (transTotal > 0) mercadoriaRefund = transTotal;
-          }
-
-          devolucoes += mercadoriaRefund;
-          if (freteRefund > 0) frete = Math.max(0, frete - freteRefund);
-        }
-      }
     }
 
-    // ========================================
-    // 7. CALCULATE TOTALS
-    // ========================================
-    const vendasLiquidas = vendasBrutas - descontos - devolucoes;
-    const totalVendas = vendasLiquidas + frete + tributos;
-    const ticketMedio = pedidosTotal > 0 ? vendasLiquidas / pedidosTotal : 0;
-
-    // Top products by quantity
+    // Top products by revenue (como Shopify)
     const vendasPorProduto = Array.from(produtosMap.values())
-      .sort((a, b) => b.quantidade_vendida - a.quantidade_vendida)
+      .sort((a, b) => b.receita_total - a.receita_total)
       .slice(0, 10)
       .map((p) => ({
         nome: p.product_title,
@@ -562,12 +624,12 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.vendas - a.vendas);
 
     // ========================================
-    // 8. BUILD CHART DATA
+    // 9. BUILD CHART DATA
     // ========================================
     const dailySalesMap = new Map<string, number>();
     const dailyOrdersMap = new Map<string, number>();
 
-    for (const o of periodOrders) {
+    for (const o of validOrders) {
       const date = o.created_at?.split('T')[0];
       if (date) {
         dailySalesMap.set(date, (dailySalesMap.get(date) || 0) + toNum(o.total_price || 0));
@@ -584,51 +646,51 @@ export async function GET(request: NextRequest) {
       chartData.push({
         date: dateStr,
         value: dailySalesMap.get(dateStr) || 0,
-        label: currentDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+        label: dateStr,
       });
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
     // ========================================
-    // 9. RETURN RESPONSE
+    // 10. RETURN RESPONSE
     // ========================================
     return NextResponse.json({
       success: true,
       data: {
         // Main KPIs
-        vendasBrutas: Number(vendasBrutas.toFixed(2)),
-        vendasBrutasChange: 0,
+        vendasBrutas: Number(currentKPIs.vendasBrutas.toFixed(2)),
+        vendasBrutasChange,
 
-        taxaClientesRecorrentes,
-        taxaClientesRecorrentesChange: 0,
+        taxaClientesRecorrentes: currentKPIs.taxaRecorrentes,
+        taxaClientesRecorrentesChange: taxaRecorrentesChange,
 
         pedidosProcessados,
-        pedidosProcessadosChange: 0,
+        pedidosProcessadosChange: 0, // Não temos histórico de fulfillments
 
-        pedidos: pedidosTotal,
-        pedidosChange: 0,
+        pedidos: currentKPIs.pedidosTotal,
+        pedidosChange,
 
         // Detalhamento
-        totalDescontos: Number(descontos.toFixed(2)),
-        descontosChange: 0,
+        totalDescontos: Number(currentKPIs.descontos.toFixed(2)),
+        descontosChange,
 
-        totalDevolucoes: Number(devolucoes.toFixed(2)),
-        devolucoesChange: 0,
+        totalDevolucoes: Number(currentKPIs.devolucoes.toFixed(2)),
+        devolucoesChange,
 
-        vendasLiquidas: Number(vendasLiquidas.toFixed(2)),
-        vendasLiquidasChange: 0,
+        vendasLiquidas: Number(currentKPIs.vendasLiquidas.toFixed(2)),
+        vendasLiquidasChange,
 
-        totalFrete: Number(frete.toFixed(2)),
-        freteChange: 0,
+        totalFrete: Number(currentKPIs.frete.toFixed(2)),
+        freteChange,
 
-        totalTributos: Number(tributos.toFixed(2)),
-        tributosChange: 0,
+        totalTributos: Number(currentKPIs.tributos.toFixed(2)),
+        tributosChange,
 
-        totalVendas: Number(totalVendas.toFixed(2)),
+        totalVendas: Number(currentKPIs.totalVendas.toFixed(2)),
 
         // Valor médio
-        valorMedioPedido: Number(ticketMedio.toFixed(2)),
-        valorMedioPedidoChange: 0,
+        valorMedioPedido: Number(currentKPIs.ticketMedio.toFixed(2)),
+        valorMedioPedidoChange: ticketMedioChange,
 
         // Charts
         chartData,
@@ -638,16 +700,17 @@ export async function GET(request: NextRequest) {
         vendasPorProduto,
 
         // Customer data
-        clientesTotalPeriodo,
-        clientesRecorrentes,
-        clientesPrimeiraVez,
-        clientesNovos: clientesPrimeiraVez, // Alias para o frontend
+        clientesTotalPeriodo: currentKPIs.clientesUnicos,
+        clientesRecorrentes: currentKPIs.clientesRecorrentes,
+        clientesPrimeiraVez: currentKPIs.clientesPrimeiraVez,
+        clientesNovos: currentKPIs.clientesPrimeiraVez,
 
         // Period info
         periodo: {
           inicio: startDate,
           fim: endDate,
           label: period,
+          dias: daysInPeriod,
         },
 
         // Store info
@@ -655,10 +718,18 @@ export async function GET(request: NextRequest) {
           nome: store.shop_name,
           dominio: store.shop_domain,
         },
+
+        // Debug info
+        debug: {
+          currentPeriodOrders: currentOrders.length,
+          previousPeriodOrders: previousOrders.length,
+          validOrders: validOrders.length,
+          customersFound: customerMap.size,
+        },
       },
     });
   } catch (error: any) {
-    console.error('Shopify Analytics API error:', error);
+    console.error('[Analytics] Error:', error);
     return NextResponse.json({
       success: false,
       error: error.message,

@@ -198,12 +198,13 @@ export async function calculateRFMScores(
   
   try {
     // 1. Fetch all paid orders with customer data
+    // Campos corretos da tabela shopify_orders
     const { data: orders, error: ordersError } = await supabase
       .from('shopify_orders')
-      .select('customer_id, customer_email, total_price, created_at, financial_status')
+      .select('customer_shopify_id, email, total_price, shopify_created_at, financial_status')
       .eq('store_id', storeId)
       .in('financial_status', ['paid', 'partially_paid', 'refunded', 'partially_refunded'])
-      .not('customer_id', 'is', null);
+      .not('customer_shopify_id', 'is', null);
 
     if (ordersError) {
       throw new Error(`Error fetching orders: ${ordersError.message}`);
@@ -233,13 +234,14 @@ export async function calculateRFMScores(
     const now = new Date();
 
     orders.forEach(order => {
-      const customerId = order.customer_id;
-      const orderDate = new Date(order.created_at);
+      // Campos corretos da tabela shopify_orders
+      const customerId = order.customer_shopify_id;
+      const orderDate = new Date(order.shopify_created_at);
       const orderValue = parseFloat(order.total_price || '0');
 
       if (!customerData[customerId]) {
         customerData[customerId] = {
-          email: order.customer_email,
+          email: order.email,
           orders: 0,
           totalSpent: 0,
           firstOrder: orderDate,

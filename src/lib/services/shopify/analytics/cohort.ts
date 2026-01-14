@@ -94,13 +94,14 @@ export async function calculateCohortAnalysis(
   
   try {
     // 1. Fetch all paid orders
+    // Campos corretos da tabela shopify_orders
     const { data: orders, error: ordersError } = await supabase
       .from('shopify_orders')
-      .select('customer_id, customer_email, total_price, created_at, financial_status')
+      .select('customer_shopify_id, email, total_price, shopify_created_at, financial_status')
       .eq('store_id', storeId)
       .in('financial_status', ['paid', 'partially_paid', 'refunded', 'partially_refunded'])
-      .not('customer_id', 'is', null)
-      .order('created_at', { ascending: true });
+      .not('customer_shopify_id', 'is', null)
+      .order('shopify_created_at', { ascending: true });
 
     if (ordersError) {
       throw new Error(`Error fetching orders: ${ordersError.message}`);
@@ -122,8 +123,8 @@ export async function calculateCohortAnalysis(
     const customerFirstPurchase: Record<string, Date> = {};
     
     orders.forEach(order => {
-      const customerId = order.customer_id;
-      const orderDate = new Date(order.created_at);
+      const customerId = order.customer_shopify_id;
+      const orderDate = new Date(order.shopify_created_at);
       
       if (!customerFirstPurchase[customerId] || orderDate < customerFirstPurchase[customerId]) {
         customerFirstPurchase[customerId] = orderDate;
@@ -169,12 +170,12 @@ export async function calculateCohortAnalysis(
 
     // Process all orders and assign to cohort periods
     orders.forEach(order => {
-      const customerId = order.customer_id;
+      const customerId = order.customer_shopify_id;
       const cohortMonth = customerCohort[customerId];
       
       if (!cohortMonth || !cohortData[cohortMonth]) return;
 
-      const orderDate = new Date(order.created_at);
+      const orderDate = new Date(order.shopify_created_at);
       const firstPurchaseDate = customerFirstPurchase[customerId];
       const monthsSinceFirst = getMonthDiff(orderDate, firstPurchaseDate);
       
