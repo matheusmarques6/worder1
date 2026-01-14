@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 
+// ===== VERSÃO DO CÓDIGO - ATUALIZAR A CADA DEPLOY =====
+const API_VERSION = 'v8-senior-fix-2026-01-14';
+
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
@@ -886,6 +889,7 @@ export async function GET(request: NextRequest) {
     // ========================================
     return NextResponse.json({
       success: true,
+      _api_version: API_VERSION, // Para debug - remover depois
       data: {
         // Main KPIs
         vendasBrutas: Number(currentKPIs.vendasBrutas.toFixed(2)),
