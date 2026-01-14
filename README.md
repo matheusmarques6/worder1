@@ -1,245 +1,91 @@
-# 🛒 Shopify Integration - Security Patch & Implementation (v2 HARDENED)
+# 📊 Métricas Avançadas Shopify - Worder
 
-> **Versão corrigida** com os 4 ajustes de segurança paranóica:
-> - ✅ A) UNIQUE(user_id) em organization_members
-> - ✅ B) Todas rotas usam getAuthClient() centralizado
-> - ✅ C) /api/shopify/sync exige storeId
-> - ✅ D) Cron fail-closed (sem modo dev aberto)
+## 🎯 O que foi implementado
 
-## 📦 Conteúdo do Pacote
+### API Unificada
+`/api/shopify/analytics/advanced`
 
-### SQL (Executar PRIMEIRO)
+- **GET**: Busca dados de RFM e Cohort
+  - Primeiro verifica se existem dados nas tabelas `shopify_rfm_scores` e `shopify_cohort_data`
+  - Se não existirem, calcula automaticamente usando as funções existentes
+  - Retorna dados formatados para o frontend
 
-| Arquivo | Descrição |
-|---------|-----------|
-| `sql/SECURITY_PATCH_V3_SUPABASE.sql` | Patch de segurança multi-tenant |
-| `sql/SHOPIFY_COMPLETE_TABLES_V3.sql` | Tabelas adicionais (checkouts, RFM, cohort, etc.) |
-| `sql/FIX_ONE_ORG_PER_USER.sql` | **NOVO** - Garante 1 usuário = 1 org (UNIQUE constraint) |
+- **POST**: Força recálculo das métricas
+  - Recalcula RFM e Cohort mesmo que já existam dados
 
-### Services (`src/lib/services/shopify/`)
+### Componentes UI (estilo Worder)
 
-| Arquivo | Descrição |
-|---------|-----------|
-| `api-client.ts` | **NOVO** - Cliente API com rate limiting (40 req/min), paginação cursor-based |
-| `full-sync.ts` | **NOVO** - Orquestrador de sync completo |
-| `index.ts` | **ATUALIZADO** - Exports centralizados |
-| `analytics/rfm.ts` | **NOVO** - Cálculo RFM com 11 segmentos |
-| `analytics/cohort.ts` | **NOVO** - Análise de retenção por cohort |
-| `analytics/index.ts` | **NOVO** - Exports do módulo analytics |
+1. **AdvancedMetricsSection** - Seção expansível no final da página
+   - Botão discreto com gradiente laranja/amarelo
+   - Expande para baixo ao clicar
+   - Tabs para alternar entre RFM e Cohort
 
-### API Routes (`src/app/api/shopify/`)
+2. **RFMSection** - Visualização de segmentação RFM
+   - Cards por segmento com cores Worder
+   - KPIs de total de clientes, receita, média de pedidos
+   - Cards de ação (Campeões, Em Risco, Potenciais)
+   - Tabela com top 10 clientes
 
-| Endpoint | Arquivo | Status |
-|----------|---------|--------|
-| `/api/shopify/sync` | `sync/route.ts` | 🔒 **CORRIGIDO** - Segurança |
-| `/api/shopify/full-sync` | `full-sync/route.ts` | ✨ **NOVO** |
-| `/api/shopify/analytics/rfm` | `analytics/rfm/route.ts` | ✨ **NOVO** |
-| `/api/shopify/analytics/cohort` | `analytics/cohort/route.ts` | ✨ **NOVO** |
-| `/api/shopify/toggle` | `toggle/route.ts` | 🔒 **CORRIGIDO** - Segurança |
-| `/api/shopify/configure` | `configure/route.ts` | 🔒 **CORRIGIDO** - Segurança |
-| `/api/cron/shopify` | `cron/shopify/route.ts` | 🔄 **ATUALIZADO** - RFM/Cohort |
+3. **CohortSection** - Análise de retenção
+   - KPIs de retenção mês 1, mês 3, melhor/pior cohort
+   - Gráfico de curva de retenção
+   - Matriz de retenção colorida (laranja = alta, cinza = baixa)
+   - Insights e dicas
 
----
-
-## 🚀 Instruções de Instalação
-
-### 1. Executar SQL no Supabase (ORDEM IMPORTANTE!)
-
-```bash
-# 1. Primeiro o patch de segurança
-# Cole o conteúdo de sql/SECURITY_PATCH_V3_SUPABASE.sql no SQL Editor
-
-# 2. Depois as tabelas adicionais
-# Cole o conteúdo de sql/SHOPIFY_COMPLETE_TABLES_V3.sql no SQL Editor
-
-# 3. Por último, garantir 1-org-por-user (CRÍTICO!)
-# Cole o conteúdo de sql/FIX_ONE_ORG_PER_USER.sql no SQL Editor
-```
-
-### 2. Copiar Arquivos TypeScript
-
-Copie os arquivos mantendo a estrutura de diretórios:
+## 📁 Arquivos
 
 ```
 src/
-├── lib/services/shopify/
-│   ├── api-client.ts        (sobrescrever/criar)
-│   ├── full-sync.ts         (sobrescrever/criar)
-│   ├── index.ts             (sobrescrever)
-│   └── analytics/
-│       ├── rfm.ts           (criar)
-│       ├── cohort.ts        (criar)
-│       └── index.ts         (criar)
-└── app/api/
-    ├── shopify/
-    │   ├── sync/route.ts        (sobrescrever)
-    │   ├── full-sync/route.ts   (criar)
-    │   ├── toggle/route.ts      (sobrescrever)
-    │   ├── configure/route.ts   (sobrescrever)
-    │   └── analytics/
-    │       ├── rfm/route.ts     (criar)
-    │       └── cohort/route.ts  (criar)
-    └── cron/shopify/route.ts    (sobrescrever)
+├── app/
+│   ├── api/
+│   │   └── shopify/
+│   │       └── analytics/
+│   │           └── advanced/
+│   │               └── route.ts          # API unificada
+│   └── (dashboard)/
+│       └── analytics/
+│           └── shopify/
+│               └── page.tsx              # Página atualizada
+└── components/
+    └── shopify/
+        ├── index.ts                      # Exports
+        ├── AdvancedMetricsSection.tsx    # Container expansível
+        ├── RFMSection.tsx                # Visualização RFM
+        └── CohortSection.tsx             # Matriz Cohort
 ```
 
-### 3. Verificar Compilação
+## 🚀 Como usar
 
-```bash
-npm run build
-# ou
-npx tsc --noEmit
+1. Extraia o ZIP na raiz do projeto (sobrescreve os arquivos existentes)
+2. Faça commit e push
+3. Acesse `/analytics/shopify`
+4. Role até o final da página
+5. Clique no botão "Métricas Avançadas"
+6. A seção expande mostrando RFM e Cohort
+
+## 🎨 Cores utilizadas
+
+- Primary: `#f97316` (orange-500)
+- Accent: `#eab308` (yellow-500)
+- Gradient: `from-primary-500/10 to-accent-500/10`
+- Background: `dark-800/40`, `dark-700/30`
+- Border: `dark-700/50`, `primary-500/20`
+
+## ⚠️ Importante
+
+- Remova a pasta `/src/app/(dashboard)/analytics/shopify/advanced/` se existir (versão antiga com página separada)
+- As tabelas `shopify_rfm_scores`, `shopify_rfm_summary` e `shopify_cohort_data` devem existir no Supabase
+- Se não existirem dados, a API calcula automaticamente na primeira chamada
+
+## 🔄 Fluxo de dados
+
 ```
-
----
-
-## 🔒 Correções de Segurança Aplicadas
-
-### Vulnerabilidades Corrigidas
-
-1. **RLS Policies com USING(true)** → Corrigido para `organization_id = get_user_org_id()`
-2. **Rotas sem autenticação** → Adicionado `getAuthClient()` obrigatório
-3. **Service role exposto** → Validação de ownership antes de usar admin
-4. **Cross-org access** → FORCE ROW LEVEL SECURITY em todas as tabelas
-5. **FK constraints faltando** → Adicionado com ON DELETE CASCADE
-
-### Padrão de Segurança nas APIs
-
-```typescript
-// ✅ PADRÃO CORRETO
-export async function POST(request: NextRequest) {
-  // 1. Autenticar usuário
-  const auth = await getAuthClient()
-  if (!auth) return authError()
-  
-  // 2. Validar acesso à loja
-  const validation = await validateStoreAccess(auth.supabase, auth.user.organization_id, storeId)
-  if (!validation.valid) return NextResponse.json({ error: validation.error }, { status: 403 })
-  
-  // 3. Só então usar admin client
-  const supabaseAdmin = getSupabaseClient()
-  // ...
-}
+1. Usuário abre página de analytics
+2. Rola até final e clica em "Métricas Avançadas"
+3. Seção expande
+4. Componente chama GET /api/shopify/analytics/advanced?storeId=xxx
+5. API verifica se existem dados nas tabelas
+6. Se sim: retorna dados
+7. Se não: calcula usando funções existentes e retorna
+8. Componente renderiza RFM e Cohort
 ```
-
----
-
-## 📊 Uso das APIs
-
-### Full Sync
-```bash
-# Executar sync completo
-curl -X POST http://localhost:3000/api/shopify/full-sync \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json"
-
-# Ver status
-curl http://localhost:3000/api/shopify/full-sync \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### RFM Analytics
-```bash
-# Calcular RFM
-curl -X POST http://localhost:3000/api/shopify/analytics/rfm \
-  -H "Authorization: Bearer YOUR_TOKEN"
-
-# Ver resumo
-curl http://localhost:3000/api/shopify/analytics/rfm \
-  -H "Authorization: Bearer YOUR_TOKEN"
-
-# Ver scores por segmento
-curl "http://localhost:3000/api/shopify/analytics/rfm?view=scores&segment=champion" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### Cohort Analytics
-```bash
-# Calcular cohorts
-curl -X POST http://localhost:3000/api/shopify/analytics/cohort \
-  -H "Authorization: Bearer YOUR_TOKEN"
-
-# Ver matriz
-curl http://localhost:3000/api/shopify/analytics/cohort \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### Cron Jobs
-```bash
-# Jobs disponíveis: abandoned, reconcile, health, cleanup, rfm, cohort, analytics, all
-curl "http://localhost:3000/api/cron/shopify?job=rfm" \
-  -H "Authorization: Bearer CRON_SECRET"
-```
-
----
-
-## ⏰ Configuração de Cron (Vercel)
-
-Adicione ao `vercel.json`:
-
-```json
-{
-  "crons": [
-    {
-      "path": "/api/cron/shopify?job=abandoned",
-      "schedule": "*/30 * * * *"
-    },
-    {
-      "path": "/api/cron/shopify?job=reconcile",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/shopify?job=analytics",
-      "schedule": "0 3 * * *"
-    }
-  ]
-}
-```
-
-E adicione `CRON_SECRET` nas environment variables.
-
----
-
-## 📈 RFM Segmentos
-
-| Segmento | Cor | Descrição |
-|----------|-----|-----------|
-| champion | 🟢 | Compraram recentemente, frequentemente e muito |
-| loyal | 🔵 | Gastam bem e compram frequentemente |
-| potential_loyalist | 🟣 | Clientes recentes com boa frequência |
-| recent | 🔵 | Compraram recentemente mas sem histórico |
-| promising | 🟡 | Compradores recentes com potencial |
-| need_attention | 🟠 | Clientes acima da média esfriando |
-| about_to_sleep | 🟣 | Abaixo da média em recência e frequência |
-| at_risk | 🔴 | Gastaram muito mas não compram há tempo |
-| cant_lose | 🔴 | Grandes compradores inativos |
-| hibernating | ⚫ | Última compra há muito tempo |
-| lost | ⚫ | Menor recência, frequência e valor |
-
----
-
-## ✅ Checklist de Implementação
-
-- [ ] Executar `SECURITY_PATCH_V3_SUPABASE.sql`
-- [ ] Executar `SHOPIFY_COMPLETE_TABLES_V3.sql`
-- [ ] Copiar arquivos TypeScript
-- [ ] Verificar build (`npm run build`)
-- [ ] Testar endpoint `/api/shopify/full-sync`
-- [ ] Testar endpoint `/api/shopify/analytics/rfm`
-- [ ] Configurar cron jobs
-- [ ] Adicionar `CRON_SECRET` nas env vars
-
----
-
-## 🆘 Troubleshooting
-
-### Erro: "permission denied for schema auth"
-O SQL Editor do Supabase não permite criar funções no schema `auth`. O patch V3 já usa `public.get_user_org_id()` como workaround.
-
-### Erro: "function auth.organization_id() does not exist"
-Execute o patch V3 que cria a função alternativa `public.get_user_org_id()`.
-
-### Erro: "column notification_count does not exist"
-Execute `SHOPIFY_COMPLETE_TABLES_V3.sql` que adiciona colunas faltantes.
-
-### Erro 401 nas APIs
-Verifique se o token Bearer está sendo enviado corretamente no header Authorization.
