@@ -21,7 +21,9 @@ import {
   CreditCard,
   BarChart3,
   PieChart,
+  Sparkles,
 } from 'lucide-react'
+import Link from 'next/link'
 import {
   XAxis,
   YAxis,
@@ -347,6 +349,15 @@ export default function ShopifyAnalyticsPage() {
             </svg>
             Exportar PDF
           </button>
+
+          {/* Advanced Metrics Button */}
+          <Link
+            href="/analytics/shopify/advanced"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-violet-500/20"
+          >
+            <Sparkles className="w-4 h-4" />
+            RFM & Cohort
+          </Link>
 
           {/* Refresh Button */}
           <button
