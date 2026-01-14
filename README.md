@@ -1,146 +1,128 @@
-# 📊 Shopify Analytics - CORREÇÃO v4
+# 🔍 Diagnóstico Shopify Analytics
 
-## ⚠️ PROBLEMA PRINCIPAL CORRIGIDO
+## O Problema
 
-**A Shopify INCLUI pedidos cancelados** nas métricas de:
-- Vendas brutas
-- Contagem de pedidos
-- Descontos
+Há uma diferença significativa entre os valores da Shopify e da Worder:
 
-A Worder estava **excluindo** esses pedidos, causando diferenças significativas.
+| Métrica | Shopify | Worder | Diferença |
+|---------|---------|--------|-----------|
+| Vendas brutas | R$ 62.868,60 | R$ 53.257,76 | -R$ 9.610 |
+| Pedidos | 339 | 289 | -50 |
 
----
+## Como Usar a API de Diagnóstico
 
-## 🔧 Correções nesta versão
+### 1. Deploy
 
-### 1. Pedidos cancelados incluídos
-```typescript
-// ANTES (errado)
-const validOrders = orders.filter(o => !o.test && !o.cancelled_at);
-for (const o of validOrders) {
-  vendasBrutas += o.total_line_items_price; // Excluía cancelados
-}
+Extraia o ZIP e faça deploy no Vercel.
 
-// DEPOIS (correto)
-const allNonTestOrders = orders.filter(o => !o.test);
-for (const o of allNonTestOrders) {
-  vendasBrutas += o.total_line_items_price; // Inclui cancelados
-}
-```
-
-### 2. Contagem de pedidos
-```typescript
-// ANTES
-pedidosTotal = validOrders.length; // Excluía cancelados
-
-// DEPOIS  
-pedidosTotal = allNonTestOrders.length; // Inclui cancelados
-```
-
-### 3. API de Debug (nova)
-Acesse: `/api/analytics/shopify/debug?storeId=XXX`
-
-Retorna análise detalhada:
-- Quantos pedidos total
-- Quantos são teste
-- Quantos são cancelados
-- Vendas com/sem cancelados
-- Por status financeiro
-- Por canal de venda
-
----
-
-## 📁 Arquivos (11 arquivos)
+### 2. Acesse a API
 
 ```
-src/
-├── app/
-│   ├── api/
-│   │   ├── analytics/
-│   │   │   └── shopify/
-│   │   │       ├── route.ts          # ⭐ API PRINCIPAL (v4)
-│   │   │       └── debug/
-│   │   │           └── route.ts      # 🆕 API DEBUG
-│   │   └── shopify/
-│   │       └── analytics/
-│   │           └── advanced/
-│   │               └── route.ts
-│   └── (dashboard)/
-│       └── analytics/
-│           └── shopify/
-│               └── page.tsx
-├── components/
-│   └── shopify/
-│       ├── index.ts
-│       ├── AdvancedMetricsSection.tsx
-│       ├── RFMSection.tsx
-│       └── CohortSection.tsx
-└── lib/
-    └── services/
-        └── shopify/
-            └── analytics/
-                ├── rfm.ts
-                └── cohort.ts
+https://seu-site.vercel.app/api/analytics/shopify/diagnostico?storeId=XXX
 ```
 
----
+### 3. O que a API retorna
 
-## 🚀 Como usar
-
-1. **Extraia o ZIP** na raiz do projeto
-2. **Deploy** para Vercel
-3. **Teste a API de debug** primeiro:
-   ```
-   https://seu-site.vercel.app/api/analytics/shopify/debug?storeId=XXX
-   ```
-4. Compare os números com a Shopify
-
----
-
-## 🔍 Usando a API de Debug
-
-A API de debug retorna:
+A API faz uma análise completa de todos os pedidos e retorna:
 
 ```json
 {
-  "debug": {
+  "diagnostico": {
     "periodo": {
-      "solicitado": "2026-01-07 a 2026-01-13"
+      "solicitado": "2026-01-07 a 2026-01-13",
+      "startISO": "...",
+      "endISO": "..."
     },
-    "pedidos": {
-      "total": 339,
-      "teste": 0,
-      "cancelados": 69,
-      "validos": 270
+    
+    "contagem": {
+      "total": 339,           // Total de pedidos
+      "teste": 0,             // Pedidos de teste
+      "cancelados": 50,       // Pedidos cancelados
+      "validos": 289,         // Não teste e não cancelados
+      
+      "shopifyDeveMostrar": {
+        "pedidos": 339,       // Shopify mostra: total - teste
+        "nota": "Shopify inclui cancelados, pending, unpaid. Exclui apenas test."
+      }
     },
-    "vendas": {
-      "comTudo": "62868.60",
-      "semCancelados": "50500.85",
-      "semTesteNemCancelados": "50500.85"
+    
+    "vendasBrutas": {
+      "metodo1_totalLineItemsPrice": {
+        "todos": "R$ 65.000,00",
+        "semTeste": "R$ 62.868,60",           // ← ESTE é o valor correto
+        "semTesteNemCancelado": "R$ 53.257,76" // ← ESTE é o que Worder calcula hoje
+      },
+      
+      "conclusao": {
+        "valorCorretoParaShopify": "R$ 62.868,60",
+        "nota": "Shopify Gross Sales = total_line_items_price de pedidos não-teste (inclui cancelados)"
+      }
+    },
+    
+    "porStatus": {
+      "financial": {
+        "paid": { "count": 280, "value": 50000 },
+        "pending": { "count": 20, "value": 5000 },
+        "refunded": { "count": 39, "value": 7868.60 }
+      }
+    },
+    
+    "pedidosCancelados": [
+      { "id": 123, "name": "#1001", "total_line_items_price": "R$ 200,00" }
+    ]
+  },
+  
+  "comparativo": {
+    "shopifyEsperado": {
+      "vendasBrutas": "R$ 62.868,60",
+      "pedidos": 339
+    },
+    "worderCalculado": {
+      "vendasBrutas_metodoAtual": "R$ 53.257,76",      // Errado
+      "vendasBrutas_metodoCorreto": "R$ 62.868,60",    // Correto
+      "pedidos_metodoAtual": 289,                       // Errado
+      "pedidos_metodoCorreto": 339                      // Correto
     }
   }
 }
 ```
 
-Se `comTudo` bater com a Shopify, a correção está funcionando!
+## O Que Descobrimos
 
----
+### Definição Oficial da Shopify
 
-## ✅ Resultado esperado
+> **Gross Sales** = product price × quantity (before taxes, shipping, discounts, and returns).
+> 
+> **Canceled, pending, and unpaid orders are INCLUDED.**
+> 
+> Test and deleted orders are NOT included.
 
-| Métrica | Shopify | Worder (antes) | Worder (depois) |
-|---------|---------|----------------|-----------------|
-| Vendas brutas | R$ 62.868,60 | R$ 50.500,85 | R$ 62.868,60 |
-| Pedidos | 339 | 270 | 339 |
+### O Erro da Worder
 
----
+A Worder estava **excluindo pedidos cancelados** das vendas brutas e da contagem de pedidos.
 
-## ⚠️ Se ainda não bater
+### A Correção
 
-Se depois desta correção os valores ainda não baterem, pode ser:
+```typescript
+// ERRADO (o que Worder fazia)
+const validOrders = orders.filter(o => !o.test && !o.cancelled_at);
+vendasBrutas = soma de validOrders; // Exclui cancelados
 
-1. **Timezone diferente** - verificar se o período está correto na API de debug
-2. **Pedidos de teste** - a Shopify pode estar incluindo ou excluindo
-3. **Status financeiro** - alguns status podem ser tratados diferente
+// CORRETO (como Shopify faz)
+const allNonTestOrders = orders.filter(o => !o.test);
+vendasBrutas = soma de allNonTestOrders; // Inclui cancelados
+```
 
-Use a API de debug para investigar!
+## Próximos Passos
+
+1. Execute a API de diagnóstico
+2. Compare os valores com a Shopify
+3. Se `vendasBrutas.metodo1_totalLineItemsPrice.semTeste` bater com a Shopify, a correção está correta
+4. Aplique a correção na API principal
+
+## Contato
+
+Se os valores ainda não baterem após a correção, verifique:
+1. Se o período está correto (timezone)
+2. Se há pedidos de teste sendo contados
+3. Se há algum filtro adicional na query
