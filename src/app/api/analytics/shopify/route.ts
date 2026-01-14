@@ -781,13 +781,18 @@ export async function GET(request: NextRequest) {
       channelMap.set(channelName, (channelMap.get(channelName) || 0) + toNum(o.total_price || 0));
 
       // Products - calcular NET SALES como Shopify faz
+      // IMPORTANTE: Shopify agrupa por PRODUTO (todas as variantes juntas), não por variante
       if (Array.isArray(o.line_items)) {
         for (const item of o.line_items) {
-          const key = `${item.product_id}_${item.variant_id}`;
+          // Agrupar por product_id apenas (não por variant_id)
+          // Isso soma todas as variantes do mesmo produto
+          const key = `${item.product_id}`;
+          const productTitle = item.title || item.name || 'Sem título';
+          
           if (!produtosMap.has(key)) {
             produtosMap.set(key, {
-              product_title: item.title || item.name || 'Sem título',
-              variant_title: item.variant_title || '',
+              product_title: productTitle,
+              variant_title: '', // Não usado quando agrupado por produto
               sku: item.sku || '',
               quantidade_vendida: 0,
               receita_bruta: 0,
