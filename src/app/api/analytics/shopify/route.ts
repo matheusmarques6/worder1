@@ -463,8 +463,12 @@ function calculateKPIsFromOrders(
         if (freteRefund > 0) frete = Math.max(0, frete - freteRefund);
       }
     }
+  }
 
-    // Contar pedidos por cliente no período
+  // Contar pedidos por cliente no período
+  // IMPORTANTE: Usar apenas pedidos VÁLIDOS (não cancelados) para taxa de recorrentes
+  // A Shopify não conta pedidos cancelados na métrica de clientes novos/recorrentes
+  for (const o of validOrders) {
     const customer = o.customer;
     if (customer?.id) {
       if (!customerOrdersInPeriod.has(customer.id)) {
