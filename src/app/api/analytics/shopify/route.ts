@@ -21,6 +21,101 @@ const calcChange = (current: number, previous: number): number => {
   return Number((((current - previous) / previous) * 100).toFixed(1));
 };
 
+// ===== ShopifyQL via GraphQL =====
+async function shopifyqlQuery(
+  shopDomain: string,
+  accessToken: string,
+  query: string
+): Promise<{ data: any; errors?: any }> {
+  const url = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  
+  const graphqlQuery = {
+    query: `{
+      shopifyqlQuery(query: "${query.replace(/"/g, '\\"').replace(/\n/g, ' ')}") {
+        tableData {
+          columns {
+            name
+            dataType
+            displayName
+          }
+          rows
+        }
+        parseErrors
+      }
+    }`
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'X-Shopify-Access-Token': accessToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(graphqlQuery),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    console.error('[ShopifyQL] Error response:', text);
+    return { data: null, errors: `HTTP ${response.status}` };
+  }
+
+  const result = await response.json();
+  return { data: result.data, errors: result.errors };
+}
+
+// ===== Buscar métricas de clientes via ShopifyQL =====
+async function fetchCustomerMetricsFromShopifyQL(
+  shopDomain: string,
+  accessToken: string,
+  sinceDate: string,
+  untilDate: string
+): Promise<{ newCustomers: number; returningCustomers: number; rate: number } | null> {
+  try {
+    // Query para buscar new vs returning customers
+    const query = `FROM sales SHOW new_customers, returning_customers SINCE ${sinceDate} UNTIL ${untilDate}`;
+    
+    console.log('[ShopifyQL] Query:', query);
+    
+    const result = await shopifyqlQuery(shopDomain, accessToken, query);
+    
+    if (result.errors || !result.data?.shopifyqlQuery?.tableData) {
+      console.error('[ShopifyQL] Query failed:', result.errors || 'No data');
+      return null;
+    }
+    
+    const { columns, rows } = result.data.shopifyqlQuery.tableData;
+    
+    if (!rows || rows.length === 0) {
+      console.log('[ShopifyQL] No rows returned');
+      return null;
+    }
+    
+    // Encontrar índices das colunas
+    const newIdx = columns.findIndex((c: any) => c.name === 'new_customers');
+    const retIdx = columns.findIndex((c: any) => c.name === 'returning_customers');
+    
+    if (newIdx === -1 || retIdx === -1) {
+      console.error('[ShopifyQL] Columns not found:', columns);
+      return null;
+    }
+    
+    // Pegar valores da primeira linha (total)
+    const row = rows[0];
+    const newCustomers = parseInt(row[newIdx]) || 0;
+    const returningCustomers = parseInt(row[retIdx]) || 0;
+    const total = newCustomers + returningCustomers;
+    const rate = total > 0 ? Number(((returningCustomers / total) * 100).toFixed(2)) : 0;
+    
+    console.log('[ShopifyQL] Results:', { newCustomers, returningCustomers, rate });
+    
+    return { newCustomers, returningCustomers, rate };
+  } catch (error) {
+    console.error('[ShopifyQL] Error:', error);
+    return null;
+  }
+}
+
 // ===== Shopify API Client =====
 async function shopifyFetch(
   shopDomain: string,
@@ -550,15 +645,58 @@ export async function GET(request: NextRequest) {
     const currentKPIs = calculateKPIsFromOrders(currentOrders, customerMap, startDate);
     const previousKPIs = calculateKPIsFromOrders(previousOrders, prevCustomerMap, prevStartDate);
 
+    // ========================================
+    // 6.5 BUSCAR TAXA DE RECORRENTES VIA SHOPIFYQL (direto da Shopify!)
+    // ========================================
+    let shopifyqlCurrentRate: number | null = null;
+    let shopifyqlPreviousRate: number | null = null;
+    
+    try {
+      // Converter datas para formato ShopifyQL (YYYY-MM-DD)
+      const currentSince = startDate;
+      const currentUntil = endDate;
+      const prevSince = prevStartDate;
+      const prevUntil = startDate.split('T')[0]; // Um dia antes do período atual
+      
+      console.log('[ShopifyQL] Fetching customer metrics...');
+      console.log('[ShopifyQL] Current period:', currentSince, 'to', currentUntil);
+      console.log('[ShopifyQL] Previous period:', prevSince, 'to', prevUntil);
+      
+      const [currentMetrics, previousMetrics] = await Promise.all([
+        fetchCustomerMetricsFromShopifyQL(shop_domain, access_token, currentSince, currentUntil),
+        fetchCustomerMetricsFromShopifyQL(shop_domain, access_token, prevSince, prevUntil)
+      ]);
+      
+      if (currentMetrics) {
+        shopifyqlCurrentRate = currentMetrics.rate;
+        console.log('[ShopifyQL] Current rate from Shopify:', shopifyqlCurrentRate);
+      }
+      
+      if (previousMetrics) {
+        shopifyqlPreviousRate = previousMetrics.rate;
+        console.log('[ShopifyQL] Previous rate from Shopify:', shopifyqlPreviousRate);
+      }
+    } catch (error) {
+      console.error('[ShopifyQL] Failed to fetch metrics, using calculated values:', error);
+    }
+    
+    // Usar valores do ShopifyQL se disponíveis, senão usar calculados
+    const finalCurrentRate = shopifyqlCurrentRate !== null ? shopifyqlCurrentRate : currentKPIs.taxaRecorrentes;
+    const finalPreviousRate = shopifyqlPreviousRate !== null ? shopifyqlPreviousRate : previousKPIs.taxaRecorrentes;
+
     console.log(`[Analytics] Current KPIs:`, {
       vendasBrutas: currentKPIs.vendasBrutas,
       pedidos: currentKPIs.pedidosTotal,
       taxaRecorrentes: currentKPIs.taxaRecorrentes,
+      taxaRecorrentesShopifyQL: shopifyqlCurrentRate,
+      taxaRecorrentesFinal: finalCurrentRate,
     });
     console.log(`[Analytics] Previous KPIs:`, {
       vendasBrutas: previousKPIs.vendasBrutas,
       pedidos: previousKPIs.pedidosTotal,
       taxaRecorrentes: previousKPIs.taxaRecorrentes,
+      taxaRecorrentesShopifyQL: shopifyqlPreviousRate,
+      taxaRecorrentesFinal: finalPreviousRate,
     });
 
     // ========================================
@@ -566,7 +704,8 @@ export async function GET(request: NextRequest) {
     // ========================================
     const vendasBrutasChange = calcChange(currentKPIs.vendasBrutas, previousKPIs.vendasBrutas);
     const pedidosChange = calcChange(currentKPIs.pedidosTotal, previousKPIs.pedidosTotal);
-    const taxaRecorrentesChange = calcChange(currentKPIs.taxaRecorrentes, previousKPIs.taxaRecorrentes);
+    // Usar valores do ShopifyQL para taxa de recorrentes
+    const taxaRecorrentesChange = calcChange(finalCurrentRate, finalPreviousRate);
     const descontosChange = calcChange(currentKPIs.descontos, previousKPIs.descontos);
     const devolucoesChange = calcChange(currentKPIs.devolucoes, previousKPIs.devolucoes);
     const vendasLiquidasChange = calcChange(currentKPIs.vendasLiquidas, previousKPIs.vendasLiquidas);
@@ -578,6 +717,7 @@ export async function GET(request: NextRequest) {
       vendasBrutasChange,
       pedidosChange,
       taxaRecorrentesChange,
+      taxaRecorrentesFinal: finalCurrentRate,
     });
 
     // ========================================
@@ -588,7 +728,9 @@ export async function GET(request: NextRequest) {
       variant_title: string;
       sku: string;
       quantidade_vendida: number;
-      receita_total: number;
+      receita_bruta: number;      // Gross: price * quantity
+      descontos_aplicados: number; // Discount allocations
+      receita_liquida: number;    // Net: gross - discounts
       numero_pedidos: number;
     }>();
 
@@ -613,7 +755,7 @@ export async function GET(request: NextRequest) {
       }
       channelMap.set(channelName, (channelMap.get(channelName) || 0) + toNum(o.total_price || 0));
 
-      // Products
+      // Products - calcular NET SALES como Shopify faz
       if (Array.isArray(o.line_items)) {
         for (const item of o.line_items) {
           const key = `${item.product_id}_${item.variant_id}`;
@@ -623,27 +765,52 @@ export async function GET(request: NextRequest) {
               variant_title: item.variant_title || '',
               sku: item.sku || '',
               quantidade_vendida: 0,
-              receita_total: 0,
+              receita_bruta: 0,
+              descontos_aplicados: 0,
+              receita_liquida: 0,
               numero_pedidos: 0,
             });
           }
           const p = produtosMap.get(key)!;
-          p.quantidade_vendida += toNum(item.quantity || 0);
-          p.receita_total += toNum(item.price || 0) * toNum(item.quantity || 0);
+          
+          const qty = toNum(item.quantity || 0);
+          const price = toNum(item.price || 0);
+          const grossAmount = price * qty;
+          
+          // Desconto alocado a este item (pode vir de cupom de pedido distribuído)
+          let discountAmount = 0;
+          if (Array.isArray(item.discount_allocations)) {
+            for (const alloc of item.discount_allocations) {
+              discountAmount += toNum(alloc.amount || 0);
+            }
+          }
+          // Fallback: usar total_discount do item se não tiver allocations
+          if (discountAmount === 0 && item.total_discount) {
+            discountAmount = toNum(item.total_discount);
+          }
+          
+          const netAmount = grossAmount - discountAmount;
+          
+          p.quantidade_vendida += qty;
+          p.receita_bruta += grossAmount;
+          p.descontos_aplicados += discountAmount;
+          p.receita_liquida += netAmount;
           p.numero_pedidos += 1;
         }
       }
     }
 
-    // Top products by revenue (como Shopify)
+    // Top products by NET revenue (como Shopify faz em "Total de vendas por produto")
     const vendasPorProduto = Array.from(produtosMap.values())
-      .sort((a, b) => b.receita_total - a.receita_total)
+      .sort((a, b) => b.receita_liquida - a.receita_liquida)
       .slice(0, 10)
       .map((p) => ({
         nome: p.product_title,
         variante: p.variant_title,
         quantidade: p.quantidade_vendida,
-        vendas: Number(p.receita_total.toFixed(2)),
+        vendas: Number(p.receita_liquida.toFixed(2)),  // NET sales
+        vendasBrutas: Number(p.receita_bruta.toFixed(2)),
+        descontos: Number(p.descontos_aplicados.toFixed(2)),
         pedidos: p.numero_pedidos,
       }));
 
@@ -690,7 +857,8 @@ export async function GET(request: NextRequest) {
         vendasBrutas: Number(currentKPIs.vendasBrutas.toFixed(2)),
         vendasBrutasChange,
 
-        taxaClientesRecorrentes: currentKPIs.taxaRecorrentes,
+        // Usar valor do ShopifyQL se disponível
+        taxaClientesRecorrentes: finalCurrentRate,
         taxaClientesRecorrentesChange: taxaRecorrentesChange,
 
         pedidosProcessados,

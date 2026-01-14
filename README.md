@@ -1,78 +1,78 @@
-# 🔧 Correção Taxa de Clientes Recorrentes - v6
+# 🔧 Correção: Total de Vendas por Produto
 
-## O Problema
+## Problema
 
-| Métrica | Worder (antes) | Shopify |
-|---------|----------------|---------|
-| Taxa recorrentes | 52.78% | 38.89% |
+O "Total de vendas por produto" na Worder não batia com a Shopify.
 
-A Worder estava usando a **data de criação do cliente**, mas a Shopify usa outra lógica.
+## Causa
 
----
-
-## Nova Lógica (Correta)
-
-**Definição Shopify:**
-- **Novo** = cliente cujo PRIMEIRO pedido foi feito DURANTE o período
-- **Recorrente** = cliente que já tinha pedidos ANTES do período
-
-**Cálculo:**
+A Worder estava calculando **Gross Sales** (preço × quantidade):
 ```typescript
-// Para cada cliente no período:
-totalOrdersCount = orders_count do cliente (total histórico)
-ordersInPeriod = pedidos do cliente no período atual
-ordersBeforePeriod = totalOrdersCount - ordersInPeriod
+receita_total = price * quantity  // ❌ Errado
+```
 
-if (ordersBeforePeriod > 0) {
-  // Tinha pedidos antes → RECORRENTE
-} else {
-  // Todos os pedidos são do período → NOVO
+Mas a Shopify mostra **Net Sales** (preço × quantidade - descontos):
+```typescript
+receita_liquida = (price * quantity) - discount_allocations  // ✅ Correto
+```
+
+## O Que Mudou
+
+### Antes (errado)
+```typescript
+p.receita_total += item.price * item.quantity;
+```
+
+### Depois (correto)
+```typescript
+// Calcular gross
+const grossAmount = price * qty;
+
+// Subtrair descontos alocados ao item
+let discountAmount = 0;
+if (Array.isArray(item.discount_allocations)) {
+  for (const alloc of item.discount_allocations) {
+    discountAmount += alloc.amount;
+  }
+}
+
+// Net = Gross - Descontos
+const netAmount = grossAmount - discountAmount;
+p.receita_liquida += netAmount;
+```
+
+## Como a Shopify Distribui Descontos
+
+Quando um cliente usa um cupom de desconto (ex: 10% OFF no pedido), a Shopify **distribui** esse desconto entre os produtos proporcionalmente.
+
+Exemplo:
+- Produto A: R$ 100
+- Produto B: R$ 50
+- Cupom: 10% OFF (R$ 15 total)
+
+Distribuição:
+- Produto A: R$ 100 - R$ 10 = R$ 90 (discount_allocation: 10)
+- Produto B: R$ 50 - R$ 5 = R$ 45 (discount_allocation: 5)
+
+## Dados Retornados Agora
+
+```json
+{
+  "vendasPorProduto": [
+    {
+      "nome": "Óculos de Sol - Kalib™",
+      "quantidade": 10,
+      "vendas": 379.36,          // NET sales (o que Shopify mostra)
+      "vendasBrutas": 450.00,    // Gross (para referência)
+      "descontos": 70.64,        // Descontos aplicados
+      "pedidos": 8
+    }
+  ]
 }
 ```
 
-**Exemplo:**
-- Cliente A: orders_count=5, pedidos_no_periodo=1 → 5-1=4 antes → **Recorrente**
-- Cliente B: orders_count=2, pedidos_no_periodo=2 → 2-2=0 antes → **Novo**
-- Cliente C: orders_count=1, pedidos_no_periodo=1 → 1-1=0 antes → **Novo**
-
----
-
-## O Que Estava Errado Antes
-
-**v5 (errada):** Usava data de criação do cliente
-```typescript
-// Se cliente foi criado antes do período = recorrente
-if (customerCreatedAt < periodStart) → recorrente
-```
-Problema: Um cliente pode ter sido criado há 1 ano e nunca ter comprado. Quando faz a primeira compra, deveria ser "novo", não "recorrente".
-
-**v6 (correta):** Usa histórico de pedidos
-```typescript
-// Se cliente tinha pedidos antes do período = recorrente
-if (ordersBeforePeriod > 0) → recorrente
-```
-
----
-
-## Arquivos
-
-```
-src/
-├── app/
-│   ├── api/
-│   │   └── analytics/
-│   │       └── shopify/
-│   │           └── route.ts          # API corrigida
-│   └── (dashboard)/
-│       └── analytics/
-│           └── shopify/
-│               └── page.tsx          # Frontend
-```
-
----
-
 ## Resultado Esperado
 
-| Métrica | v5 (errado) | v6 (correto) | Shopify |
-|---------|-------------|--------------|---------|
-| Taxa recorrentes | 52.78% | ~38.89% | 38.89% ✅ |
+| Produto | Worder (antes) | Worder (agora) | Shopify |
+|---------|---------------|----------------|---------|
+| Kalib™  | R$ 450,00     | R$ 379,36      | R$ 379,36 ✅ |
