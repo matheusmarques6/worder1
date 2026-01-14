@@ -1,11 +1,6 @@
 // =============================================
-// API: Shopify Sync (CORRIGIDO)
+// API: Shopify Sync
 // src/app/api/shopify/sync/route.ts
-//
-// CORREÇÕES:
-// ✅ Usa getAuthClient() centralizado (não helper local)
-// ✅ Exige storeId (não pega "primeira store")
-// ✅ Valida ownership com validateStoreAccess()
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,7 +15,9 @@ const SHOPIFY_API_VERSION = '2024-10';
 // FETCH HELPERS
 // =============================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchAllOrders(shopDomain: string, accessToken: string): Promise<any[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allOrders: any[] = [];
   let nextPageUrl: string | null = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?status=any&limit=250`;
   
@@ -28,7 +25,8 @@ async function fetchAllOrders(shopDomain: string, accessToken: string): Promise<
   const maxPages = 10;
   
   while (nextPageUrl && pageCount < maxPages) {
-    const response = await fetch(nextPageUrl, {
+    const currentUrl = nextPageUrl;
+    const response: Response = await fetch(currentUrl, {
       headers: {
         'X-Shopify-Access-Token': accessToken,
         'Content-Type': 'application/json',
@@ -63,8 +61,9 @@ async function fetchAllOrders(shopDomain: string, accessToken: string): Promise<
   return allOrders;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchCustomers(shopDomain: string, accessToken: string): Promise<any[]> {
-  const response = await fetch(
+  const response: Response = await fetch(
     `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250`,
     {
       headers: {
@@ -83,6 +82,7 @@ async function fetchCustomers(shopDomain: string, accessToken: string): Promise<
 // METRICS CALCULATION
 // =============================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function calculateMetrics(orders: any[]) {
   const paidOrders = orders.filter(o => 
     ['paid', 'partially_paid', 'refunded', 'partially_refunded'].includes(o.financial_status)
@@ -98,7 +98,9 @@ function calculateMetrics(orders: any[]) {
     totalDescontos += parseFloat(order.total_discounts || '0');
     
     if (order.refunds?.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       order.refunds.forEach((refund: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         refund.refund_line_items?.forEach((item: any) => {
           totalRefunds += parseFloat(item.subtotal || '0');
         });
@@ -138,14 +140,12 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    // ✅ CORREÇÃO B: Usar helper centralizado
     const auth = await getAuthClient();
     if (!auth) return authError();
     
     const { supabase, user } = auth;
     const organizationId = user.organization_id;
 
-    // Parse body para obter storeId
     let storeId: string | null = null;
     try {
       const body = await request.json();
@@ -154,7 +154,6 @@ export async function POST(request: NextRequest) {
       // Body vazio
     }
 
-    // ✅ CORREÇÃO C: Exigir storeId (não pegar "primeira store")
     if (!storeId) {
       return NextResponse.json({ 
         success: false, 
@@ -162,7 +161,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // ✅ Validar ownership
     const validation = await validateStoreAccess(supabase, organizationId, storeId);
     if (!validation.valid) {
       return NextResponse.json(
@@ -171,7 +169,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar store (RLS já filtrou, mas pegamos dados)
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
       .select('id, shop_domain, access_token, shop_name, organization_id')
@@ -192,25 +189,22 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Fetch data from Shopify
     const orders = await fetchAllOrders(store.shop_domain, store.access_token);
     const customers = await fetchCustomers(store.shop_domain, store.access_token);
     const metrics = calculateMetrics(orders);
     
-    // Usar admin client para bulk operations (após validação)
     const supabaseAdmin = getSupabaseClient();
     if (!supabaseAdmin) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
     }
 
-    // Delete existing orders for this store
     await supabaseAdmin
       .from('shopify_orders')
       .delete()
       .eq('store_id', store.id);
 
-    // Insert orders with organization_id
     if (orders.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ordersToInsert = orders.map((order: any) => ({
         store_id: store.id,
         organization_id: organizationId,
@@ -249,7 +243,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update store with metrics
     await supabaseAdmin
       .from('shopify_stores')
       .update({
@@ -277,11 +270,12 @@ export async function POST(request: NextRequest) {
       }
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Sync] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
       success: false, 
-      error: error.message 
+      error: errorMessage 
     }, { status: 500 });
   }
 }
@@ -292,13 +286,11 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ CORREÇÃO B: Usar helper centralizado
     const auth = await getAuthClient();
     if (!auth) return authError();
 
     const { supabase } = auth;
 
-    // RLS filtra automaticamente
     const { data: stores } = await supabase
       .from('shopify_stores')
       .select('id, shop_name, shop_domain, total_orders, total_revenue, last_sync_at, metrics, is_active')
@@ -308,11 +300,12 @@ export async function GET(request: NextRequest) {
       success: true, 
       stores: stores || [],
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Sync GET] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
       success: false, 
-      error: error.message 
+      error: errorMessage 
     }, { status: 500 });
   }
 }

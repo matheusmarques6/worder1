@@ -174,9 +174,10 @@ export class ShopifyAPIClient {
     let pageCount = 0;
 
     while (nextUrl && pageCount < maxPages) {
-      const { data, nextPageUrl } = await this.fetchWithRateLimit<Record<string, T[]>>(nextUrl);
+      const currentUrl: string = nextUrl;
+      const result = await this.fetchWithRateLimit<Record<string, T[]>>(currentUrl);
       
-      const items = data[dataKey] || [];
+      const items = result.data[dataKey] || [];
       allItems.push(...items);
       
       pageCount++;
@@ -185,7 +186,7 @@ export class ShopifyAPIClient {
         onProgress(pageCount, allItems.length);
       }
 
-      nextUrl = nextPageUrl;
+      nextUrl = result.nextPageUrl;
     }
 
     return {

@@ -545,7 +545,7 @@ export async function runFullSync(
         items_created: 0,
         items_updated: result.ordersCount + result.customersCount + result.productsCount,
         items_failed: errors.length,
-        error_message: errors.length > 0 ? errors.join('; ') : null,
+        error_message: errors.length > 0 ? errors.join('; ') : undefined,
       });
     }
 
