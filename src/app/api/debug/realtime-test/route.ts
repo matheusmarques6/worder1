@@ -182,6 +182,7 @@ export async function GET(request: NextRequest) {
   const testMessage: Record<string, unknown> = {
     organization_id: organizationId,
     conversation_id: conv.id,
+    message_id: `test-${Date.now()}`,
     direction: 'inbound',
     message_type: 'text',
     content: `🧪 Teste Realtime - ${new Date().toLocaleTimeString('pt-BR')}`,
