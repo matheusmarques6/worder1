@@ -115,33 +115,36 @@ async function processMessage(body: any) {
   const instanceName = body.instance
   const data = body.data
 
+  console.log('[Webhook] Processing message for instance:', instanceName)
+
   // 1. Buscar instância - tentar múltiplas formas
   let instance = null
   
-  // Tentar por instance_name ou instance_id
-  const { data: instances1 } = await supabase
-    .from('whatsapp_instances')
-    .select('*')
-    .or(`instance_name.eq.${instanceName},instance_id.eq.${instanceName},unique_id.eq.${instanceName}`)
-    .limit(1)
-
-  instance = instances1?.[0]
-  
-  // Se não encontrou, tentar buscar qualquer instância conectada (para debug)
-  if (!instance) {
-    console.log('[Webhook] Instância não encontrada por nome:', instanceName)
-    
-    // Tentar por instance_name parcial
-    const { data: instances2 } = await supabase
+  // Primeiro: tentar por instance_name ou instance_id exato
+  if (instanceName) {
+    const { data: instances1 } = await supabase
       .from('whatsapp_instances')
       .select('*')
-      .or(`instance_name.ilike.%${instanceName}%,instance_id.ilike.%${instanceName}%`)
+      .or(`instance_name.eq.${instanceName},instance_id.eq.${instanceName},unique_id.eq.${instanceName}`)
       .limit(1)
+
+    instance = instances1?.[0]
+    
+    // Se não encontrou, tentar busca parcial
+    if (!instance) {
+      console.log('[Webhook] Instância não encontrada por nome exato:', instanceName)
       
-    instance = instances2?.[0]
+      const { data: instances2 } = await supabase
+        .from('whatsapp_instances')
+        .select('*')
+        .or(`instance_name.ilike.%${instanceName}%,unique_id.ilike.%${instanceName}%`)
+        .limit(1)
+        
+      instance = instances2?.[0]
+    }
   }
   
-  // Se ainda não encontrou, usar a primeira instância conectada
+  // Se ainda não encontrou, usar a primeira instância conectada (fallback importante!)
   if (!instance) {
     console.log('[Webhook] Tentando buscar qualquer instância conectada...')
     
@@ -154,24 +157,62 @@ async function processMessage(body: any) {
     instance = instances3?.[0]
   }
   
+  // Último fallback: qualquer instância
   if (!instance) {
-    console.log('[Webhook] ❌ Nenhuma instância encontrada para:', instanceName)
-    console.log('[Webhook] Buscando todas as instâncias...')
+    console.log('[Webhook] Tentando buscar qualquer instância...')
     
-    const { data: allInstances } = await supabase
+    const { data: instances4 } = await supabase
       .from('whatsapp_instances')
-      .select('instance_name, instance_id, unique_id, status')
-      .limit(10)
-    
-    console.log('[Webhook] Instâncias no banco:', allInstances)
+      .select('*')
+      .limit(1)
+      
+    instance = instances4?.[0]
+  }
+  
+  if (!instance) {
+    console.log('[Webhook] ❌ Nenhuma instância encontrada')
     return
   }
 
   console.log('[Webhook] ✅ Instância encontrada:', instance.instance_name || instance.unique_id, 'Org:', instance.organization_id)
 
   const orgId = instance.organization_id
-  const key = data?.key
-  const message = data?.message
+  
+  // =====================================================
+  // EXTRAIR DADOS - Suportar múltiplos formatos do Evolution
+  // =====================================================
+  
+  // Log para debug da estrutura
+  console.log('[Webhook] Data structure:', JSON.stringify({
+    hasData: !!data,
+    dataKeys: data ? Object.keys(data) : [],
+    hasKey: !!data?.key,
+    hasMessage: !!data?.message,
+    isArray: Array.isArray(data),
+  }))
+  
+  // Tentar extrair de diferentes estruturas do Evolution API
+  let messageData = data
+  
+  // Se data é um array (messages.upsert pode enviar array)
+  if (Array.isArray(data)) {
+    messageData = data[0]
+    console.log('[Webhook] Data is array, using first element')
+  }
+  
+  // Extrair key de múltiplas formas
+  const key = messageData?.key || 
+              messageData?.message?.key || 
+              body?.key ||
+              (messageData?.messages?.[0]?.key)
+  
+  // Extrair message de múltiplas formas
+  const message = messageData?.message?.message || 
+                  messageData?.message || 
+                  body?.message ||
+                  (messageData?.messages?.[0]?.message)
+  
+  console.log('[Webhook] Extracted key:', JSON.stringify(key))
 
   // Ignorar mensagens próprias
   if (key?.fromMe) {
@@ -179,21 +220,33 @@ async function processMessage(body: any) {
     return
   }
 
-  const remoteJid = key?.remoteJid
-  if (!remoteJid || remoteJid.includes('@g.us')) {
+  // Extrair remoteJid de múltiplas formas
+  const remoteJid = key?.remoteJid || 
+                    messageData?.remoteJid ||
+                    messageData?.from ||
+                    body?.sender?.replace('@s.whatsapp.net', '') + '@s.whatsapp.net' ||
+                    messageData?.chatId
+                    
+  console.log('[Webhook] Extracted remoteJid:', remoteJid)
+  
+  if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'undefined@s.whatsapp.net') {
     console.log('[Webhook] Ignorando grupo ou jid inválido:', remoteJid)
+    console.log('[Webhook] Full body for debug:', JSON.stringify(body).substring(0, 2000))
     return
   }
 
   const phoneNumber = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '')
-  const pushName = data?.pushName || phoneNumber
+  const pushName = messageData?.pushName || data?.pushName || body?.pushName || phoneNumber
 
-  // Extrair conteúdo
+  // Extrair conteúdo de múltiplas formas
   let content = message?.conversation || 
                 message?.extendedTextMessage?.text || 
                 message?.imageMessage?.caption ||
                 message?.videoMessage?.caption ||
+                messageData?.body ||
+                messageData?.text ||
                 data?.text ||
+                body?.text ||
                 '[Mídia]'
 
   let messageType = 'text'
@@ -423,7 +476,7 @@ export async function GET() {
     status: 'Webhook WhatsApp ativo',
     ai_enabled: true,
     queue_enabled: isQStashConfigured(),
-    version: '2.2-fixed',
+    version: '2.3-debug',
     features: ['message_processing', 'ai_agent_response', 'typing_indicator', 'durable_queue'],
     timestamp: new Date().toISOString(),
   })
