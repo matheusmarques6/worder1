@@ -369,9 +369,11 @@ async function processMessage(body: any) {
       message_id: messageId,
       direction: 'inbound',
       message_type: messageType,
-      content: content,
+      content: { text: content }, // JSONB - deve ser objeto
+      text_body: content, // Campo para texto simples
+      from_number: phoneNumber,
       status: 'received',
-      metadata: { pushName, remoteJid },
+      timestamp: new Date().toISOString(), // Obrigatório
     })
     .select()
     .single()
@@ -467,7 +469,7 @@ export async function GET() {
     status: 'Webhook WhatsApp ativo',
     ai_enabled: true,
     queue_enabled: isQStashConfigured(),
-    version: '2.5-simplified',
+    version: '2.6-schema-fix',
     features: ['message_processing', 'ai_agent_response', 'typing_indicator', 'durable_queue'],
     timestamp: new Date().toISOString(),
   })

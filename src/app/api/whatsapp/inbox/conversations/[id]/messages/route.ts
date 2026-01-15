@@ -31,12 +31,12 @@ export async function GET(
       conversation_id: msg.conversation_id,
       direction: msg.direction,
       message_type: msg.message_type || 'text',
-      content: msg.content,
+      content: typeof msg.content === 'object' ? (msg.content?.text || msg.text_body || JSON.stringify(msg.content)) : msg.content,
       media_url: msg.media_url,
-      media_filename: msg.metadata?.fileName,
+      media_filename: msg.media_filename,
       status: msg.status || 'sent',
-      sent_by_bot: msg.metadata?.ai_generated || false,
-      created_at: msg.created_at,
+      sent_by_bot: false,
+      created_at: msg.created_at || msg.timestamp,
     }))
 
     return NextResponse.json({ messages })
@@ -81,7 +81,7 @@ export async function POST(
     }
 
     console.log('[Send Message] Conversa encontrada, org:', conversation.organization_id)
-    console.log('[Send Message] Telefone destino:', conversation.phone_number)
+    console.log('[Send Message] Telefone destino:', conversation.contact_phone || conversation.phone_number)
 
     // Buscar instância ativa - QUALQUER instância conectada da organização
     const { data: instances, error: instError } = await supabase
@@ -118,23 +118,24 @@ export async function POST(
       }, { status: 400 })
     }
 
-    console.log('[Send Message] Instância encontrada:', instance.unique_id, 'Status:', instance.status)
+    console.log('[Send Message] Instância encontrada:', instance.instance_name || instance.unique_id, 'Status:', instance.status)
 
     // Enviar via Evolution API
     const apiUrl = instance.api_url || EVOLUTION_API_URL
     const apiKey = instance.api_key || EVOLUTION_API_KEY
+    const instanceName = instance.instance_name || instance.instance_id || instance.unique_id
 
     console.log('[Send Message] Enviando para Evolution API...')
-    console.log('[Send Message] URL:', `${apiUrl}/message/sendText/${instance.unique_id}`)
+    console.log('[Send Message] URL:', `${apiUrl}/message/sendText/${instanceName}`)
 
-    const sendResponse = await fetch(`${apiUrl}/message/sendText/${instance.unique_id}`, {
+    const sendResponse = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': apiKey,
       },
       body: JSON.stringify({
-        number: conversation.phone_number,
+        number: conversation.contact_phone || conversation.phone_number,
         text: content,
       }),
     })
@@ -149,18 +150,16 @@ export async function POST(
       .from('whatsapp_messages')
       .insert({
         organization_id: conversation.organization_id,
+        instance_id: conversation.instance_id,
         conversation_id: conversationId,
-        contact_id: conversation.contact_id,
+        message_id: sendData?.key?.id || `out-${Date.now()}`,
         direction: 'outbound',
         message_type,
-        content,
+        content: { text: content }, // JSONB
+        text_body: content,
+        to_number: conversation.contact_phone || conversation.phone_number,
         status: sendResponse.ok ? 'sent' : 'failed',
-        wamid: sendData?.key?.id,
-        wa_message_id: sendData?.key?.id,
-        metadata: { 
-          evolution_response: sendData,
-          send_error: !sendResponse.ok ? sendData : null,
-        },
+        timestamp: new Date().toISOString(),
       })
       .select()
       .single()
@@ -177,6 +176,8 @@ export async function POST(
       .update({
         last_message_at: new Date().toISOString(),
         last_message_preview: content.substring(0, 100),
+        last_message_direction: 'outbound',
+        updated_at: new Date().toISOString(),
       })
       .eq('id', conversationId)
 
