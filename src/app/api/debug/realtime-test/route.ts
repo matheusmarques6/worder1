@@ -103,9 +103,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Descobrir schema inserindo com campos mínimos obrigatórios
+    const testPhone = '5511999999999'
+    const testChatId = `${testPhone}@s.whatsapp.net`
+    
     const testConv = {
       organization_id: organizationId,
       instance_id: instance.id,
+      chat_id: testChatId,
       status: 'open'
     }
 
