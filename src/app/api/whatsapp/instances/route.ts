@@ -296,12 +296,15 @@ async function handleCreate(body: any) {
       title,
       unique_id: uniqueId,
       api_type: 'EVOLUTION',
-      api_url,
+      server_url: api_url,
       api_key,
       status: 'disconnected',
       online_status: 'unavailable',
       webhook_url: webhookUrl,
-      webhook_configured: webhookResult.success,
+      settings: { 
+        webhook_configured: webhookResult.success,
+        evolution_api_url: api_url,
+      },
     })
     .select()
     .single();
@@ -496,7 +499,7 @@ async function handleConfigureWebhook(body: any) {
   const webhookUrl = `${WEBHOOK_BASE_URL}/api/whatsapp/webhook`;
   
   const result = await configureEvolutionWebhook({
-    apiUrl: instance.api_url || EVOLUTION_API_URL,
+    apiUrl: instance.server_url || instance.api_url || EVOLUTION_API_URL,
     apiKey: instance.api_key || EVOLUTION_API_KEY,
     instanceName: instance.unique_id,
     webhookUrl,
@@ -535,7 +538,7 @@ async function handleCheckWebhook(body: any) {
   }
 
   const result = await checkEvolutionWebhook({
-    apiUrl: instance.api_url || EVOLUTION_API_URL,
+    apiUrl: instance.server_url || instance.api_url || EVOLUTION_API_URL,
     apiKey: instance.api_key || EVOLUTION_API_KEY,
     instanceName: instance.unique_id,
   });
@@ -647,7 +650,7 @@ async function checkEvolutionWebhook(params: { apiUrl: string; apiKey: string; i
 
 async function getEvolutionQR(instance: any) {
   try {
-    const apiUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiUrl = instance.server_url || instance.api_url || EVOLUTION_API_URL;
     const apiKey = instance.api_key || EVOLUTION_API_KEY;
     
     console.log(`📱 Getting QR for: ${instance.unique_id}`);
@@ -694,7 +697,7 @@ async function getEvolutionQR(instance: any) {
 
 async function getEvolutionStatus(instance: any) {
   try {
-    const apiUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiUrl = instance.server_url || instance.api_url || EVOLUTION_API_URL;
     const apiKey = instance.api_key || EVOLUTION_API_KEY;
     
     // 1. Verificar estado da conexão
@@ -749,7 +752,7 @@ async function getEvolutionStatus(instance: any) {
 
 async function connectEvolution(instance: any) {
   try {
-    const apiUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiUrl = instance.server_url || instance.api_url || EVOLUTION_API_URL;
     const apiKey = instance.api_key || EVOLUTION_API_KEY;
     
     const response = await fetch(`${apiUrl}/instance/connect/${instance.unique_id}`, {
@@ -767,7 +770,7 @@ async function connectEvolution(instance: any) {
 
 async function disconnectEvolution(instance: any) {
   try {
-    const apiUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiUrl = instance.server_url || instance.api_url || EVOLUTION_API_URL;
     const apiKey = instance.api_key || EVOLUTION_API_KEY;
     
     const response = await fetch(`${apiUrl}/instance/logout/${instance.unique_id}`, {
@@ -785,7 +788,7 @@ async function disconnectEvolution(instance: any) {
 
 async function deleteEvolutionInstance(instance: any) {
   try {
-    const apiUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiUrl = instance.server_url || instance.api_url || EVOLUTION_API_URL;
     const apiKey = instance.api_key || EVOLUTION_API_KEY;
     
     const response = await fetch(`${apiUrl}/instance/delete/${instance.unique_id}`, {
