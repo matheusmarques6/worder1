@@ -333,7 +333,7 @@ export default function InboxTab() {
   // =============================================
   // SUPABASE REALTIME
   // =============================================
-  const { isConnected: realtimeConnected } = useInboxRealtime({
+  const { isConnected: realtimeConnected, hasError: realtimeError, status: realtimeStatus } = useInboxRealtime({
     organizationId,
     conversationId: selectedConversation?.id || null,
     onNewMessage: handleNewMessage,
@@ -343,6 +343,34 @@ export default function InboxTab() {
     onInstanceUpdate: handleInstanceUpdate,
     enabled: !!organizationId
   })
+
+  // =============================================
+  // FALLBACK POLLING (quando Realtime falha)
+  // =============================================
+  useEffect(() => {
+    // Se realtime está funcionando, não precisa de polling
+    if (realtimeConnected && !realtimeError) {
+      console.log('[Polling] Realtime connected, skipping polling')
+      return
+    }
+
+    // Polling a cada 5s como fallback
+    console.log('[Polling] Starting fallback polling (realtime not connected)')
+    
+    const pollInterval = setInterval(() => {
+      console.log('[Polling] Fetching conversations silently...')
+      fetchConversations(true) // silent = true
+      
+      if (selectedConversation?.id) {
+        fetchMessages(selectedConversation.id, true) // silent = true
+      }
+    }, 5000)
+
+    return () => {
+      console.log('[Polling] Stopping fallback polling')
+      clearInterval(pollInterval)
+    }
+  }, [realtimeConnected, realtimeError, selectedConversation?.id])
 
   // =============================================
   // DATA FETCHING
@@ -710,10 +738,28 @@ export default function InboxTab() {
                   )}
                 </div>
               )}
-              {/* Realtime Status */}
-              {realtimeConnected && (
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Realtime conectado" />
-              )}
+              {/* Realtime Status Indicator */}
+              <div 
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-help ${
+                  realtimeConnected && !realtimeError
+                    ? 'bg-green-500/20 text-green-400'
+                    : realtimeError
+                    ? 'bg-red-500/20 text-red-400'
+                    : 'bg-yellow-500/20 text-yellow-400'
+                }`}
+                title={`Realtime: ${realtimeConnected ? 'Conectado' : 'Desconectado'}${realtimeError ? ' (com erros)' : ''}`}
+              >
+                <div className={`w-2 h-2 rounded-full ${
+                  realtimeConnected && !realtimeError
+                    ? 'bg-green-400 animate-pulse'
+                    : realtimeError
+                    ? 'bg-red-400'
+                    : 'bg-yellow-400 animate-pulse'
+                }`} />
+                <span className="hidden sm:inline">
+                  {realtimeConnected && !realtimeError ? 'Live' : realtimeError ? 'Erro' : 'Polling'}
+                </span>
+              </div>
             </div>
             <div className="flex gap-2">
               <button onClick={fetchConversations} disabled={conversationsLoading} className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors disabled:opacity-50">

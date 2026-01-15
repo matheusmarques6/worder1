@@ -1,13 +1,14 @@
 'use client'
 
 // =============================================
-// INBOX REALTIME HOOK
-// Hook simplificado para realtime no Inbox
+// INBOX REALTIME HOOK V2
+// Hook robusto para realtime no Inbox
 // Escuta mensagens, conversas e instâncias em tempo real
+// Inclui fallback polling e melhor diagnóstico
 // =============================================
 
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { RealtimeChannel } from '@supabase/supabase-js'
+import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { supabaseClient } from '@/lib/supabase-client'
 
 interface UseInboxRealtimeOptions {
@@ -20,6 +21,15 @@ interface UseInboxRealtimeOptions {
   onInstanceUpdate?: (instance: any) => void
   enabled?: boolean
 }
+
+interface RealtimeStatus {
+  conversations: 'disconnected' | 'connecting' | 'connected' | 'error'
+  messages: 'disconnected' | 'connecting' | 'connected' | 'error'
+  instances: 'disconnected' | 'connecting' | 'connected' | 'error'
+}
+
+// Gerar ID único para evitar conflitos de canal
+const generateChannelId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
 export function useInboxRealtime(options: UseInboxRealtimeOptions) {
   const {
@@ -34,9 +44,17 @@ export function useInboxRealtime(options: UseInboxRealtimeOptions) {
   } = options
 
   const [isConnected, setIsConnected] = useState(false)
+  const [status, setStatus] = useState<RealtimeStatus>({
+    conversations: 'disconnected',
+    messages: 'disconnected',
+    instances: 'disconnected'
+  })
+  const [lastEvent, setLastEvent] = useState<string | null>(null)
+  
   const conversationsChannelRef = useRef<RealtimeChannel | null>(null)
   const messagesChannelRef = useRef<RealtimeChannel | null>(null)
   const instancesChannelRef = useRef<RealtimeChannel | null>(null)
+  const channelIdRef = useRef<string>(generateChannelId())
 
   // =============================================
   // CONVERSATIONS REALTIME
@@ -44,10 +62,13 @@ export function useInboxRealtime(options: UseInboxRealtimeOptions) {
   useEffect(() => {
     if (!organizationId || !enabled) return
 
-    console.log('[Realtime] Subscribing to conversations for org:', organizationId)
+    const channelName = `inbox-conv-${organizationId}-${channelIdRef.current}`
+    console.log('[Realtime] 🔌 Subscribing to conversations:', channelName)
+    
+    setStatus(prev => ({ ...prev, conversations: 'connecting' }))
 
     const channel = supabaseClient
-      .channel(`inbox-conversations-${organizationId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -57,7 +78,8 @@ export function useInboxRealtime(options: UseInboxRealtimeOptions) {
           filter: `organization_id=eq.${organizationId}`
         },
         (payload) => {
-          console.log('[Realtime] New conversation:', payload.new)
+          console.log('[Realtime] ✅ New conversation:', payload.new)
+          setLastEvent(`new_conversation:${Date.now()}`)
           onNewConversation?.(payload.new)
         }
       )
@@ -70,20 +92,31 @@ export function useInboxRealtime(options: UseInboxRealtimeOptions) {
           filter: `organization_id=eq.${organizationId}`
         },
         (payload) => {
-          console.log('[Realtime] Conversation updated:', payload.new)
+          console.log('[Realtime] ✅ Conversation updated:', payload.new)
+          setLastEvent(`conv_update:${Date.now()}`)
           onConversationUpdate?.(payload.new)
         }
       )
-      .subscribe((status) => {
-        console.log('[Realtime] Conversations channel status:', status)
-        setIsConnected(status === 'SUBSCRIBED')
+      .subscribe((status, err) => {
+        console.log('[Realtime] Conversations channel status:', status, err ? `Error: ${err.message}` : '')
+        
+        if (status === 'SUBSCRIBED') {
+          setStatus(prev => ({ ...prev, conversations: 'connected' }))
+          setIsConnected(true)
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setStatus(prev => ({ ...prev, conversations: 'error' }))
+          console.error('[Realtime] ❌ Conversations channel error:', err)
+        } else if (status === 'CLOSED') {
+          setStatus(prev => ({ ...prev, conversations: 'disconnected' }))
+        }
       })
 
     conversationsChannelRef.current = channel
 
     return () => {
-      console.log('[Realtime] Unsubscribing from conversations')
+      console.log('[Realtime] 🔌 Unsubscribing from conversations:', channelName)
       channel.unsubscribe()
+      conversationsChannelRef.current = null
     }
   }, [organizationId, enabled, onNewConversation, onConversationUpdate])
 
@@ -93,17 +126,21 @@ export function useInboxRealtime(options: UseInboxRealtimeOptions) {
   useEffect(() => {
     if (!conversationId || !enabled) {
       if (messagesChannelRef.current) {
-        console.log('[Realtime] Unsubscribing from messages (no conversation)')
+        console.log('[Realtime] 🔌 Unsubscribing from messages (no conversation)')
         messagesChannelRef.current.unsubscribe()
         messagesChannelRef.current = null
+        setStatus(prev => ({ ...prev, messages: 'disconnected' }))
       }
       return
     }
 
-    console.log('[Realtime] Subscribing to messages for conversation:', conversationId)
+    const channelName = `inbox-msg-${conversationId}-${channelIdRef.current}`
+    console.log('[Realtime] 🔌 Subscribing to messages:', channelName)
+    
+    setStatus(prev => ({ ...prev, messages: 'connecting' }))
 
     const channel = supabaseClient
-      .channel(`inbox-messages-${conversationId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -113,7 +150,8 @@ export function useInboxRealtime(options: UseInboxRealtimeOptions) {
           filter: `conversation_id=eq.${conversationId}`
         },
         (payload) => {
-          console.log('[Realtime] New message:', payload.new)
+          console.log('[Realtime] ✅ New message:', payload.new)
+          setLastEvent(`new_message:${Date.now()}`)
           onNewMessage?.(payload.new)
           
           // Play notification sound for incoming messages
@@ -131,19 +169,30 @@ export function useInboxRealtime(options: UseInboxRealtimeOptions) {
           filter: `conversation_id=eq.${conversationId}`
         },
         (payload) => {
-          console.log('[Realtime] Message updated:', payload.new)
+          console.log('[Realtime] ✅ Message updated:', payload.new)
+          setLastEvent(`msg_update:${Date.now()}`)
           onMessageUpdate?.(payload.new)
         }
       )
-      .subscribe((status) => {
-        console.log('[Realtime] Messages channel status:', status)
+      .subscribe((status, err) => {
+        console.log('[Realtime] Messages channel status:', status, err ? `Error: ${err.message}` : '')
+        
+        if (status === 'SUBSCRIBED') {
+          setStatus(prev => ({ ...prev, messages: 'connected' }))
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setStatus(prev => ({ ...prev, messages: 'error' }))
+          console.error('[Realtime] ❌ Messages channel error:', err)
+        } else if (status === 'CLOSED') {
+          setStatus(prev => ({ ...prev, messages: 'disconnected' }))
+        }
       })
 
     messagesChannelRef.current = channel
 
     return () => {
-      console.log('[Realtime] Unsubscribing from messages')
+      console.log('[Realtime] 🔌 Unsubscribing from messages:', channelName)
       channel.unsubscribe()
+      messagesChannelRef.current = null
     }
   }, [conversationId, enabled, onNewMessage, onMessageUpdate])
 
@@ -153,10 +202,13 @@ export function useInboxRealtime(options: UseInboxRealtimeOptions) {
   useEffect(() => {
     if (!organizationId || !enabled) return
 
-    console.log('[Realtime] Subscribing to instances for org:', organizationId)
+    const channelName = `inbox-inst-${organizationId}-${channelIdRef.current}`
+    console.log('[Realtime] 🔌 Subscribing to instances:', channelName)
+    
+    setStatus(prev => ({ ...prev, instances: 'connecting' }))
 
     const channel = supabaseClient
-      .channel(`inbox-instances-${organizationId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -166,24 +218,50 @@ export function useInboxRealtime(options: UseInboxRealtimeOptions) {
           filter: `organization_id=eq.${organizationId}`
         },
         (payload) => {
-          console.log('[Realtime] Instance update:', payload)
+          console.log('[Realtime] ✅ Instance update:', payload.eventType, payload.new)
+          setLastEvent(`instance_update:${Date.now()}`)
           onInstanceUpdate?.(payload.new)
         }
       )
-      .subscribe((status) => {
-        console.log('[Realtime] Instances channel status:', status)
+      .subscribe((status, err) => {
+        console.log('[Realtime] Instances channel status:', status, err ? `Error: ${err.message}` : '')
+        
+        if (status === 'SUBSCRIBED') {
+          setStatus(prev => ({ ...prev, instances: 'connected' }))
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setStatus(prev => ({ ...prev, instances: 'error' }))
+          console.error('[Realtime] ❌ Instances channel error:', err)
+        } else if (status === 'CLOSED') {
+          setStatus(prev => ({ ...prev, instances: 'disconnected' }))
+        }
       })
 
     instancesChannelRef.current = channel
 
     return () => {
-      console.log('[Realtime] Unsubscribing from instances')
+      console.log('[Realtime] 🔌 Unsubscribing from instances:', channelName)
       channel.unsubscribe()
+      instancesChannelRef.current = null
     }
   }, [organizationId, enabled, onInstanceUpdate])
 
+  // =============================================
+  // CALCULATE OVERALL CONNECTION STATUS
+  // =============================================
+  const isFullyConnected = status.conversations === 'connected' && 
+                           status.instances === 'connected' &&
+                           (conversationId ? status.messages === 'connected' : true)
+
+  const hasAnyError = status.conversations === 'error' || 
+                      status.messages === 'error' || 
+                      status.instances === 'error'
+
   return {
-    isConnected
+    isConnected,
+    isFullyConnected,
+    hasError: hasAnyError,
+    status,
+    lastEvent
   }
 }
 
