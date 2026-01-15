@@ -34,69 +34,71 @@ export async function GET(request: NextRequest) {
     })
   }
 
+  // Verificar se tem instância WhatsApp
+  const { data: instance } = await supabaseAdmin
+    .from('whatsapp_instances')
+    .select('id, instance_name, status')
+    .eq('organization_id', organizationId)
+    .limit(1)
+    .single()
+
   // Com organizationId - listar conversas
   const { data: conversations, error: convError } = await supabaseAdmin
     .from('whatsapp_conversations')
-    .select('id, phone_number, contact_name, last_message_at')
+    .select('id, remote_jid, push_name, chat_id, last_message_at, instance_id')
     .eq('organization_id', organizationId)
-    .order('last_message_at', { ascending: false })
+    .order('last_message_at', { ascending: false, nullsFirst: false })
     .limit(20)
 
   if (convError) {
-    return NextResponse.json({ error: convError.message }, { status: 500 })
+    return NextResponse.json({ 
+      error: convError.message,
+      hint: 'Erro ao buscar conversas',
+      instance: instance
+    }, { status: 500 })
   }
 
   // Se não tem conversas e pediu para criar
   if ((!conversations || conversations.length === 0) && createTest) {
-    // Buscar ou criar um contato de teste
+    if (!instance) {
+      return NextResponse.json({
+        error: 'Nenhuma instância WhatsApp encontrada para esta organização',
+        hint: 'Primeiro conecte uma instância WhatsApp',
+        organizationId
+      }, { status: 400 })
+    }
+
     const testPhone = '5511999999999'
+    const testJid = `${testPhone}@s.whatsapp.net`
     
-    let { data: contact } = await supabaseAdmin
-      .from('whatsapp_contacts')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('phone_number', testPhone)
+    // Criar conversa de teste
+    const { data: newConv, error: newConvError } = await supabaseAdmin
+      .from('whatsapp_conversations')
+      .insert({
+        organization_id: organizationId,
+        instance_id: instance.id,
+        chat_id: testJid,
+        remote_jid: testJid,
+        push_name: 'Contato Teste Debug',
+        status: 'open',
+        last_message_at: new Date().toISOString(),
+        last_message_preview: 'Conversa de teste criada'
+      })
+      .select()
       .single()
 
-    if (!contact) {
-      const { data: newContact } = await supabaseAdmin
-        .from('whatsapp_contacts')
-        .insert({
-          organization_id: organizationId,
-          phone_number: testPhone,
-          name: 'Contato Teste Debug',
-          metadata: { test: true }
-        })
-        .select()
-        .single()
-      contact = newContact
+    if (newConvError) {
+      return NextResponse.json({ 
+        error: 'Erro ao criar conversa: ' + newConvError.message,
+        details: newConvError
+      }, { status: 500 })
     }
 
-    if (contact) {
-      // Criar conversa de teste
-      const { data: newConv, error: newConvError } = await supabaseAdmin
-        .from('whatsapp_conversations')
-        .insert({
-          organization_id: organizationId,
-          contact_id: contact.id,
-          phone_number: testPhone,
-          contact_name: 'Contato Teste Debug',
-          status: 'active',
-          last_message_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
-      if (newConvError) {
-        return NextResponse.json({ error: 'Erro ao criar conversa: ' + newConvError.message }, { status: 500 })
-      }
-
-      return NextResponse.json({
-        message: 'Conversa de teste criada!',
-        conversation: newConv,
-        next_step: `Agora acesse: /api/debug/realtime-test?organizationId=${organizationId}&conversationId=${newConv.id}`
-      })
-    }
+    return NextResponse.json({
+      message: 'Conversa de teste criada!',
+      conversation: newConv,
+      next_step: `Agora acesse: /api/debug/realtime-test?organizationId=${organizationId}&conversationId=${newConv.id}`
+    })
   }
 
   // Se não tem conversas
@@ -104,8 +106,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       error: 'No conversations found for this organization',
       organizationId,
-      hint: 'Adicione ?create=true para criar uma conversa de teste',
-      create_url: `/api/debug/realtime-test?organizationId=${organizationId}&create=true`
+      instance: instance,
+      hint: instance 
+        ? 'Adicione ?create=true para criar uma conversa de teste'
+        : 'Primeiro conecte uma instância WhatsApp',
+      create_url: instance ? `/api/debug/realtime-test?organizationId=${organizationId}&create=true` : null
     }, { status: 404 })
   }
 
@@ -114,37 +119,35 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       message: 'Escolha uma conversa para testar',
       organizationId,
+      instance: instance,
       conversations: conversations.map(c => ({
         id: c.id,
-        phone: c.phone_number,
-        name: c.contact_name,
+        remote_jid: c.remote_jid,
+        name: c.push_name,
+        last_message_at: c.last_message_at,
         test_url: `/api/debug/realtime-test?organizationId=${organizationId}&conversationId=${c.id}`
       }))
     })
   }
 
   // Se passou conversationId, buscar a conversa
-  let targetConversationId = conversationId
-  let targetContactId = null
-
   const { data: conv } = await supabaseAdmin
     .from('whatsapp_conversations')
-    .select('id, contact_id')
+    .select('id, instance_id, contact_id, remote_jid')
     .eq('id', conversationId)
     .single()
 
   if (!conv) {
     return NextResponse.json({ error: 'Conversation not found', conversationId }, { status: 404 })
   }
-  
-  targetConversationId = conv.id
-  targetContactId = conv.contact_id
 
   // Inserir mensagem de teste
   const testMessage = {
     organization_id: organizationId,
-    conversation_id: targetConversationId,
-    contact_id: targetContactId,
+    conversation_id: conv.id,
+    instance_id: conv.instance_id,
+    contact_id: conv.contact_id,
+    remote_jid: conv.remote_jid,
     direction: 'inbound',
     message_type: 'text',
     content: `🧪 Teste Realtime - ${new Date().toLocaleTimeString('pt-BR')}`,
@@ -163,7 +166,7 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error('[Debug] Error inserting message:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message, details: error }, { status: 500 })
   }
 
   // Também atualizar a conversa para disparar o evento de update
@@ -174,14 +177,14 @@ export async function GET(request: NextRequest) {
       last_message_preview: testMessage.content,
       unread_count: 1
     })
-    .eq('id', targetConversationId)
+    .eq('id', conv.id)
 
   return NextResponse.json({
     success: true,
     message: 'Test message inserted! Check if Realtime received it.',
     data: {
       messageId: message.id,
-      conversationId: targetConversationId,
+      conversationId: conv.id,
       content: testMessage.content
     }
   })
