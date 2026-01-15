@@ -57,11 +57,11 @@ async function processConnectionUpdate(body: any) {
   const state = data?.state || data?.instance?.state
   console.log('[Webhook] Connection state:', state, 'for instance:', instanceName)
   
-  // Buscar e atualizar instância
+  // Buscar e atualizar instância - tentar múltiplas formas
   const { data: instance } = await supabase
     .from('whatsapp_instances')
     .select('id')
-    .eq('unique_id', instanceName)
+    .or(`instance_name.eq.${instanceName},instance_id.eq.${instanceName},unique_id.eq.${instanceName}`)
     .single()
     
   if (instance) {
@@ -72,13 +72,15 @@ async function processConnectionUpdate(body: any) {
       .from('whatsapp_instances')
       .update({
         status: newStatus,
-        online_status: state === 'open' ? 'available' : 'unavailable',
         phone_number: data?.instance?.phoneNumber || data?.instance?.wuid?.split('@')[0],
+        qr_code: state === 'open' ? null : undefined,
         updated_at: new Date().toISOString()
       })
       .eq('id', instance.id)
       
     console.log('[Webhook] Instance status updated to:', newStatus)
+  } else {
+    console.log('[Webhook] Instance not found for connection update:', instanceName)
   }
 }
 
@@ -92,16 +94,20 @@ async function processQRCode(body: any) {
   const qrcode = data?.qrcode?.base64 || data?.base64
   
   if (qrcode) {
-    await supabase
+    const { error } = await supabase
       .from('whatsapp_instances')
       .update({
-        status: 'generating',
+        status: 'qr_pending',
         qr_code: qrcode,
         updated_at: new Date().toISOString()
       })
-      .eq('unique_id', instanceName)
+      .or(`instance_name.eq.${instanceName},instance_id.eq.${instanceName},unique_id.eq.${instanceName}`)
       
-    console.log('[Webhook] QR Code updated for:', instanceName)
+    if (!error) {
+      console.log('[Webhook] QR Code updated for:', instanceName)
+    } else {
+      console.error('[Webhook] Error updating QR Code:', error)
+    }
   }
 }
 
@@ -112,27 +118,40 @@ async function processMessage(body: any) {
   // 1. Buscar instância - tentar múltiplas formas
   let instance = null
   
-  // Tentar por unique_id
+  // Tentar por instance_name ou instance_id
   const { data: instances1 } = await supabase
     .from('whatsapp_instances')
     .select('*')
-    .eq('unique_id', instanceName)
+    .or(`instance_name.eq.${instanceName},instance_id.eq.${instanceName},unique_id.eq.${instanceName}`)
     .limit(1)
 
   instance = instances1?.[0]
   
   // Se não encontrou, tentar buscar qualquer instância conectada (para debug)
   if (!instance) {
-    console.log('[Webhook] Instância não encontrada por unique_id:', instanceName)
+    console.log('[Webhook] Instância não encontrada por nome:', instanceName)
     
     // Tentar por instance_name parcial
     const { data: instances2 } = await supabase
       .from('whatsapp_instances')
       .select('*')
-      .ilike('unique_id', `%${instanceName}%`)
+      .or(`instance_name.ilike.%${instanceName}%,instance_id.ilike.%${instanceName}%`)
       .limit(1)
       
     instance = instances2?.[0]
+  }
+  
+  // Se ainda não encontrou, usar a primeira instância conectada
+  if (!instance) {
+    console.log('[Webhook] Tentando buscar qualquer instância conectada...')
+    
+    const { data: instances3 } = await supabase
+      .from('whatsapp_instances')
+      .select('*')
+      .eq('status', 'connected')
+      .limit(1)
+      
+    instance = instances3?.[0]
   }
   
   if (!instance) {
@@ -141,14 +160,14 @@ async function processMessage(body: any) {
     
     const { data: allInstances } = await supabase
       .from('whatsapp_instances')
-      .select('unique_id, status')
+      .select('instance_name, instance_id, unique_id, status')
       .limit(10)
     
-    console.log('[Webhook] Instâncias no banco:', allInstances?.map(i => i.unique_id))
+    console.log('[Webhook] Instâncias no banco:', allInstances)
     return
   }
 
-  console.log('[Webhook] ✅ Instância encontrada:', instance.unique_id, 'Org:', instance.organization_id)
+  console.log('[Webhook] ✅ Instância encontrada:', instance.instance_name || instance.unique_id, 'Org:', instance.organization_id)
 
   const orgId = instance.organization_id
   const key = data?.key
@@ -225,12 +244,13 @@ async function processMessage(body: any) {
 
   if (!contact) return
 
-  // 3. Buscar conversa EXISTENTE por phone_number (NÃO por contact_id)
+  // 3. Buscar conversa EXISTENTE por chat_id (remoteJid)
+  const chatId = remoteJid
   const { data: existingConversations } = await supabase
     .from('whatsapp_conversations')
     .select('*')
     .eq('organization_id', orgId)
-    .eq('phone_number', phoneNumber)
+    .eq('chat_id', chatId)
     .order('created_at', { ascending: false })
     .limit(1)
 
@@ -238,21 +258,27 @@ async function processMessage(body: any) {
 
   if (!conversation) {
     // Criar nova conversa APENAS se não existe
-    const { data: newConv } = await supabase
+    const { data: newConv, error: convError } = await supabase
       .from('whatsapp_conversations')
       .insert({
         organization_id: orgId,
-        contact_id: contact.id,
-        phone_number: phoneNumber,
+        instance_id: instance.id,
+        chat_id: chatId,
+        contact_phone: phoneNumber,
+        contact_name: pushName,
         status: 'open',
-        is_bot_active: false,
-        ai_enabled: true, // Habilitar IA por padrão
         last_message_at: new Date().toISOString(),
         last_message_preview: content.substring(0, 100),
+        last_message_direction: 'inbound',
         unread_count: 1,
       })
       .select()
       .single()
+    
+    if (convError) {
+      console.error('[Webhook] Erro ao criar conversa:', convError)
+      return
+    }
     conversation = newConv
     console.log('[Webhook] Nova conversa criada:', conversation?.id)
   } else {
@@ -262,10 +288,13 @@ async function processMessage(body: any) {
       .from('whatsapp_conversations')
       .update({
         status: 'open',
+        contact_name: pushName,
         last_message_at: new Date().toISOString(),
         last_message_preview: content.substring(0, 100),
+        last_message_direction: 'inbound',
+        last_customer_message_at: new Date().toISOString(),
         unread_count: (conversation.unread_count || 0) + 1,
-        contact_id: contact.id,
+        updated_at: new Date().toISOString(),
       })
       .eq('id', conversation.id)
   }
@@ -273,40 +302,41 @@ async function processMessage(body: any) {
   if (!conversation) return
 
   // 4. Verificar se mensagem já existe (evitar duplicação)
-  const messageId = key?.id
-  if (messageId) {
-    const { data: existingMsg } = await supabase
-      .from('whatsapp_messages')
-      .select('id')
-      .eq('wamid', messageId)
-      .limit(1)
+  const messageId = key?.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  
+  const { data: existingMsg } = await supabase
+    .from('whatsapp_messages')
+    .select('id')
+    .eq('message_id', messageId)
+    .limit(1)
 
-    if (existingMsg && existingMsg.length > 0) {
-      console.log('[Webhook] Mensagem já existe, ignorando:', messageId)
-      return
-    }
+  if (existingMsg && existingMsg.length > 0) {
+    console.log('[Webhook] Mensagem já existe, ignorando:', messageId)
+    return
   }
 
   // 5. Salvar mensagem
-  const { error: msgError } = await supabase
+  const { data: savedMsg, error: msgError } = await supabase
     .from('whatsapp_messages')
     .insert({
       organization_id: orgId,
+      instance_id: instance.id,
       conversation_id: conversation.id,
-      contact_id: contact.id,
-      wamid: key?.id,
-      wa_message_id: key?.id,
+      message_id: messageId,
       direction: 'inbound',
       message_type: messageType,
       content: content,
       status: 'received',
-      metadata: { pushName },
+      metadata: { pushName, remoteJid },
     })
+    .select()
+    .single()
 
   if (msgError) {
     console.error('[Webhook] Erro ao salvar mensagem:', msgError)
+    return
   } else {
-    console.log('[Webhook] Mensagem salva com sucesso')
+    console.log('[Webhook] ✅ Mensagem salva:', savedMsg?.id, '| Conversa:', conversation.id)
   }
 
   // =====================================================
@@ -393,7 +423,7 @@ export async function GET() {
     status: 'Webhook WhatsApp ativo',
     ai_enabled: true,
     queue_enabled: isQStashConfigured(),
-    version: '2.1',
+    version: '2.2-fixed',
     features: ['message_processing', 'ai_agent_response', 'typing_indicator', 'durable_queue'],
     timestamp: new Date().toISOString(),
   })
