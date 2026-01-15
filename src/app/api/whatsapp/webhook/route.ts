@@ -191,6 +191,22 @@ async function processMessage(body: any) {
     isArray: Array.isArray(data),
   }))
   
+  // IMPORTANTE: Verificar se é uma mensagem real ou apenas status update
+  // Status updates têm: keyId, remoteJid, fromMe, status, instanceId, messageId (sem key e message)
+  // Mensagens reais têm: key, pushName, status, message, messageType, messageTimestamp
+  
+  if (!data?.key && !data?.message && data?.status) {
+    // É um status update (delivered, read, etc.), não uma mensagem nova
+    console.log('[Webhook] ⏭️ Ignorando status update:', data?.status)
+    return
+  }
+  
+  // Verificar se tem os campos necessários para uma mensagem
+  if (!data?.key && !data?.message) {
+    console.log('[Webhook] ⏭️ Ignorando evento sem key/message')
+    return
+  }
+  
   // Tentar extrair de diferentes estruturas do Evolution API
   let messageData = data
   
@@ -200,56 +216,57 @@ async function processMessage(body: any) {
     console.log('[Webhook] Data is array, using first element')
   }
   
-  // Extrair key de múltiplas formas
-  const key = messageData?.key || 
-              messageData?.message?.key || 
-              body?.key ||
-              (messageData?.messages?.[0]?.key)
+  // Extrair key
+  const key = messageData?.key || body?.key
   
-  // Extrair message de múltiplas formas
-  const message = messageData?.message?.message || 
-                  messageData?.message || 
-                  body?.message ||
-                  (messageData?.messages?.[0]?.message)
+  // Extrair message
+  const message = messageData?.message || body?.message
   
   console.log('[Webhook] Extracted key:', JSON.stringify(key))
 
   // Ignorar mensagens próprias
   if (key?.fromMe) {
-    console.log('[Webhook] Ignorando mensagem própria')
+    console.log('[Webhook] ⏭️ Ignorando mensagem própria')
     return
   }
 
-  // Extrair remoteJid de múltiplas formas
-  const remoteJid = key?.remoteJid || 
-                    messageData?.remoteJid ||
-                    messageData?.from ||
-                    body?.sender?.replace('@s.whatsapp.net', '') + '@s.whatsapp.net' ||
-                    messageData?.chatId
+  // Extrair remoteJid
+  const remoteJid = key?.remoteJid || key?.remoteJidAlt
                     
   console.log('[Webhook] Extracted remoteJid:', remoteJid)
   
-  if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'undefined@s.whatsapp.net') {
-    console.log('[Webhook] Ignorando grupo ou jid inválido:', remoteJid)
-    console.log('[Webhook] Full body for debug:', JSON.stringify(body).substring(0, 2000))
+  if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('@lid')) {
+    console.log('[Webhook] ⏭️ Ignorando grupo ou lid:', remoteJid)
     return
   }
 
   const phoneNumber = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '')
   const pushName = messageData?.pushName || data?.pushName || body?.pushName || phoneNumber
 
-  // Extrair conteúdo de múltiplas formas
+  // Extrair conteúdo da mensagem
   let content = message?.conversation || 
                 message?.extendedTextMessage?.text || 
                 message?.imageMessage?.caption ||
                 message?.videoMessage?.caption ||
                 messageData?.body ||
-                messageData?.text ||
-                data?.text ||
-                body?.text ||
-                '[Mídia]'
+                ''
+                
+  // Se não tem conteúdo, verificar tipo de mídia
+  if (!content) {
+    if (message?.imageMessage) content = '[Imagem]'
+    else if (message?.audioMessage) content = '[Áudio]'
+    else if (message?.videoMessage) content = '[Vídeo]'
+    else if (message?.documentMessage) content = message?.documentMessage?.fileName || '[Documento]'
+    else if (message?.stickerMessage) content = '[Sticker]'
+    else if (message?.locationMessage) content = '[Localização]'
+    else if (message?.contactMessage) content = '[Contato]'
+    else content = '[Mídia]'
+  }
+  
+  console.log('[Webhook] 📩 Mensagem de:', phoneNumber, '| Nome:', pushName, '| Conteúdo:', content?.substring(0, 50))
 
-  let messageType = 'text'
+  // Determinar tipo de mensagem
+  let messageType = messageData?.messageType || 'text'
   if (message?.imageMessage) messageType = 'image'
   if (message?.audioMessage) messageType = 'audio'
   if (message?.videoMessage) messageType = 'video'
@@ -258,7 +275,7 @@ async function processMessage(body: any) {
   if (message?.locationMessage) messageType = 'location'
   if (message?.contactMessage) messageType = 'contact'
 
-  console.log('[Webhook] 📩 Mensagem de:', phoneNumber, '-', content?.substring(0, 50))
+  console.log('[Webhook] 📩 Tipo:', messageType)
 
   // 2. Buscar contato EXISTENTE por phone_number
   const { data: existingContacts } = await supabase
@@ -476,7 +493,7 @@ export async function GET() {
     status: 'Webhook WhatsApp ativo',
     ai_enabled: true,
     queue_enabled: isQStashConfigured(),
-    version: '2.3-debug',
+    version: '2.4-fixed',
     features: ['message_processing', 'ai_agent_response', 'typing_indicator', 'durable_queue'],
     timestamp: new Date().toISOString(),
   })
