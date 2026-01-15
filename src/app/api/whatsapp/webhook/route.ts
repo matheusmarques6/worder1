@@ -396,9 +396,9 @@ async function processMessage(body: any) {
   const aiParams = {
     organizationId: orgId,
     conversationId: conversation.id,
-    contactId: null as string | null,
+    contactId: '', // Não temos contato separado, usar string vazia
     instanceId: instance.id,
-    instanceName: instance.unique_id || instance.instance_name,
+    instanceName: instance.unique_id || instance.instance_name || '',
     phoneNumber: phoneNumber,
     message: content,
     messageId: key?.id,
@@ -434,7 +434,7 @@ async function processMessage(body: any) {
 async function processWithAI(params: {
   organizationId: string
   conversationId: string
-  contactId: string | null
+  contactId: string
   instanceId: string
   instanceName: string
   phoneNumber: string
