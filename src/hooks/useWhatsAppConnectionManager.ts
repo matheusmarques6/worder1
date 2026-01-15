@@ -148,11 +148,37 @@ export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnec
     fetchInstances()
   }, [organizationId])
 
+  // Auto-refresh instances quando status muda (polling a cada 5s quando conectando)
+  const statusPollingRef = useRef<NodeJS.Timeout | null>(null)
+  
+  useEffect(() => {
+    // Limpar polling anterior
+    if (statusPollingRef.current) {
+      clearInterval(statusPollingRef.current)
+      statusPollingRef.current = null
+    }
+    
+    // Se estiver conectando ou gerando QR, fazer polling mais frequente
+    if (connectionStatus === 'connecting' || connectionStatus === 'generating') {
+      console.log('[WhatsAppConnection] Starting status polling (connecting/generating)...')
+      statusPollingRef.current = setInterval(() => {
+        fetchInstances()
+      }, 3000) // A cada 3 segundos enquanto conecta
+    }
+    
+    return () => {
+      if (statusPollingRef.current) {
+        clearInterval(statusPollingRef.current)
+      }
+    }
+  }, [connectionStatus, fetchInstances])
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current)
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (statusPollingRef.current) clearInterval(statusPollingRef.current)
     }
   }, [])
 

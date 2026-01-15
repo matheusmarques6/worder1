@@ -71,6 +71,15 @@ export default function WhatsAppConnectionManager({
             onSelectInstance(activeInstance)
           }
         }
+        
+        // Se a instância selecionada mudou de status, atualizar
+        if (selectedInstance) {
+          const updated = data.instances.find((i: WhatsAppInstance) => i.id === selectedInstance.id)
+          if (updated && updated.status !== selectedInstance.status) {
+            console.log('[ConnectionManager] Instance status changed:', updated.status)
+            onSelectInstance(updated)
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching instances:', error)
@@ -84,6 +93,17 @@ export default function WhatsAppConnectionManager({
       fetchInstances()
     }
   }, [organizationId])
+  
+  // Auto-refresh a cada 5 segundos para manter status atualizado
+  useEffect(() => {
+    if (!organizationId) return
+    
+    const interval = setInterval(() => {
+      fetchInstances()
+    }, 5000)
+    
+    return () => clearInterval(interval)
+  }, [organizationId, selectedInstance])
 
   // =============================================
   // ACTIONS

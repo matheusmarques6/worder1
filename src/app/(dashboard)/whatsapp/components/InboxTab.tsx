@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '@/stores'
 import {
@@ -42,6 +42,9 @@ import {
 import WhatsAppConnectionManager from '@/components/whatsapp/inbox/WhatsAppConnectionManager'
 import WhatsAppConnectUnified from '@/components/whatsapp/WhatsAppConnectUnified'
 import { useWhatsAppConnection, type WhatsAppInstance } from '@/hooks/useWhatsAppConnectionManager'
+
+// Realtime hook
+import { useInboxRealtime } from '@/hooks/useInboxRealtime'
 
 // Types
 interface InboxContact {
@@ -232,10 +235,11 @@ export default function InboxTab() {
     }
   }
 
-  const handleConnectionSuccess = (instance: any) => {
+  const handleConnectionSuccess = useCallback((instance: any) => {
+    console.log('[Connection] Success! Refreshing instances...')
     fetchInstances()
     setShowConnectModal(false)
-  }
+  }, [fetchInstances])
 
   // State
   const [conversations, setConversations] = useState<InboxConversation[]>([])
@@ -267,9 +271,85 @@ export default function InboxTab() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
+  // =============================================
+  // REALTIME HANDLERS
+  // =============================================
+  
+  const handleNewMessage = useCallback((message: InboxMessage) => {
+    console.log('[Realtime] New message received:', message.id)
+    
+    // Adicionar mensagem se for da conversa selecionada
+    if (selectedConversation && message.conversation_id === selectedConversation.id) {
+      setMessages(prev => {
+        // Evitar duplicatas
+        if (prev.find(m => m.id === message.id)) return prev
+        return [...prev, message]
+      })
+    }
+    
+    // Atualizar lista de conversas
+    setConversations(prev => prev.map(conv => {
+      if (conv.id === message.conversation_id) {
+        return {
+          ...conv,
+          last_message_at: message.created_at,
+          last_message_preview: message.content || '[Mídia]',
+          unread_count: selectedConversation?.id === conv.id ? 0 : conv.unread_count + 1
+        }
+      }
+      return conv
+    }))
+  }, [selectedConversation])
+
+  const handleMessageUpdate = useCallback((message: InboxMessage) => {
+    console.log('[Realtime] Message updated:', message.id)
+    setMessages(prev => prev.map(m => m.id === message.id ? message : m))
+  }, [])
+
+  const handleConversationUpdate = useCallback((conversation: InboxConversation) => {
+    console.log('[Realtime] Conversation updated:', conversation.id)
+    setConversations(prev => prev.map(c => c.id === conversation.id ? { ...c, ...conversation } : c))
+    
+    // Atualizar selecionada se for a mesma
+    if (selectedConversation?.id === conversation.id) {
+      setSelectedConversation(prev => prev ? { ...prev, ...conversation } : null)
+    }
+  }, [selectedConversation])
+
+  const handleNewConversation = useCallback((conversation: InboxConversation) => {
+    console.log('[Realtime] New conversation:', conversation.id)
+    setConversations(prev => {
+      if (prev.find(c => c.id === conversation.id)) return prev
+      return [conversation, ...prev]
+    })
+  }, [])
+
+  const handleInstanceUpdate = useCallback((instance: WhatsAppInstance) => {
+    console.log('[Realtime] Instance updated:', instance)
+    // Atualizar a lista de instâncias quando houver mudança de status
+    fetchInstances()
+  }, [fetchInstances])
+
+  // =============================================
+  // SUPABASE REALTIME
+  // =============================================
+  const { isConnected: realtimeConnected } = useInboxRealtime({
+    organizationId,
+    conversationId: selectedConversation?.id || null,
+    onNewMessage: handleNewMessage,
+    onMessageUpdate: handleMessageUpdate,
+    onConversationUpdate: handleConversationUpdate,
+    onNewConversation: handleNewConversation,
+    onInstanceUpdate: handleInstanceUpdate,
+    enabled: !!organizationId
+  })
+
+  // =============================================
+  // DATA FETCHING
+  // =============================================
+
   // Fetch conversations
   const fetchConversations = async (silent?: boolean | React.MouseEvent) => {
-    // Se for um evento de clique, não é silent
     const isSilent = typeof silent === 'boolean' ? silent : false
     
     if (!organizationId) return
@@ -282,7 +362,6 @@ export default function InboxTab() {
       const res = await fetch(`/api/whatsapp/inbox/conversations?${params}`)
       const data = await res.json()
       
-      // Simplesmente atualizar conversas
       setConversations(data.conversations || [])
     } catch (error) {
       console.error('Error fetching conversations:', error)
@@ -291,31 +370,23 @@ export default function InboxTab() {
     }
   }
 
-  // Fetch messages - SEMPRE atualiza para garantir tempo real
+  // Fetch messages
   const fetchMessages = async (conversationId: string, silent = false) => {
     if (!silent) setMessagesLoading(true)
     try {
-      console.log('[fetchMessages] Buscando para:', conversationId)
       const res = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}/messages`)
       const data = await res.json()
-      console.log('[fetchMessages] Resposta:', JSON.stringify(data).substring(0, 200))
       
-      const newMessages = data.messages || []
-      console.log('[fetchMessages] Total mensagens:', newMessages.length)
-      
-      // Força atualização criando novo array
-      setMessages([...newMessages])
-      console.log('[fetchMessages] setMessages executado')
+      setMessages(data.messages || [])
     } catch (error) {
-      console.error('[fetchMessages] ERRO:', error)
+      console.error('[fetchMessages] Error:', error)
     } finally {
       if (!silent) setMessagesLoading(false)
     }
   }
 
-  // Fetch contact - silencioso se já tem contato
+  // Fetch contact
   const fetchContact = async (contactId: string, silent = false) => {
-    // Só mostra loading na primeira carga
     if (!silent && !contact) setContactLoading(true)
     try {
       const res = await fetch(`/api/whatsapp/inbox/contacts/${contactId}`)
@@ -352,12 +423,31 @@ export default function InboxTab() {
     }
   }
 
+  // =============================================
+  // ACTIONS
+  // =============================================
+
   // Send message
   const handleSendMessage = async () => {
     if (!input.trim() || !selectedConversation || isSending) return
     const content = input.trim()
     setInput('')
     setIsSending(true)
+    
+    // Otimistic update - adicionar mensagem imediatamente
+    const tempId = `temp-${Date.now()}`
+    const tempMessage: InboxMessage = {
+      id: tempId,
+      conversation_id: selectedConversation.id,
+      direction: 'outbound',
+      message_type: 'text',
+      content,
+      status: 'pending',
+      sent_by_bot: false,
+      created_at: new Date().toISOString()
+    }
+    setMessages(prev => [...prev, tempMessage])
+    
     try {
       const res = await fetch(`/api/whatsapp/inbox/conversations/${selectedConversation.id}/messages`, {
         method: 'POST',
@@ -365,9 +455,15 @@ export default function InboxTab() {
         body: JSON.stringify({ content, messageType: 'text' })
       })
       const data = await res.json()
-      if (data.message) setMessages(prev => [...prev, data.message])
+      
+      if (data.message) {
+        // Substituir mensagem temporária pela real
+        setMessages(prev => prev.map(m => m.id === tempId ? data.message : m))
+      }
     } catch (error) {
       console.error('Error sending message:', error)
+      // Remover mensagem temporária em caso de erro
+      setMessages(prev => prev.filter(m => m.id !== tempId))
     } finally {
       setIsSending(false)
     }
@@ -484,25 +580,19 @@ export default function InboxTab() {
 
   // Select conversation
   const handleSelectConversation = (conv: InboxConversation) => {
-    console.log('[handleSelect] Selecionando conversa:', conv.id)
+    if (selectedConversation?.id === conv.id) return
     
-    // Se é a mesma conversa, não faz nada
-    if (selectedConversation?.id === conv.id) {
-      console.log('[handleSelect] Mesma conversa, ignorando')
-      return
-    }
-    
-    // Zerar unread_count localmente imediatamente
+    // Zerar unread_count localmente
     const updatedConv = { ...conv, unread_count: 0 }
     setSelectedConversation(updatedConv)
     
-    // Atualizar lista de conversas localmente
+    // Atualizar lista
     setConversations(prev => prev.map(c => 
       c.id === conv.id ? { ...c, unread_count: 0 } : c
     ))
     
-    // NÃO limpar mensagens - deixar o polling atualizar
-    console.log('[handleSelect] Limpando dados e carregando novos')
+    // Limpar dados anteriores
+    setMessages([])
     setContact(null)
     setNotes([])
     setDeals([])
@@ -511,8 +601,7 @@ export default function InboxTab() {
     
     setMobileView('chat')
     
-    // Carregar mensagens com loading
-    console.log('[handleSelect] Chamando fetchMessages')
+    // Carregar dados
     fetchMessages(conv.id, false)
     
     if (conv.contact_id) {
@@ -521,57 +610,46 @@ export default function InboxTab() {
       fetchDeals(conv.contact_id)
     }
     
-    // Zerar no banco
+    // Marcar como lido no banco
     fetch(`/api/whatsapp/inbox/conversations/${conv.id}/read`, { method: 'POST' }).catch(() => {})
   }
 
-  // Effects
-  useEffect(() => { if (organizationId) fetchConversations() }, [statusFilter, organizationId])
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  // =============================================
+  // EFFECTS
+  // =============================================
+  
+  // Load conversations on mount and filter change
+  useEffect(() => { 
+    if (organizationId) fetchConversations() 
+  }, [statusFilter, organizationId])
+  
+  // Scroll to bottom on new messages
+  useEffect(() => { 
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) 
+  }, [messages])
 
-  // Polling para conversas (a cada 5 segundos) - silencioso
-  useEffect(() => {
-    if (!organizationId) return
-    console.log('[Polling] Iniciando polling de conversas')
-    const interval = setInterval(() => {
-      fetchConversations(true) // silent = true
-    }, 5000)
-    return () => {
-      console.log('[Polling] Parando polling de conversas')
-      clearInterval(interval)
-    }
-  }, [organizationId, statusFilter])
-
-  // Polling para mensagens (a cada 2 segundos quando há conversa selecionada)
-  useEffect(() => {
-    if (!selectedConversation) {
-      console.log('[Polling] Sem conversa selecionada')
-      return
-    }
-    
-    const convId = selectedConversation.id
-    console.log('[Polling] Iniciando polling para conversa:', convId)
-    
-    // Buscar imediatamente
-    fetchMessages(convId, true)
-    
-    // E depois a cada 2 segundos
-    const interval = setInterval(() => {
-      console.log('[Polling] Tick - buscando mensagens...')
-      fetchMessages(convId, true)
-    }, 2000)
-    
-    return () => {
-      console.log('[Polling] Limpando interval')
-      clearInterval(interval)
-    }
-  }, [selectedConversation?.id])
+  // Auto-resize textarea
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.height = 'auto'
       inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`
     }
   }, [input])
+
+  // Polling de instâncias para atualizar status de conexão (a cada 10s)
+  useEffect(() => {
+    if (!organizationId) return
+    
+    const interval = setInterval(() => {
+      fetchInstances()
+    }, 10000)
+    
+    return () => clearInterval(interval)
+  }, [organizationId, fetchInstances])
+
+  // =============================================
+  // DERIVED STATE
+  // =============================================
 
   // Group messages by date
   const groupedMessages: { date: string; messages: InboxMessage[] }[] = []
@@ -585,8 +663,6 @@ export default function InboxTab() {
       groupedMessages[groupedMessages.length - 1].messages.push(msg)
     }
   })
-  
-  console.log('[RENDER] groupedMessages:', groupedMessages.length, 'grupos')
 
   const contactName = selectedConversation?.contact_name || formatPhone(selectedConversation?.phone_number)
   const activeDeal = deals.find(d => d.status === 'open')
@@ -601,9 +677,6 @@ export default function InboxTab() {
     { id: 'orders', label: 'Pedidos' },
     { id: 'notes', label: 'Notas' },
   ]
-
-  // Debug: log do render
-  console.log('[RENDER] messages.length:', messages.length, 'selectedConversation:', selectedConversation?.id)
 
   return (
     <div className="h-[calc(100vh-80px)] flex bg-dark-900/50 rounded-2xl border border-dark-700/50 overflow-hidden">
@@ -637,6 +710,10 @@ export default function InboxTab() {
                   )}
                 </div>
               )}
+              {/* Realtime Status */}
+              {realtimeConnected && (
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Realtime conectado" />
+              )}
             </div>
             <div className="flex gap-2">
               <button onClick={fetchConversations} disabled={conversationsLoading} className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors disabled:opacity-50">
@@ -649,127 +726,212 @@ export default function InboxTab() {
           </div>
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
-            <input type="text" placeholder="Buscar por nome ou telefone..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchConversations()} className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 transition-colors" />
+            <input
+              type="text"
+              placeholder="Buscar por nome ou telefone..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && fetchConversations()}
+              className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-primary-500/50"
+            />
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {[{ id: 'all', label: 'Todas' }, { id: 'open', label: 'Abertas' }, { id: 'pending', label: 'Pendentes' }, { id: 'closed', label: 'Fechadas' }].map((filter) => (
-              <button key={filter.id} onClick={() => setStatusFilter(filter.id)} className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${statusFilter === filter.id ? 'bg-primary-500 text-white' : 'bg-dark-800/50 text-dark-400 hover:text-white hover:bg-dark-700/50'}`}>
-                {filter.label}
+          <div className="flex gap-2">
+            {['all', 'open', 'pending', 'closed'].map(status => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                  statusFilter === status
+                    ? 'bg-primary-500/20 text-primary-400'
+                    : 'bg-dark-800/50 text-dark-400 hover:bg-dark-700/50 hover:text-white'
+                }`}
+              >
+                {status === 'all' ? 'Todas' : status === 'open' ? 'Abertas' : status === 'pending' ? 'Pendentes' : 'Fechadas'}
               </button>
             ))}
           </div>
         </div>
 
+        {/* Conversations List */}
         <div className="flex-1 overflow-y-auto">
           {conversationsLoading && conversations.length === 0 ? (
-            <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 text-primary-400 animate-spin" /></div>
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+            </div>
           ) : conversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-dark-400 p-8">
-              <div className="w-16 h-16 rounded-2xl bg-dark-800/50 flex items-center justify-center mb-4"><MessageSquare className="w-8 h-8 opacity-50" /></div>
-              <p className="text-sm font-medium">Nenhuma conversa</p>
-              <p className="text-xs text-dark-500 mt-1 text-center">Aguardando novas mensagens ou inicie uma nova conversa</p>
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+              <MessageSquare className="w-12 h-12 text-dark-500 mb-4" />
+              <p className="text-dark-400 text-sm">Nenhuma conversa encontrada</p>
             </div>
           ) : (
-            conversations.map((conv) => {
-              const name = conv.contact_name || formatPhone(conv.phone_number)
-              const hasUnread = conv.unread_count > 0
-              return (
-                <motion.div key={conv.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} onClick={() => handleSelectConversation(conv)} className={`flex items-start gap-3 p-4 cursor-pointer border-b border-dark-700/30 transition-all ${selectedConversation?.id === conv.id ? 'bg-primary-500/10 border-l-2 border-l-primary-500' : 'hover:bg-dark-800/50 border-l-2 border-l-transparent'}`}>
-                  <div className="relative flex-shrink-0">
-                    {conv.contact_avatar ? <img src={conv.contact_avatar} alt={name} className="w-12 h-12 rounded-full object-cover" /> : (
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                        <span className="text-white font-semibold text-sm">{getInitials(conv.contact_name || conv.phone_number)}</span>
+            <div className="p-2 space-y-1">
+              {conversations.map((conv) => (
+                <button
+                  key={conv.id}
+                  onClick={() => handleSelectConversation(conv)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
+                    selectedConversation?.id === conv.id
+                      ? 'bg-primary-500/10 border border-primary-500/20'
+                      : 'hover:bg-dark-800/50'
+                  }`}
+                >
+                  {/* Avatar */}
+                  <div className="relative">
+                    {conv.contact_avatar ? (
+                      <img src={conv.contact_avatar} alt="" className="w-12 h-12 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
+                        <span className="text-sm font-semibold text-white">{getInitials(conv.contact_name)}</span>
                       </div>
                     )}
-                    {conv.is_bot_active && <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center border-2 border-dark-900"><Bot className="w-3 h-3 text-white" /></div>}
+                    {conv.is_bot_active && (
+                      <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-cyan-500 rounded-full flex items-center justify-center border-2 border-dark-900">
+                        <Bot className="w-3 h-3 text-white" />
+                      </div>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <span className={`font-medium truncate ${hasUnread ? 'text-white' : 'text-dark-200'}`}>{name}</span>
-                      <span className={`text-xs flex-shrink-0 ${hasUnread ? 'text-primary-400 font-medium' : 'text-dark-500'}`}>{formatTime(conv.last_message_at)}</span>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <p className="text-sm font-medium text-white truncate">
+                        {conv.contact_name || formatPhone(conv.phone_number)}
+                      </p>
+                      <span className="text-xs text-dark-500">{formatTime(conv.last_message_at)}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className={`text-sm truncate ${hasUnread ? 'text-dark-300' : 'text-dark-500'}`}>{conv.last_message_preview || 'Nova conversa'}</p>
-                      {hasUnread && <span className="flex-shrink-0 px-2 py-0.5 bg-primary-500 rounded-full text-[10px] font-bold text-white min-w-[20px] text-center">{conv.unread_count > 99 ? '99+' : conv.unread_count}</span>}
-                    </div>
+                    <p className="text-xs text-dark-400 truncate">{conv.last_message_preview || 'Sem mensagens'}</p>
                     {conv.contact_tags && conv.contact_tags.length > 0 && (
-                      <div className="flex gap-1 mt-2 overflow-hidden">
-                        {conv.contact_tags.slice(0, 2).map((tag, i) => <span key={i} className="px-2 py-0.5 bg-dark-700/50 rounded text-[10px] text-dark-300 truncate max-w-[80px]">{tag}</span>)}
-                        {conv.contact_tags.length > 2 && <span className="px-2 py-0.5 bg-dark-700/50 rounded text-[10px] text-dark-400">+{conv.contact_tags.length - 2}</span>}
+                      <div className="flex gap-1 mt-1.5">
+                        {conv.contact_tags.slice(0, 2).map((tag, i) => (
+                          <span key={i} className="px-1.5 py-0.5 bg-primary-500/10 text-primary-400 text-[10px] rounded">
+                            {tag}
+                          </span>
+                        ))}
+                        {conv.contact_tags.length > 2 && (
+                          <span className="text-[10px] text-dark-500">+{conv.contact_tags.length - 2}</span>
+                        )}
                       </div>
                     )}
                   </div>
-                </motion.div>
-              )
-            })
+
+                  {/* Unread Badge */}
+                  {conv.unread_count > 0 && (
+                    <div className="w-5 h-5 rounded-full bg-primary-500 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-white">{conv.unread_count > 9 ? '9+' : conv.unread_count}</span>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
-      {/* ========== CHAT PANEL ========== */}
-      <div className={`flex-1 flex flex-col min-w-0 ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
-        {selectedConversation ? (
+      {/* ========== CHAT AREA ========== */}
+      <div className={`flex-1 flex flex-col bg-dark-900/20 ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
+        {!selectedConversation ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center mb-6">
+              <MessageSquare className="w-10 h-10 text-primary-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">Selecione uma conversa</h3>
+            <p className="text-dark-400 text-sm max-w-sm">Escolha uma conversa na lista à esquerda para começar a responder</p>
+          </div>
+        ) : (
           <>
-            <div className="flex items-center justify-between p-4 border-b border-dark-700/50 bg-dark-800/30">
+            {/* Chat Header */}
+            <div className="h-16 px-4 flex items-center justify-between border-b border-dark-700/50 bg-dark-800/30">
               <div className="flex items-center gap-3">
-                <button onClick={() => setMobileView('list')} className="md:hidden p-2 rounded-lg hover:bg-dark-700/50 text-dark-400"><ArrowLeft className="w-5 h-5" /></button>
-                {selectedConversation.contact_avatar ? <img src={selectedConversation.contact_avatar} alt={contactName} className="w-10 h-10 rounded-full object-cover" /> : (
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center"><span className="text-white font-semibold text-sm">{getInitials(contactName)}</span></div>
+                <button onClick={() => setMobileView('list')} className="md:hidden p-2 hover:bg-dark-700/50 rounded-lg">
+                  <ArrowLeft className="w-5 h-5 text-dark-400" />
+                </button>
+                {selectedConversation.contact_avatar ? (
+                  <img src={selectedConversation.contact_avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
+                    <span className="text-sm font-semibold text-white">{getInitials(selectedConversation.contact_name)}</span>
+                  </div>
                 )}
                 <div>
-                  <h3 className="font-semibold text-white">{contactName}</h3>
+                  <p className="text-sm font-medium text-white">{contactName}</p>
                   <p className="text-xs text-dark-400">{formatPhone(selectedConversation.phone_number)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={handleToggleBot} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedConversation.is_bot_active ? 'bg-primary-500/10 text-primary-400 border border-primary-500/30' : 'bg-dark-700/50 text-dark-400 hover:text-white'}`}>
-                  <Bot className="w-4 h-4" /><span className="hidden sm:inline">{selectedConversation.is_bot_active ? 'Bot Ativo' : 'Bot Off'}</span>
+                <button
+                  onClick={handleToggleBot}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    selectedConversation.is_bot_active
+                      ? 'bg-cyan-500/20 text-cyan-400'
+                      : 'bg-dark-700/50 text-dark-400 hover:text-white'
+                  }`}
+                >
+                  <Bot className="w-4 h-4" />
+                  {selectedConversation.is_bot_active ? 'Bot Ativo' : 'Bot Inativo'}
                 </button>
-                <button className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors"><UserPlus className="w-5 h-5" /></button>
-                <button className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors"><MoreVertical className="w-5 h-5" /></button>
-                <button onClick={() => setShowContactPanel(!showContactPanel)} className="hidden lg:block p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors">
+                <button
+                  onClick={() => setShowContactPanel(!showContactPanel)}
+                  className="p-2 hover:bg-dark-700/50 rounded-lg text-dark-400 hover:text-white transition-colors"
+                >
                   {showContactPanel ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {(() => { console.log('[RENDER AREA] messagesLoading:', messagesLoading, 'messages.length:', messages.length, 'groupedMessages.length:', groupedMessages.length); return null })()}
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4">
               {messagesLoading ? (
-                <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 text-primary-400 animate-spin" /></div>
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+                </div>
               ) : messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-dark-400">
-                  <div className="w-16 h-16 rounded-2xl bg-dark-800/50 flex items-center justify-center mb-4"><Send className="w-8 h-8 opacity-50" /></div>
-                  <p className="text-sm">Nenhuma mensagem ainda</p>
-                  <p className="text-xs text-dark-500 mt-1">Envie uma mensagem para iniciar a conversa</p>
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <MessageSquare className="w-12 h-12 text-dark-500 mb-4" />
+                  <p className="text-dark-400 text-sm">Nenhuma mensagem ainda</p>
                 </div>
               ) : (
                 <>
-                  {groupedMessages.map((group, gi) => (
-                    <div key={gi}>
+                  {groupedMessages.map((group, idx) => (
+                    <div key={idx}>
                       <DateSeparator date={group.date} />
-                      <div className="space-y-3">
-                        {group.messages.map((msg) => {
-                          const isOutbound = msg.direction === 'outbound'
-                          return (
-                            <div key={msg.id} className={`flex gap-3 ${isOutbound ? 'justify-end' : 'justify-start'}`}>
-                              {!isOutbound && <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0 mt-1"><span className="text-white text-xs font-semibold">{getInitials(contactName)}</span></div>}
-                              <div className={`max-w-[70%] ${isOutbound ? 'items-end' : 'items-start'}`}>
-                                <div className={`relative rounded-2xl px-4 py-2.5 ${isOutbound ? msg.sent_by_bot ? 'bg-gradient-to-r from-primary-500 to-primary-600 rounded-tr-md' : 'bg-primary-500 rounded-tr-md' : 'bg-dark-800 border border-dark-700/50 rounded-tl-md'}`}>
-                                  {msg.sent_by_bot && <div className="absolute top-2 right-2"><Bot className="w-3 h-3 text-white/50" /></div>}
-                                  {msg.message_type === 'document' && msg.media_url && <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-dark-700/50 rounded-lg mb-2 hover:bg-dark-700"><FileText className="w-5 h-5 text-primary-400" /><span className="text-sm text-white truncate">{msg.media_filename || 'Documento'}</span></a>}
-                                  {msg.content && <p className={`text-sm whitespace-pre-wrap break-words ${isOutbound ? 'text-white' : 'text-dark-100'}`}>{msg.content}</p>}
-                                </div>
-                                <div className={`flex items-center gap-1.5 mt-1 px-1 ${isOutbound ? 'justify-end' : 'justify-start'}`}>
-                                  {msg.sent_by_bot && isOutbound && <span className="text-[10px] text-dark-500">via Bot</span>}
-                                  <span className="text-[10px] text-dark-500">{formatMessageTime(msg.created_at)}</span>
-                                  {isOutbound && <MessageStatus status={msg.status} />}
-                                </div>
+                      {group.messages.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className={`flex mb-3 ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div
+                            className={`max-w-[70%] p-3 rounded-2xl ${
+                              msg.direction === 'outbound'
+                                ? 'bg-primary-500 text-white rounded-br-md'
+                                : 'bg-dark-800 text-white rounded-bl-md'
+                            }`}
+                          >
+                            {msg.sent_by_bot && msg.direction === 'outbound' && (
+                              <div className="flex items-center gap-1 mb-1 opacity-70">
+                                <Bot className="w-3 h-3" />
+                                <span className="text-[10px]">Bot</span>
                               </div>
+                            )}
+                            {msg.media_url && msg.message_type === 'image' && (
+                              <img src={msg.media_url} alt="" className="rounded-lg mb-2 max-w-full" />
+                            )}
+                            {msg.media_url && msg.message_type === 'audio' && (
+                              <audio controls src={msg.media_url} className="max-w-full mb-2" />
+                            )}
+                            {msg.media_url && msg.message_type === 'document' && (
+                              <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-dark-700/50 rounded-lg mb-2">
+                                <FileText className="w-5 h-5" />
+                                <span className="text-sm truncate">{msg.media_filename || 'Documento'}</span>
+                              </a>
+                            )}
+                            {msg.content && <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>}
+                            <div className={`flex items-center gap-1 mt-1 ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
+                              <span className="text-[10px] opacity-70">{formatMessageTime(msg.created_at)}</span>
+                              {msg.direction === 'outbound' && <MessageStatus status={msg.status} />}
                             </div>
-                          )
-                        })}
-                      </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ))}
                   <div ref={messagesEndRef} />
@@ -777,89 +939,177 @@ export default function InboxTab() {
               )}
             </div>
 
+            {/* Input */}
             <div className="p-4 border-t border-dark-700/50 bg-dark-800/30">
-              {selectedConversation.can_send_template_only && (
-                <div className="flex items-center gap-2 p-3 mb-3 bg-warning-500/10 border border-warning-500/20 rounded-xl">
-                  <AlertCircle className="w-4 h-4 text-warning-400 flex-shrink-0" />
-                  <span className="text-sm text-warning-400">Janela de 24h expirada. Use um template.</span>
-                  <button className="ml-auto text-sm text-primary-400 font-medium hover:underline whitespace-nowrap">Enviar Template</button>
+              {selectedConversation.can_send_template_only ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-yellow-400 mb-2">Janela de 24h expirada</p>
+                  <p className="text-xs text-dark-400">Envie um template para reabrir a conversa</p>
+                </div>
+              ) : (
+                <div className="flex items-end gap-2">
+                  <button className="p-2 hover:bg-dark-700/50 rounded-lg text-dark-400 hover:text-white transition-colors">
+                    <Paperclip className="w-5 h-5" />
+                  </button>
+                  <div className="flex-1 relative">
+                    <textarea
+                      ref={inputRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Digite sua mensagem..."
+                      rows={1}
+                      className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-primary-500/50 resize-none max-h-[120px]"
+                    />
+                  </div>
+                  <button className="p-2 hover:bg-dark-700/50 rounded-lg text-dark-400 hover:text-white transition-colors">
+                    <Smile className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={!input.trim() || isSending}
+                    className="p-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  </button>
                 </div>
               )}
-              <div className="flex items-end gap-2">
-                <button className="p-2.5 rounded-xl hover:bg-dark-700/50 text-dark-400 hover:text-primary-400 transition-colors"><Smile className="w-5 h-5" /></button>
-                <button className="p-2.5 rounded-xl hover:bg-dark-700/50 text-dark-400 hover:text-primary-400 transition-colors"><Paperclip className="w-5 h-5" /></button>
-                <div className="flex-1 relative">
-                  <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Digite uma mensagem..." disabled={isSending} rows={1} className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 resize-none transition-colors disabled:opacity-50" style={{ maxHeight: '120px' }} />
-                </div>
-                <button onClick={handleSendMessage} disabled={!input.trim() || isSending} className="p-3 rounded-xl bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                </button>
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <button className="px-3 py-1.5 text-xs bg-dark-700/50 text-dark-400 rounded-lg hover:text-white hover:bg-dark-700 transition-colors">/atalhos</button>
-                <button className="px-3 py-1.5 text-xs bg-dark-700/50 text-dark-400 rounded-lg hover:text-white hover:bg-dark-700 transition-colors">📋 Templates</button>
-              </div>
             </div>
           </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-dark-400">
-            <MessageSquare className="w-16 h-16 mb-4 opacity-30" />
-            <p className="text-lg font-medium">Selecione uma conversa</p>
-            <p className="text-sm text-dark-500 mt-1">Escolha uma conversa da lista para começar</p>
-          </div>
         )}
       </div>
 
       {/* ========== CONTACT PANEL ========== */}
       <AnimatePresence>
-        {selectedConversation && showContactPanel && (
-          <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 380, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="hidden lg:flex flex-col flex-shrink-0 border-l border-dark-700/50 bg-dark-900/30 overflow-hidden">
-            {contactLoading || !contact ? (
-              <div className="w-[380px] h-full flex items-center justify-center"><Loader2 className="w-8 h-8 text-primary-400 animate-spin" /></div>
+        {showContactPanel && selectedConversation && contact && (
+          <motion.div
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 320, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="hidden lg:flex flex-col border-l border-dark-700/50 bg-dark-900/30 overflow-hidden"
+          >
+            {contactLoading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+              </div>
             ) : (
-              <div className="w-[380px] flex flex-col h-full">
-                <div className="p-6 border-b border-dark-700/50 text-center">
-                  {contact.profile_picture_url ? <img src={contact.profile_picture_url} alt={contact.name || 'Contato'} className="w-20 h-20 mx-auto rounded-full object-cover mb-4 ring-4 ring-primary-500/20" /> : (
-                    <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center mb-4 ring-4 ring-primary-500/20"><span className="text-white font-bold text-2xl">{getInitials(contact.name || contact.phone_number)}</span></div>
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Contact Header */}
+                <div className="p-6 text-center border-b border-dark-700/50">
+                  {contact.profile_picture_url ? (
+                    <img src={contact.profile_picture_url} alt="" className="w-20 h-20 rounded-full mx-auto mb-4 object-cover" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full mx-auto mb-4 bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
+                      <span className="text-2xl font-semibold text-white">{getInitials(contact.name)}</span>
+                    </div>
                   )}
                   <h3 className="text-lg font-semibold text-white mb-1">{contact.name || 'Sem nome'}</h3>
-                  <p className="text-sm text-dark-400 mb-3">{contact.phone_number}</p>
-                  <div className="flex items-center justify-center gap-2 flex-wrap">
-                    {contact.is_blocked ? <span className="px-2.5 py-1 bg-red-500/10 text-red-400 text-xs font-medium rounded-lg">Bloqueado</span> : <span className="px-2.5 py-1 bg-green-500/10 text-green-400 text-xs font-medium rounded-lg">Ativo</span>}
-                    {contact.total_orders > 0 && <span className="px-2.5 py-1 bg-primary-500/10 text-primary-400 text-xs font-medium rounded-lg">Cliente</span>}
-                  </div>
+                  <p className="text-sm text-dark-400">{formatPhone(contact.phone_number)}</p>
                 </div>
 
+                {/* Tabs */}
                 <div className="flex border-b border-dark-700/50">
-                  {tabs.map((tab) => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-3 text-sm font-medium transition-all border-b-2 ${activeTab === tab.id ? 'text-primary-400 border-primary-500' : 'text-dark-400 border-transparent hover:text-white'}`}>{tab.label}</button>)}
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex-1 py-3 text-xs font-medium transition-colors ${
+                        activeTab === tab.id
+                          ? 'text-primary-400 border-b-2 border-primary-400'
+                          : 'text-dark-400 hover:text-white'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
 
+                {/* Tab Content */}
                 <div className="flex-1 overflow-y-auto">
                   {activeTab === 'info' && (
                     <div className="p-4 space-y-4">
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"><Mail className="w-5 h-5 text-dark-400" /><div className="flex-1 min-w-0"><p className="text-xs text-dark-500">Email</p><p className="text-sm text-white truncate">{contact.email || 'Não informado'}</p></div></div>
-                        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"><Phone className="w-5 h-5 text-dark-400" /><div className="flex-1"><p className="text-xs text-dark-500">Telefone</p><p className="text-sm text-white">{contact.phone_number}</p></div></div>
-                        {contact.address?.city && <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"><MapPin className="w-5 h-5 text-dark-400" /><div className="flex-1"><p className="text-xs text-dark-500">Cidade</p><p className="text-sm text-white">{contact.address.city}{contact.address.state ? `, ${contact.address.state}` : ''}</p></div></div>}
-                        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"><Calendar className="w-5 h-5 text-dark-400" /><div className="flex-1"><p className="text-xs text-dark-500">Contato desde</p><p className="text-sm text-white">{formatDate(contact.created_at)}</p></div></div>
+                      {contact.email && (
+                        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
+                          <Mail className="w-5 h-5 text-dark-400" />
+                          <div className="flex-1">
+                            <p className="text-xs text-dark-500">Email</p>
+                            <p className="text-sm text-white">{contact.email}</p>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
+                        <Phone className="w-5 h-5 text-dark-400" />
+                        <div className="flex-1">
+                          <p className="text-xs text-dark-500">Telefone</p>
+                          <p className="text-sm text-white">{contact.phone_number}</p>
+                        </div>
+                      </div>
+                      {contact.address?.city && (
+                        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
+                          <MapPin className="w-5 h-5 text-dark-400" />
+                          <div className="flex-1">
+                            <p className="text-xs text-dark-500">Cidade</p>
+                            <p className="text-sm text-white">{contact.address.city}{contact.address.state ? `, ${contact.address.state}` : ''}</p>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
+                        <Calendar className="w-5 h-5 text-dark-400" />
+                        <div className="flex-1">
+                          <p className="text-xs text-dark-500">Contato desde</p>
+                          <p className="text-sm text-white">{formatDate(contact.created_at)}</p>
+                        </div>
                       </div>
                       <div>
-                        <div className="flex items-center justify-between mb-2"><h4 className="text-sm font-medium text-dark-300">Tags</h4><button onClick={() => setShowAddTag(true)} className="p-1 hover:bg-dark-700 rounded transition-colors"><Plus className="w-4 h-4 text-dark-400" /></button></div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-medium text-dark-300">Tags</h4>
+                          <button onClick={() => setShowAddTag(true)} className="p-1 hover:bg-dark-700 rounded transition-colors">
+                            <Plus className="w-4 h-4 text-dark-400" />
+                          </button>
+                        </div>
                         <div className="flex flex-wrap gap-2">
-                          {contact.tags?.map((tag, i) => <span key={i} className="px-2.5 py-1 bg-primary-500/10 text-primary-400 text-xs rounded-lg flex items-center gap-1 group">{tag}<button onClick={() => handleRemoveTag(tag)} className="opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3 hover:text-white" /></button></span>)}
+                          {contact.tags?.map((tag, i) => (
+                            <span key={i} className="px-2.5 py-1 bg-primary-500/10 text-primary-400 text-xs rounded-lg flex items-center gap-1 group">
+                              {tag}
+                              <button onClick={() => handleRemoveTag(tag)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                <X className="w-3 h-3 hover:text-white" />
+                              </button>
+                            </span>
+                          ))}
                           {showAddTag && (
                             <div className="flex items-center gap-1">
-                              <input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTag()} placeholder="Nova tag" className="w-24 px-2 py-1 text-xs bg-dark-700 border border-dark-600 rounded text-white placeholder-dark-400 focus:outline-none focus:border-primary-500" autoFocus />
-                              <button onClick={handleAddTag} className="text-primary-400 hover:text-primary-300"><CheckCircle className="w-4 h-4" /></button>
-                              <button onClick={() => setShowAddTag(false)} className="text-dark-400 hover:text-white"><X className="w-4 h-4" /></button>
+                              <input
+                                type="text"
+                                value={newTag}
+                                onChange={(e) => setNewTag(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
+                                placeholder="Nova tag"
+                                className="w-24 px-2 py-1 text-xs bg-dark-700 border border-dark-600 rounded text-white placeholder-dark-400 focus:outline-none focus:border-primary-500"
+                                autoFocus
+                              />
+                              <button onClick={handleAddTag} className="text-primary-400 hover:text-primary-300">
+                                <CheckCircle className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => setShowAddTag(false)} className="text-dark-400 hover:text-white">
+                                <X className="w-4 h-4" />
+                              </button>
                             </div>
                           )}
-                          {(!contact.tags || contact.tags.length === 0) && !showAddTag && <span className="text-xs text-dark-500">Nenhuma tag</span>}
+                          {(!contact.tags || contact.tags.length === 0) && !showAddTag && (
+                            <span className="text-xs text-dark-500">Nenhuma tag</span>
+                          )}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 bg-dark-800/50 rounded-xl text-center"><p className="text-2xl font-bold text-white">{contact.total_messages_received}</p><p className="text-xs text-dark-400">Msg Recebidas</p></div>
-                        <div className="p-3 bg-dark-800/50 rounded-xl text-center"><p className="text-2xl font-bold text-white">{contact.total_messages_sent}</p><p className="text-xs text-dark-400">Msg Enviadas</p></div>
+                        <div className="p-3 bg-dark-800/50 rounded-xl text-center">
+                          <p className="text-2xl font-bold text-white">{contact.total_messages_received}</p>
+                          <p className="text-xs text-dark-400">Msg Recebidas</p>
+                        </div>
+                        <div className="p-3 bg-dark-800/50 rounded-xl text-center">
+                          <p className="text-2xl font-bold text-white">{contact.total_messages_sent}</p>
+                          <p className="text-xs text-dark-400">Msg Enviadas</p>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -868,20 +1118,29 @@ export default function InboxTab() {
                     <div className="p-4 space-y-4">
                       {activeDeal ? (
                         <div className="p-4 bg-gradient-to-br from-primary-500/10 to-yellow-500/10 border border-primary-500/20 rounded-xl">
-                          <div className="flex items-center justify-between mb-3"><h4 className="font-medium text-white">Deal Ativo</h4><span className="px-2 py-0.5 bg-primary-500 text-white text-xs rounded">{activeDeal.stage?.name || 'Em andamento'}</span></div>
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-medium text-white">Deal Ativo</h4>
+                            <span className="px-2 py-0.5 bg-primary-500 text-white text-xs rounded">{activeDeal.stage?.name || 'Em andamento'}</span>
+                          </div>
                           <p className="text-2xl font-bold text-white mb-1">{formatCurrency(activeDeal.value)}</p>
                           <p className="text-sm text-dark-400">{activeDeal.pipeline?.name || 'Pipeline'}</p>
                         </div>
                       ) : (
-                        <button className="w-full py-4 border border-dashed border-dark-600 rounded-xl text-dark-400 hover:text-white hover:border-primary-500 transition-all flex items-center justify-center gap-2"><Plus className="w-4 h-4" />Criar Novo Deal</button>
+                        <button onClick={handleCreateDeal} className="w-full py-4 border border-dashed border-dark-600 rounded-xl text-dark-400 hover:text-white hover:border-primary-500 transition-all flex items-center justify-center gap-2">
+                          <Plus className="w-4 h-4" />Criar Novo Deal
+                        </button>
                       )}
                       {deals.length > 0 && (
-                        <div><h4 className="text-sm font-medium text-dark-300 mb-3">Histórico</h4>
+                        <div>
+                          <h4 className="text-sm font-medium text-dark-300 mb-3">Histórico</h4>
                           <div className="space-y-2">
                             {deals.filter(d => d.id !== activeDeal?.id).slice(0, 5).map((deal) => (
                               <div key={deal.id} className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
                                 <div className={`w-2 h-2 rounded-full ${deal.status === 'won' ? 'bg-green-500' : deal.status === 'lost' ? 'bg-red-500' : 'bg-yellow-500'}`} />
-                                <div className="flex-1 min-w-0"><p className="text-sm text-white truncate">{deal.title}</p><p className="text-xs text-dark-400">{formatCurrency(deal.value)}</p></div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-white truncate">{deal.title}</p>
+                                  <p className="text-xs text-dark-400">{formatCurrency(deal.value)}</p>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -893,12 +1152,21 @@ export default function InboxTab() {
                   {activeTab === 'orders' && (
                     <div className="p-4 space-y-4">
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 bg-dark-800/50 rounded-xl text-center"><p className="text-2xl font-bold text-white">{contact.total_orders}</p><p className="text-xs text-dark-400">Pedidos</p></div>
-                        <div className="p-3 bg-dark-800/50 rounded-xl text-center"><p className="text-2xl font-bold text-primary-400">{formatCurrency(contact.total_spent)}</p><p className="text-xs text-dark-400">Total Gasto</p></div>
+                        <div className="p-3 bg-dark-800/50 rounded-xl text-center">
+                          <p className="text-2xl font-bold text-white">{contact.total_orders}</p>
+                          <p className="text-xs text-dark-400">Pedidos</p>
+                        </div>
+                        <div className="p-3 bg-dark-800/50 rounded-xl text-center">
+                          <p className="text-2xl font-bold text-primary-400">{formatCurrency(contact.total_spent)}</p>
+                          <p className="text-xs text-dark-400">Total Gasto</p>
+                        </div>
                       </div>
                       {cart && (
                         <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
-                          <div className="flex items-center gap-2 mb-3"><ShoppingCart className="w-5 h-5 text-yellow-400" /><h4 className="font-medium text-yellow-400">Carrinho Abandonado</h4></div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <ShoppingCart className="w-5 h-5 text-yellow-400" />
+                            <h4 className="font-medium text-yellow-400">Carrinho Abandonado</h4>
+                          </div>
                           <p className="text-sm text-dark-300 mb-1">{cart.line_items?.length || 0} itens • {formatCurrency(cart.total_price)}</p>
                           <p className="text-xs text-dark-500 mb-3">Abandonado {formatRelativeTime(cart.created_at)}</p>
                           <button className="w-full py-2 bg-yellow-500 text-white text-sm rounded-lg hover:bg-yellow-600 transition-colors">Enviar Recuperação</button>
@@ -906,20 +1174,39 @@ export default function InboxTab() {
                       )}
                       {orders.length > 0 && (
                         <div className="p-4 bg-dark-800/50 rounded-xl">
-                          <div className="flex items-center justify-between mb-3"><h4 className="font-medium text-white">Último Pedido</h4><span className={`px-2 py-0.5 text-xs rounded ${orders[0].fulfillment_status === 'fulfilled' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>{orders[0].fulfillment_status === 'fulfilled' ? 'Entregue' : 'Pendente'}</span></div>
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-medium text-white">Último Pedido</h4>
+                            <span className={`px-2 py-0.5 text-xs rounded ${orders[0].fulfillment_status === 'fulfilled' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                              {orders[0].fulfillment_status === 'fulfilled' ? 'Entregue' : 'Pendente'}
+                            </span>
+                          </div>
                           <p className="text-sm text-dark-300 mb-2">#{orders[0].order_number} • {orders[0].line_items?.length || 0} itens</p>
                           <p className="text-lg font-semibold text-white">{formatCurrency(orders[0].total_price)}</p>
                         </div>
                       )}
-                      {orders.length === 0 && !cart && <div className="text-center py-8 text-dark-400"><Package className="w-12 h-12 mx-auto mb-3 opacity-30" /><p className="text-sm">Nenhum pedido encontrado</p></div>}
+                      {orders.length === 0 && !cart && (
+                        <div className="text-center py-8 text-dark-400">
+                          <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                          <p className="text-sm">Nenhum pedido encontrado</p>
+                        </div>
+                      )}
                     </div>
                   )}
 
                   {activeTab === 'notes' && (
                     <div className="p-4 space-y-4">
                       <div className="relative">
-                        <textarea value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="Adicionar uma nota..." className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 resize-none min-h-[80px]" />
-                        <button onClick={handleAddNote} disabled={!newNote.trim() || isSavingNote} className="absolute bottom-3 right-3 p-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50">
+                        <textarea
+                          value={newNote}
+                          onChange={(e) => setNewNote(e.target.value)}
+                          placeholder="Adicionar uma nota..."
+                          className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 resize-none min-h-[80px]"
+                        />
+                        <button
+                          onClick={handleAddNote}
+                          disabled={!newNote.trim() || isSavingNote}
+                          className="absolute bottom-3 right-3 p-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50"
+                        >
                           {isSavingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         </button>
                       </div>
@@ -928,42 +1215,40 @@ export default function InboxTab() {
                           <div key={note.id} className="relative pl-6 border-l-2 border-dark-700">
                             <div className="absolute left-[-5px] top-0 w-2 h-2 bg-primary-500 rounded-full" />
                             <div className="pb-4">
-                              <div className="flex items-center gap-2 mb-1"><span className="text-sm font-medium text-white">{note.created_by_name || 'Usuário'}</span><span className="text-xs text-dark-500">{formatRelativeTime(note.created_at)}</span></div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium text-white">{note.created_by_name || 'Usuário'}</span>
+                                <span className="text-xs text-dark-500">{formatRelativeTime(note.created_at)}</span>
+                              </div>
                               <p className="text-sm text-dark-300">{note.content}</p>
                             </div>
                           </div>
-                        )) : <div className="text-center py-8 text-dark-400"><FileText className="w-12 h-12 mx-auto mb-3 opacity-30" /><p className="text-sm">Nenhuma nota ainda</p></div>}
+                        )) : (
+                          <div className="text-center py-8 text-dark-400">
+                            <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                            <p className="text-sm">Nenhuma nota ainda</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
                 </div>
 
+                {/* Contact Actions */}
                 <div className="p-4 border-t border-dark-700/50 bg-dark-800/30">
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => setShowAddTag(true)} className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><Tag className="w-4 h-4" /><span className="text-sm">Tag</span></button>
-                    <button className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><UserPlus className="w-4 h-4" /><span className="text-sm">Atribuir</span></button>
-                    <button onClick={handleCreateDeal} className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all"><DollarSign className="w-4 h-4" /><span className="text-sm">Deal</span></button>
-                    <button onClick={handleBlockContact} className={`flex items-center justify-center gap-2 p-3 rounded-xl transition-all ${contact.is_blocked ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}><Ban className="w-4 h-4" /><span className="text-sm">{contact.is_blocked ? 'Desbloquear' : 'Bloquear'}</span></button>
+                    <button onClick={() => setShowAddTag(true)} className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+                      <Tag className="w-4 h-4" /><span className="text-sm">Tag</span>
+                    </button>
+                    <button className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+                      <UserPlus className="w-4 h-4" /><span className="text-sm">Atribuir</span>
+                    </button>
+                    <button onClick={handleCreateDeal} className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+                      <DollarSign className="w-4 h-4" /><span className="text-sm">Deal</span>
+                    </button>
+                    <button onClick={handleBlockContact} className={`flex items-center justify-center gap-2 p-3 rounded-xl transition-all ${contact.is_blocked ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}>
+                      <Ban className="w-4 h-4" /><span className="text-sm">{contact.is_blocked ? 'Desbloquear' : 'Bloquear'}</span>
+                    </button>
                   </div>
-                  
-                  {/* Modal de adicionar tag */}
-                  {showAddTag && (
-                    <div className="mt-3 p-3 bg-dark-800 rounded-xl border border-dark-700">
-                      <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          value={newTag} 
-                          onChange={(e) => setNewTag(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                          placeholder="Nome da tag..." 
-                          className="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
-                          autoFocus
-                        />
-                        <button onClick={handleAddTag} className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm hover:bg-primary-600">Adicionar</button>
-                        <button onClick={() => { setShowAddTag(false); setNewTag('') }} className="px-3 py-2 bg-dark-600 text-dark-300 rounded-lg text-sm hover:bg-dark-500">X</button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
