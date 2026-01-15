@@ -55,6 +55,15 @@ export async function GET(request: NextRequest) {
         }
         break;
 
+      case 'check_instance':
+        // Verificar instância específica em detalhes
+        if (!instanceName) {
+          results.error = 'instance parameter required (use unique_id from database)';
+        } else {
+          results.instance_check = await checkSpecificInstance(instanceName);
+        }
+        break;
+
       case 'full':
         // Diagnóstico completo
         results.evolution_api = await checkEvolutionAPI();
@@ -63,7 +72,7 @@ export async function GET(request: NextRequest) {
         break;
 
       default:
-        results.error = 'Unknown action. Use: status, instances, webhook, configure_webhook, full';
+        results.error = 'Unknown action. Use: status, instances, webhook, configure_webhook, check_instance, full';
     }
 
     return NextResponse.json(results, { status: 200 });
@@ -140,6 +149,51 @@ async function checkEvolutionAPI() {
   }
 }
 
+// Verificar instância específica em detalhes
+async function checkSpecificInstance(instanceName: string) {
+  const result: any = {
+    instanceName,
+    checks: {},
+  };
+
+  try {
+    // 1. Verificar estado da conexão
+    const stateResponse = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
+      method: 'GET',
+      headers: { 'apikey': EVOLUTION_API_KEY },
+    });
+    result.checks.connection = await stateResponse.json();
+
+    // 2. Buscar informações da instância
+    const infoResponse = await fetch(`${EVOLUTION_API_URL}/instance/fetchInstances?instanceName=${instanceName}`, {
+      method: 'GET',
+      headers: { 'apikey': EVOLUTION_API_KEY },
+    });
+    result.checks.info = await infoResponse.json();
+
+    // 3. Verificar webhook
+    const webhookResponse = await fetch(`${EVOLUTION_API_URL}/webhook/find/${instanceName}`, {
+      method: 'GET',
+      headers: { 'apikey': EVOLUTION_API_KEY },
+    });
+    result.checks.webhook = await webhookResponse.json();
+
+    // 4. Resumo
+    result.summary = {
+      exists: !result.checks.connection?.error,
+      connected: result.checks.connection?.instance?.state === 'open',
+      webhook_enabled: result.checks.webhook?.webhook?.enabled || result.checks.webhook?.enabled || false,
+      webhook_url: result.checks.webhook?.webhook?.url || result.checks.webhook?.url || 'not configured',
+      expected_webhook: `${WEBHOOK_BASE_URL}/api/whatsapp/webhook`,
+    };
+
+  } catch (error: any) {
+    result.error = error.message;
+  }
+
+  return result;
+}
+
 async function listEvolutionInstances() {
   try {
     const response = await fetch(`${EVOLUTION_API_URL}/instance/fetchInstances`, {
@@ -151,15 +205,21 @@ async function listEvolutionInstances() {
 
     const data = await response.json();
     
-    // Processar cada instância
+    // Processar cada instância - mostrar TODOS os campos para debug
     const instances = Array.isArray(data) ? data : [data];
     
     return instances.map((inst: any) => ({
-      name: inst.instance?.instanceName || inst.instanceName,
+      // Tentar todas as formas possíveis de pegar o nome
+      instanceName: inst.instance?.instanceName || inst.instanceName || inst.name || 'unknown',
+      name: inst.instance?.name || inst.name,
       status: inst.instance?.status || inst.status,
       owner: inst.instance?.owner || inst.owner,
+      ownerJid: inst.instance?.ownerJid || inst.ownerJid,
       profileName: inst.instance?.profileName || inst.profileName,
       connectionStatus: inst.instance?.connectionStatus || inst.connectionStatus,
+      // Mostrar estrutura raw para debug
+      _raw_keys: Object.keys(inst),
+      _instance_keys: inst.instance ? Object.keys(inst.instance) : null,
     }));
   } catch (error: any) {
     return { error: error.message };
