@@ -4,16 +4,104 @@ import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log('[Webhook] Received:', body.event)
+    
+    // Log detalhado para debug
+    console.log('[Webhook] ======================================')
+    console.log('[Webhook] Received event:', body.event)
+    console.log('[Webhook] Instance:', body.instance)
+    console.log('[Webhook] Data keys:', body.data ? Object.keys(body.data) : 'no data')
+    console.log('[Webhook] Full body:', JSON.stringify(body, null, 2).substring(0, 1000))
 
-    if (body.event === 'messages.upsert') {
+    // Tratar diferentes formatos de evento
+    const eventType = body.event?.toLowerCase() || ''
+    
+    // Eventos de mensagem
+    if (eventType === 'messages.upsert' || 
+        eventType === 'message' || 
+        eventType === 'messages_upsert' ||
+        eventType.includes('message')) {
+      console.log('[Webhook] Processing message event...')
       await processMessage(body)
     }
+    
+    // Eventos de conexão
+    if (eventType === 'connection.update' || 
+        eventType === 'connection_update' ||
+        eventType.includes('connection')) {
+      console.log('[Webhook] Processing connection event...')
+      await processConnectionUpdate(body)
+    }
+    
+    // Eventos de QR Code
+    if (eventType === 'qrcode.updated' || 
+        eventType === 'qrcode_updated' ||
+        eventType.includes('qr')) {
+      console.log('[Webhook] Processing QR event...')
+      await processQRCode(body)
+    }
 
-    return NextResponse.json({ status: 'ok' })
+    return NextResponse.json({ status: 'ok', event: body.event })
   } catch (error) {
     console.error('[Webhook] Error:', error)
-    return NextResponse.json({ status: 'error' }, { status: 200 })
+    return NextResponse.json({ status: 'error', error: String(error) }, { status: 200 })
+  }
+}
+
+// Processar atualização de conexão
+async function processConnectionUpdate(body: any) {
+  const instanceName = body.instance
+  const data = body.data
+  
+  if (!instanceName) return
+  
+  const state = data?.state || data?.instance?.state
+  console.log('[Webhook] Connection state:', state, 'for instance:', instanceName)
+  
+  // Buscar e atualizar instância
+  const { data: instance } = await supabase
+    .from('whatsapp_instances')
+    .select('id')
+    .eq('unique_id', instanceName)
+    .single()
+    
+  if (instance) {
+    const newStatus = state === 'open' ? 'connected' : 
+                     state === 'connecting' ? 'connecting' : 'disconnected'
+    
+    await supabase
+      .from('whatsapp_instances')
+      .update({
+        status: newStatus,
+        online_status: state === 'open' ? 'available' : 'unavailable',
+        phone_number: data?.instance?.phoneNumber || data?.instance?.wuid?.split('@')[0],
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', instance.id)
+      
+    console.log('[Webhook] Instance status updated to:', newStatus)
+  }
+}
+
+// Processar QR Code
+async function processQRCode(body: any) {
+  const instanceName = body.instance
+  const data = body.data
+  
+  if (!instanceName) return
+  
+  const qrcode = data?.qrcode?.base64 || data?.base64
+  
+  if (qrcode) {
+    await supabase
+      .from('whatsapp_instances')
+      .update({
+        status: 'generating',
+        qr_code: qrcode,
+        updated_at: new Date().toISOString()
+      })
+      .eq('unique_id', instanceName)
+      
+    console.log('[Webhook] QR Code updated for:', instanceName)
   }
 }
 
@@ -21,36 +109,72 @@ async function processMessage(body: any) {
   const instanceName = body.instance
   const data = body.data
 
-  // 1. Buscar instância
-  const { data: instances } = await supabase
+  // 1. Buscar instância - tentar múltiplas formas
+  let instance = null
+  
+  // Tentar por unique_id
+  const { data: instances1 } = await supabase
     .from('whatsapp_instances')
     .select('*')
     .eq('unique_id', instanceName)
     .limit(1)
 
-  const instance = instances?.[0]
+  instance = instances1?.[0]
+  
+  // Se não encontrou, tentar buscar qualquer instância conectada (para debug)
   if (!instance) {
-    console.log('[Webhook] Instância não encontrada:', instanceName)
+    console.log('[Webhook] Instância não encontrada por unique_id:', instanceName)
+    
+    // Tentar por instance_name parcial
+    const { data: instances2 } = await supabase
+      .from('whatsapp_instances')
+      .select('*')
+      .ilike('unique_id', `%${instanceName}%`)
+      .limit(1)
+      
+    instance = instances2?.[0]
+  }
+  
+  if (!instance) {
+    console.log('[Webhook] ❌ Nenhuma instância encontrada para:', instanceName)
+    console.log('[Webhook] Buscando todas as instâncias...')
+    
+    const { data: allInstances } = await supabase
+      .from('whatsapp_instances')
+      .select('unique_id, status')
+      .limit(10)
+    
+    console.log('[Webhook] Instâncias no banco:', allInstances?.map(i => i.unique_id))
     return
   }
 
+  console.log('[Webhook] ✅ Instância encontrada:', instance.unique_id, 'Org:', instance.organization_id)
+
   const orgId = instance.organization_id
-  const key = data.key
-  const message = data.message
+  const key = data?.key
+  const message = data?.message
 
   // Ignorar mensagens próprias
-  if (key?.fromMe) return
+  if (key?.fromMe) {
+    console.log('[Webhook] Ignorando mensagem própria')
+    return
+  }
 
   const remoteJid = key?.remoteJid
-  if (!remoteJid || remoteJid.includes('@g.us')) return
+  if (!remoteJid || remoteJid.includes('@g.us')) {
+    console.log('[Webhook] Ignorando grupo ou jid inválido:', remoteJid)
+    return
+  }
 
-  const phoneNumber = remoteJid.replace('@s.whatsapp.net', '')
-  const pushName = data.pushName || phoneNumber
+  const phoneNumber = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '')
+  const pushName = data?.pushName || phoneNumber
 
   // Extrair conteúdo
   let content = message?.conversation || 
                 message?.extendedTextMessage?.text || 
                 message?.imageMessage?.caption ||
+                message?.videoMessage?.caption ||
+                data?.text ||
                 '[Mídia]'
 
   let messageType = 'text'
@@ -58,8 +182,11 @@ async function processMessage(body: any) {
   if (message?.audioMessage) messageType = 'audio'
   if (message?.videoMessage) messageType = 'video'
   if (message?.documentMessage) messageType = 'document'
+  if (message?.stickerMessage) messageType = 'sticker'
+  if (message?.locationMessage) messageType = 'location'
+  if (message?.contactMessage) messageType = 'contact'
 
-  console.log('[Webhook] Mensagem de:', phoneNumber, '-', content)
+  console.log('[Webhook] 📩 Mensagem de:', phoneNumber, '-', content?.substring(0, 50))
 
   // 2. Buscar contato EXISTENTE por phone_number
   const { data: existingContacts } = await supabase

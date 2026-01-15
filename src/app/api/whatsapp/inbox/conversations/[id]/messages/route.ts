@@ -56,36 +56,76 @@ export async function POST(
     const body = await request.json()
     const { content, message_type = 'text' } = body
 
+    console.log('[Send Message] ============================')
+    console.log('[Send Message] Conversation:', conversationId)
+    console.log('[Send Message] Content:', content?.substring(0, 50))
+
     if (!content) {
       return NextResponse.json({ error: 'content required' }, { status: 400 })
     }
 
     // Buscar conversa e instância
-    const { data: conversation } = await supabase
+    const { data: conversation, error: convError } = await supabase
       .from('whatsapp_conversations')
       .select('*, contact:whatsapp_contacts(*)')
       .eq('id', conversationId)
       .single()
 
+    if (convError) {
+      console.error('[Send Message] Erro ao buscar conversa:', convError)
+      return NextResponse.json({ error: 'Conversation not found', details: convError }, { status: 404 })
+    }
+
     if (!conversation) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
-    // Buscar instância ativa
-    const { data: instance } = await supabase
+    console.log('[Send Message] Conversa encontrada, org:', conversation.organization_id)
+    console.log('[Send Message] Telefone destino:', conversation.phone_number)
+
+    // Buscar instância ativa - QUALQUER instância conectada da organização
+    const { data: instances, error: instError } = await supabase
       .from('whatsapp_instances')
       .select('*')
       .eq('organization_id', conversation.organization_id)
-      .eq('status', 'connected')
-      .single()
+      .in('status', ['connected', 'ACTIVE'])
+      .limit(1)
+
+    const instance = instances?.[0]
+
+    if (instError) {
+      console.error('[Send Message] Erro ao buscar instância:', instError)
+    }
 
     if (!instance) {
-      return NextResponse.json({ error: 'No connected WhatsApp instance' }, { status: 400 })
+      console.error('[Send Message] Nenhuma instância conectada encontrada')
+      
+      // Listar todas as instâncias para debug
+      const { data: allInst } = await supabase
+        .from('whatsapp_instances')
+        .select('id, unique_id, status, organization_id')
+        .eq('organization_id', conversation.organization_id)
+      
+      console.log('[Send Message] Instâncias da org:', allInst)
+      
+      return NextResponse.json({ 
+        error: 'No connected WhatsApp instance',
+        debug: {
+          organization_id: conversation.organization_id,
+          instances_found: allInst?.length || 0,
+          instances: allInst?.map(i => ({ id: i.id, status: i.status }))
+        }
+      }, { status: 400 })
     }
+
+    console.log('[Send Message] Instância encontrada:', instance.unique_id, 'Status:', instance.status)
 
     // Enviar via Evolution API
     const apiUrl = instance.api_url || EVOLUTION_API_URL
     const apiKey = instance.api_key || EVOLUTION_API_KEY
+
+    console.log('[Send Message] Enviando para Evolution API...')
+    console.log('[Send Message] URL:', `${apiUrl}/message/sendText/${instance.unique_id}`)
 
     const sendResponse = await fetch(`${apiUrl}/message/sendText/${instance.unique_id}`, {
       method: 'POST',
@@ -100,8 +140,11 @@ export async function POST(
     })
 
     const sendData = await sendResponse.json()
+    
+    console.log('[Send Message] Resposta Evolution:', sendResponse.status, sendResponse.ok)
+    console.log('[Send Message] Dados:', JSON.stringify(sendData, null, 2).substring(0, 500))
 
-    // Salvar mensagem no banco
+    // Salvar mensagem no banco (mesmo se falhou, para registro)
     const { data: savedMessage, error: saveError } = await supabase
       .from('whatsapp_messages')
       .insert({
@@ -114,12 +157,19 @@ export async function POST(
         status: sendResponse.ok ? 'sent' : 'failed',
         wamid: sendData?.key?.id,
         wa_message_id: sendData?.key?.id,
-        metadata: { evolution_response: sendData },
+        metadata: { 
+          evolution_response: sendData,
+          send_error: !sendResponse.ok ? sendData : null,
+        },
       })
       .select()
       .single()
 
-    if (saveError) throw saveError
+    if (saveError) {
+      console.error('[Send Message] Erro ao salvar mensagem:', saveError)
+    } else {
+      console.log('[Send Message] Mensagem salva:', savedMessage.id)
+    }
 
     // Atualizar conversa
     await supabase
@@ -130,21 +180,39 @@ export async function POST(
       })
       .eq('id', conversationId)
 
+    if (!sendResponse.ok) {
+      return NextResponse.json({ 
+        message: savedMessage ? {
+          id: savedMessage.id,
+          conversation_id: savedMessage.conversation_id,
+          direction: savedMessage.direction,
+          message_type: savedMessage.message_type,
+          content: savedMessage.content,
+          status: 'failed',
+          sent_by_bot: false,
+          created_at: savedMessage.created_at,
+        } : null,
+        success: false,
+        error: 'Failed to send via Evolution API',
+        evolution_error: sendData,
+      })
+    }
+
     return NextResponse.json({ 
       message: {
-        id: savedMessage.id,
-        conversation_id: savedMessage.conversation_id,
-        direction: savedMessage.direction,
-        message_type: savedMessage.message_type,
-        content: savedMessage.content,
-        status: savedMessage.status,
+        id: savedMessage?.id,
+        conversation_id: savedMessage?.conversation_id,
+        direction: savedMessage?.direction,
+        message_type: savedMessage?.message_type,
+        content: savedMessage?.content,
+        status: savedMessage?.status,
         sent_by_bot: false,
-        created_at: savedMessage.created_at,
+        created_at: savedMessage?.created_at,
       },
       success: sendResponse.ok,
     })
   } catch (error: any) {
-    console.error('Error sending message:', error)
+    console.error('[Send Message] Erro geral:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
