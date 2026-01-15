@@ -272,19 +272,39 @@ export default function InboxTab() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // =============================================
+  // DEBUG STATE
+  // =============================================
+  const [debugEvents, setDebugEvents] = useState<string[]>([])
+  const [showDebug, setShowDebug] = useState(false)
+  
+  const addDebugEvent = useCallback((event: string) => {
+    const timestamp = new Date().toLocaleTimeString('pt-BR')
+    setDebugEvents(prev => [`[${timestamp}] ${event}`, ...prev.slice(0, 19)])
+  }, [])
+
+  // =============================================
   // REALTIME HANDLERS
   // =============================================
   
   const handleNewMessage = useCallback((message: InboxMessage) => {
-    console.log('[Realtime] New message received:', message.id)
+    console.log('[Realtime] 🔔 New message received:', message)
+    addDebugEvent(`📩 MSG: ${message.content?.substring(0, 30) || '[mídia]'} (conv: ${message.conversation_id?.substring(0, 8)})`)
     
     // Adicionar mensagem se for da conversa selecionada
     if (selectedConversation && message.conversation_id === selectedConversation.id) {
+      console.log('[Realtime] ✅ Adding message to current conversation')
+      addDebugEvent(`✅ Adicionado à conversa atual`)
       setMessages(prev => {
         // Evitar duplicatas
-        if (prev.find(m => m.id === message.id)) return prev
+        if (prev.find(m => m.id === message.id)) {
+          console.log('[Realtime] ⚠️ Message already exists, skipping')
+          return prev
+        }
         return [...prev, message]
       })
+    } else {
+      console.log('[Realtime] ℹ️ Message for different conversation:', message.conversation_id, 'Current:', selectedConversation?.id)
+      addDebugEvent(`ℹ️ Msg para outra conversa`)
     }
     
     // Atualizar lista de conversas
@@ -299,41 +319,45 @@ export default function InboxTab() {
       }
       return conv
     }))
-  }, [selectedConversation])
+  }, [selectedConversation, addDebugEvent])
 
   const handleMessageUpdate = useCallback((message: InboxMessage) => {
-    console.log('[Realtime] Message updated:', message.id)
+    console.log('[Realtime] 🔄 Message updated:', message)
+    addDebugEvent(`🔄 MSG UPDATE: status=${message.status}`)
     setMessages(prev => prev.map(m => m.id === message.id ? message : m))
-  }, [])
+  }, [addDebugEvent])
 
   const handleConversationUpdate = useCallback((conversation: InboxConversation) => {
-    console.log('[Realtime] Conversation updated:', conversation.id)
+    console.log('[Realtime] 🔄 Conversation updated:', conversation)
+    addDebugEvent(`🔄 CONV: ${conversation.contact_name || conversation.phone_number}`)
     setConversations(prev => prev.map(c => c.id === conversation.id ? { ...c, ...conversation } : c))
     
     // Atualizar selecionada se for a mesma
     if (selectedConversation?.id === conversation.id) {
       setSelectedConversation(prev => prev ? { ...prev, ...conversation } : null)
     }
-  }, [selectedConversation])
+  }, [selectedConversation, addDebugEvent])
 
   const handleNewConversation = useCallback((conversation: InboxConversation) => {
-    console.log('[Realtime] New conversation:', conversation.id)
+    console.log('[Realtime] 🆕 New conversation:', conversation)
+    addDebugEvent(`🆕 NOVA CONV: ${conversation.contact_name || conversation.phone_number}`)
     setConversations(prev => {
       if (prev.find(c => c.id === conversation.id)) return prev
       return [conversation, ...prev]
     })
-  }, [])
+  }, [addDebugEvent])
 
   const handleInstanceUpdate = useCallback((instance: WhatsAppInstance) => {
-    console.log('[Realtime] Instance updated:', instance)
+    console.log('[Realtime] 📱 Instance updated:', instance)
+    addDebugEvent(`📱 INSTÂNCIA: status=${instance?.status}`)
     // Atualizar a lista de instâncias quando houver mudança de status
     fetchInstances()
-  }, [fetchInstances])
+  }, [fetchInstances, addDebugEvent])
 
   // =============================================
   // SUPABASE REALTIME
   // =============================================
-  const { isConnected: realtimeConnected, hasError: realtimeError, status: realtimeStatus } = useInboxRealtime({
+  const { isConnected: realtimeConnected, hasError: realtimeError, status: realtimeStatus, lastEvent } = useInboxRealtime({
     organizationId,
     conversationId: selectedConversation?.id || null,
     onNewMessage: handleNewMessage,
@@ -343,6 +367,18 @@ export default function InboxTab() {
     onInstanceUpdate: handleInstanceUpdate,
     enabled: !!organizationId
   })
+
+  // Log realtime events to debug panel
+  useEffect(() => {
+    if (lastEvent) {
+      addDebugEvent(`⚡ REALTIME: ${lastEvent}`)
+    }
+  }, [lastEvent, addDebugEvent])
+
+  // Log connection status changes
+  useEffect(() => {
+    addDebugEvent(`🔌 Status: conv=${realtimeStatus.conversations}, msg=${realtimeStatus.messages}, inst=${realtimeStatus.instances}`)
+  }, [realtimeStatus, addDebugEvent])
 
   // =============================================
   // FALLBACK POLLING (quando Realtime falha)
@@ -674,6 +710,18 @@ export default function InboxTab() {
     
     return () => clearInterval(interval)
   }, [organizationId, fetchInstances])
+
+  // Keyboard shortcut for debug panel (Ctrl+D)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'd') {
+        e.preventDefault()
+        setShowDebug(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // =============================================
   // DERIVED STATE
@@ -1301,6 +1349,96 @@ export default function InboxTab() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Debug Panel - Toggle com Ctrl+D ou clique no indicador */}
+      <div className="fixed bottom-4 right-4 z-50">
+        {/* Toggle Button */}
+        <button
+          onClick={() => setShowDebug(!showDebug)}
+          className={`p-3 rounded-full shadow-lg transition-all ${
+            realtimeConnected && !realtimeError
+              ? 'bg-green-500 hover:bg-green-600'
+              : realtimeError
+              ? 'bg-red-500 hover:bg-red-600'
+              : 'bg-yellow-500 hover:bg-yellow-600'
+          }`}
+          title="Toggle Debug Panel (Ctrl+D)"
+        >
+          <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
+        </button>
+
+        {/* Debug Panel */}
+        {showDebug && (
+          <div className="absolute bottom-14 right-0 w-96 max-h-80 bg-dark-900 border border-dark-700 rounded-xl shadow-2xl overflow-hidden">
+            <div className="p-3 border-b border-dark-700 bg-dark-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-white">🔧 Debug Realtime</span>
+                <span className={`px-2 py-0.5 rounded text-xs ${
+                  realtimeConnected && !realtimeError
+                    ? 'bg-green-500/20 text-green-400'
+                    : realtimeError
+                    ? 'bg-red-500/20 text-red-400'
+                    : 'bg-yellow-500/20 text-yellow-400'
+                }`}>
+                  {realtimeConnected ? 'Conectado' : 'Desconectado'}
+                </span>
+              </div>
+              <button
+                onClick={() => setDebugEvents([])}
+                className="text-xs text-dark-400 hover:text-white"
+              >
+                Limpar
+              </button>
+            </div>
+            
+            {/* Status dos canais */}
+            <div className="p-2 border-b border-dark-700 bg-dark-800/50 text-xs">
+              <div className="grid grid-cols-3 gap-2">
+                <div className={`p-1.5 rounded text-center ${
+                  realtimeStatus.conversations === 'connected' ? 'bg-green-500/20 text-green-400' :
+                  realtimeStatus.conversations === 'error' ? 'bg-red-500/20 text-red-400' :
+                  'bg-yellow-500/20 text-yellow-400'
+                }`}>
+                  Conv: {realtimeStatus.conversations}
+                </div>
+                <div className={`p-1.5 rounded text-center ${
+                  realtimeStatus.messages === 'connected' ? 'bg-green-500/20 text-green-400' :
+                  realtimeStatus.messages === 'error' ? 'bg-red-500/20 text-red-400' :
+                  realtimeStatus.messages === 'disconnected' ? 'bg-dark-600 text-dark-400' :
+                  'bg-yellow-500/20 text-yellow-400'
+                }`}>
+                  Msg: {realtimeStatus.messages}
+                </div>
+                <div className={`p-1.5 rounded text-center ${
+                  realtimeStatus.instances === 'connected' ? 'bg-green-500/20 text-green-400' :
+                  realtimeStatus.instances === 'error' ? 'bg-red-500/20 text-red-400' :
+                  'bg-yellow-500/20 text-yellow-400'
+                }`}>
+                  Inst: {realtimeStatus.instances}
+                </div>
+              </div>
+              <div className="mt-2 text-dark-400">
+                Org: {organizationId?.substring(0, 8)}... | Conv: {selectedConversation?.id?.substring(0, 8) || 'nenhuma'}
+              </div>
+            </div>
+            
+            {/* Event Log */}
+            <div className="max-h-40 overflow-y-auto p-2 space-y-1">
+              {debugEvents.length === 0 ? (
+                <div className="text-center text-dark-500 text-xs py-4">
+                  Aguardando eventos...
+                </div>
+              ) : (
+                debugEvents.map((event, i) => (
+                  <div key={i} className="text-xs text-dark-300 font-mono">
+                    {event}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* WhatsApp Connect Modal */}
       <WhatsAppConnectUnified
