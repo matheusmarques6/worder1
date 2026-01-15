@@ -110,6 +110,8 @@ export async function GET(request: NextRequest) {
       organization_id: organizationId,
       instance_id: instance.id,
       chat_id: testChatId,
+      contact_phone: testPhone,
+      contact_name: 'Contato Teste Debug',
       status: 'open'
     }
 
