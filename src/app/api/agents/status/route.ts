@@ -1,167 +1,151 @@
+// =============================================
+// API: Agent Status
+// src/app/api/agents/status/route.ts
+// GET - Buscar status do agente logado
+// PUT - Atualizar status
+// =============================================
+// ⚠️ SEGURANÇA: OBRIGATÓRIO validar organization_id
+// NUNCA permitir acesso a dados de outra organização
+// =============================================
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
-// Cliente admin
-let supabaseAdmin: SupabaseClient | null = null;
-function getSupabaseAdmin(): SupabaseClient | null {
-  if (!supabaseAdmin) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (url && key && !url.includes('placeholder')) {
-      supabaseAdmin = createClient(url, key, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      });
-    }
-  }
-  return supabaseAdmin;
-}
-
-// Obter usuário autenticado
-async function getAuthUser() {
-  const admin = getSupabaseAdmin();
-  if (!admin) return null;
-
-  const cookieStore = cookies();
-  const accessToken = cookieStore.get('sb-access-token')?.value;
-  
-  if (!accessToken) return null;
-  
-  const { data: { user }, error } = await admin.auth.getUser(accessToken);
-  if (error || !user) return null;
-  
-  // Buscar organization_id do profile
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
-    .single();
-  
-  return { user, admin, organizationId: profile?.organization_id || user.user_metadata?.organization_id };
-}
-
-// Verificar se agente está online (última atividade < 2 minutos)
-function isAgentOnline(lastSeenAt: string | null): boolean {
-  if (!lastSeenAt) return false;
-  const lastSeen = new Date(lastSeenAt);
-  const now = new Date();
-  const diffMinutes = (now.getTime() - lastSeen.getTime()) / (1000 * 60);
-  return diffMinutes < 2;
-}
-
-// GET - Listar status de todos os agentes da organização
+// =============================================
+// GET - Buscar status do agente
+// =============================================
 export async function GET(request: NextRequest) {
   try {
-    const auth = await getAuthUser();
-    
-    if (!auth) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { searchParams } = new URL(request.url);
+    const organizationId = searchParams.get('organization_id');
+    const userId = searchParams.get('user_id');
 
-    const { admin, organizationId } = auth;
-
+    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO para isolamento de dados
     if (!organizationId) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 400 });
+      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
     }
 
-    // Buscar todos os agentes da organização
-    const { data: agents, error } = await admin
-      .from('agents')
-      .select(`
-        id,
-        name,
-        email,
-        status,
-        last_seen_at,
-        avatar_url
-      `)
-      .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .order('name');
-
-    if (error) {
-      console.error('Error fetching agents:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!userId) {
+      return NextResponse.json({ error: 'user_id é obrigatório' }, { status: 400 });
     }
 
-    // Mapear agentes com status calculado
-    const agentsWithStatus = (agents || []).map(agent => {
-      // Se o agente tem status explícito (online/away/busy), usar
-      // Se não, calcular baseado em last_seen_at
-      let calculatedStatus = agent.status || 'offline';
-      
-      if (calculatedStatus === 'online' && !isAgentOnline(agent.last_seen_at)) {
-        calculatedStatus = 'offline';
-      }
+    // ⚠️ SEGURANÇA: Buscar status FILTRADO por organization_id
+    let { data: status, error } = await supabaseAdmin
+      .from('agent_status')
+      .select('*')
+      .eq('organization_id', organizationId) // ⚠️ CRÍTICO
+      .eq('user_id', userId)
+      .single();
 
-      return {
-        id: agent.id,
-        name: agent.name,
-        email: agent.email,
-        avatar_url: agent.avatar_url,
-        status: calculatedStatus,
-        last_seen_at: agent.last_seen_at,
-      };
-    });
+    if (error && error.code === 'PGRST116') {
+      // Não existe, criar - SEMPRE com organization_id
+      const { data: newStatus, error: createError } = await supabaseAdmin
+        .from('agent_status')
+        .insert({
+          organization_id: organizationId, // ⚠️ CRÍTICO
+          user_id: userId,
+          status: 'offline',
+        })
+        .select()
+        .single();
 
-    // Ordenar: online primeiro, depois por nome
-    agentsWithStatus.sort((a, b) => {
-      if (a.status === 'online' && b.status !== 'online') return -1;
-      if (a.status !== 'online' && b.status === 'online') return 1;
-      return a.name.localeCompare(b.name);
-    });
+      if (createError) throw createError;
+      status = newStatus;
+    } else if (error) {
+      throw error;
+    }
 
-    return NextResponse.json({ agents: agentsWithStatus });
-
+    return NextResponse.json({ status });
   } catch (error: any) {
-    console.error('Agents status error:', error);
+    console.error('[Agent Status GET] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// POST - Atualizar heartbeat (agente está ativo)
-export async function POST(request: NextRequest) {
+// =============================================
+// PUT - Atualizar status
+// =============================================
+export async function PUT(request: NextRequest) {
   try {
-    const auth = await getAuthUser();
-    
-    if (!auth) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { user, admin } = auth;
     const body = await request.json();
-    const { agent_id, status } = body;
+    const {
+      organization_id, // ⚠️ OBRIGATÓRIO
+      user_id,
+      status,
+      status_message,
+      max_conversations,
+      on_break,
+      break_reason,
+      skills,
+    } = body;
 
-    // Se não passou agent_id, tentar pegar do user_metadata
-    const agentId = agent_id || user.user_metadata?.agent_id;
-
-    if (!agentId) {
-      return NextResponse.json({ error: 'Agent ID required' }, { status: 400 });
+    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO para isolamento de dados
+    if (!organization_id) {
+      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
     }
 
-    // Atualizar last_seen_at e opcionalmente status
-    const updateData: any = {
-      last_seen_at: new Date().toISOString(),
+    if (!user_id) {
+      return NextResponse.json({ error: 'user_id é obrigatório' }, { status: 400 });
+    }
+
+    // Preparar updates
+    const updates: Record<string, any> = {
+      last_activity_at: new Date().toISOString(),
     };
 
-    if (status) {
-      updateData.status = status;
+    if (status !== undefined) {
+      const validStatuses = ['online', 'busy', 'away', 'offline'];
+      if (!validStatuses.includes(status)) {
+        return NextResponse.json({ 
+          error: `Status inválido. Use: ${validStatuses.join(', ')}` 
+        }, { status: 400 });
+      }
+      updates.status = status;
     }
 
-    const { error } = await admin
-      .from('agents')
-      .update(updateData)
-      .eq('id', agentId);
+    if (status_message !== undefined) updates.status_message = status_message;
+    if (max_conversations !== undefined) updates.max_conversations = max_conversations;
+    if (skills !== undefined) updates.skills = skills;
 
-    if (error) {
-      console.error('Error updating agent status:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    // Tratar pausa
+    if (on_break !== undefined) {
+      updates.on_break = on_break;
+      if (on_break) {
+        updates.break_started_at = new Date().toISOString();
+        updates.break_reason = break_reason || null;
+      } else {
+        updates.break_started_at = null;
+        updates.break_reason = null;
+      }
     }
 
-    return NextResponse.json({ success: true });
+    // ⚠️ SEGURANÇA: Upsert SEMPRE com organization_id no conflito
+    const { data: agentStatus, error } = await supabaseAdmin
+      .from('agent_status')
+      .upsert({
+        organization_id, // ⚠️ CRÍTICO
+        user_id,
+        ...updates,
+      }, {
+        onConflict: 'organization_id,user_id',
+      })
+      .select()
+      .single();
 
+    if (error) throw error;
+
+    console.log('[Agent Status] Updated:', user_id, 'Status:', status || agentStatus.status, 'Org:', organization_id);
+
+    // Se ficou online, tentar processar fila
+    if (status === 'online') {
+      await supabaseAdmin.rpc('assign_next_conversation', {
+        p_organization_id: organization_id,
+      });
+    }
+
+    return NextResponse.json({ status: agentStatus, success: true });
   } catch (error: any) {
-    console.error('Agent heartbeat error:', error);
+    console.error('[Agent Status PUT] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
