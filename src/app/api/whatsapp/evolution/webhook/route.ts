@@ -22,17 +22,21 @@ export async function POST(request: NextRequest) {
     console.log('[Evolution Webhook] Full body:', JSON.stringify(body).substring(0, 500));
 
     // Buscar instância na tabela whatsapp_instances
+    // IMPORTANTE: Buscar por unique_id (usado na Evolution API), instance_name ou instance_id
     const { data: instance, error: instanceError } = await supabase
       .from('whatsapp_instances')
       .select('*')
-      .or(`instance_name.eq.${instanceName},instance_id.eq.${instanceName}`)
+      .or(`unique_id.eq.${instanceName},instance_name.eq.${instanceName}`)
       .single();
+    
+    console.log('[Evolution Webhook] Instance lookup:', { instanceName, found: !!instance, error: instanceError?.message });
 
     if (instanceError || !instance) {
       // Tentar buscar por qualquer instância conectada (fallback)
-      console.warn('[Evolution Webhook] Instance not found by name, trying by status...');
+      console.warn('[Evolution Webhook] Instance not found by unique_id/instance_name:', instanceName);
+      console.warn('[Evolution Webhook] Trying fallback: looking for any connected instance...');
       
-      const { data: anyInstance } = await supabase
+      const { data: anyInstance, error: fallbackError } = await supabase
         .from('whatsapp_instances')
         .select('*')
         .eq('status', 'connected')
@@ -40,13 +44,22 @@ export async function POST(request: NextRequest) {
         .single();
       
       if (!anyInstance) {
-        console.error('[Evolution Webhook] No connected instance found');
-        return NextResponse.json({ received: true, error: 'No instance found' });
+        console.error('[Evolution Webhook] ❌ No connected instance found!');
+        console.error('[Evolution Webhook] Fallback error:', fallbackError?.message);
+        console.error('[Evolution Webhook] Available instance names should match Evolution API instance names');
+        return NextResponse.json({ 
+          received: true, 
+          error: 'No instance found',
+          searched_for: instanceName,
+          hint: 'Verifique se o unique_id no banco corresponde ao instance_name na Evolution API'
+        });
       }
       
+      console.log('[Evolution Webhook] ✅ Fallback: Using instance:', anyInstance.unique_id || anyInstance.instance_name);
       // Usar a instância encontrada
       await processEvent(anyInstance, body, eventType);
     } else {
+      console.log('[Evolution Webhook] ✅ Instance found:', instance.unique_id || instance.instance_name);
       await processEvent(instance, body, eventType);
     }
 
@@ -152,13 +165,16 @@ async function handleConnection(instance: any, body: any) {
 // =============================================
 async function handleMessage(instance: any, body: any) {
   try {
+    console.log('[Evolution] ========== PROCESSING MESSAGE ==========');
+    console.log('[Evolution] Instance:', instance.id, '| Org:', instance.organization_id);
+    
     // Extrair dados da mensagem (diferentes formatos do Evolution)
     const data = body.data || body;
     const key = data.key || data.message?.key;
     const message = data.message?.message || data.message;
     const pushName = data.pushName || data.message?.pushName || 'Desconhecido';
 
-    console.log('[Evolution] Processing message, key:', key);
+    console.log('[Evolution] Raw key:', JSON.stringify(key).substring(0, 200));
 
     // Ignorar mensagens próprias
     if (key?.fromMe) {
