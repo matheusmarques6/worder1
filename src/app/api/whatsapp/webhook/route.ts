@@ -241,7 +241,8 @@ async function processMessage(body: any) {
   }
 
   const phoneNumber = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '')
-  const pushName = messageData?.pushName || data?.pushName || body?.pushName || phoneNumber
+  // NÃO usar phoneNumber como fallback - deixar null se não tiver nome
+  const pushName = messageData?.pushName || data?.pushName || body?.pushName || null
 
   // Extrair conteúdo da mensagem
   let content = message?.conversation || 
