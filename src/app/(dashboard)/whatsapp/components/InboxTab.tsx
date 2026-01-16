@@ -36,6 +36,8 @@ import {
   CheckCircle,
   Wifi,
   WifiOff,
+  Pencil,
+  Save,
 } from 'lucide-react'
 
 // Connection components
@@ -174,9 +176,16 @@ const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 }
 
-const getInitials = (name?: string) => {
-  if (!name) return '??'
-  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+const getInitials = (name?: string, phone?: string) => {
+  if (name) {
+    return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  }
+  // Fallback: usar últimos 2 dígitos do telefone
+  if (phone) {
+    const clean = phone.replace(/\D/g, '')
+    return clean.slice(-2)
+  }
+  return '??'
 }
 
 // Status Icon
@@ -267,6 +276,11 @@ export default function InboxTab() {
   const [newTag, setNewTag] = useState('')
   const [showAddTag, setShowAddTag] = useState(false)
   const [isSavingNote, setIsSavingNote] = useState(false)
+  
+  // Estados para edição de nome do contato
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [editingName, setEditingName] = useState('')
+  const [isSavingName, setIsSavingName] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -620,6 +634,45 @@ export default function InboxTab() {
     }
   }
 
+  // Salvar nome do contato
+  const handleSaveName = async () => {
+    if (!contact || !editingName.trim()) return
+    setIsSavingName(true)
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/contacts/${contact.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editingName.trim() })
+      })
+      const data = await res.json()
+      if (data.contact) {
+        // Atualizar contato local
+        setContact(prev => prev ? { ...prev, name: editingName.trim() } : null)
+        // Atualizar conversa na lista
+        setConversations(prev => prev.map(conv => 
+          conv.contact_id === contact.id 
+            ? { ...conv, contact_name: editingName.trim() }
+            : conv
+        ))
+        // Atualizar conversa selecionada
+        if (selectedConversation?.contact_id === contact.id) {
+          setSelectedConversation(prev => prev ? { ...prev, contact_name: editingName.trim() } : null)
+        }
+        setIsEditingName(false)
+      }
+    } catch (error) {
+      console.error('Error saving contact name:', error)
+    } finally {
+      setIsSavingName(false)
+    }
+  }
+
+  // Iniciar edição de nome
+  const handleStartEditName = () => {
+    setEditingName(contact?.name || '')
+    setIsEditingName(true)
+  }
+
   // Create Deal
   const handleCreateDeal = async () => {
     if (!contact) return
@@ -875,7 +928,7 @@ export default function InboxTab() {
                       <img src={conv.contact_avatar} alt="" className="w-12 h-12 rounded-full object-cover" />
                     ) : (
                       <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
-                        <span className="text-sm font-semibold text-white">{getInitials(conv.contact_name)}</span>
+                        <span className="text-sm font-semibold text-white">{getInitials(conv.contact_name, conv.phone_number)}</span>
                       </div>
                     )}
                     {conv.is_bot_active && (
@@ -943,7 +996,7 @@ export default function InboxTab() {
                   <img src={selectedConversation.contact_avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-white">{getInitials(selectedConversation.contact_name)}</span>
+                    <span className="text-sm font-semibold text-white">{getInitials(selectedConversation.contact_name, selectedConversation.phone_number)}</span>
                   </div>
                 )}
                 <div>
@@ -1095,10 +1148,52 @@ export default function InboxTab() {
                     <img src={contact.profile_picture_url} alt="" className="w-20 h-20 rounded-full mx-auto mb-4 object-cover" />
                   ) : (
                     <div className="w-20 h-20 rounded-full mx-auto mb-4 bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
-                      <span className="text-2xl font-semibold text-white">{getInitials(contact.name)}</span>
+                      <span className="text-2xl font-semibold text-white">{getInitials(contact.name, contact.phone_number)}</span>
                     </div>
                   )}
-                  <h3 className="text-lg font-semibold text-white mb-1">{contact.name || 'Sem nome'}</h3>
+                  
+                  {/* Nome editável */}
+                  {isEditingName ? (
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        placeholder="Digite o nome"
+                        className="bg-dark-700 border border-dark-600 rounded-lg px-3 py-1.5 text-white text-center text-sm focus:outline-none focus:border-primary-500"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveName()
+                          if (e.key === 'Escape') setIsEditingName(false)
+                        }}
+                      />
+                      <button
+                        onClick={handleSaveName}
+                        disabled={isSavingName || !editingName.trim()}
+                        className="p-1.5 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 disabled:opacity-50"
+                      >
+                        {isSavingName ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => setIsEditingName(false)}
+                        className="p-1.5 bg-dark-700 text-dark-400 rounded-lg hover:bg-dark-600 hover:text-white"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <h3 className="text-lg font-semibold text-white">{contact.name || 'Sem nome'}</h3>
+                      <button
+                        onClick={handleStartEditName}
+                        className="p-1 text-dark-500 hover:text-primary-400 transition-colors"
+                        title="Editar nome"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  
                   <p className="text-sm text-dark-400">{formatPhone(contact.phone_number)}</p>
                 </div>
 
