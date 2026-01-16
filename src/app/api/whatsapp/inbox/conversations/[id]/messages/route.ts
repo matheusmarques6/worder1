@@ -26,12 +26,21 @@ export async function GET(
       .update({ unread_count: 0 })
       .eq('id', conversationId)
 
+    // Helper para extrair content como string
+    const getContentString = (content: any, fallback?: string): string => {
+      if (!content && !fallback) return ''
+      if (typeof content === 'string') return content
+      if (typeof content === 'object' && content.text) return content.text
+      if (fallback) return fallback
+      return typeof content === 'object' ? JSON.stringify(content) : String(content || '')
+    }
+
     const messages = (data || []).map(msg => ({
       id: msg.id,
       conversation_id: msg.conversation_id,
       direction: msg.direction,
       message_type: msg.message_type || 'text',
-      content: typeof msg.content === 'object' ? (msg.content?.text || msg.text_body || JSON.stringify(msg.content)) : msg.content,
+      content: getContentString(msg.content, msg.text_body),
       media_url: msg.media_url,
       media_filename: msg.media_filename,
       status: msg.status || 'sent',
@@ -181,6 +190,14 @@ export async function POST(
       })
       .eq('id', conversationId)
 
+    // Helper para extrair content como string
+    const getContentString = (content: any): string => {
+      if (!content) return ''
+      if (typeof content === 'string') return content
+      if (typeof content === 'object' && content.text) return content.text
+      return JSON.stringify(content)
+    }
+
     if (!sendResponse.ok) {
       return NextResponse.json({ 
         message: savedMessage ? {
@@ -188,7 +205,7 @@ export async function POST(
           conversation_id: savedMessage.conversation_id,
           direction: savedMessage.direction,
           message_type: savedMessage.message_type,
-          content: savedMessage.content,
+          content: getContentString(savedMessage.content) || content, // String, não objeto
           status: 'failed',
           sent_by_bot: false,
           created_at: savedMessage.created_at,
@@ -205,7 +222,7 @@ export async function POST(
         conversation_id: savedMessage?.conversation_id,
         direction: savedMessage?.direction,
         message_type: savedMessage?.message_type,
-        content: savedMessage?.content,
+        content: getContentString(savedMessage?.content) || content, // String, não objeto
         status: savedMessage?.status,
         sent_by_bot: false,
         created_at: savedMessage?.created_at,
