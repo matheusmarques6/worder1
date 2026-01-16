@@ -251,32 +251,156 @@ async function processMessage(body: any) {
                 message?.videoMessage?.caption ||
                 messageData?.body ||
                 ''
-                
-  // Se não tem conteúdo, verificar tipo de mídia
-  if (!content) {
-    if (message?.imageMessage) content = '[Imagem]'
-    else if (message?.audioMessage) content = '[Áudio]'
-    else if (message?.videoMessage) content = '[Vídeo]'
-    else if (message?.documentMessage) content = message?.documentMessage?.fileName || '[Documento]'
-    else if (message?.stickerMessage) content = '[Sticker]'
-    else if (message?.locationMessage) content = '[Localização]'
-    else if (message?.contactMessage) content = '[Contato]'
-    else content = '[Mídia]'
+
+  // ✅ CORREÇÃO: Variáveis para mídia
+  let messageType = 'text'
+  let mediaUrl = null
+  let mediaMimeType = null
+
+  // ✅ CORREÇÃO: Extrair URL e tipo de cada tipo de mídia
+  if (message?.imageMessage) {
+    messageType = 'image'
+    content = content || '[Imagem]'
+    mediaUrl = message.imageMessage.url
+    mediaMimeType = message.imageMessage.mimetype
+  }
+  else if (message?.audioMessage) {
+    messageType = 'audio'
+    content = '[Áudio]'
+    mediaUrl = message.audioMessage.url
+    mediaMimeType = message.audioMessage.mimetype
+  }
+  else if (message?.videoMessage) {
+    messageType = 'video'
+    content = content || '[Vídeo]'
+    mediaUrl = message.videoMessage.url
+    mediaMimeType = message.videoMessage.mimetype
+  }
+  else if (message?.documentMessage) {
+    messageType = 'document'
+    content = message.documentMessage.fileName || '[Documento]'
+    mediaUrl = message.documentMessage.url
+    mediaMimeType = message.documentMessage.mimetype
+  }
+  else if (message?.stickerMessage) {
+    messageType = 'sticker'
+    content = '[Sticker]'
+    mediaUrl = message.stickerMessage.url
+  }
+  else if (message?.locationMessage) {
+    messageType = 'location'
+    content = `[Localização: ${message.locationMessage.degreesLatitude}, ${message.locationMessage.degreesLongitude}]`
+  }
+  else if (message?.contactMessage) {
+    messageType = 'contact'
+    content = '[Contato]'
+  }
+  else if (!content) {
+    content = '[Mídia]'
   }
   
   console.log('[Webhook] 📩 Mensagem de:', phoneNumber, '| Nome:', pushName, '| Conteúdo:', content?.substring(0, 50))
+  console.log('[Webhook] 📩 Tipo:', messageType, '| Media URL inicial:', mediaUrl ? 'SIM' : 'NÃO')
 
-  // Determinar tipo de mensagem
-  let messageType = messageData?.messageType || 'text'
-  if (message?.imageMessage) messageType = 'image'
-  if (message?.audioMessage) messageType = 'audio'
-  if (message?.videoMessage) messageType = 'video'
-  if (message?.documentMessage) messageType = 'document'
-  if (message?.stickerMessage) messageType = 'sticker'
-  if (message?.locationMessage) messageType = 'location'
-  if (message?.contactMessage) messageType = 'contact'
+  // =====================================================
+  // DOWNLOAD DE MÍDIA E UPLOAD PARA SUPABASE STORAGE
+  // =====================================================
+  if (!mediaUrl && messageType !== 'text' && messageType !== 'location' && messageType !== 'contact' && key?.id) {
+    console.log('[Webhook] 📥 Tentando baixar mídia via Evolution API...')
+    
+    try {
+      const EVOLUTION_API_URL = instance.api_url || process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host'
+      const EVOLUTION_API_KEY = instance.api_key || process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11'
+      
+      // 1. Baixar mídia da Evolution API
+      const downloadResponse = await fetch(
+        `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${instance.unique_id}`,
+        {
+          method: 'POST',
+          headers: {
+            'apikey': EVOLUTION_API_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: { key },
+            convertToMp4: false
+          })
+        }
+      )
+      
+      if (downloadResponse.ok) {
+        const mediaData = await downloadResponse.json()
+        
+        if (mediaData.base64) {
+          // Determinar tipo MIME e extensão
+          const mimeType = mediaMimeType || mediaData.mimetype ||
+            (messageType === 'image' ? 'image/jpeg' : 
+             messageType === 'audio' ? 'audio/ogg' : 
+             messageType === 'video' ? 'video/mp4' : 
+             messageType === 'document' ? 'application/pdf' :
+             'application/octet-stream')
+          
+          // Determinar extensão do arquivo
+          const extensionMap: Record<string, string> = {
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/gif': 'gif',
+            'image/webp': 'webp',
+            'audio/ogg': 'ogg',
+            'audio/mpeg': 'mp3',
+            'audio/mp4': 'm4a',
+            'audio/opus': 'opus',
+            'video/mp4': 'mp4',
+            'video/3gpp': '3gp',
+            'application/pdf': 'pdf',
+          }
+          const extension = extensionMap[mimeType] || 'bin'
+          
+          // 2. Converter base64 para Buffer
+          const buffer = Buffer.from(mediaData.base64, 'base64')
+          
+          // 3. Gerar nome único para o arquivo
+          const timestamp = Date.now()
+          const messageId = key?.id || `${timestamp}`
+          const fileName = `${orgId}/${phoneNumber}/${timestamp}-${messageId.substring(0, 8)}.${extension}`
+          
+          console.log('[Webhook] 📤 Fazendo upload para Storage:', fileName, '| Tamanho:', buffer.length, 'bytes')
+          
+          // 4. Upload para Supabase Storage
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('whatsapp-media')
+            .upload(fileName, buffer, {
+              contentType: mimeType,
+              cacheControl: '31536000', // 1 ano de cache
+              upsert: false
+            })
+          
+          if (uploadError) {
+            console.error('[Webhook] ❌ Erro no upload:', uploadError)
+            // Fallback para data URL se o upload falhar
+            mediaUrl = `data:${mimeType};base64,${mediaData.base64}`
+            console.log('[Webhook] ⚠️ Usando fallback base64')
+          } else {
+            // 5. Obter URL pública
+            const { data: { publicUrl } } = supabase.storage
+              .from('whatsapp-media')
+              .getPublicUrl(fileName)
+            
+            mediaUrl = publicUrl
+            console.log('[Webhook] ✅ Upload concluído! URL:', mediaUrl)
+          }
+        } else {
+          console.log('[Webhook] ⚠️ Resposta sem base64:', JSON.stringify(mediaData).substring(0, 200))
+        }
+      } else {
+        console.log('[Webhook] ⚠️ Erro ao baixar mídia:', downloadResponse.status, downloadResponse.statusText)
+      }
+    } catch (downloadError) {
+      console.error('[Webhook] ❌ Erro no download/upload de mídia:', downloadError)
+    }
+  }
 
-  console.log('[Webhook] 📩 Tipo:', messageType)
+  console.log('[Webhook] 📩 Media URL final:', mediaUrl ? `SIM (${mediaUrl.substring(0, 80)}...)` : 'NÃO')
 
   // 2. Buscar ou criar CONVERSA diretamente (sem depender de whatsapp_contacts)
   const chatId = remoteJid
@@ -375,6 +499,9 @@ async function processMessage(body: any) {
       from_number: phoneNumber,
       status: 'received',
       timestamp: new Date().toISOString(), // Obrigatório
+      // ✅ CORREÇÃO: Adicionar mídia
+      media_url: mediaUrl,
+      media_mime_type: mediaMimeType,
     })
     .select()
     .single()
