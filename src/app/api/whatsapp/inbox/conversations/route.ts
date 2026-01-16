@@ -37,14 +37,15 @@ export async function GET(request: NextRequest) {
       id: conv.id,
       organization_id: conv.organization_id,
       contact_id: conv.contact_id,
-      phone_number: conv.phone_number,
+      phone_number: conv.phone_number || conv.contact?.phone_number,
       status: conv.status,
       is_bot_active: conv.is_bot_active,
       last_message_at: conv.last_message_at,
       last_message_preview: conv.last_message_preview,
       unread_count: conv.unread_count || 0,
       can_send_template_only: false,
-      contact_name: conv.contact?.name || conv.contact?.profile_name || conv.phone_number,
+      // NÃO usar phone_number como fallback - deixar null para mostrar os dígitos do telefone
+      contact_name: conv.contact?.name || conv.contact?.profile_name || null,
       contact_avatar: conv.contact?.profile_picture_url,
       contact_tags: conv.contact?.tags || [],
     }))

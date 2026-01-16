@@ -471,10 +471,38 @@ export default function InboxTab() {
       const data = await res.json()
       if (data.contact) setContact(data.contact)
       setNotes(data.notes || [])
+      
+      // Buscar foto de perfil atualizada em background
+      fetchProfilePicture(contactId)
     } catch (error) {
       console.error('Error fetching contact:', error)
     } finally {
       setContactLoading(false)
+    }
+  }
+
+  // Fetch profile picture from WhatsApp
+  const fetchProfilePicture = async (contactId: string) => {
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/profile-picture`)
+      const data = await res.json()
+      if (data.profile_picture_url && data.updated) {
+        // Atualizar foto do contato
+        setContact(prev => prev ? { ...prev, profile_picture_url: data.profile_picture_url } : null)
+        // Atualizar na lista de conversas
+        setConversations(prev => prev.map(conv => 
+          conv.contact_id === contactId 
+            ? { ...conv, contact_avatar: data.profile_picture_url }
+            : conv
+        ))
+        // Atualizar conversa selecionada
+        if (selectedConversation?.contact_id === contactId) {
+          setSelectedConversation(prev => prev ? { ...prev, contact_avatar: data.profile_picture_url } : null)
+        }
+      }
+    } catch (error) {
+      // Silently fail - foto de perfil não é crítica
+      console.debug('Could not fetch profile picture:', error)
     }
   }
 
