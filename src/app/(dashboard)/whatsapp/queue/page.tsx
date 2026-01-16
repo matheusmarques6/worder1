@@ -29,7 +29,7 @@ import {
 import { useQueue, QueueItem, QueueAgent } from '@/hooks/useQueue'
 import { useAgentStatus } from '@/hooks/useAgentStatus'
 import { useStore } from '@/hooks/useStore'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuthStore } from '@/stores'
 
 // =============================================
 // HELPERS
@@ -247,7 +247,7 @@ function AgentCard({ agent }: AgentCardProps) {
 
 export default function QueuePage() {
   const { currentStore } = useStore()
-  const { user } = useAuth()
+  const { user } = useAuthStore()
   
   const {
     items,
