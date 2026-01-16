@@ -28,7 +28,6 @@ import {
 } from 'lucide-react'
 import { useQueue, QueueItem, QueueAgent } from '@/hooks/useQueue'
 import { useAgentStatus } from '@/hooks/useAgentStatus'
-import { useStore } from '@/hooks/useStore'
 import { useAuthStore } from '@/stores'
 
 // =============================================
@@ -246,9 +245,11 @@ function AgentCard({ agent }: AgentCardProps) {
 // =============================================
 
 export default function QueuePage() {
-  const { currentStore } = useStore()
   const { user } = useAuthStore()
   
+  // Obter organization_id do usuário
+  const organizationId = user?.organization_id || user?.user_metadata?.organization_id || ''
+
   const {
     items,
     agents,
@@ -261,7 +262,7 @@ export default function QueuePage() {
     assignConversation,
     triggerAutoAssign,
   } = useQueue({
-    organizationId: currentStore?.organization_id || '',
+    organizationId,
     autoLoad: true,
     refreshInterval: 10000, // 10 segundos
   })
@@ -272,7 +273,7 @@ export default function QueuePage() {
     goOffline,
     toggleBreak,
   } = useAgentStatus({
-    organizationId: currentStore?.organization_id || '',
+    organizationId,
     userId: user?.id || '',
     autoLoad: true,
   })

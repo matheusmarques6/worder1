@@ -22,7 +22,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { useTasks, Task } from '@/hooks/useTasks'
-import { useStore } from '@/hooks/useStore'
+import { useAuthStore } from '@/stores'
 import { TaskCard } from '@/components/tasks/TaskCard'
 import { CreateTaskModal } from '@/components/tasks/CreateTaskModal'
 
@@ -97,10 +97,13 @@ function TaskSection({
 // =============================================
 
 export default function TasksPage() {
-  const { currentStore } = useStore()
+  const { user } = useAuthStore()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [typeFilter, setTypeFilter] = useState<string>('')
+
+  // Obter organization_id do usuário
+  const organizationId = user?.organization_id || user?.user_metadata?.organization_id || ''
 
   const {
     tasks,
@@ -114,7 +117,7 @@ export default function TasksPage() {
     completeTask,
     deleteTask,
   } = useTasks({
-    organizationId: currentStore?.organization_id || '',
+    organizationId,
     filters: {
       status: statusFilter || undefined,
       type: typeFilter || undefined,

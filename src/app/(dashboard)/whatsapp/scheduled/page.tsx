@@ -28,7 +28,7 @@ import {
   MoreVertical,
 } from 'lucide-react'
 import { useScheduledMessages, ScheduledMessage } from '@/hooks/useScheduledMessages'
-import { useStore } from '@/hooks/useStore'
+import { useAuthStore } from '@/stores'
 
 // =============================================
 // HELPERS
@@ -265,9 +265,12 @@ function MessageCard({ message, onCancel, onDelete, onSendNow, isActioning }: Me
 // =============================================
 
 export default function ScheduledMessagesPage() {
-  const { currentStore } = useStore()
+  const { user } = useAuthStore()
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [actioningId, setActioningId] = useState<string | null>(null)
+
+  // Obter organization_id do usuário
+  const organizationId = user?.organization_id || user?.user_metadata?.organization_id || ''
 
   const {
     messages,
@@ -279,7 +282,7 @@ export default function ScheduledMessagesPage() {
     deleteMessage,
     sendNow,
   } = useScheduledMessages({
-    organizationId: currentStore?.organization_id || '',
+    organizationId,
     status: statusFilter || undefined,
     autoLoad: true,
   })

@@ -26,7 +26,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { useTickets, Ticket as TicketType } from '@/hooks/useTickets'
-import { useStore } from '@/hooks/useStore'
+import { useAuthStore } from '@/stores'
 import { CreateTicketModal } from '@/components/tickets/CreateTicketModal'
 
 // =============================================
@@ -210,11 +210,14 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
 // =============================================
 
 export default function TicketsPage() {
-  const { currentStore } = useStore()
+  const { user } = useAuthStore()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [categoryFilter, setCategoryFilter] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Obter organization_id do usuário
+  const organizationId = user?.organization_id || user?.user_metadata?.organization_id || ''
 
   const {
     tickets,
@@ -227,7 +230,7 @@ export default function TicketsPage() {
     updateTicket,
     setSelectedTicket,
   } = useTickets({
-    organizationId: currentStore?.organization_id || '',
+    organizationId,
     filters: {
       status: statusFilter || undefined,
       category: categoryFilter || undefined,
