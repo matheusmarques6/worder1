@@ -7,6 +7,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 
+// Constantes da Evolution API
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+
 // =============================================
 // POST - Receber eventos
 // =============================================
