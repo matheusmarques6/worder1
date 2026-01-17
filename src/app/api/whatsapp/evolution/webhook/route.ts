@@ -296,7 +296,8 @@ async function handleMessage(instance: any, body: any) {
     if (mediaBase64) {
       try {
         const ext = mediaMimeType?.split('/')[1]?.split(';')[0] || 'bin';
-        const fileName = `${instance.organization_id}/${Date.now()}-${messageId.substring(0, 8)}.${ext}`;
+        const tempId = key?.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const fileName = `${instance.organization_id}/${Date.now()}-${tempId.substring(0, 8)}.${ext}`;
         
         // Converter base64 para buffer
         const buffer = Buffer.from(mediaBase64, 'base64');
