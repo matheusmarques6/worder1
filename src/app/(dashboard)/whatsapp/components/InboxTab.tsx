@@ -36,6 +36,11 @@ import {
   CheckCircle,
   Wifi,
   WifiOff,
+  Image,
+  Mic,
+  Video,
+  StopCircle,
+  Camera,
 } from 'lucide-react'
 
 // Connection components
@@ -282,6 +287,15 @@ export default function InboxTab() {
   const [aiAgents, setAiAgents] = useState<AIAgent[]>([])
   const [showAgentSelector, setShowAgentSelector] = useState(false)
   const [loadingAgents, setLoadingAgents] = useState(false)
+  
+  // Media states
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingTime, setRecordingTime] = useState(0)
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
+  const [showMediaMenu, setShowMediaMenu] = useState(false)
+  const [uploadingMedia, setUploadingMedia] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const recordingInterval = useRef<NodeJS.Timeout | null>(null)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -608,6 +622,164 @@ export default function InboxTab() {
     } catch (error) {
       console.error('Error activating bot:', error)
     }
+  }
+
+  // =============================================
+  // MEDIA FUNCTIONS
+  // =============================================
+
+  // Handle file selection (image/video/document)
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !selectedConversation) return
+
+    setUploadingMedia(true)
+    setShowMediaMenu(false)
+
+    try {
+      // Determinar tipo de mídia
+      let mediaType = 'document'
+      if (file.type.startsWith('image/')) mediaType = 'image'
+      else if (file.type.startsWith('video/')) mediaType = 'video'
+      else if (file.type.startsWith('audio/')) mediaType = 'audio'
+
+      // Criar FormData
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('mediaType', mediaType)
+
+      // Enviar para API
+      const res = await fetch(`/api/whatsapp/inbox/conversations/${selectedConversation.id}/media`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+      
+      if (data.message) {
+        // Adicionar mensagem na lista
+        setMessages(prev => [...prev, {
+          id: data.message.id,
+          conversation_id: selectedConversation.id,
+          direction: 'outbound',
+          message_type: mediaType,
+          content: file.name,
+          media_url: data.message.media_url,
+          media_filename: file.name,
+          status: data.success ? 'sent' : 'failed',
+          sent_by_bot: false,
+          created_at: new Date().toISOString()
+        }])
+      }
+    } catch (error) {
+      console.error('Error sending media:', error)
+    } finally {
+      setUploadingMedia(false)
+      // Limpar input
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  // Start audio recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      const chunks: BlobPart[] = []
+
+      recorder.ondataavailable = (e) => chunks.push(e.data)
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunks, { type: 'audio/ogg; codecs=opus' })
+        await sendAudio(audioBlob)
+        stream.getTracks().forEach(track => track.stop())
+      }
+
+      recorder.start()
+      setMediaRecorder(recorder)
+      setIsRecording(true)
+      setRecordingTime(0)
+
+      // Timer
+      recordingInterval.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1)
+      }, 1000)
+    } catch (error) {
+      console.error('Error starting recording:', error)
+      alert('Não foi possível acessar o microfone. Verifique as permissões.')
+    }
+  }
+
+  // Stop audio recording
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop()
+      setIsRecording(false)
+      setMediaRecorder(null)
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current)
+        recordingInterval.current = null
+      }
+    }
+  }
+
+  // Cancel recording
+  const cancelRecording = () => {
+    if (mediaRecorder) {
+      mediaRecorder.stream.getTracks().forEach(track => track.stop())
+      setIsRecording(false)
+      setMediaRecorder(null)
+      setRecordingTime(0)
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current)
+        recordingInterval.current = null
+      }
+    }
+  }
+
+  // Send audio
+  const sendAudio = async (audioBlob: Blob) => {
+    if (!selectedConversation) return
+
+    setUploadingMedia(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', audioBlob, 'audio.ogg')
+      formData.append('mediaType', 'audio')
+
+      const res = await fetch(`/api/whatsapp/inbox/conversations/${selectedConversation.id}/media`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+      
+      if (data.message) {
+        setMessages(prev => [...prev, {
+          id: data.message.id,
+          conversation_id: selectedConversation.id,
+          direction: 'outbound',
+          message_type: 'audio',
+          content: '',
+          media_url: data.message.media_url,
+          status: data.success ? 'sent' : 'failed',
+          sent_by_bot: false,
+          created_at: new Date().toISOString()
+        }])
+      }
+    } catch (error) {
+      console.error('Error sending audio:', error)
+    } finally {
+      setUploadingMedia(false)
+      setRecordingTime(0)
+    }
+  }
+
+  // Format recording time
+  const formatRecordingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
   // Add note
@@ -1069,14 +1241,13 @@ export default function InboxTab() {
                               </div>
                             )}
                             {msg.message_type === 'image' && (
-                              <div className="mb-2">
+                              <div className="mb-1">
                                 {msg.media_url ? (
                                   <img 
                                     src={msg.media_url} 
-                                    alt="Imagem" 
-                                    className="rounded-lg max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90"
+                                    alt="" 
+                                    className="rounded-lg w-full max-w-[280px] max-h-[320px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                     onError={(e) => {
-                                      // Tentar proxy se URL original falhar
                                       const target = e.target as HTMLImageElement
                                       if (!target.src.includes('/api/whatsapp/media')) {
                                         target.src = `/api/whatsapp/media?messageId=${msg.id}`
@@ -1095,12 +1266,12 @@ export default function InboxTab() {
                               </div>
                             )}
                             {msg.message_type === 'audio' && (
-                              <div className="mb-2">
+                              <div className="mb-1 min-w-[200px]">
                                 {msg.media_url ? (
                                   <audio 
                                     controls 
                                     src={msg.media_url} 
-                                    className="max-w-full"
+                                    className="w-full max-w-[280px]"
                                     onError={(e) => {
                                       const target = e.target as HTMLAudioElement
                                       if (!target.src.includes('/api/whatsapp/media')) {
@@ -1116,12 +1287,12 @@ export default function InboxTab() {
                               </div>
                             )}
                             {msg.message_type === 'video' && (
-                              <div className="mb-2">
+                              <div className="mb-1">
                                 {msg.media_url ? (
                                   <video 
                                     controls 
                                     src={msg.media_url} 
-                                    className="rounded-lg max-w-full max-h-64"
+                                    className="rounded-lg w-full max-w-[280px] max-h-[320px]"
                                     onError={(e) => {
                                       const target = e.target as HTMLVideoElement
                                       if (!target.src.includes('/api/whatsapp/media')) {
@@ -1136,13 +1307,31 @@ export default function InboxTab() {
                                 )}
                               </div>
                             )}
+                            {msg.message_type === 'sticker' && msg.media_url && (
+                              <div className="mb-1">
+                                <img 
+                                  src={msg.media_url} 
+                                  alt="" 
+                                  className="w-32 h-32 object-contain"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement
+                                    if (!target.src.includes('/api/whatsapp/media')) {
+                                      target.src = `/api/whatsapp/media?messageId=${msg.id}`
+                                    }
+                                  }}
+                                />
+                              </div>
+                            )}
                             {msg.media_url && msg.message_type === 'document' && (
-                              <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-dark-700/50 rounded-lg mb-2">
-                                <FileText className="w-5 h-5" />
+                              <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 bg-dark-700/50 rounded-lg mb-1 hover:bg-dark-600/50 transition-colors">
+                                <FileText className="w-5 h-5 text-primary-400" />
                                 <span className="text-sm truncate">{msg.media_filename || 'Documento'}</span>
                               </a>
                             )}
-                            {msg.content && <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>}
+                            {/* Mostrar content apenas se não for placeholder de mídia */}
+                            {msg.content && !['[Imagem]', '[Áudio]', '[Vídeo]', '[Sticker]', '[Documento]'].includes(msg.content) && (
+                              <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                            )}
                             <div className={`flex items-center gap-1 mt-1 ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                               <span className="text-[10px] opacity-70">{formatMessageTime(msg.created_at)}</span>
                               {msg.direction === 'outbound' && <MessageStatus status={msg.status} />}
@@ -1164,11 +1353,135 @@ export default function InboxTab() {
                   <p className="text-sm text-yellow-400 mb-2">Janela de 24h expirada</p>
                   <p className="text-xs text-dark-400">Envie um template para reabrir a conversa</p>
                 </div>
-              ) : (
-                <div className="flex items-end gap-2">
-                  <button className="p-2 hover:bg-dark-700/50 rounded-lg text-dark-400 hover:text-white transition-colors">
-                    <Paperclip className="w-5 h-5" />
+              ) : isRecording ? (
+                /* Recording UI */
+                <div className="flex items-center gap-3 bg-dark-800/50 rounded-xl p-3">
+                  <button
+                    onClick={cancelRecording}
+                    className="p-2 hover:bg-dark-700/50 rounded-lg text-red-400 hover:text-red-300 transition-colors"
+                    title="Cancelar"
+                  >
+                    <X className="w-5 h-5" />
                   </button>
+                  <div className="flex-1 flex items-center gap-3">
+                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                    <span className="text-sm text-white font-medium">{formatRecordingTime(recordingTime)}</span>
+                    <div className="flex-1 h-1 bg-dark-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-red-500 animate-pulse" style={{ width: '100%' }} />
+                    </div>
+                  </div>
+                  <button
+                    onClick={stopRecording}
+                    className="p-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors"
+                    title="Enviar"
+                  >
+                    <Send className="w-5 h-5" />
+                  </button>
+                </div>
+              ) : (
+                /* Normal Input */
+                <div className="flex items-end gap-2">
+                  {/* Hidden file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  
+                  {/* Media menu button */}
+                  <div className="relative">
+                    <button 
+                      onClick={() => setShowMediaMenu(!showMediaMenu)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        showMediaMenu 
+                          ? 'bg-primary-500/20 text-primary-400' 
+                          : 'hover:bg-dark-700/50 text-dark-400 hover:text-white'
+                      }`}
+                      disabled={uploadingMedia}
+                    >
+                      {uploadingMedia ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Paperclip className="w-5 h-5" />
+                      )}
+                    </button>
+                    
+                    {/* Media menu dropdown */}
+                    <AnimatePresence>
+                      {showMediaMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                          className="absolute bottom-full left-0 mb-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden min-w-[180px]"
+                        >
+                          <button
+                            onClick={() => {
+                              if (fileInputRef.current) {
+                                fileInputRef.current.accept = 'image/*'
+                                fileInputRef.current.click()
+                              }
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/50 transition-colors text-left"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
+                              <Image className="w-4 h-4 text-purple-400" />
+                            </div>
+                            <span className="text-sm text-white">Imagem</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (fileInputRef.current) {
+                                fileInputRef.current.accept = 'video/*'
+                                fileInputRef.current.click()
+                              }
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/50 transition-colors text-left"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                              <Video className="w-4 h-4 text-blue-400" />
+                            </div>
+                            <span className="text-sm text-white">Vídeo</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (fileInputRef.current) {
+                                fileInputRef.current.accept = '.pdf,.doc,.docx,.xls,.xlsx,.txt'
+                                fileInputRef.current.click()
+                              }
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/50 transition-colors text-left"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center">
+                              <FileText className="w-4 h-4 text-orange-400" />
+                            </div>
+                            <span className="text-sm text-white">Documento</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowMediaMenu(false)
+                              // Usar camera API se disponível
+                              if (fileInputRef.current) {
+                                fileInputRef.current.accept = 'image/*'
+                                fileInputRef.current.capture = 'environment'
+                                fileInputRef.current.click()
+                              }
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/50 transition-colors text-left"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                              <Camera className="w-4 h-4 text-green-400" />
+                            </div>
+                            <span className="text-sm text-white">Câmera</span>
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  
+                  {/* Text input */}
                   <div className="flex-1 relative">
                     <textarea
                       ref={inputRef}
@@ -1180,16 +1493,31 @@ export default function InboxTab() {
                       className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-primary-500/50 resize-none max-h-[120px]"
                     />
                   </div>
+                  
+                  {/* Emoji button (placeholder) */}
                   <button className="p-2 hover:bg-dark-700/50 rounded-lg text-dark-400 hover:text-white transition-colors">
                     <Smile className="w-5 h-5" />
                   </button>
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={!input.trim() || isSending}
-                    className="p-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                  </button>
+                  
+                  {/* Send or Record button */}
+                  {input.trim() ? (
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={isSending}
+                      className="p-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={startRecording}
+                      disabled={uploadingMedia}
+                      className="p-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors disabled:opacity-50"
+                      title="Gravar áudio"
+                    >
+                      <Mic className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
               )}
             </div>
