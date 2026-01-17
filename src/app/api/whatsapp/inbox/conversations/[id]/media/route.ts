@@ -14,10 +14,11 @@ export async function POST(
     const formData = await request.formData()
     const file = formData.get('file') as File
     const mediaType = formData.get('mediaType') as string || 'document'
+    const caption = formData.get('caption') as string || ''
 
     console.log('[Send Media] ============================')
     console.log('[Send Media] Conversation:', conversationId)
-    console.log('[Send Media] Type:', mediaType, '| File:', file?.name, '| Size:', file?.size)
+    console.log('[Send Media] Type:', mediaType, '| File:', file?.name, '| Caption:', caption?.substring(0, 30))
 
     if (!file) {
       return NextResponse.json({ error: 'file required' }, { status: 400 })
@@ -96,11 +97,13 @@ export async function POST(
       payload.mediatype = 'image'
       payload.media = `data:${file.type};base64,${base64}`
       payload.fileName = file.name
+      if (caption) payload.caption = caption
     } else if (mediaType === 'video') {
       endpoint = `/message/sendMedia/${instanceName}`
       payload.mediatype = 'video'
       payload.media = `data:${file.type};base64,${base64}`
       payload.fileName = file.name
+      if (caption) payload.caption = caption
     } else if (mediaType === 'audio') {
       endpoint = `/message/sendWhatsAppAudio/${instanceName}`
       payload.audio = `data:audio/ogg;base64,${base64}`
@@ -109,6 +112,7 @@ export async function POST(
       payload.mediatype = 'document'
       payload.media = `data:${file.type};base64,${base64}`
       payload.fileName = file.name
+      if (caption) payload.caption = caption
     }
 
     console.log('[Send Media] Sending to Evolution API:', endpoint)
@@ -136,7 +140,7 @@ export async function POST(
         message_id: sendData?.key?.id || `media-${Date.now()}`,
         direction: 'outbound',
         message_type: mediaType,
-        content: '',
+        content: caption || '',
         text_body: '',
         to_number: phoneNumber,
         status: sendResponse.ok ? 'sent' : 'failed',
@@ -155,14 +159,24 @@ export async function POST(
     }
 
     // 4. Atualizar conversa
+    let preview = ''
+    if (caption) {
+      preview = caption.substring(0, 50)
+    } else if (mediaType === 'image') {
+      preview = '📷 Imagem'
+    } else if (mediaType === 'video') {
+      preview = '🎬 Vídeo'
+    } else if (mediaType === 'audio') {
+      preview = '🎵 Áudio'
+    } else {
+      preview = `📎 ${file.name}`
+    }
+
     await supabase
       .from('whatsapp_conversations')
       .update({
         last_message_at: new Date().toISOString(),
-        last_message_preview: mediaType === 'image' ? '📷 Imagem' : 
-                             mediaType === 'video' ? '🎬 Vídeo' :
-                             mediaType === 'audio' ? '🎵 Áudio' : 
-                             `📎 ${file.name}`,
+        last_message_preview: preview,
         last_message_direction: 'outbound',
         updated_at: new Date().toISOString(),
       })

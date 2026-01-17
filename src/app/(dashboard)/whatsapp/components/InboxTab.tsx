@@ -295,6 +295,14 @@ export default function InboxTab() {
   const [showMediaMenu, setShowMediaMenu] = useState(false)
   const [uploadingMedia, setUploadingMedia] = useState(false)
   
+  // Media Preview state (antes de enviar)
+  const [mediaPreview, setMediaPreview] = useState<{
+    file: File
+    url: string
+    type: 'image' | 'video' | 'audio' | 'document'
+  } | null>(null)
+  const [mediaCaption, setMediaCaption] = useState('')
+  
   // Lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -632,26 +640,57 @@ export default function InboxTab() {
   // =============================================
 
   // Handle file selection (image/video/document)
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle file selection - mostra preview antes de enviar
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !selectedConversation) return
 
-    setUploadingMedia(true)
     setShowMediaMenu(false)
 
+    // Determinar tipo de mídia
+    let mediaType: 'image' | 'video' | 'audio' | 'document' = 'document'
+    if (file.type.startsWith('image/')) mediaType = 'image'
+    else if (file.type.startsWith('video/')) mediaType = 'video'
+    else if (file.type.startsWith('audio/')) mediaType = 'audio'
+
+    // Criar URL para preview
+    const previewUrl = URL.createObjectURL(file)
+
+    // Mostrar preview
+    setMediaPreview({
+      file,
+      url: previewUrl,
+      type: mediaType,
+    })
+    setMediaCaption('')
+
+    // Limpar input
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  // Cancelar envio de mídia
+  const cancelMediaPreview = () => {
+    if (mediaPreview?.url) {
+      URL.revokeObjectURL(mediaPreview.url)
+    }
+    setMediaPreview(null)
+    setMediaCaption('')
+  }
+
+  // Enviar mídia com caption
+  const sendMediaWithCaption = async () => {
+    if (!mediaPreview || !selectedConversation) return
+
+    setUploadingMedia(true)
+
     try {
-      // Determinar tipo de mídia
-      let mediaType = 'document'
-      if (file.type.startsWith('image/')) mediaType = 'image'
-      else if (file.type.startsWith('video/')) mediaType = 'video'
-      else if (file.type.startsWith('audio/')) mediaType = 'audio'
-
-      // Criar FormData
       const formData = new FormData()
-      formData.append('file', file)
-      formData.append('mediaType', mediaType)
+      formData.append('file', mediaPreview.file)
+      formData.append('mediaType', mediaPreview.type)
+      if (mediaCaption.trim()) {
+        formData.append('caption', mediaCaption.trim())
+      }
 
-      // Enviar para API
       const res = await fetch(`/api/whatsapp/inbox/conversations/${selectedConversation.id}/media`, {
         method: 'POST',
         body: formData,
@@ -660,26 +699,26 @@ export default function InboxTab() {
       const data = await res.json()
       
       if (data.message) {
-        // Adicionar mensagem na lista
         setMessages(prev => [...prev, {
           id: data.message.id,
           conversation_id: selectedConversation.id,
           direction: 'outbound',
-          message_type: mediaType,
-          content: file.name,
+          message_type: mediaPreview.type,
+          content: mediaCaption.trim() || '',
           media_url: data.message.media_url,
-          media_filename: file.name,
+          media_filename: mediaPreview.file.name,
           status: data.success ? 'sent' : 'failed',
           sent_by_bot: false,
           created_at: new Date().toISOString()
         }])
       }
+
+      // Limpar preview
+      cancelMediaPreview()
     } catch (error) {
       console.error('Error sending media:', error)
     } finally {
       setUploadingMedia(false)
-      // Limpar input
-      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -1332,8 +1371,11 @@ export default function InboxTab() {
                                 <span className="text-sm truncate">{msg.media_filename || 'Documento'}</span>
                               </a>
                             )}
-                            {/* Mostrar content apenas se não for placeholder de mídia */}
-                            {msg.content && !['[Imagem]', '[Áudio]', '[Vídeo]', '[Sticker]', '[Documento]'].includes(msg.content) && (
+                            {/* Mostrar content apenas se não for placeholder de mídia e não for nome de arquivo */}
+                            {msg.content && 
+                              !['[Imagem]', '[Áudio]', '[Vídeo]', '[Sticker]', '[Documento]'].includes(msg.content) &&
+                              !(msg.message_type !== 'text' && msg.content === msg.media_filename) &&
+                              !msg.content.match(/\.(png|jpg|jpeg|gif|webp|mp4|mov|avi|mp3|ogg|wav|pdf|doc|docx)$/i) && (
                               <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                             )}
                             <div className={`flex items-center gap-1 mt-1 ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
@@ -1356,6 +1398,84 @@ export default function InboxTab() {
                 <div className="text-center py-4">
                   <p className="text-sm text-yellow-400 mb-2">Janela de 24h expirada</p>
                   <p className="text-xs text-dark-400">Envie um template para reabrir a conversa</p>
+                </div>
+              ) : mediaPreview ? (
+                /* Media Preview UI - igual WhatsApp */
+                <div className="space-y-3">
+                  {/* Preview da mídia */}
+                  <div className="relative bg-dark-800 rounded-xl overflow-hidden">
+                    {/* Botão fechar */}
+                    <button
+                      onClick={cancelMediaPreview}
+                      className="absolute top-2 right-2 z-10 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    
+                    {/* Conteúdo da preview */}
+                    <div className="flex items-center justify-center p-4 min-h-[200px] max-h-[300px]">
+                      {mediaPreview.type === 'image' && (
+                        <img 
+                          src={mediaPreview.url} 
+                          alt="Preview" 
+                          className="max-w-full max-h-[280px] object-contain rounded-lg"
+                        />
+                      )}
+                      {mediaPreview.type === 'video' && (
+                        <video 
+                          src={mediaPreview.url} 
+                          controls 
+                          className="max-w-full max-h-[280px] rounded-lg"
+                        />
+                      )}
+                      {mediaPreview.type === 'audio' && (
+                        <div className="flex flex-col items-center gap-3 py-8">
+                          <div className="w-16 h-16 rounded-full bg-primary-500/20 flex items-center justify-center">
+                            <Mic className="w-8 h-8 text-primary-400" />
+                          </div>
+                          <audio src={mediaPreview.url} controls className="w-full max-w-[300px]" />
+                          <p className="text-sm text-dark-400">{mediaPreview.file.name}</p>
+                        </div>
+                      )}
+                      {mediaPreview.type === 'document' && (
+                        <div className="flex flex-col items-center gap-3 py-8">
+                          <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center">
+                            <FileText className="w-8 h-8 text-orange-400" />
+                          </div>
+                          <p className="text-sm text-white font-medium">{mediaPreview.file.name}</p>
+                          <p className="text-xs text-dark-400">
+                            {(mediaPreview.file.size / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Input de legenda + botão enviar */}
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={mediaCaption}
+                        onChange={(e) => setMediaCaption(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            sendMediaWithCaption()
+                          }
+                        }}
+                        placeholder="Adicionar legenda..."
+                        className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-primary-500/50"
+                      />
+                    </div>
+                    <button
+                      onClick={sendMediaWithCaption}
+                      disabled={uploadingMedia}
+                      className="p-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors disabled:opacity-50"
+                    >
+                      {uploadingMedia ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
               ) : isRecording ? (
                 /* Recording UI */
