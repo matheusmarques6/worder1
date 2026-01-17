@@ -36,8 +36,6 @@ import {
   CheckCircle,
   Wifi,
   WifiOff,
-  Pencil,
-  Save,
 } from 'lucide-react'
 
 // Connection components
@@ -76,6 +74,8 @@ interface InboxConversation {
   phone_number: string
   status: string
   is_bot_active: boolean
+  ai_enabled?: boolean
+  ai_agent_id?: string
   last_message_at?: string
   last_message_preview?: string
   unread_count: number
@@ -83,6 +83,14 @@ interface InboxConversation {
   contact_name?: string
   contact_avatar?: string
   contact_tags?: string[]
+}
+
+interface AIAgent {
+  id: string
+  name: string
+  type: string
+  is_active: boolean
+  status?: string
 }
 
 interface InboxMessage {
@@ -176,16 +184,9 @@ const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 }
 
-const getInitials = (name?: string, phone?: string) => {
-  if (name) {
-    return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-  }
-  // Fallback: usar últimos 2 dígitos do telefone
-  if (phone) {
-    const clean = phone.replace(/\D/g, '')
-    return clean.slice(-2)
-  }
-  return '??'
+const getInitials = (name?: string) => {
+  if (!name) return '??'
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
 // Status Icon
@@ -277,10 +278,10 @@ export default function InboxTab() {
   const [showAddTag, setShowAddTag] = useState(false)
   const [isSavingNote, setIsSavingNote] = useState(false)
   
-  // Estados para edição de nome do contato
-  const [isEditingName, setIsEditingName] = useState(false)
-  const [editingName, setEditingName] = useState('')
-  const [isSavingName, setIsSavingName] = useState(false)
+  // AI Agent states
+  const [aiAgents, setAiAgents] = useState<AIAgent[]>([])
+  const [showAgentSelector, setShowAgentSelector] = useState(false)
+  const [loadingAgents, setLoadingAgents] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -471,38 +472,10 @@ export default function InboxTab() {
       const data = await res.json()
       if (data.contact) setContact(data.contact)
       setNotes(data.notes || [])
-      
-      // Buscar foto de perfil atualizada em background
-      fetchProfilePicture(contactId)
     } catch (error) {
       console.error('Error fetching contact:', error)
     } finally {
       setContactLoading(false)
-    }
-  }
-
-  // Fetch profile picture from WhatsApp
-  const fetchProfilePicture = async (contactId: string) => {
-    try {
-      const res = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/profile-picture`)
-      const data = await res.json()
-      if (data.profile_picture_url && data.updated) {
-        // Atualizar foto do contato
-        setContact(prev => prev ? { ...prev, profile_picture_url: data.profile_picture_url } : null)
-        // Atualizar na lista de conversas
-        setConversations(prev => prev.map(conv => 
-          conv.contact_id === contactId 
-            ? { ...conv, contact_avatar: data.profile_picture_url }
-            : conv
-        ))
-        // Atualizar conversa selecionada
-        if (selectedConversation?.contact_id === contactId) {
-          setSelectedConversation(prev => prev ? { ...prev, contact_avatar: data.profile_picture_url } : null)
-        }
-      }
-    } catch (error) {
-      // Silently fail - foto de perfil não é crítica
-      console.debug('Could not fetch profile picture:', error)
     }
   }
 
@@ -578,15 +551,62 @@ export default function InboxTab() {
   // Toggle bot
   const handleToggleBot = async () => {
     if (!selectedConversation) return
+    
+    // Se bot está ativo, desativar
+    if (selectedConversation.is_bot_active) {
+      try {
+        await fetch(`/api/whatsapp/inbox/conversations/${selectedConversation.id}/bot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: false })
+        })
+        setSelectedConversation(prev => prev ? { ...prev, is_bot_active: false, ai_enabled: false } : null)
+      } catch (error) {
+        console.error('Error toggling bot:', error)
+      }
+    } else {
+      // Se bot está inativo, mostrar seletor de agentes
+      setShowAgentSelector(true)
+      fetchAgents()
+    }
+  }
+
+  // Fetch AI Agents
+  const fetchAgents = async () => {
+    if (!organizationId) return
+    setLoadingAgents(true)
     try {
-      await fetch(`/api/whatsapp/inbox/conversations/${selectedConversation.id}/bot`, {
+      const res = await fetch(`/api/whatsapp/agents?organization_id=${organizationId}&type=ai`)
+      const data = await res.json()
+      setAiAgents(data.agents || [])
+    } catch (error) {
+      console.error('Error fetching agents:', error)
+    } finally {
+      setLoadingAgents(false)
+    }
+  }
+
+  // Activate bot with specific agent
+  const handleActivateBot = async (agentId: string) => {
+    if (!selectedConversation) return
+    try {
+      const res = await fetch(`/api/whatsapp/inbox/conversations/${selectedConversation.id}/bot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !selectedConversation.is_bot_active })
+        body: JSON.stringify({ isActive: true, agentId })
       })
-      setSelectedConversation(prev => prev ? { ...prev, is_bot_active: !prev.is_bot_active } : null)
+      const data = await res.json()
+      if (data.conversation) {
+        setSelectedConversation(prev => prev ? { 
+          ...prev, 
+          is_bot_active: true, 
+          ai_enabled: true,
+          ai_agent_id: agentId 
+        } : null)
+      }
+      setShowAgentSelector(false)
     } catch (error) {
-      console.error('Error toggling bot:', error)
+      console.error('Error activating bot:', error)
     }
   }
 
@@ -660,45 +680,6 @@ export default function InboxTab() {
     } catch (error) {
       console.error('Error blocking contact:', error)
     }
-  }
-
-  // Salvar nome do contato
-  const handleSaveName = async () => {
-    if (!contact || !editingName.trim()) return
-    setIsSavingName(true)
-    try {
-      const res = await fetch(`/api/whatsapp/inbox/contacts/${contact.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editingName.trim() })
-      })
-      const data = await res.json()
-      if (data.contact) {
-        // Atualizar contato local
-        setContact(prev => prev ? { ...prev, name: editingName.trim() } : null)
-        // Atualizar conversa na lista
-        setConversations(prev => prev.map(conv => 
-          conv.contact_id === contact.id 
-            ? { ...conv, contact_name: editingName.trim() }
-            : conv
-        ))
-        // Atualizar conversa selecionada
-        if (selectedConversation?.contact_id === contact.id) {
-          setSelectedConversation(prev => prev ? { ...prev, contact_name: editingName.trim() } : null)
-        }
-        setIsEditingName(false)
-      }
-    } catch (error) {
-      console.error('Error saving contact name:', error)
-    } finally {
-      setIsSavingName(false)
-    }
-  }
-
-  // Iniciar edição de nome
-  const handleStartEditName = () => {
-    setEditingName(contact?.name || '')
-    setIsEditingName(true)
   }
 
   // Create Deal
@@ -956,7 +937,7 @@ export default function InboxTab() {
                       <img src={conv.contact_avatar} alt="" className="w-12 h-12 rounded-full object-cover" />
                     ) : (
                       <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
-                        <span className="text-sm font-semibold text-white">{getInitials(conv.contact_name, conv.phone_number)}</span>
+                        <span className="text-sm font-semibold text-white">{getInitials(conv.contact_name)}</span>
                       </div>
                     )}
                     {conv.is_bot_active && (
@@ -1024,7 +1005,7 @@ export default function InboxTab() {
                   <img src={selectedConversation.contact_avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-white">{getInitials(selectedConversation.contact_name, selectedConversation.phone_number)}</span>
+                    <span className="text-sm font-semibold text-white">{getInitials(selectedConversation.contact_name)}</span>
                   </div>
                 )}
                 <div>
@@ -1087,11 +1068,73 @@ export default function InboxTab() {
                                 <span className="text-[10px]">Bot</span>
                               </div>
                             )}
-                            {msg.media_url && msg.message_type === 'image' && (
-                              <img src={msg.media_url} alt="" className="rounded-lg mb-2 max-w-full" />
+                            {msg.message_type === 'image' && (
+                              <div className="mb-2">
+                                {msg.media_url ? (
+                                  <img 
+                                    src={msg.media_url} 
+                                    alt="Imagem" 
+                                    className="rounded-lg max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90"
+                                    onError={(e) => {
+                                      // Tentar proxy se URL original falhar
+                                      const target = e.target as HTMLImageElement
+                                      if (!target.src.includes('/api/whatsapp/media')) {
+                                        target.src = `/api/whatsapp/media?messageId=${msg.id}`
+                                      } else {
+                                        target.style.display = 'none'
+                                        target.parentElement?.querySelector('.media-fallback')?.classList.remove('hidden')
+                                      }
+                                    }}
+                                    onClick={() => msg.media_url && window.open(msg.media_url, '_blank')}
+                                  />
+                                ) : null}
+                                <div className="media-fallback hidden flex items-center gap-2 p-3 bg-dark-700/50 rounded-lg text-dark-400">
+                                  <FileText className="w-5 h-5" />
+                                  <span className="text-sm">Imagem não disponível</span>
+                                </div>
+                              </div>
                             )}
-                            {msg.media_url && msg.message_type === 'audio' && (
-                              <audio controls src={msg.media_url} className="max-w-full mb-2" />
+                            {msg.message_type === 'audio' && (
+                              <div className="mb-2">
+                                {msg.media_url ? (
+                                  <audio 
+                                    controls 
+                                    src={msg.media_url} 
+                                    className="max-w-full"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLAudioElement
+                                      if (!target.src.includes('/api/whatsapp/media')) {
+                                        target.src = `/api/whatsapp/media?messageId=${msg.id}`
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="flex items-center gap-2 p-3 bg-dark-700/50 rounded-lg text-dark-400">
+                                    <span className="text-sm">🎵 Áudio não disponível</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {msg.message_type === 'video' && (
+                              <div className="mb-2">
+                                {msg.media_url ? (
+                                  <video 
+                                    controls 
+                                    src={msg.media_url} 
+                                    className="rounded-lg max-w-full max-h-64"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLVideoElement
+                                      if (!target.src.includes('/api/whatsapp/media')) {
+                                        target.src = `/api/whatsapp/media?messageId=${msg.id}`
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="flex items-center gap-2 p-3 bg-dark-700/50 rounded-lg text-dark-400">
+                                    <span className="text-sm">🎬 Vídeo não disponível</span>
+                                  </div>
+                                )}
+                              </div>
                             )}
                             {msg.media_url && msg.message_type === 'document' && (
                               <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-dark-700/50 rounded-lg mb-2">
@@ -1176,52 +1219,10 @@ export default function InboxTab() {
                     <img src={contact.profile_picture_url} alt="" className="w-20 h-20 rounded-full mx-auto mb-4 object-cover" />
                   ) : (
                     <div className="w-20 h-20 rounded-full mx-auto mb-4 bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
-                      <span className="text-2xl font-semibold text-white">{getInitials(contact.name, contact.phone_number)}</span>
+                      <span className="text-2xl font-semibold text-white">{getInitials(contact.name)}</span>
                     </div>
                   )}
-                  
-                  {/* Nome editável */}
-                  {isEditingName ? (
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                      <input
-                        type="text"
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        placeholder="Digite o nome"
-                        className="bg-dark-700 border border-dark-600 rounded-lg px-3 py-1.5 text-white text-center text-sm focus:outline-none focus:border-primary-500"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveName()
-                          if (e.key === 'Escape') setIsEditingName(false)
-                        }}
-                      />
-                      <button
-                        onClick={handleSaveName}
-                        disabled={isSavingName || !editingName.trim()}
-                        className="p-1.5 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 disabled:opacity-50"
-                      >
-                        {isSavingName ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      </button>
-                      <button
-                        onClick={() => setIsEditingName(false)}
-                        className="p-1.5 bg-dark-700 text-dark-400 rounded-lg hover:bg-dark-600 hover:text-white"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                      <h3 className="text-lg font-semibold text-white">{contact.name || 'Sem nome'}</h3>
-                      <button
-                        onClick={handleStartEditName}
-                        className="p-1 text-dark-500 hover:text-primary-400 transition-colors"
-                        title="Editar nome"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                  
+                  <h3 className="text-lg font-semibold text-white mb-1">{contact.name || 'Sem nome'}</h3>
                   <p className="text-sm text-dark-400">{formatPhone(contact.phone_number)}</p>
                 </div>
 
@@ -1570,6 +1571,77 @@ export default function InboxTab() {
         onSuccess={handleConnectionSuccess}
         organizationId={organizationId}
       />
+
+      {/* Agent Selector Modal */}
+      <AnimatePresence>
+        {showAgentSelector && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowAgentSelector(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-dark-900 border border-dark-700 rounded-xl p-6 w-full max-w-md shadow-xl"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white">Selecionar Agente de IA</h3>
+                <button
+                  onClick={() => setShowAgentSelector(false)}
+                  className="p-1 hover:bg-dark-700 rounded-lg text-dark-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {loadingAgents ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+                </div>
+              ) : aiAgents.length === 0 ? (
+                <div className="text-center py-8">
+                  <Bot className="w-12 h-12 text-dark-500 mx-auto mb-3" />
+                  <p className="text-dark-400 text-sm mb-4">Nenhum agente de IA configurado</p>
+                  <a 
+                    href="/settings/agents" 
+                    className="text-primary-400 hover:text-primary-300 text-sm"
+                  >
+                    Criar agente de IA →
+                  </a>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {aiAgents.map((agent) => (
+                    <button
+                      key={agent.id}
+                      onClick={() => handleActivateBot(agent.id)}
+                      className="w-full flex items-center gap-3 p-3 bg-dark-800 hover:bg-dark-700 rounded-lg transition-colors text-left"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                        <Bot className="w-5 h-5 text-cyan-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-white">{agent.name}</p>
+                        <p className="text-xs text-dark-400">
+                          {agent.type === 'ai' ? 'Agente de IA' : 'Agente Humano'}
+                        </p>
+                      </div>
+                      <div className={`w-2 h-2 rounded-full ${
+                        agent.status === 'online' || agent.is_active ? 'bg-green-400' : 'bg-dark-500'
+                      }`} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
