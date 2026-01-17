@@ -50,14 +50,42 @@ export async function POST(
 
     const apiUrl = instance.api_url || EVOLUTION_API_URL
     const apiKey = instance.api_key || EVOLUTION_API_KEY
-    const instanceName = instance.instance_name || instance.instance_id || instance.unique_id
+    const instanceName = instance.unique_id || instance.instance_name || instance.instance_id
     const phoneNumber = conversation.contact_phone || conversation.phone_number
 
-    // Converter arquivo para base64
+    // Converter arquivo para buffer e base64
     const arrayBuffer = await file.arrayBuffer()
-    const base64 = Buffer.from(arrayBuffer).toString('base64')
+    const buffer = Buffer.from(arrayBuffer)
+    const base64 = buffer.toString('base64')
 
-    // Determinar endpoint e payload baseado no tipo de mídia
+    // 1. Upload para Supabase Storage primeiro
+    let permanentMediaUrl = null
+    try {
+      const ext = file.name.split('.').pop() || file.type.split('/')[1] || 'bin'
+      const fileName = `${conversation.organization_id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('whatsapp-media')
+        .upload(fileName, buffer, {
+          contentType: file.type || 'application/octet-stream',
+          upsert: false,
+        })
+
+      if (uploadError) {
+        console.error('[Send Media] Storage upload error:', uploadError)
+      } else {
+        const { data: publicUrlData } = supabase.storage
+          .from('whatsapp-media')
+          .getPublicUrl(fileName)
+        
+        permanentMediaUrl = publicUrlData?.publicUrl
+        console.log('[Send Media] ✅ Uploaded to storage:', permanentMediaUrl?.substring(0, 60))
+      }
+    } catch (storageError) {
+      console.error('[Send Media] Storage error:', storageError)
+    }
+
+    // 2. Enviar via Evolution API
     let endpoint = ''
     let payload: any = {
       number: phoneNumber,
@@ -77,7 +105,6 @@ export async function POST(
       endpoint = `/message/sendWhatsAppAudio/${instanceName}`
       payload.audio = `data:audio/ogg;base64,${base64}`
     } else {
-      // Documento
       endpoint = `/message/sendMedia/${instanceName}`
       payload.mediatype = 'document'
       payload.media = `data:${file.type};base64,${base64}`
@@ -97,10 +124,9 @@ export async function POST(
 
     const sendData = await sendResponse.json()
 
-    console.log('[Send Media] Response:', sendResponse.status, sendResponse.ok)
-    console.log('[Send Media] Data:', JSON.stringify(sendData).substring(0, 300))
+    console.log('[Send Media] Evolution response:', sendResponse.status, sendResponse.ok)
 
-    // Salvar mensagem no banco
+    // 3. Salvar mensagem no banco com URL permanente
     const { data: savedMessage, error: saveError } = await supabase
       .from('whatsapp_messages')
       .insert({
@@ -110,10 +136,11 @@ export async function POST(
         message_id: sendData?.key?.id || `media-${Date.now()}`,
         direction: 'outbound',
         message_type: mediaType,
-        content: file.name || `[${mediaType}]`,
+        content: '',
         text_body: '',
         to_number: phoneNumber,
         status: sendResponse.ok ? 'sent' : 'failed',
+        media_url: permanentMediaUrl,
         media_filename: file.name,
         media_mime_type: file.type,
         timestamp: new Date().toISOString(),
@@ -124,15 +151,18 @@ export async function POST(
     if (saveError) {
       console.error('[Send Media] Error saving:', saveError)
     } else {
-      console.log('[Send Media] Message saved:', savedMessage.id)
+      console.log('[Send Media] ✅ Message saved:', savedMessage.id)
     }
 
-    // Atualizar conversa
+    // 4. Atualizar conversa
     await supabase
       .from('whatsapp_conversations')
       .update({
         last_message_at: new Date().toISOString(),
-        last_message_preview: `📎 ${file.name || mediaType}`,
+        last_message_preview: mediaType === 'image' ? '📷 Imagem' : 
+                             mediaType === 'video' ? '🎬 Vídeo' :
+                             mediaType === 'audio' ? '🎵 Áudio' : 
+                             `📎 ${file.name}`,
         last_message_direction: 'outbound',
         updated_at: new Date().toISOString(),
       })

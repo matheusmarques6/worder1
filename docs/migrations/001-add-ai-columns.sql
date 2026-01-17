@@ -61,3 +61,36 @@ FROM information_schema.columns
 WHERE table_name = 'whatsapp_conversations' 
   AND column_name IN ('is_bot_active', 'ai_enabled', 'ai_agent_id', 'bot_stopped_at')
 ORDER BY column_name;
+
+-- =============================================
+-- IMPORTANTE: Criar bucket de mídia no Storage
+-- =============================================
+-- Execute isso no SQL Editor do Supabase:
+
+-- Criar bucket para mídias do WhatsApp (se não existir)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'whatsapp-media', 
+  'whatsapp-media', 
+  true, 
+  52428800, -- 50MB
+  ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/quicktime', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = true,
+  file_size_limit = 52428800;
+
+-- Política de acesso público para leitura
+CREATE POLICY IF NOT EXISTS "Public read access"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'whatsapp-media');
+
+-- Política de upload para usuários autenticados
+CREATE POLICY IF NOT EXISTS "Authenticated upload"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'whatsapp-media');
+
+-- Política de delete para usuários autenticados
+CREATE POLICY IF NOT EXISTS "Authenticated delete"
+ON storage.objects FOR DELETE
+USING (bucket_id = 'whatsapp-media');

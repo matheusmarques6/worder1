@@ -210,45 +210,119 @@ async function handleMessage(instance: any, body: any) {
     let messageType = 'text';
     let mediaUrl = null;
     let mediaMimeType = null;
+    let mediaBase64 = null;
 
     if (message?.imageMessage) {
       messageType = 'image';
-      content = content || '[Imagem]';
+      content = content || '';
       mediaUrl = message.imageMessage.url;
-      mediaMimeType = message.imageMessage.mimetype;
+      mediaMimeType = message.imageMessage.mimetype || 'image/jpeg';
+      mediaBase64 = message.imageMessage.base64 || body.data?.base64 || body.base64;
     }
     if (message?.audioMessage) {
       messageType = 'audio';
-      content = '[Áudio]';
+      content = '';
       mediaUrl = message.audioMessage.url;
-      mediaMimeType = message.audioMessage.mimetype;
+      mediaMimeType = message.audioMessage.mimetype || 'audio/ogg';
+      mediaBase64 = message.audioMessage.base64 || body.data?.base64 || body.base64;
     }
     if (message?.videoMessage) {
       messageType = 'video';
-      content = content || '[Vídeo]';
+      content = content || '';
       mediaUrl = message.videoMessage.url;
-      mediaMimeType = message.videoMessage.mimetype;
+      mediaMimeType = message.videoMessage.mimetype || 'video/mp4';
+      mediaBase64 = message.videoMessage.base64 || body.data?.base64 || body.base64;
     }
     if (message?.documentMessage) {
       messageType = 'document';
-      content = message.documentMessage.fileName || '[Documento]';
+      content = message.documentMessage.fileName || '';
       mediaUrl = message.documentMessage.url;
-      mediaMimeType = message.documentMessage.mimetype;
+      mediaMimeType = message.documentMessage.mimetype || 'application/pdf';
+      mediaBase64 = message.documentMessage.base64 || body.data?.base64 || body.base64;
     }
     if (message?.stickerMessage) {
       messageType = 'sticker';
-      content = '[Sticker]';
+      content = '';
+      mediaBase64 = message.stickerMessage.base64 || body.data?.base64 || body.base64;
+      mediaMimeType = 'image/webp';
     }
     if (message?.locationMessage) {
       messageType = 'location';
-      content = `[Localização: ${message.locationMessage.degreesLatitude}, ${message.locationMessage.degreesLongitude}]`;
+      content = `📍 ${message.locationMessage.degreesLatitude}, ${message.locationMessage.degreesLongitude}`;
     }
     if (message?.contactMessage) {
       messageType = 'contact';
-      content = `[Contato: ${message.contactMessage.displayName}]`;
+      content = `👤 ${message.contactMessage.displayName}`;
     }
 
-    console.log('[Evolution] Message from:', phoneNumber, '| Type:', messageType, '| Content:', content?.substring(0, 50));
+    console.log('[Evolution] Message from:', phoneNumber, '| Type:', messageType, '| HasBase64:', !!mediaBase64);
+
+    // Se tem mídia mas não tem base64, tentar baixar da Evolution API
+    if (messageType !== 'text' && !mediaBase64 && mediaUrl) {
+      try {
+        console.log('[Evolution] Fetching media base64 from Evolution API...');
+        const mediaResponse = await fetch(`${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${instance.unique_id || instance.instance_name}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': EVOLUTION_API_KEY,
+          },
+          body: JSON.stringify({
+            message: {
+              key: key
+            },
+            convertToMp4: messageType === 'audio' ? false : undefined,
+          }),
+        });
+
+        if (mediaResponse.ok) {
+          const mediaData = await mediaResponse.json();
+          if (mediaData.base64) {
+            mediaBase64 = mediaData.base64;
+            console.log('[Evolution] ✅ Got media base64, length:', mediaBase64.length);
+          }
+        }
+      } catch (mediaError) {
+        console.error('[Evolution] Error fetching media:', mediaError);
+      }
+    }
+
+    // Se tem base64, fazer upload para Supabase Storage
+    let permanentMediaUrl = null;
+    if (mediaBase64) {
+      try {
+        const ext = mediaMimeType?.split('/')[1]?.split(';')[0] || 'bin';
+        const fileName = `${instance.organization_id}/${Date.now()}-${messageId.substring(0, 8)}.${ext}`;
+        
+        // Converter base64 para buffer
+        const buffer = Buffer.from(mediaBase64, 'base64');
+        
+        // Upload para Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('whatsapp-media')
+          .upload(fileName, buffer, {
+            contentType: mediaMimeType || 'application/octet-stream',
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error('[Evolution] Storage upload error:', uploadError);
+        } else {
+          // Gerar URL pública
+          const { data: publicUrlData } = supabase.storage
+            .from('whatsapp-media')
+            .getPublicUrl(fileName);
+          
+          permanentMediaUrl = publicUrlData?.publicUrl;
+          console.log('[Evolution] ✅ Media uploaded:', permanentMediaUrl?.substring(0, 80));
+        }
+      } catch (storageError) {
+        console.error('[Evolution] Storage error:', storageError);
+      }
+    }
+
+    // Usar URL permanente se disponível, senão a original
+    const finalMediaUrl = permanentMediaUrl || mediaUrl;
 
     // 1. Buscar ou criar conversa
     let { data: conversation } = await supabase
@@ -327,13 +401,13 @@ async function handleMessage(instance: any, body: any) {
         message_type: messageType,
         content: content || '',
         status: 'received',
-        media_url: mediaUrl,
+        media_url: finalMediaUrl,
         media_mime_type: mediaMimeType,
         metadata: {
           pushName,
           remoteJid,
           participant: key?.participant,
-          raw: body,
+          originalMediaUrl: mediaUrl,
         },
       })
       .select()
