@@ -294,6 +294,9 @@ export default function InboxTab() {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
   const [showMediaMenu, setShowMediaMenu] = useState(false)
   const [uploadingMedia, setUploadingMedia] = useState(false)
+  
+  // Lightbox state
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const recordingInterval = useRef<NodeJS.Timeout | null>(null)
   
@@ -1246,7 +1249,7 @@ export default function InboxTab() {
                                   <img 
                                     src={msg.media_url} 
                                     alt="" 
-                                    className="rounded-lg w-full max-w-[280px] max-h-[320px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                    className="rounded-lg w-full max-w-[400px] max-h-[450px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                     onError={(e) => {
                                       const target = e.target as HTMLImageElement
                                       if (!target.src.includes('/api/whatsapp/media')) {
@@ -1256,7 +1259,7 @@ export default function InboxTab() {
                                         target.parentElement?.querySelector('.media-fallback')?.classList.remove('hidden')
                                       }
                                     }}
-                                    onClick={() => msg.media_url && window.open(msg.media_url, '_blank')}
+                                    onClick={() => msg.media_url && setLightboxImage(msg.media_url)}
                                   />
                                 ) : null}
                                 <div className="media-fallback hidden flex items-center gap-2 p-3 bg-dark-700/50 rounded-lg text-dark-400">
@@ -1266,12 +1269,12 @@ export default function InboxTab() {
                               </div>
                             )}
                             {msg.message_type === 'audio' && (
-                              <div className="mb-1 min-w-[200px]">
+                              <div className="mb-1 min-w-[240px]">
                                 {msg.media_url ? (
                                   <audio 
                                     controls 
                                     src={msg.media_url} 
-                                    className="w-full max-w-[280px]"
+                                    className="w-full max-w-[320px]"
                                     onError={(e) => {
                                       const target = e.target as HTMLAudioElement
                                       if (!target.src.includes('/api/whatsapp/media')) {
@@ -1292,7 +1295,7 @@ export default function InboxTab() {
                                   <video 
                                     controls 
                                     src={msg.media_url} 
-                                    className="rounded-lg w-full max-w-[280px] max-h-[320px]"
+                                    className="rounded-lg w-full max-w-[400px] max-h-[450px]"
                                     onError={(e) => {
                                       const target = e.target as HTMLVideoElement
                                       if (!target.src.includes('/api/whatsapp/media')) {
@@ -1312,7 +1315,8 @@ export default function InboxTab() {
                                 <img 
                                   src={msg.media_url} 
                                   alt="" 
-                                  className="w-32 h-32 object-contain"
+                                  className="w-40 h-40 object-contain cursor-pointer"
+                                  onClick={() => msg.media_url && setLightboxImage(msg.media_url)}
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement
                                     if (!target.src.includes('/api/whatsapp/media')) {
@@ -1899,6 +1903,62 @@ export default function InboxTab() {
         onSuccess={handleConnectionSuccess}
         organizationId={organizationId}
       />
+
+      {/* Image Lightbox Modal */}
+      <AnimatePresence>
+        {lightboxImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+            onClick={() => setLightboxImage(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-[90vw] max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setLightboxImage(null)}
+                className="absolute -top-12 right-0 p-2 text-white/70 hover:text-white transition-colors"
+              >
+                <X className="w-8 h-8" />
+              </button>
+              
+              {/* Image */}
+              <img 
+                src={lightboxImage} 
+                alt="" 
+                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+              />
+              
+              {/* Actions */}
+              <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 flex items-center gap-4">
+                <a
+                  href={lightboxImage}
+                  download
+                  className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <FileText className="w-4 h-4" />
+                  Baixar
+                </a>
+                <button
+                  onClick={() => window.open(lightboxImage, '_blank')}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-colors"
+                >
+                  <PanelRightOpen className="w-4 h-4" />
+                  Abrir em nova aba
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Agent Selector Modal */}
       <AnimatePresence>
