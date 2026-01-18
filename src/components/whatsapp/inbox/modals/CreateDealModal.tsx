@@ -89,7 +89,7 @@ export function CreateDealModal({
   useEffect(() => {
     if (selectedPipeline) {
       const pipeline = pipelines.find(p => p.id === selectedPipeline)
-      if (pipeline?.stages?.length > 0) {
+      if (pipeline?.stages && pipeline.stages.length > 0) {
         setSelectedStage(pipeline.stages[0].id)
       }
     }
