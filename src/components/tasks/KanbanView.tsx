@@ -102,9 +102,8 @@ export function KanbanView({
     return acc
   }, {} as Record<string, Task[]>)
 
-  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+  const handleDragStart = (taskId: string) => {
     setDraggedTask(taskId)
-    e.dataTransfer.effectAllowed = 'move'
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -117,6 +116,10 @@ export function KanbanView({
     if (draggedTask && onDragEnd) {
       onDragEnd(draggedTask, columnId)
     }
+    setDraggedTask(null)
+  }
+
+  const handleDragEndNative = () => {
     setDraggedTask(null)
   }
 
@@ -147,7 +150,8 @@ export function KanbanView({
                   onComplete={onComplete}
                   onDelete={onDelete}
                   onClick={() => onTaskClick(task)}
-                  onDragStart={(e) => handleDragStart(e, task.id)}
+                  onDragStart={() => handleDragStart(task.id)}
+                  onDragEnd={handleDragEndNative}
                   isDragging={draggedTask === task.id}
                 />
               ))}
@@ -172,13 +176,15 @@ function KanbanCard({
   onDelete,
   onClick,
   onDragStart,
+  onDragEnd,
   isDragging,
 }: {
   task: Task
   onComplete: (id: string) => Promise<boolean>
   onDelete: (id: string) => Promise<boolean>
   onClick: () => void
-  onDragStart: (e: React.DragEvent) => void
+  onDragStart: () => void
+  onDragEnd: () => void
   isDragging: boolean
 }) {
   const [showMenu, setShowMenu] = useState(false)
@@ -203,138 +209,147 @@ function KanbanCard({
     setShowMenu(false)
   }
 
+  const handleNativeDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    e.dataTransfer.effectAllowed = 'move'
+    onDragStart()
+  }
+
   return (
     <motion.div
       layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      draggable
-      onDragStart={onDragStart}
-      onClick={onClick}
-      className={`bg-dark-800 border border-dark-700/50 rounded-xl p-3 cursor-pointer 
-                  hover:border-dark-600 transition-all group ${
-                    overdue ? 'border-l-2 border-l-red-500' : ''
-                  }`}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className={`p-1.5 rounded-lg ${priorityConfig.color}`}>
-            <Icon className="w-3.5 h-3.5" />
+      <div
+        draggable
+        onDragStart={handleNativeDragStart}
+        onDragEnd={onDragEnd}
+        onClick={onClick}
+        className={`bg-dark-800 border border-dark-700/50 rounded-xl p-3 cursor-pointer 
+                    hover:border-dark-600 transition-all group ${
+                      overdue ? 'border-l-2 border-l-red-500' : ''
+                    }`}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className={`p-1.5 rounded-lg ${priorityConfig.color}`}>
+              <Icon className="w-3.5 h-3.5" />
+            </div>
+            <span className="text-[10px] text-dark-400 uppercase">
+              {getTaskTypeLabel(task.type)}
+            </span>
           </div>
-          <span className="text-[10px] text-dark-400 uppercase">
-            {getTaskTypeLabel(task.type)}
-          </span>
-        </div>
-        
-        <div className="flex items-center gap-1">
-          <GripVertical className="w-4 h-4 text-dark-600 opacity-0 group-hover:opacity-100 cursor-grab" />
           
-          <div className="relative">
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
-              className="p-1 text-dark-500 hover:text-white rounded transition-colors"
-            >
-              <MoreVertical className="w-4 h-4" />
-            </button>
+          <div className="flex items-center gap-1">
+            <GripVertical className="w-4 h-4 text-dark-600 opacity-0 group-hover:opacity-100 cursor-grab" />
             
-            {showMenu && (
-              <div className="absolute right-0 top-full mt-1 w-32 bg-dark-700 rounded-lg shadow-lg 
-                              border border-dark-600 py-1 z-10">
-                <button
-                  onClick={handleComplete}
-                  className="w-full px-3 py-1.5 text-left text-sm text-dark-300 
-                             hover:bg-dark-600 flex items-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Concluir
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="w-full px-3 py-1.5 text-left text-sm text-red-400 
-                             hover:bg-dark-600 flex items-center gap-2"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Excluir
-                </button>
+            <div className="relative">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
+                className="p-1 text-dark-500 hover:text-white rounded transition-colors"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              
+              {showMenu && (
+                <div className="absolute right-0 top-full mt-1 w-32 bg-dark-700 rounded-lg shadow-lg 
+                                border border-dark-600 py-1 z-10">
+                  <button
+                    onClick={handleComplete}
+                    className="w-full px-3 py-1.5 text-left text-sm text-dark-300 
+                               hover:bg-dark-600 flex items-center gap-2"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Concluir
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="w-full px-3 py-1.5 text-left text-sm text-red-400 
+                               hover:bg-dark-600 flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Excluir
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Title */}
+        <h4 className="text-sm font-medium text-white mb-2 line-clamp-2">
+          {task.title}
+        </h4>
+
+        {/* Due Date */}
+        <div className={`flex items-center gap-1.5 text-xs mb-2 ${
+          overdue ? 'text-red-400' : 'text-dark-400'
+        }`}>
+          {overdue && <AlertTriangle className="w-3 h-3" />}
+          <Clock className="w-3 h-3" />
+          <span>{formatDate(task.due_date)}</span>
+          {task.due_time && <span>às {task.due_time.slice(0, 5)}</span>}
+        </div>
+
+        {/* Contact/Deal Info */}
+        {(task.contact || task.deal) && (
+          <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-dark-700/50">
+            {task.contact && (
+              <div className="flex items-center gap-1.5 text-xs text-dark-400">
+                {task.contact.profile_picture_url ? (
+                  <img 
+                    src={task.contact.profile_picture_url} 
+                    alt="" 
+                    className="w-4 h-4 rounded-full"
+                  />
+                ) : (
+                  <User className="w-3 h-3" />
+                )}
+                <span className="truncate max-w-[100px]">
+                  {task.contact.name || task.contact.phone_number}
+                </span>
+              </div>
+            )}
+            
+            {task.deal && (
+              <div className="flex items-center gap-1.5 text-xs text-primary-400">
+                <DollarSign className="w-3 h-3" />
+                <span className="truncate max-w-[100px]">{task.deal.title}</span>
               </div>
             )}
           </div>
-        </div>
+        )}
+
+        {/* Assigned User */}
+        {task.assigned_to_name && (
+          <div className="flex items-center gap-1.5 text-xs text-dark-500 mt-2">
+            <User className="w-3 h-3" />
+            <span>{task.assigned_to_name}</span>
+          </div>
+        )}
+
+        {/* Complete Button */}
+        {task.status !== 'completed' && (
+          <button
+            onClick={handleComplete}
+            disabled={isCompleting}
+            className="w-full mt-3 py-1.5 bg-dark-700/50 text-dark-300 text-xs rounded-lg 
+                       hover:bg-primary-500/20 hover:text-primary-400 transition-colors
+                       flex items-center justify-center gap-1.5"
+          >
+            {isCompleting ? (
+              <span className="animate-pulse">Concluindo...</span>
+            ) : (
+              <>
+                <CheckCircle className="w-3.5 h-3.5" />
+                Marcar como concluída
+              </>
+            )}
+          </button>
+        )}
       </div>
-
-      {/* Title */}
-      <h4 className="text-sm font-medium text-white mb-2 line-clamp-2">
-        {task.title}
-      </h4>
-
-      {/* Due Date */}
-      <div className={`flex items-center gap-1.5 text-xs mb-2 ${
-        overdue ? 'text-red-400' : 'text-dark-400'
-      }`}>
-        {overdue && <AlertTriangle className="w-3 h-3" />}
-        <Clock className="w-3 h-3" />
-        <span>{formatDate(task.due_date)}</span>
-        {task.due_time && <span>às {task.due_time.slice(0, 5)}</span>}
-      </div>
-
-      {/* Contact/Deal Info */}
-      {(task.contact || task.deal) && (
-        <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-dark-700/50">
-          {task.contact && (
-            <div className="flex items-center gap-1.5 text-xs text-dark-400">
-              {task.contact.profile_picture_url ? (
-                <img 
-                  src={task.contact.profile_picture_url} 
-                  alt="" 
-                  className="w-4 h-4 rounded-full"
-                />
-              ) : (
-                <User className="w-3 h-3" />
-              )}
-              <span className="truncate max-w-[100px]">
-                {task.contact.name || task.contact.phone_number}
-              </span>
-            </div>
-          )}
-          
-          {task.deal && (
-            <div className="flex items-center gap-1.5 text-xs text-primary-400">
-              <DollarSign className="w-3 h-3" />
-              <span className="truncate max-w-[100px]">{task.deal.title}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Assigned User */}
-      {task.assigned_to_name && (
-        <div className="flex items-center gap-1.5 text-xs text-dark-500 mt-2">
-          <User className="w-3 h-3" />
-          <span>{task.assigned_to_name}</span>
-        </div>
-      )}
-
-      {/* Complete Button */}
-      {task.status !== 'completed' && (
-        <button
-          onClick={handleComplete}
-          disabled={isCompleting}
-          className="w-full mt-3 py-1.5 bg-dark-700/50 text-dark-300 text-xs rounded-lg 
-                     hover:bg-primary-500/20 hover:text-primary-400 transition-colors
-                     flex items-center justify-center gap-1.5"
-        >
-          {isCompleting ? (
-            <span className="animate-pulse">Concluindo...</span>
-          ) : (
-            <>
-              <CheckCircle className="w-3.5 h-3.5" />
-              Marcar como concluída
-            </>
-          )}
-        </button>
-      )}
     </motion.div>
   )
 }
