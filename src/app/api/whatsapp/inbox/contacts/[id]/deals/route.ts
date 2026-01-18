@@ -1,5 +1,39 @@
+// src/app/api/whatsapp/inbox/contacts/[id]/deals/route.ts
+// CORRIGIDO: Usa tabela CONTACTS unificada
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+
+// Helper para buscar contato unificado
+async function getContact(contactId: string) {
+  // Tentar tabela contacts primeiro
+  const { data: contact } = await supabase
+    .from('contacts')
+    .select('id, organization_id, whatsapp, phone, full_name, first_name, email')
+    .eq('id', contactId)
+    .single()
+
+  if (contact) {
+    return {
+      ...contact,
+      phone_number: contact.whatsapp || contact.phone,
+      name: contact.full_name || contact.first_name,
+      _table: 'contacts'
+    }
+  }
+
+  // Fallback para whatsapp_contacts
+  const { data: waContact } = await supabase
+    .from('whatsapp_contacts')
+    .select('id, organization_id, phone_number, name, email')
+    .eq('id', contactId)
+    .single()
+
+  if (waContact) {
+    return { ...waContact, _table: 'whatsapp_contacts' }
+  }
+
+  return null
+}
 
 // GET - Listar deals do contato
 export async function GET(
@@ -9,34 +43,39 @@ export async function GET(
   try {
     const contactId = params.id
 
-    // Buscar contato para pegar org_id
-    const { data: contact } = await supabase
-      .from('whatsapp_contacts')
-      .select('organization_id, phone_number')
-      .eq('id', contactId)
-      .single()
+    const contact = await getContact(contactId)
 
     if (!contact) {
-      return NextResponse.json({ deals: [] })
+      return NextResponse.json({ deals: [], activeDeal: null })
     }
 
-    // Buscar deals do contato
+    // Buscar deals pelo contact_id OU pelo telefone
     const { data: deals, error } = await supabase
       .from('deals')
-      .select('*')
+      .select(`
+        *,
+        pipeline:pipelines(id, name, color),
+        stage:pipeline_stages(id, name, color, is_won, is_lost)
+      `)
       .eq('organization_id', contact.organization_id)
-      .or(`contact_phone.eq.${contact.phone_number},metadata->>whatsapp_contact_id.eq.${contactId}`)
+      .or(`contact_id.eq.${contactId},contact_phone.eq.${contact.phone_number}`)
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.log('Deals table error:', error.message)
-      return NextResponse.json({ deals: [] })
+      console.error('Deals fetch error:', error.message)
+      return NextResponse.json({ deals: [], activeDeal: null })
     }
 
-    return NextResponse.json({ deals: deals || [] })
+    // Encontrar deal ativo (open)
+    const activeDeal = deals?.find((d: any) => d.status === 'open') || null
+
+    return NextResponse.json({ 
+      deals: deals || [],
+      activeDeal
+    })
   } catch (error: any) {
     console.error('Error fetching deals:', error)
-    return NextResponse.json({ deals: [] })
+    return NextResponse.json({ deals: [], activeDeal: null })
   }
 }
 
@@ -48,46 +87,61 @@ export async function POST(
   try {
     const contactId = params.id
     const body = await request.json()
-    const { title, value } = body
+    const { pipelineId, stageId, title, value } = body
 
-    // Buscar contato
-    const { data: contact } = await supabase
-      .from('whatsapp_contacts')
-      .select('organization_id, phone_number, name')
-      .eq('id', contactId)
-      .single()
+    const contact = await getContact(contactId)
 
     if (!contact) {
       return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })
     }
 
-    // Buscar pipeline padrão
-    const { data: pipelines } = await supabase
-      .from('pipelines')
-      .select('id, stages:pipeline_stages(id, name, position)')
-      .eq('organization_id', contact.organization_id)
-      .limit(1)
+    // Se não passou pipeline/stage, buscar o primeiro
+    let finalPipelineId = pipelineId
+    let finalStageId = stageId
 
-    const pipeline = pipelines?.[0]
-    const firstStage = pipeline?.stages?.sort((a: any, b: any) => a.position - b.position)?.[0]
+    if (!finalPipelineId || !finalStageId) {
+      const { data: pipelines } = await supabase
+        .from('pipelines')
+        .select('id, stages:pipeline_stages(id, name, position)')
+        .eq('organization_id', contact.organization_id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+
+      const pipeline = pipelines?.[0]
+      if (pipeline) {
+        finalPipelineId = pipeline.id
+        const sortedStages = (pipeline.stages || []).sort((a: any, b: any) => a.position - b.position)
+        finalStageId = sortedStages[0]?.id
+      }
+    }
+
+    if (!finalPipelineId || !finalStageId) {
+      return NextResponse.json({ error: 'Nenhum pipeline disponível' }, { status: 400 })
+    }
 
     // Criar deal
     const { data: deal, error } = await supabase
       .from('deals')
       .insert({
         organization_id: contact.organization_id,
+        pipeline_id: finalPipelineId,
+        stage_id: finalStageId,
+        contact_id: contactId,
+        contact_phone: contact.phone_number,
+        contact_name: contact.name,
+        contact_email: contact.email,
         title: title || `Deal - ${contact.name || contact.phone_number}`,
         value: value || 0,
         status: 'open',
-        pipeline_id: pipeline?.id || null,
-        stage_id: firstStage?.id || null,
-        contact_phone: contact.phone_number,
-        metadata: { 
-          whatsapp_contact_id: contactId,
-          source: 'whatsapp'
-        },
+        probability: 50,
+        currency: 'BRL',
       })
-      .select()
+      .select(`
+        *,
+        pipeline:pipelines(id, name, color),
+        stage:pipeline_stages(id, name, color, is_won, is_lost)
+      `)
       .single()
 
     if (error) {

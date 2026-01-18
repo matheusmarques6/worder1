@@ -1,7 +1,9 @@
+// src/app/api/whatsapp/inbox/contacts/[id]/route.ts
+// CORRIGIDO: Prioriza tabela CONTACTS unificada
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 
-// GET - Buscar contato UNIFICADO (tabela contacts)
+// GET - Buscar contato UNIFICADO
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -9,7 +11,7 @@ export async function GET(
   try {
     const contactId = params.id
 
-    // Buscar contato da tabela UNIFICADA (contacts)
+    // 1. Tentar buscar da tabela UNIFICADA (contacts) primeiro
     const { data: contact, error } = await supabase
       .from('contacts')
       .select('*')
@@ -17,48 +19,39 @@ export async function GET(
       .single()
 
     if (error) {
-      // Fallback: tentar buscar da whatsapp_contacts antiga (para compatibilidade)
-      const { data: legacyContact, error: legacyError } = await supabase
+      // 2. Fallback: tentar buscar da whatsapp_contacts
+      const { data: waContact, error: waError } = await supabase
         .from('whatsapp_contacts')
         .select('*')
         .eq('id', contactId)
         .single()
       
-      if (legacyError) throw error // throw original error
+      if (waError) {
+        return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
+      }
       
-      // Retornar formato compatível
+      // Retornar formato compatível do whatsapp_contacts
       return NextResponse.json({ 
-        contact: formatLegacyContact(legacyContact),
+        contact: formatWhatsAppContact(waContact),
         notes: [],
         activities: [],
         deals: [],
         tasks: [],
         invoices: [],
-        _legacy: true
+        _source: 'whatsapp_contacts'
       })
     }
 
-    // Buscar comentários/notas do contato (tabela unificada)
-    const { data: comments } = await supabase
-      .from('contact_comments')
+    // 3. Buscar notas do contato
+    const { data: notes } = await supabase
+      .from('whatsapp_contact_notes')
       .select('*')
       .eq('contact_id', contactId)
+      .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(50)
 
-    // Fallback para whatsapp_contact_notes se não tiver comments
-    let notes = comments || []
-    if (notes.length === 0) {
-      const { data: legacyNotes } = await supabase
-        .from('whatsapp_contact_notes')
-        .select('*')
-        .eq('contact_id', contactId)
-        .order('created_at', { ascending: false })
-        .limit(50)
-      notes = legacyNotes || []
-    }
-
-    // Buscar atividades do contato (timeline)
+    // 4. Buscar atividades do contato
     const { data: activities } = await supabase
       .from('contact_activities')
       .select('*')
@@ -66,7 +59,7 @@ export async function GET(
       .order('created_at', { ascending: false })
       .limit(50)
 
-    // Buscar deals do contato
+    // 5. Buscar deals do contato
     const { data: deals } = await supabase
       .from('deals')
       .select(`
@@ -74,10 +67,10 @@ export async function GET(
         pipeline:pipelines(id, name, color),
         stage:pipeline_stages(id, name, color, is_won, is_lost)
       `)
-      .eq('contact_id', contactId)
+      .or(`contact_id.eq.${contactId},contact_phone.eq.${contact.whatsapp},contact_phone.eq.${contact.phone}`)
       .order('created_at', { ascending: false })
 
-    // Buscar tarefas do contato
+    // 6. Buscar tarefas do contato
     const { data: tasks } = await supabase
       .from('tasks')
       .select('*')
@@ -86,7 +79,7 @@ export async function GET(
       .order('due_date', { ascending: true })
       .limit(10)
 
-    // Buscar notas fiscais do contato
+    // 7. Buscar notas fiscais do contato
     const { data: invoices } = await supabase
       .from('contact_invoices')
       .select('*')
@@ -94,16 +87,7 @@ export async function GET(
       .order('issue_date', { ascending: false })
       .limit(20)
 
-    // Buscar última conversa para link rápido
-    const { data: lastConversation } = await supabase
-      .from('whatsapp_conversations')
-      .select('id, phone_number, last_message_at')
-      .or(`unified_contact_id.eq.${contactId},phone_number.eq.${contact.whatsapp},phone_number.eq.${contact.phone}`)
-      .order('last_message_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    // Formatar contato para resposta
+    // 8. Formatar contato para resposta
     const formattedContact = {
       id: contact.id,
       organization_id: contact.organization_id,
@@ -168,9 +152,6 @@ export async function GET(
       created_at: contact.created_at,
       updated_at: contact.updated_at,
       
-      // Contexto
-      last_conversation_id: lastConversation?.id,
-      
       // Contagens
       deals_count: deals?.length || 0,
       deals_won_count: deals?.filter((d: any) => d.status === 'won').length || 0,
@@ -186,6 +167,7 @@ export async function GET(
       deals: deals || [],
       tasks: tasks || [],
       invoices: invoices || [],
+      _source: 'contacts'
     })
   } catch (error: any) {
     console.error('Error fetching contact:', error)
@@ -193,15 +175,15 @@ export async function GET(
   }
 }
 
-// Helper para formatar contato legado
-function formatLegacyContact(contact: any) {
+// Helper para formatar contato do WhatsApp
+function formatWhatsAppContact(contact: any) {
   return {
     id: contact.id,
     organization_id: contact.organization_id,
     phone_number: contact.phone_number,
     phone: contact.phone_number,
     whatsapp: contact.phone_number,
-    name: contact.name || contact.profile_name,
+    name: contact.name || contact.profile_name || contact.push_name,
     first_name: contact.name?.split(' ')[0],
     last_name: contact.name?.split(' ').slice(1).join(' '),
     email: contact.email,
@@ -248,50 +230,59 @@ export async function PATCH(
       }
     }
 
-    // Atualizar na tabela contacts UNIFICADA
+    // Gerar full_name se first/last_name foram atualizados
+    if (updates.first_name || updates.last_name) {
+      const firstName = updates.first_name || body.first_name || ''
+      const lastName = updates.last_name || body.last_name || ''
+      updates.full_name = `${firstName} ${lastName}`.trim()
+    }
+
+    updates.updated_at = new Date().toISOString()
+
+    // Tentar atualizar na tabela contacts primeiro
     const { data, error } = await supabase
       .from('contacts')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', contactId)
       .select()
       .single()
 
     if (error) {
-      // Fallback: tentar atualizar na whatsapp_contacts antiga
-      const legacyUpdates: Record<string, any> = {}
+      // Fallback: tentar atualizar na whatsapp_contacts
+      const waUpdates: Record<string, any> = {
+        updated_at: new Date().toISOString()
+      }
+      
       if (updates.first_name || updates.last_name) {
-        legacyUpdates.name = `${updates.first_name || ''} ${updates.last_name || ''}`.trim()
+        waUpdates.name = updates.full_name
       }
       if (updates.whatsapp || updates.phone) {
-        legacyUpdates.phone_number = updates.whatsapp || updates.phone
+        waUpdates.phone_number = updates.whatsapp || updates.phone
       }
-      if (updates.email) legacyUpdates.email = updates.email
-      if (updates.tags) legacyUpdates.tags = updates.tags
-      if (updates.is_blocked !== undefined) legacyUpdates.is_blocked = updates.is_blocked
-      if (updates.blocked_reason) legacyUpdates.blocked_reason = updates.blocked_reason
-      if (updates.address) legacyUpdates.address = updates.address
-      if (updates.custom_fields) legacyUpdates.custom_fields = updates.custom_fields
-      if (updates.profile_picture_url) legacyUpdates.profile_picture_url = updates.profile_picture_url
+      if (updates.email) waUpdates.email = updates.email
+      if (updates.tags) waUpdates.tags = updates.tags
+      if (updates.is_blocked !== undefined) waUpdates.is_blocked = updates.is_blocked
+      if (updates.blocked_reason) waUpdates.blocked_reason = updates.blocked_reason
+      if (updates.address) waUpdates.address = updates.address
+      if (updates.custom_fields) waUpdates.custom_fields = updates.custom_fields
+      if (updates.profile_picture_url) waUpdates.profile_picture_url = updates.profile_picture_url
 
-      const { data: legacyData, error: legacyError } = await supabase
+      const { data: waData, error: waError } = await supabase
         .from('whatsapp_contacts')
-        .update({
-          ...legacyUpdates,
-          updated_at: new Date().toISOString(),
-        })
+        .update(waUpdates)
         .eq('id', contactId)
         .select()
         .single()
 
-      if (legacyError) throw error
+      if (waError) throw error
 
-      return NextResponse.json({ contact: formatLegacyContact(legacyData), _legacy: true })
+      return NextResponse.json({ 
+        contact: formatWhatsAppContact(waData), 
+        _source: 'whatsapp_contacts' 
+      })
     }
 
-    return NextResponse.json({ contact: data })
+    return NextResponse.json({ contact: data, _source: 'contacts' })
   } catch (error: any) {
     console.error('Error updating contact:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

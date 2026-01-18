@@ -1,69 +1,72 @@
-# 🔧 Correções do Inbox - Worder
+# 🔧 Correções das APIs do Inbox - SISTEMA UNIFICADO
 
-## Problemas Corrigidos
+## Problema Principal
+As APIs estavam usando duas tabelas diferentes:
+- `whatsapp_contacts` - tabela antiga (legada)
+- `contacts` - tabela unificada (CORRETA)
 
-### 1. ✅ BUG CRÍTICO: Notas compartilhadas entre contatos
-**Problema:** Ao trocar de contato, as notas do contato anterior continuavam aparecendo.
-**Causa:** O hook `useInboxContact` não limpava os dados ao mudar de contato.
-**Solução:** 
-- Adicionado `clearAllData()` que limpa TODOS os estados antes de buscar novo contato
-- Adicionado `currentContactIdRef` para evitar race conditions
-- Todas as operações agora verificam se ainda é o contato atual antes de atualizar estado
+## Pré-requisitos SQL (JÁ EXECUTADOS)
+```sql
+-- 1. Tabela whatsapp_contact_notes com colunas corretas
+-- 2. Colunas contact_phone, contact_name, contact_email em deals
+-- 3. FK de unified_contact_id para contacts
+```
 
-### 2. ✅ Props faltando no ContactPanel
-**Problema:** A página do Inbox não passava todas as props necessárias para o ContactPanel.
-**Props que faltavam:**
-- `conversation` - Necessário para mostrar info da conversa e toggle do bot
-- `onDeleteNote` - Necessário para excluir notas
-- `onAssignConversation` - Necessário para atribuir conversa
-- `onToggleBot` - Necessário para ativar/desativar bot
-- `tasks`, `invoices`, `comments` - Dados adicionais
-- E outras props de ações
+## Arquivos Corrigidos
 
-### 3. ✅ Funcionalidades que agora funcionam
-- ✅ **Notas** - Agora são individuais por contato
-- ✅ **Tags** - Funcionando corretamente
-- ✅ **Atribuir** - Modal funcional com callback
-- ✅ **Deal** - Modal funcional com callback
-- ✅ **Bot Toggle** - Funcionando com callback
-- ✅ **Bloquear/Desbloquear** - Funcionando
-- ✅ **CRM** - Tab CRM com deals
-- ✅ **Pedidos** - Tab de pedidos com carrinho abandonado
+### 1. `/api/whatsapp/inbox/conversations/route.ts` ⭐ PRINCIPAL
+- **Antes**: Join com `whatsapp_contacts`
+- **Depois**: Join com `contacts` via `unified_contact_id`
 
----
+### 2. `/api/whatsapp/inbox/contacts/[id]/route.ts`
+- **Antes**: Misturava tabelas
+- **Depois**: Prioriza `contacts`, fallback para `whatsapp_contacts`
 
-## 📁 Arquivos para Substituir
+### 3. `/api/whatsapp/inbox/contacts/[id]/tags/route.ts`
+- **Antes**: Usava só `contacts`
+- **Depois**: Busca em `contacts` primeiro, fallback para `whatsapp_contacts`
 
-### 1. Hook useInboxContact
-**Arquivo:** `src/hooks/useInboxContact.ts`
-**Ação:** Substituir completamente pelo arquivo fornecido
+### 4. `/api/whatsapp/inbox/contacts/[id]/deals/route.ts`
+- **Antes**: Usava `whatsapp_contacts` para buscar org_id
+- **Depois**: Busca em `contacts`, busca deals por `contact_id` OU `contact_phone`
 
-### 2. Página WhatsApp Inbox
-**Arquivo:** `src/app/(dashboard)/whatsapp/inbox/page.tsx`
-**Ação:** Substituir completamente pelo arquivo fornecido
+### 5. `/api/whatsapp/inbox/contacts/[id]/block/route.ts`
+- **Antes**: Usava só uma tabela
+- **Depois**: Atualiza ambas as tabelas se necessário (sync)
 
----
+### 6. `/api/whatsapp/inbox/conversations/[id]/assign/route.ts`
+- **Antes**: Usava coluna `assigned_agent_id` (não existe)
+- **Depois**: Usa coluna `assigned_to` (correta)
 
-## 🚀 Como Aplicar as Correções
+### 7. `/api/whatsapp/inbox/conversations/[id]/bot/route.ts`
+- **Antes**: Usava `is_bot_active` (não existe)
+- **Depois**: Usa `ai_enabled` (correta), mantém compatibilidade
 
-1. Faça backup dos arquivos originais
-2. Substitua `src/hooks/useInboxContact.ts` pelo arquivo fornecido
-3. Substitua `src/app/(dashboard)/whatsapp/inbox/page.tsx` pelo arquivo fornecido
-4. Reinicie o servidor de desenvolvimento
+## Como Aplicar
 
----
+1. Copie TODOS os arquivos para as pastas correspondentes em `src/app/api/whatsapp/inbox/`
+2. Faça commit e deploy
+3. Teste cada funcionalidade
 
-## 🧪 Como Testar
+## Estrutura de Pastas
+```
+src/app/api/whatsapp/inbox/
+├── conversations/
+│   ├── route.ts              ← CORRIGIDO (lista conversas)
+│   └── [id]/
+│       ├── assign/route.ts   ← CORRIGIDO
+│       └── bot/route.ts      ← CORRIGIDO
+└── contacts/[id]/
+    ├── route.ts              ← CORRIGIDO
+    ├── tags/route.ts         ← CORRIGIDO
+    ├── deals/route.ts        ← CORRIGIDO
+    └── block/route.ts        ← CORRIGIDO
+```
 
-### Teste 1: Notas não compartilhadas
-1. Abrir uma conversa com o contato A
-2. Ir na aba "Notas"
-3. Digitar "Teste contato A" no campo de notas (NÃO salvar ainda)
-4. Clicar em outra conversa (contato B)
-5. Verificar que o campo de notas está VAZIO ✅
-
-### Teste 2: Funcionalidades do painel
-1. **Tag**: Clicar em "Tag" → Adicionar tag → Verificar que aparece
-2. **Atribuir**: Clicar em "Atribuir" → Modal deve abrir
-3. **Deal**: Clicar em "Deal" → Modal deve abrir e criar deal
-4. **Bloquear**: Clicar em "Bloquear" → Contato deve ser bloqueado
+## Teste Checklist
+- [ ] Listar conversas (deve carregar dados do contato unificado)
+- [ ] Tags: adicionar/remover
+- [ ] Deals: criar/listar
+- [ ] Block: bloquear/desbloquear
+- [ ] Assign: atribuir conversa a agente
+- [ ] Bot: toggle IA on/off

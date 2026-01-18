@@ -1,4 +1,5 @@
 // src/app/api/whatsapp/inbox/contacts/[id]/tags/route.ts
+// CORRIGIDO: Usa tabela CONTACTS unificada
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -19,14 +20,33 @@ export async function POST(
       )
     }
 
-    // Buscar contato atual
-    const { data: contact, error: fetchError } = await supabase
+    // Buscar contato da tabela UNIFICADA (contacts)
+    let contact = null
+    let tableName = 'contacts'
+
+    const { data: unifiedContact, error: unifiedError } = await supabase
       .from('contacts')
       .select('id, tags, organization_id')
       .eq('id', contactId)
       .single()
 
-    if (fetchError || !contact) {
+    if (unifiedContact) {
+      contact = unifiedContact
+    } else {
+      // Fallback: tentar whatsapp_contacts
+      const { data: waContact, error: waError } = await supabase
+        .from('whatsapp_contacts')
+        .select('id, tags, organization_id')
+        .eq('id', contactId)
+        .single()
+
+      if (waContact) {
+        contact = waContact
+        tableName = 'whatsapp_contacts'
+      }
+    }
+
+    if (!contact) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
     }
 
@@ -40,9 +60,9 @@ export async function POST(
       newTags = newTags.filter((t: string) => t !== tag)
     }
 
-    // Atualizar contato
+    // Atualizar contato na tabela correta
     const { data: updatedContact, error: updateError } = await supabase
-      .from('contacts')
+      .from(tableName)
       .update({ 
         tags: newTags,
         updated_at: new Date().toISOString()

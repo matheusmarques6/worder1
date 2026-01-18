@@ -1,4 +1,5 @@
 // src/app/api/whatsapp/inbox/conversations/[id]/bot/route.ts
+// CORRIGIDO: Usa coluna ai_enabled correta
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -14,11 +15,10 @@ export async function GET(
       .from('whatsapp_conversations')
       .select(`
         id,
-        is_bot_active,
-        bot_disabled_until,
-        bot_disabled_reason,
         ai_enabled,
-        ai_agent_id
+        ai_agent_id,
+        ai_disabled_at,
+        ai_disabled_reason
       `)
       .eq('id', conversationId)
       .single()
@@ -28,11 +28,12 @@ export async function GET(
     }
 
     return NextResponse.json({
-      is_bot_active: conversation.is_bot_active,
-      bot_disabled_until: conversation.bot_disabled_until,
-      bot_disabled_reason: conversation.bot_disabled_reason,
-      ai_enabled: conversation.ai_enabled,
-      ai_agent_id: conversation.ai_agent_id
+      // Retornar tanto ai_enabled quanto is_bot_active para compatibilidade
+      ai_enabled: conversation.ai_enabled ?? true,
+      is_bot_active: conversation.ai_enabled ?? true,
+      ai_agent_id: conversation.ai_agent_id,
+      ai_disabled_at: conversation.ai_disabled_at,
+      ai_disabled_reason: conversation.ai_disabled_reason
     })
   } catch (error) {
     console.error('Error fetching bot status:', error)
@@ -52,7 +53,7 @@ export async function POST(
     const conversationId = params.id
     const body = await request.json()
     const { 
-      is_bot_active, 
+      is_bot_active, // compatibilidade
       ai_enabled,
       ai_agent_id,
       reason 
@@ -63,21 +64,20 @@ export async function POST(
       updated_at: new Date().toISOString()
     }
 
-    // Toggle do bot
-    if (is_bot_active !== undefined) {
-      updateData.is_bot_active = is_bot_active
-      
-      if (!is_bot_active) {
-        updateData.bot_disabled_reason = reason || 'Desativado manualmente'
-      } else {
-        updateData.bot_disabled_reason = null
-        updateData.bot_disabled_until = null
-      }
-    }
+    // CORREÇÃO: Usar ai_enabled como coluna principal
+    // Aceitar tanto is_bot_active quanto ai_enabled
+    const newAiEnabled = ai_enabled ?? is_bot_active
 
-    // Toggle da IA
-    if (ai_enabled !== undefined) {
-      updateData.ai_enabled = ai_enabled
+    if (newAiEnabled !== undefined) {
+      updateData.ai_enabled = newAiEnabled
+      
+      if (!newAiEnabled) {
+        updateData.ai_disabled_at = new Date().toISOString()
+        updateData.ai_disabled_reason = reason || 'Desativado manualmente'
+      } else {
+        updateData.ai_disabled_at = null
+        updateData.ai_disabled_reason = null
+      }
     }
 
     // Definir agente de IA
@@ -93,21 +93,25 @@ export async function POST(
       .from('whatsapp_conversations')
       .update(updateData)
       .eq('id', conversationId)
-      .select('id, is_bot_active, bot_disabled_until, bot_disabled_reason, ai_enabled, ai_agent_id')
+      .select('id, ai_enabled, ai_agent_id, ai_disabled_at, ai_disabled_reason')
       .single()
 
     if (updateError) {
+      console.error('Error updating conversation:', updateError)
       throw updateError
     }
 
     return NextResponse.json({ 
       success: true,
-      conversation: updatedConversation 
+      conversation: {
+        ...updatedConversation,
+        is_bot_active: updatedConversation.ai_enabled // compatibilidade
+      }
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error toggling bot:', error)
     return NextResponse.json(
-      { error: 'Failed to toggle bot' },
+      { error: error.message || 'Failed to toggle bot' },
       { status: 500 }
     )
   }
