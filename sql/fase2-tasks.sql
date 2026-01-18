@@ -181,21 +181,21 @@ BEGIN
     t.status,
     t.assigned_to,
     t.assigned_to_name,
-    t.contact_id,
-    c.name::VARCHAR as contact_name,
-    c.phone_number::VARCHAR as contact_phone,
+    COALESCE(t.unified_contact_id, t.contact_id) as contact_id,
+    COALESCE(c.first_name || ' ' || COALESCE(c.last_name, ''), c.first_name, c.profile_name, c.whatsapp)::VARCHAR as contact_name,
+    COALESCE(c.whatsapp, c.phone)::VARCHAR as contact_phone,
     t.deal_id,
     d.title::VARCHAR as deal_title,
     d.value as deal_value,
     t.created_at,
     t.updated_at
   FROM tasks t
-  LEFT JOIN whatsapp_contacts c ON c.id = t.contact_id
+  LEFT JOIN contacts c ON c.id = COALESCE(t.unified_contact_id, t.contact_id)
   LEFT JOIN deals d ON d.id = t.deal_id
   WHERE t.organization_id = p_organization_id
     AND (p_status IS NULL OR t.status = p_status)
     AND (p_assigned_to IS NULL OR t.assigned_to = p_assigned_to)
-    AND (p_contact_id IS NULL OR t.contact_id = p_contact_id)
+    AND (p_contact_id IS NULL OR t.contact_id = p_contact_id OR t.unified_contact_id = p_contact_id)
     AND (p_deal_id IS NULL OR t.deal_id = p_deal_id)
     AND (p_due_date_start IS NULL OR t.due_date >= p_due_date_start)
     AND (p_due_date_end IS NULL OR t.due_date <= p_due_date_end)

@@ -2,14 +2,33 @@
 // WORDER - INBOX TYPES
 // =====================================================
 
-// Contato
+// Contato (UNIFICADO - tabela contacts)
 export interface InboxContact {
   id: string
   organization_id: string
+  
+  // Identificadores
   phone_number: string
-  name?: string
+  phone?: string
+  whatsapp?: string
   email?: string
+  
+  // Nome
+  name?: string
+  first_name?: string
+  last_name?: string
+  full_name?: string
+  profile_name?: string
+  
+  // Empresa
+  company?: string
+  position?: string
+  
+  // Avatar
   profile_picture_url?: string
+  avatar_url?: string
+  
+  // Endereço
   address?: {
     street?: string
     city?: string
@@ -17,6 +36,8 @@ export interface InboxContact {
     zip?: string
     country?: string
   }
+  
+  // Campos customizados
   custom_fields?: Record<string, any>
   tags: string[]
   
@@ -29,6 +50,7 @@ export interface InboxContact {
   shopify_customer_id?: string
   total_orders: number
   total_spent: number
+  lifetime_value?: number
   last_order_at?: string
   
   // Status
@@ -36,16 +58,32 @@ export interface InboxContact {
   blocked_reason?: string
   blocked_at?: string
   
-  // Origem
-  source?: 'organic' | 'campaign' | 'import' | 'manual'
-  source_campaign_id?: string
+  // Subscriptions
+  is_subscribed_email?: boolean
+  is_subscribed_sms?: boolean
+  is_subscribed_whatsapp?: boolean
   
-  // Métricas
+  // Origem
+  source?: 'organic' | 'campaign' | 'import' | 'manual' | 'whatsapp' | 'shopify'
+  source_campaign_id?: string
+  first_contact_channel?: string
+  
+  // Métricas WhatsApp
   first_message_at?: string
   last_message_at?: string
   total_conversations: number
   total_messages_received: number
   total_messages_sent: number
+  
+  // Contexto
+  last_conversation_id?: string
+  
+  // Contagens relacionadas
+  deals_count?: number
+  deals_won_count?: number
+  deals_open_count?: number
+  tasks_pending_count?: number
+  invoices_count?: number
   
   created_at: string
   updated_at?: string
@@ -56,6 +94,7 @@ export interface InboxConversation {
   id: string
   organization_id: string
   contact_id: string
+  unified_contact_id?: string // Novo campo para tabela contacts
   instance_id?: string
   phone_number: string
   wa_conversation_id?: string
@@ -183,14 +222,14 @@ export interface InboxMessage {
   metadata?: Record<string, any>
 }
 
-// Nota
+// Nota (compatibilidade com API antiga)
 export interface InboxNote {
   id: string
   organization_id: string
   contact_id: string
   conversation_id?: string
   content: string
-  note_type: 'general' | 'call' | 'meeting' | 'follow_up' | 'important'
+  note_type: 'general' | 'call' | 'meeting' | 'follow_up' | 'important' | 'note'
   is_pinned: boolean
   created_by: string
   created_by_name?: string
@@ -198,22 +237,217 @@ export interface InboxNote {
   updated_at?: string
 }
 
-// Atividade
+// Comentário (nova tabela contact_comments)
+export interface InboxComment {
+  id: string
+  organization_id: string
+  contact_id: string
+  conversation_id?: string
+  deal_id?: string
+  task_id?: string
+  
+  content: string
+  comment_type: 'note' | 'call_log' | 'meeting_note' | 'important' | 'follow_up'
+  
+  is_pinned: boolean
+  pinned_at?: string
+  pinned_by?: string
+  
+  mentions: string[]
+  
+  created_by: string
+  created_by_name?: string
+  created_by_avatar?: string
+  
+  created_at: string
+  updated_at?: string
+}
+
+// Atividade (tabela contact_activities)
 export interface InboxActivity {
   id: string
   organization_id: string
   contact_id: string
   conversation_id?: string
-  activity_type: string
+  deal_id?: string
+  task_id?: string
+  invoice_id?: string
+  order_id?: string
+  
+  activity_type: 
+    // Conversas
+    | 'conversation_started' | 'conversation_closed' | 'message_sent' | 'message_received'
+    // Bot
+    | 'bot_interaction' | 'bot_enabled' | 'bot_disabled'
+    // Agentes
+    | 'agent_assigned' | 'agent_removed'
+    // Tags
+    | 'tag_added' | 'tag_removed'
+    // Deals
+    | 'deal_created' | 'deal_updated' | 'deal_won' | 'deal_lost' | 'deal_stage_changed'
+    // Pedidos
+    | 'order_placed' | 'order_fulfilled' | 'order_cancelled' | 'cart_abandoned' | 'cart_recovered'
+    // Tarefas
+    | 'task_created' | 'task_completed' | 'task_assigned'
+    // NFs
+    | 'invoice_uploaded' | 'invoice_sent'
+    // Contato
+    | 'contact_created' | 'contact_updated' | 'blocked' | 'unblocked'
+    // Campanhas
+    | 'campaign_sent' | 'campaign_replied' | 'campaign_clicked'
+    // Notas
+    | 'note_added' | 'comment_added'
+    // Avaliações
+    | 'rating_received'
+    | string
+    
   title: string
   description?: string
   metadata?: Record<string, any>
+  
+  // Deprecated fields (manter para compatibilidade)
   related_deal_id?: string
   related_campaign_id?: string
   related_order_id?: string
+  
   created_by?: string
   created_by_name?: string
   created_at: string
+}
+
+// Tarefa
+export interface InboxTask {
+  id: string
+  organization_id: string
+  
+  // Vinculações
+  contact_id?: string
+  unified_contact_id?: string
+  deal_id?: string
+  conversation_id?: string
+  ticket_id?: string
+  
+  // Dados da tarefa
+  title: string
+  description?: string
+  type: 'task' | 'call' | 'email' | 'whatsapp' | 'meeting' | 'followup' | 'payment'
+  priority: 'low' | 'normal' | 'high' | 'urgent'
+  
+  // Agendamento
+  due_date: string
+  due_time?: string
+  all_day?: boolean
+  
+  // Lembrete
+  reminder_at?: string
+  reminder_sent?: boolean
+  
+  // Atribuição
+  assigned_to?: string
+  assigned_to_name?: string
+  assigned_user?: {
+    id: string
+    first_name: string
+    last_name?: string
+    avatar_url?: string
+  }
+  
+  created_by?: string
+  created_by_name?: string
+  
+  // Status
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  completed_at?: string
+  completed_by?: string
+  completed_by_name?: string
+  
+  // Resultado
+  outcome?: string
+  outcome_type?: 'success' | 'no_answer' | 'rescheduled' | 'cancelled'
+  
+  // Contexto
+  deal?: InboxDeal
+  
+  // Calculados
+  is_overdue?: boolean
+  is_today?: boolean
+  
+  // Metadata
+  tags?: string[]
+  metadata?: Record<string, any>
+  
+  created_at: string
+  updated_at?: string
+}
+
+// Nota Fiscal
+export interface InboxInvoice {
+  id: string
+  organization_id: string
+  contact_id: string
+  
+  // Contexto
+  deal_id?: string
+  order_id?: string
+  
+  // Dados da NF
+  invoice_number?: string
+  invoice_type: 'nfe' | 'nfce' | 'nfse' | 'outros'
+  invoice_series?: string
+  invoice_key?: string
+  
+  // Valores
+  total_value: number
+  tax_value?: number
+  discount_value?: number
+  
+  // Datas
+  issue_date?: string
+  due_date?: string
+  
+  // Status
+  status: 'pending' | 'issued' | 'cancelled' | 'rejected'
+  
+  // Arquivos
+  pdf_url?: string
+  xml_url?: string
+  
+  // Dados parseados do XML
+  parsed_data?: {
+    emitente?: {
+      cnpj?: string
+      nome?: string
+      endereco?: string
+    }
+    destinatario?: {
+      cpf_cnpj?: string
+      nome?: string
+      endereco?: string
+    }
+    itens?: Array<{
+      descricao: string
+      quantidade: number
+      valor_unitario: number
+      valor_total: number
+    }>
+    impostos?: {
+      icms?: number
+      ipi?: number
+      pis?: number
+      cofins?: number
+    }
+  }
+  
+  // Notas
+  notes?: string
+  metadata?: Record<string, any>
+  
+  // Quem enviou
+  uploaded_by?: string
+  uploaded_by_name?: string
+  
+  created_at: string
+  updated_at?: string
 }
 
 // Tag
@@ -313,11 +547,14 @@ export interface InboxDeal {
   pipeline?: {
     id: string
     name: string
+    color?: string
   }
   stage?: {
     id: string
     name: string
     color: string
+    is_won?: boolean
+    is_lost?: boolean
   }
 }
 
@@ -346,4 +583,15 @@ export interface ApiResponse<T> {
   data?: T
   error?: string
   pagination?: Pagination
+}
+
+// Resposta da API de contato completo
+export interface ContactFullResponse {
+  contact: InboxContact
+  notes: InboxNote[]
+  activities: InboxActivity[]
+  deals: InboxDeal[]
+  tasks: InboxTask[]
+  invoices: InboxInvoice[]
+  _legacy?: boolean
 }
