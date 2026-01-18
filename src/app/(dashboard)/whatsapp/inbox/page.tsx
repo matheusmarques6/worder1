@@ -56,7 +56,6 @@ export default function InboxPage() {
   const handleConnectionSuccess = (instance: any) => {
     fetchInstances()
     setShowConnectModal(false)
-    // Toast de sucesso pode ser adicionado aqui
   }
 
   // =============================================
@@ -88,32 +87,46 @@ export default function InboxPage() {
     clear: clearMessages,
   } = useInboxMessages()
 
+  // CORREÇÃO: Extrair TODAS as funcionalidades do hook
   const {
     contact,
+    conversation: contactConversation, // NOVO: pegar conversation do hook
     notes,
     activities,
     orders,
     cart,
     activeDeal,
     deals,
+    tasks,        // NOVO
+    invoices,     // NOVO
+    comments,     // NOVO
     isLoading: contactLoading,
     fetchContact,
     updateContact,
     addTag,
     removeTag,
     addNote,
+    deleteNote,   // NOVO
     blockContact,
     unblockContact,
     fetchOrders,
     fetchDeals,
     createDeal,
+    assignConversation,  // NOVO
+    toggleBot: toggleContactBot,  // NOVO
+    createTask,   // NOVO
+    completeTask, // NOVO
+    deleteTask,   // NOVO
+    uploadInvoice, // NOVO
+    deleteInvoice, // NOVO
+    addComment,   // NOVO
+    refreshContact,  // NOVO
     clear: clearContact,
   } = useInboxContact()
 
   // Handler para seleção de instância
   const handleInstanceSelect = (instance: WhatsAppInstance | null) => {
     selectInstance(instance)
-    // Recarregar conversas para a nova instância
     if (instance) {
       refreshConversations()
     }
@@ -130,7 +143,6 @@ export default function InboxPage() {
     if (selectedConversation) {
       addMessage(msg)
     }
-    // Atualizar lista de conversas para mostrar nova mensagem
     refreshConversations()
   }, [selectedConversation, addMessage, refreshConversations])
 
@@ -161,12 +173,14 @@ export default function InboxPage() {
     }
   }, [selectedInstance?.id, refreshConversations])
 
-  // Load messages and contact when conversation changes
+  // CORREÇÃO: Load messages and contact when conversation changes
+  // Passando o conversationId para o fetchContact
   useEffect(() => {
     if (selectedConversation) {
       fetchMessages(selectedConversation.id)
       if (selectedConversation.contact_id) {
-        fetchContact(selectedConversation.contact_id)
+        // CORREÇÃO: Passar conversationId para carregar conversation junto
+        fetchContact(selectedConversation.contact_id, selectedConversation.id)
         fetchOrders(selectedConversation.contact_id)
         fetchDeals(selectedConversation.contact_id)
       }
@@ -209,6 +223,25 @@ export default function InboxPage() {
   const handleSearch = (value: string) => {
     setSearch(value)
     fetchConversations({ ...filters, search: value })
+  }
+
+  // NOVO: Handler para atribuir conversa
+  const handleAssignConversation = async (conversationId: string, userId: string | null) => {
+    await assignConversation(conversationId, userId)
+    refreshConversations()
+  }
+
+  // NOVO: Handler para toggle bot no ContactPanel
+  const handleContactToggleBot = async (conversationId: string, active: boolean) => {
+    await toggleContactBot(conversationId, active)
+    refreshConversations()
+  }
+
+  // NOVO: Handler para refresh do contato
+  const handleRefreshContact = () => {
+    if (selectedConversation?.contact_id) {
+      refreshContact(selectedConversation.contact_id, selectedConversation.id)
+    }
   }
 
   // Filter conversations locally for instant feedback
@@ -345,7 +378,7 @@ export default function InboxPage() {
             </div>
           )}
 
-              {/* Conversation List */}
+          {/* Conversation List */}
           <ConversationList
             conversations={filteredConversations}
             selectedId={selectedConversation?.id}
@@ -355,65 +388,80 @@ export default function InboxPage() {
         </div>
 
         {/* ========== CHAT PANEL ========== */}
-      <div className={`
-        flex-1 flex flex-col min-w-0
-        ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}
-      `}>
-        {selectedConversation ? (
-          <ChatPanel
-            conversation={selectedConversation}
-            messages={messages}
-            isLoading={messagesLoading}
-            isSending={isSending}
-            onSendMessage={handleSendMessage}
-            onToggleBot={handleToggleBot}
-            onBack={handleBackToList}
-            onToggleContactPanel={() => setShowContactPanel(!showContactPanel)}
-            showContactPanel={showContactPanel}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-dark-400">
-            <MessageSquare className="w-16 h-16 mb-4 opacity-30" />
-            <p className="text-lg font-medium">Selecione uma conversa</p>
-            <p className="text-sm text-dark-500 mt-1">
-              Escolha uma conversa da lista para começar
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* ========== CONTACT PANEL ========== */}
-      <AnimatePresence>
-        {selectedConversation && showContactPanel && (
-          <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 380, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="hidden lg:flex flex-shrink-0 border-l border-dark-700/50 bg-dark-900/30 overflow-hidden"
-          >
-            <ContactPanel
-              contact={contact}
-              notes={notes}
-              activities={activities}
-              orders={orders}
-              cart={cart}
-              activeDeal={activeDeal}
-              deals={deals}
-              isLoading={contactLoading}
-              conversationId={selectedConversation.id}
-              onUpdateContact={updateContact}
-              onAddTag={addTag}
-              onRemoveTag={removeTag}
-              onAddNote={addNote}
-              onBlockContact={blockContact}
-              onUnblockContact={unblockContact}
-              onCreateDeal={createDeal}
+        <div className={`
+          flex-1 flex flex-col min-w-0
+          ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}
+        `}>
+          {selectedConversation ? (
+            <ChatPanel
+              conversation={selectedConversation}
+              messages={messages}
+              isLoading={messagesLoading}
+              isSending={isSending}
+              onSendMessage={handleSendMessage}
+              onToggleBot={handleToggleBot}
+              onBack={handleBackToList}
+              onToggleContactPanel={() => setShowContactPanel(!showContactPanel)}
+              showContactPanel={showContactPanel}
             />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-dark-400">
+              <MessageSquare className="w-16 h-16 mb-4 opacity-30" />
+              <p className="text-lg font-medium">Selecione uma conversa</p>
+              <p className="text-sm text-dark-500 mt-1">
+                Escolha uma conversa da lista para começar
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* ========== CONTACT PANEL ========== */}
+        <AnimatePresence>
+          {selectedConversation && showContactPanel && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 380, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="hidden lg:flex flex-shrink-0 border-l border-dark-700/50 bg-dark-900/30 overflow-hidden"
+            >
+              {/* CORREÇÃO: Passar TODAS as props necessárias */}
+              <ContactPanel
+                contact={contact}
+                conversation={contactConversation || selectedConversation}
+                notes={notes}
+                activities={activities}
+                orders={orders}
+                cart={cart}
+                activeDeal={activeDeal}
+                deals={deals}
+                tasks={tasks}
+                invoices={invoices}
+                comments={comments}
+                isLoading={contactLoading}
+                conversationId={selectedConversation.id}
+                onUpdateContact={updateContact}
+                onAddTag={addTag}
+                onRemoveTag={removeTag}
+                onAddNote={addNote}
+                onDeleteNote={deleteNote}
+                onBlockContact={blockContact}
+                onUnblockContact={unblockContact}
+                onCreateDeal={createDeal}
+                onAssignConversation={handleAssignConversation}
+                onToggleBot={handleContactToggleBot}
+                onCreateTask={createTask}
+                onCompleteTask={completeTask}
+                onDeleteTask={deleteTask}
+                onUploadInvoice={uploadInvoice}
+                onDeleteInvoice={deleteInvoice}
+                onAddComment={addComment}
+                onRefreshContact={handleRefreshContact}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </>
   )
 }

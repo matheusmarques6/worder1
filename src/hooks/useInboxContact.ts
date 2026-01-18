@@ -1,5 +1,6 @@
 // src/hooks/useInboxContact.ts
-import { useState, useCallback } from 'react'
+// VERSÃO CORRIGIDA - Limpa dados ao mudar de contato
+import { useState, useCallback, useRef } from 'react'
 import type { 
   InboxContact, 
   InboxNote, 
@@ -77,7 +78,31 @@ export function useInboxContact(): UseInboxContactReturn {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Ref para controlar qual contato está sendo carregado (evita race conditions)
+  const currentContactIdRef = useRef<string | null>(null)
+
+  // CORREÇÃO: Limpar todos os dados antes de carregar novo contato
+  const clearAllData = useCallback(() => {
+    setContact(null)
+    setConversation(null)
+    setNotes([])
+    setActivities([])
+    setOrders([])
+    setCart(null)
+    setActiveDeal(null)
+    setDeals([])
+    setTasks([])
+    setInvoices([])
+    setComments([])
+  }, [])
+
   const fetchContact = useCallback(async (contactId: string, conversationId?: string) => {
+    // CORREÇÃO: Salvar o ID atual para verificar depois
+    currentContactIdRef.current = contactId
+    
+    // CORREÇÃO: Limpar dados ANTES de começar a buscar
+    clearAllData()
+    
     setIsLoading(true)
     setError(null)
 
@@ -85,6 +110,12 @@ export function useInboxContact(): UseInboxContactReturn {
       // Buscar contato
       const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}`)
       const data = await response.json()
+
+      // CORREÇÃO: Verificar se ainda é o contato que queremos (evita race condition)
+      if (currentContactIdRef.current !== contactId) {
+        console.log('⚠️ Contact changed during fetch, ignoring response')
+        return
+      }
 
       if (!response.ok) throw new Error(data.error || 'Failed to fetch contact')
 
@@ -94,6 +125,7 @@ export function useInboxContact(): UseInboxContactReturn {
       setDeals(data.deals || [])
       setTasks(data.tasks || [])
       setInvoices(data.invoices || [])
+      setComments(data.comments || [])
       
       const openDeals = (data.deals || []).filter((d: InboxDeal) => d.status === 'open')
       setActiveDeal(openDeals[0] || null)
@@ -101,41 +133,51 @@ export function useInboxContact(): UseInboxContactReturn {
       // Buscar conversa se tiver conversationId
       if (conversationId) {
         const convResponse = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}`)
-        if (convResponse.ok) {
+        if (convResponse.ok && currentContactIdRef.current === contactId) {
           const convData = await convResponse.json()
           setConversation(convData.conversation || convData)
         }
       }
 
       // Buscar pedidos separadamente
-      if (data.contact?.phone_number) {
+      if (data.contact?.phone_number && currentContactIdRef.current === contactId) {
         fetchOrders(contactId)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
+      if (currentContactIdRef.current === contactId) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
+      }
     } finally {
-      setIsLoading(false)
+      if (currentContactIdRef.current === contactId) {
+        setIsLoading(false)
+      }
     }
-  }, [])
+  }, [clearAllData])
 
   const refreshContact = useCallback(async (contactId: string, conversationId?: string) => {
+    // CORREÇÃO: Verificar se é o mesmo contato atual
+    if (currentContactIdRef.current !== contactId) {
+      return fetchContact(contactId, conversationId)
+    }
+
     try {
       const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}`)
       const data = await response.json()
 
-      if (response.ok) {
+      if (response.ok && currentContactIdRef.current === contactId) {
         setContact(data.contact)
         setNotes(data.notes || [])
         setActivities(data.activities || [])
         setDeals(data.deals || [])
         setTasks(data.tasks || [])
         setInvoices(data.invoices || [])
+        setComments(data.comments || [])
         
         const openDeals = (data.deals || []).filter((d: InboxDeal) => d.status === 'open')
         setActiveDeal(openDeals[0] || null)
       }
 
-      if (conversationId) {
+      if (conversationId && currentContactIdRef.current === contactId) {
         const convResponse = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}`)
         if (convResponse.ok) {
           const convData = await convResponse.json()
@@ -145,7 +187,7 @@ export function useInboxContact(): UseInboxContactReturn {
     } catch (err) {
       console.error('Error refreshing contact:', err)
     }
-  }, [])
+  }, [fetchContact])
 
   const updateContact = useCallback(async (contactId: string, updates: Partial<InboxContact>) => {
     const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}`, {
@@ -157,7 +199,11 @@ export function useInboxContact(): UseInboxContactReturn {
     if (!response.ok) throw new Error('Failed to update contact')
 
     const { contact: updated } = await response.json()
-    setContact(prev => prev ? { ...prev, ...updated } : null)
+    
+    // CORREÇÃO: Só atualizar se ainda é o mesmo contato
+    if (currentContactIdRef.current === contactId) {
+      setContact(prev => prev ? { ...prev, ...updated } : null)
+    }
   }, [])
 
   const addTag = useCallback(async (contactId: string, tag: string) => {
@@ -170,7 +216,10 @@ export function useInboxContact(): UseInboxContactReturn {
     if (!response.ok) throw new Error('Failed to add tag')
 
     const { contact: updated } = await response.json()
-    setContact(prev => prev ? { ...prev, tags: updated.tags } : null)
+    
+    if (currentContactIdRef.current === contactId) {
+      setContact(prev => prev ? { ...prev, tags: updated.tags } : null)
+    }
   }, [])
 
   const removeTag = useCallback(async (contactId: string, tag: string) => {
@@ -183,7 +232,10 @@ export function useInboxContact(): UseInboxContactReturn {
     if (!response.ok) throw new Error('Failed to remove tag')
 
     const { contact: updated } = await response.json()
-    setContact(prev => prev ? { ...prev, tags: updated.tags } : null)
+    
+    if (currentContactIdRef.current === contactId) {
+      setContact(prev => prev ? { ...prev, tags: updated.tags } : null)
+    }
   }, [])
 
   const addNote = useCallback(async (contactId: string, content: string, conversationId?: string) => {
@@ -196,7 +248,11 @@ export function useInboxContact(): UseInboxContactReturn {
     if (!response.ok) throw new Error('Failed to add note')
 
     const { note } = await response.json()
-    setNotes(prev => [note, ...prev])
+    
+    // CORREÇÃO: Só adicionar se ainda é o mesmo contato
+    if (currentContactIdRef.current === contactId) {
+      setNotes(prev => [note, ...prev])
+    }
   }, [])
 
   const deleteNote = useCallback(async (contactId: string, noteId: string) => {
@@ -207,7 +263,10 @@ export function useInboxContact(): UseInboxContactReturn {
 
     if (!response.ok) throw new Error('Failed to delete note')
 
-    setNotes(prev => prev.filter(n => n.id !== noteId))
+    // CORREÇÃO: Só remover se ainda é o mesmo contato
+    if (currentContactIdRef.current === contactId) {
+      setNotes(prev => prev.filter(n => n.id !== noteId))
+    }
   }, [])
 
   const blockContact = useCallback(async (contactId: string, reason?: string) => {
@@ -219,7 +278,9 @@ export function useInboxContact(): UseInboxContactReturn {
 
     if (!response.ok) throw new Error('Failed to block contact')
 
-    setContact(prev => prev ? { ...prev, is_blocked: true, blocked_reason: reason } : null)
+    if (currentContactIdRef.current === contactId) {
+      setContact(prev => prev ? { ...prev, is_blocked: true, blocked_reason: reason } : null)
+    }
   }, [])
 
   const unblockContact = useCallback(async (contactId: string) => {
@@ -231,7 +292,9 @@ export function useInboxContact(): UseInboxContactReturn {
 
     if (!response.ok) throw new Error('Failed to unblock contact')
 
-    setContact(prev => prev ? { ...prev, is_blocked: false, blocked_reason: undefined } : null)
+    if (currentContactIdRef.current === contactId) {
+      setContact(prev => prev ? { ...prev, is_blocked: false, blocked_reason: undefined } : null)
+    }
   }, [])
 
   const assignConversation = useCallback(async (conversationId: string, userId: string | null) => {
@@ -256,7 +319,6 @@ export function useInboxContact(): UseInboxContactReturn {
 
     if (!response.ok) throw new Error('Failed to toggle bot')
 
-    const { conversation: updated } = await response.json()
     setConversation(prev => prev ? { ...prev, is_bot_active: active } : null)
   }, [])
 
@@ -265,7 +327,7 @@ export function useInboxContact(): UseInboxContactReturn {
       const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/orders`)
       const data = await response.json()
 
-      if (response.ok) {
+      if (response.ok && currentContactIdRef.current === contactId) {
         setOrders(data.orders || [])
         setCart(data.cart || null)
       }
@@ -279,7 +341,7 @@ export function useInboxContact(): UseInboxContactReturn {
       const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/deals`)
       const data = await response.json()
 
-      if (response.ok) {
+      if (response.ok && currentContactIdRef.current === contactId) {
         setActiveDeal(data.activeDeal || null)
         setDeals(data.deals || [])
       }
@@ -298,8 +360,11 @@ export function useInboxContact(): UseInboxContactReturn {
     if (!response.ok) throw new Error('Failed to create deal')
 
     const { deal } = await response.json()
-    setActiveDeal(deal)
-    setDeals(prev => [deal, ...prev])
+    
+    if (currentContactIdRef.current === contactId) {
+      setActiveDeal(deal)
+      setDeals(prev => [deal, ...prev])
+    }
     
     return deal
   }, [])
@@ -309,7 +374,7 @@ export function useInboxContact(): UseInboxContactReturn {
       const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/tasks`)
       const data = await response.json()
 
-      if (response.ok) {
+      if (response.ok && currentContactIdRef.current === contactId) {
         setTasks(data.tasks || [])
       }
     } catch (err) {
@@ -327,7 +392,10 @@ export function useInboxContact(): UseInboxContactReturn {
     if (!response.ok) throw new Error('Failed to create task')
 
     const { task: newTask } = await response.json()
-    setTasks(prev => [newTask, ...prev])
+    
+    if (currentContactIdRef.current === contactId) {
+      setTasks(prev => [newTask, ...prev])
+    }
     
     return newTask
   }, [])
@@ -367,7 +435,7 @@ export function useInboxContact(): UseInboxContactReturn {
       const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/invoices`)
       const data = await response.json()
 
-      if (response.ok) {
+      if (response.ok && currentContactIdRef.current === contactId) {
         setInvoices(data.invoices || [])
       }
     } catch (err) {
@@ -390,19 +458,25 @@ export function useInboxContact(): UseInboxContactReturn {
     if (!response.ok) throw new Error('Failed to upload invoice')
 
     const { invoice } = await response.json()
-    setInvoices(prev => [invoice, ...prev])
+    
+    if (currentContactIdRef.current === contactId) {
+      setInvoices(prev => [invoice, ...prev])
+    }
   }, [])
 
   const deleteInvoice = useCallback(async (invoiceId: string) => {
+    const contactId = currentContactIdRef.current
+    if (!contactId) return
+
     const response = await fetch(
-      `/api/whatsapp/inbox/contacts/${contact?.id}/invoices?invoice_id=${invoiceId}`,
+      `/api/whatsapp/inbox/contacts/${contactId}/invoices?invoice_id=${invoiceId}`,
       { method: 'DELETE' }
     )
 
     if (!response.ok) throw new Error('Failed to delete invoice')
 
     setInvoices(prev => prev.filter(i => i.id !== invoiceId))
-  }, [contact?.id])
+  }, [])
 
   const addComment = useCallback(async (contactId: string, content: string, type?: string) => {
     const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/comments`, {
@@ -414,32 +488,26 @@ export function useInboxContact(): UseInboxContactReturn {
     if (!response.ok) throw new Error('Failed to add comment')
 
     const { comment } = await response.json()
-    setComments(prev => [comment, ...prev])
-    setActivities(prev => [{
-      id: comment.id,
-      organization_id: comment.organization_id,
-      contact_id: comment.contact_id,
-      activity_type: 'note_added',
-      title: 'Nota adicionada',
-      description: content,
-      created_by_name: comment.created_by_name,
-      created_at: comment.created_at,
-    }, ...prev])
+    
+    if (currentContactIdRef.current === contactId) {
+      setComments(prev => [comment, ...prev])
+      setActivities(prev => [{
+        id: comment.id,
+        organization_id: comment.organization_id,
+        contact_id: comment.contact_id,
+        activity_type: 'note_added',
+        title: 'Nota adicionada',
+        description: content,
+        created_by_name: comment.created_by_name,
+        created_at: comment.created_at,
+      }, ...prev])
+    }
   }, [])
 
   const clear = useCallback(() => {
-    setContact(null)
-    setConversation(null)
-    setNotes([])
-    setActivities([])
-    setOrders([])
-    setCart(null)
-    setActiveDeal(null)
-    setDeals([])
-    setTasks([])
-    setInvoices([])
-    setComments([])
-  }, [])
+    currentContactIdRef.current = null
+    clearAllData()
+  }, [clearAllData])
 
   return {
     contact,
