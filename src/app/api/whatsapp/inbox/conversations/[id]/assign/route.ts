@@ -1,78 +1,96 @@
+// src/app/api/whatsapp/inbox/conversations/[id]/assign/route.ts
+import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 
-// GET - Buscar usuários disponíveis para atribuição
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const conversationId = params.id
-
-    // Buscar conversa para pegar org_id
-    const { data: conversation } = await supabase
-      .from('whatsapp_conversations')
-      .select('organization_id, assigned_to')
-      .eq('id', conversationId)
-      .single()
-
-    if (!conversation) {
-      return NextResponse.json({ error: 'Conversa não encontrada' }, { status: 404 })
-    }
-
-    // Buscar membros da organização
-    const { data: members, error } = await supabase
-      .from('organization_members')
-      .select('user_id, role, users(id, email, full_name)')
-      .eq('organization_id', conversation.organization_id)
-
-    if (error) {
-      console.log('Members error:', error.message)
-      return NextResponse.json({ users: [], assigned_to: conversation.assigned_to })
-    }
-
-    const users = members?.map((m: any) => ({
-      id: m.user_id,
-      email: m.users?.email,
-      name: m.users?.full_name || m.users?.email,
-      role: m.role
-    })) || []
-
-    return NextResponse.json({ 
-      users, 
-      assigned_to: conversation.assigned_to 
-    })
-  } catch (error: any) {
-    console.error('Error fetching users:', error)
-    return NextResponse.json({ users: [], assigned_to: null })
-  }
-}
-
-// POST - Atribuir conversa a um usuário
+// POST - Atribuir ou remover atribuição de conversa
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const supabase = await createClient()
     const conversationId = params.id
-    const body = await request.json()
-    const { user_id } = body
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    const { data: conversation, error } = await supabase
+    const body = await request.json()
+    const { userId } = body // null para remover atribuição
+
+    // Buscar conversa atual
+    const { data: conversation, error: fetchError } = await supabase
       .from('whatsapp_conversations')
-      .update({ 
-        assigned_to: user_id || null,
-        updated_at: new Date().toISOString()
-      })
+      .select('id, organization_id, contact_id, assigned_agent_id')
       .eq('id', conversationId)
-      .select()
       .single()
 
-    if (error) throw error
+    if (fetchError || !conversation) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+    }
 
-    return NextResponse.json({ conversation })
-  } catch (error: any) {
+    // Preparar dados de atualização
+    const updateData: Record<string, any> = {
+      assigned_agent_id: userId || null,
+      updated_at: new Date().toISOString()
+    }
+
+    if (userId) {
+      updateData.assigned_at = new Date().toISOString()
+    } else {
+      updateData.assigned_at = null
+    }
+
+    // Atualizar conversa
+    const { data: updatedConversation, error: updateError } = await supabase
+      .from('whatsapp_conversations')
+      .update(updateData)
+      .eq('id', conversationId)
+      .select(`
+        id, 
+        assigned_agent_id, 
+        assigned_at,
+        assigned_agent:users!assigned_agent_id(id, name, email)
+      `)
+      .single()
+
+    if (updateError) {
+      throw updateError
+    }
+
+    // Buscar nome do agente para a atividade
+    let agentName = null
+    if (userId) {
+      const { data: agent } = await supabase
+        .from('users')
+        .select('name, email')
+        .eq('id', userId)
+        .single()
+      agentName = agent?.name || agent?.email
+    }
+
+    // Registrar atividade
+    await supabase.from('contact_activities').insert({
+      contact_id: conversation.contact_id,
+      conversation_id: conversationId,
+      organization_id: conversation.organization_id,
+      activity_type: userId ? 'agent_assigned' : 'agent_removed',
+      title: userId ? 'Conversa atribuída' : 'Atribuição removida',
+      description: agentName ? `Atribuída para ${agentName}` : null,
+      created_by: user.id,
+      metadata: { assigned_to: userId }
+    }).single()
+
+    return NextResponse.json({ 
+      success: true,
+      conversation: updatedConversation 
+    })
+  } catch (error) {
     console.error('Error assigning conversation:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Failed to assign conversation' },
+      { status: 500 }
+    )
   }
 }

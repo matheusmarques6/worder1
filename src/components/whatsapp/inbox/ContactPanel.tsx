@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Mail,
@@ -30,6 +30,8 @@ import {
   Building,
   Briefcase,
   MessageSquare,
+  Bot,
+  MessageCircle,
 } from 'lucide-react'
 import type { 
   InboxContact, 
@@ -41,22 +43,28 @@ import type {
   InboxTask,
   InboxInvoice,
   InboxComment,
+  InboxConversation,
 } from '@/types/inbox'
 
 // Import tabs components
 import { TasksTab } from './tabs/TasksTab'
 import { InvoicesTab } from './tabs/InvoicesTab'
 import { TimelineTab } from './tabs/TimelineTab'
+import { NotesTab } from './tabs/NotesTab'
+
+// Import modals
+import { CreateDealModal } from './modals/CreateDealModal'
+import { AssignModal } from './modals/AssignModal'
 
 interface ContactPanelProps {
   contact: InboxContact | null
+  conversation?: InboxConversation | null
   notes: InboxNote[]
   activities: InboxActivity[]
   orders: InboxOrder[]
   cart: InboxCart | null
   activeDeal: InboxDeal | null
   deals: InboxDeal[]
-  // Novos props
   tasks?: InboxTask[]
   invoices?: InboxInvoice[]
   comments?: InboxComment[]
@@ -66,9 +74,12 @@ interface ContactPanelProps {
   onAddTag: (id: string, tag: string) => Promise<void>
   onRemoveTag: (id: string, tag: string) => Promise<void>
   onAddNote: (id: string, content: string, conversationId?: string) => Promise<void>
+  onDeleteNote?: (id: string, noteId: string) => Promise<void>
   onBlockContact: (id: string, reason?: string) => Promise<void>
   onUnblockContact: (id: string) => Promise<void>
   onCreateDeal: (id: string, params: any) => Promise<any>
+  onAssignConversation?: (conversationId: string, userId: string | null) => Promise<void>
+  onToggleBot?: (conversationId: string, active: boolean) => Promise<void>
   // Novos callbacks
   onCreateTask?: (contactId: string, task: Partial<InboxTask>) => Promise<void>
   onCompleteTask?: (taskId: string, outcome?: string) => Promise<void>
@@ -116,12 +127,13 @@ const getInitials = (name?: string) => {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-// Tab types - ATUALIZADO com novas tabs
-type TabId = 'info' | 'crm' | 'orders' | 'tasks' | 'invoices' | 'timeline'
+// Tab types
+type TabId = 'info' | 'crm' | 'pedidos' | 'notas'
 
 // Main Component
 export function ContactPanel({
   contact,
+  conversation,
   notes,
   activities,
   orders,
@@ -137,9 +149,12 @@ export function ContactPanel({
   onAddTag,
   onRemoveTag,
   onAddNote,
+  onDeleteNote,
   onBlockContact,
   onUnblockContact,
   onCreateDeal,
+  onAssignConversation,
+  onToggleBot,
   onCreateTask,
   onCompleteTask,
   onDeleteTask,
@@ -151,9 +166,21 @@ export function ContactPanel({
   const [activeTab, setActiveTab] = useState<TabId>('info')
   const [newTag, setNewTag] = useState('')
   const [showAddTag, setShowAddTag] = useState(false)
-  const [newNote, setNewNote] = useState('')
-  const [isSavingNote, setIsSavingNote] = useState(false)
+  
+  // Modals
   const [showCreateDeal, setShowCreateDeal] = useState(false)
+  const [showAssignModal, setShowAssignModal] = useState(false)
+  
+  // Bot toggle
+  const [isBotActive, setIsBotActive] = useState(conversation?.is_bot_active ?? true)
+  const [isTogglingBot, setIsTogglingBot] = useState(false)
+
+  // Atualizar estado do bot quando conversation mudar
+  useEffect(() => {
+    if (conversation) {
+      setIsBotActive(conversation.is_bot_active)
+    }
+  }, [conversation?.is_bot_active])
 
   if (isLoading) {
     return (
@@ -172,36 +199,50 @@ export function ContactPanel({
     )
   }
 
-  const handleAddNote = async () => {
-    if (!newNote.trim()) return
-    setIsSavingNote(true)
+  const handleAddTag = async () => {
+    if (!newTag.trim()) return
     try {
-      await onAddNote(contact.id, newNote.trim(), conversationId)
-      setNewNote('')
-    } finally {
-      setIsSavingNote(false)
+      await onAddTag(contact.id, newTag.trim())
+      setNewTag('')
+      setShowAddTag(false)
+    } catch (error) {
+      console.error('Error adding tag:', error)
     }
   }
 
-  const handleAddTag = async () => {
-    if (!newTag.trim()) return
-    await onAddTag(contact.id, newTag.trim())
-    setNewTag('')
-    setShowAddTag(false)
+  const handleToggleBot = async () => {
+    if (!onToggleBot || isTogglingBot) return
+    
+    setIsTogglingBot(true)
+    try {
+      await onToggleBot(conversationId, !isBotActive)
+      setIsBotActive(!isBotActive)
+    } catch (error) {
+      console.error('Error toggling bot:', error)
+    } finally {
+      setIsTogglingBot(false)
+    }
   }
 
-  // Tabs atualizadas com novas tabs
-  const tabs: { id: TabId; label: string; badge?: number }[] = [
+  const handleAssign = async (userId: string | null) => {
+    if (!onAssignConversation) return
+    await onAssignConversation(conversationId, userId)
+  }
+
+  const handleCreateDeal = async (params: any) => {
+    return await onCreateDeal(contact.id, params)
+  }
+
+  // Tabs simplificadas como na imagem
+  const tabs: { id: TabId; label: string }[] = [
     { id: 'info', label: 'Info' },
-    { id: 'crm', label: 'CRM', badge: deals.filter(d => d.status === 'open').length },
-    { id: 'tasks', label: 'Tarefas', badge: tasks.filter(t => t.status !== 'completed').length },
-    { id: 'orders', label: 'Pedidos', badge: contact.total_orders },
-    { id: 'invoices', label: 'NFs', badge: invoices.length },
-    { id: 'timeline', label: 'Timeline' },
+    { id: 'crm', label: 'CRM' },
+    { id: 'pedidos', label: 'Pedidos' },
+    { id: 'notas', label: 'Notas' },
   ]
 
   return (
-    <div className="w-[380px] flex flex-col h-full">
+    <div className="w-[380px] flex flex-col h-full bg-dark-900">
       {/* ========== HEADER ========== */}
       <div className="p-6 border-b border-dark-700/50 text-center">
         {/* Avatar */}
@@ -251,37 +292,22 @@ export function ContactPanel({
               Cliente
             </span>
           )}
-          {tasks.filter(t => t.is_overdue).length > 0 && (
-            <span className="px-2.5 py-1 bg-red-500/10 text-red-400 text-xs font-medium rounded-lg">
-              Tarefa Atrasada
-            </span>
-          )}
         </div>
       </div>
 
       {/* ========== TABS ========== */}
-      <div className="flex border-b border-dark-700/50 overflow-x-auto scrollbar-none">
+      <div className="flex border-b border-dark-700/50">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-shrink-0 px-3 py-3 text-xs font-medium transition-all border-b-2 
-                        flex items-center gap-1 ${
+            className={`flex-1 px-3 py-3 text-xs font-medium transition-all border-b-2 ${
               activeTab === tab.id
                 ? 'text-primary-400 border-primary-500'
                 : 'text-dark-400 border-transparent hover:text-white'
             }`}
           >
             {tab.label}
-            {tab.badge !== undefined && tab.badge > 0 && (
-              <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${
-                activeTab === tab.id 
-                  ? 'bg-primary-500/20 text-primary-400' 
-                  : 'bg-dark-700 text-dark-400'
-              }`}>
-                {tab.badge}
-              </span>
-            )}
           </button>
         ))}
       </div>
@@ -294,16 +320,6 @@ export function ContactPanel({
             {/* Contact Fields */}
             <div className="space-y-3">
               <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
-                <Mail className="w-5 h-5 text-dark-400" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-dark-500">Email</p>
-                  <p className="text-sm text-white truncate">
-                    {contact.email || 'Não informado'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
                 <Phone className="w-5 h-5 text-dark-400" />
                 <div className="flex-1">
                   <p className="text-xs text-dark-500">Telefone</p>
@@ -311,52 +327,12 @@ export function ContactPanel({
                 </div>
               </div>
 
-              {contact.address?.city && (
-                <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
-                  <MapPin className="w-5 h-5 text-dark-400" />
-                  <div className="flex-1">
-                    <p className="text-xs text-dark-500">Cidade</p>
-                    <p className="text-sm text-white">
-                      {contact.address.city}{contact.address.state ? `, ${contact.address.state}` : ''}
-                    </p>
-                  </div>
-                </div>
-              )}
-
               <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
                 <Calendar className="w-5 h-5 text-dark-400" />
                 <div className="flex-1">
-                  <p className="text-xs text-dark-500">Cliente desde</p>
+                  <p className="text-xs text-dark-500">Contato desde</p>
                   <p className="text-sm text-white">{formatDate(contact.created_at)}</p>
                 </div>
-              </div>
-              
-              {contact.last_message_at && (
-                <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
-                  <MessageSquare className="w-5 h-5 text-dark-400" />
-                  <div className="flex-1">
-                    <p className="text-xs text-dark-500">Última mensagem</p>
-                    <p className="text-sm text-white">{formatRelativeTime(contact.last_message_at)}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Métricas rápidas */}
-            <div className="grid grid-cols-3 gap-2">
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-lg font-bold text-white">{contact.total_orders || 0}</p>
-                <p className="text-[10px] text-dark-400">Pedidos</p>
-              </div>
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-lg font-bold text-primary-400">
-                  {formatCurrency(contact.total_spent || 0).replace('R$', '').trim()}
-                </p>
-                <p className="text-[10px] text-dark-400">Gasto</p>
-              </div>
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-lg font-bold text-white">{contact.total_conversations || 0}</p>
-                <p className="text-[10px] text-dark-400">Conversas</p>
               </div>
             </div>
 
@@ -376,7 +352,7 @@ export function ContactPanel({
                 {(contact.tags || []).map((tag, i) => (
                   <span 
                     key={i}
-                    className="px-2.5 py-1 bg-dark-700 text-dark-300 text-xs rounded-lg 
+                    className="px-2.5 py-1 bg-primary-500/20 text-primary-400 text-xs rounded-lg 
                                flex items-center gap-1 group"
                   >
                     {tag}
@@ -401,20 +377,30 @@ export function ContactPanel({
                                  placeholder:text-dark-500 focus:outline-none focus:border-primary-500 w-24"
                       autoFocus
                     />
-                    <button
-                      onClick={handleAddTag}
-                      className="p-1 bg-primary-500 text-white rounded"
-                    >
+                    <button onClick={handleAddTag} className="p-1 bg-primary-500 text-white rounded">
                       <Plus className="w-3 h-3" />
                     </button>
-                    <button
-                      onClick={() => { setShowAddTag(false); setNewTag('') }}
-                      className="p-1 bg-dark-600 text-dark-300 rounded"
-                    >
+                    <button onClick={() => { setShowAddTag(false); setNewTag('') }} className="p-1 bg-dark-600 text-dark-300 rounded">
                       <X className="w-3 h-3" />
                     </button>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Message Stats */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
+                <p className="text-2xl font-bold text-white">
+                  {contact.total_messages_received || 0}
+                </p>
+                <p className="text-xs text-dark-400">Msg Recebidas</p>
+              </div>
+              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
+                <p className="text-2xl font-bold text-white">
+                  {contact.total_messages_sent || 0}
+                </p>
+                <p className="text-xs text-dark-400">Msg Enviadas</p>
               </div>
             </div>
           </div>
@@ -423,7 +409,7 @@ export function ContactPanel({
         {/* CRM TAB */}
         {activeTab === 'crm' && (
           <div className="p-4 space-y-4">
-            {/* Active Deal */}
+            {/* Active Deal ou botão de criar */}
             {activeDeal ? (
               <div className="p-4 bg-gradient-to-br from-primary-500/10 to-accent-500/10 
                               border border-primary-500/20 rounded-xl">
@@ -435,41 +421,48 @@ export function ContactPanel({
                   }`}>
                     {activeDeal.stage?.name || 'Em progresso'}
                   </span>
-                  <span className="text-xs text-dark-400">
-                    {formatRelativeTime(activeDeal.updated_at || activeDeal.created_at)}
-                  </span>
                 </div>
                 <h4 className="font-semibold text-white mb-1">{activeDeal.title}</h4>
                 <p className="text-2xl font-bold text-primary-400 mb-1">
                   {formatCurrency(activeDeal.value)}
-                </p>
-                <p className="text-xs text-dark-400">
-                  {activeDeal.pipeline?.name || 'Pipeline'}
                 </p>
                 <div className="mt-3 flex gap-2">
                   <a 
                     href={`/crm?deal=${activeDeal.id}`}
                     target="_blank"
                     className="flex-1 py-2 bg-dark-700/50 text-dark-300 text-sm rounded-lg 
-                                     hover:bg-dark-700 transition-colors text-center">
+                               hover:bg-dark-700 transition-colors text-center">
                     Ver Deal
                   </a>
-                  <button className="flex-1 py-2 bg-primary-500 text-white text-sm rounded-lg 
-                                     hover:bg-primary-600 transition-colors">
-                    Avançar
-                  </button>
                 </div>
               </div>
             ) : (
               <button 
                 onClick={() => setShowCreateDeal(true)}
                 className="w-full py-4 border border-dashed border-dark-600 rounded-xl 
-                                 text-dark-400 hover:text-white hover:border-primary-500 transition-all
-                                 flex items-center justify-center gap-2">
+                           text-dark-400 hover:text-white hover:border-primary-500 transition-all
+                           flex items-center justify-center gap-2">
                 <Plus className="w-4 h-4" />
                 Criar Novo Deal
               </button>
             )}
+
+            {/* Deal Stats */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
+                <p className="text-2xl font-bold text-success-400">
+                  {deals.filter(d => d.status === 'won').length}
+                </p>
+                <p className="text-xs text-dark-400">Deals Ganhos</p>
+              </div>
+              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
+                <p className="text-2xl font-bold text-white">
+                  {formatCurrency(deals.filter(d => d.status === 'won')
+                    .reduce((sum, d) => sum + d.value, 0))}
+                </p>
+                <p className="text-xs text-dark-400">Valor Total</p>
+              </div>
+            </div>
 
             {/* Deal History */}
             {deals.length > 0 && (
@@ -488,59 +481,19 @@ export function ContactPanel({
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-white truncate">{deal.title}</p>
                         <p className="text-xs text-dark-400">
-                          {formatCurrency(deal.value)} • {deal.status === 'won' ? 'Ganho' : 
-                           deal.status === 'lost' ? 'Perdido' : 'Aberto'}
+                          {formatCurrency(deal.value)}
                         </p>
                       </div>
-                      <span className="text-xs text-dark-500">
-                        {formatDate(deal.created_at)}
-                      </span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-2xl font-bold text-success-400">
-                  {deals.filter(d => d.status === 'won').length}
-                </p>
-                <p className="text-xs text-dark-400">Deals Ganhos</p>
-              </div>
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-2xl font-bold text-white">
-                  {formatCurrency(deals.filter(d => d.status === 'won')
-                    .reduce((sum, d) => sum + d.value, 0))}
-                </p>
-                <p className="text-xs text-dark-400">Valor Total</p>
-              </div>
-            </div>
           </div>
         )}
 
-        {/* TASKS TAB - NOVA */}
-        {activeTab === 'tasks' && (
-          <TasksTab
-            contactId={contact.id}
-            tasks={tasks}
-            isLoading={false}
-            onCreateTask={async (task) => {
-              if (onCreateTask) await onCreateTask(contact.id, task)
-            }}
-            onCompleteTask={async (taskId, outcome) => {
-              if (onCompleteTask) await onCompleteTask(taskId, outcome)
-            }}
-            onDeleteTask={async (taskId) => {
-              if (onDeleteTask) await onDeleteTask(taskId)
-            }}
-            onRefresh={() => onRefreshContact?.()}
-          />
-        )}
-
-        {/* ORDERS TAB */}
-        {activeTab === 'orders' && (
+        {/* PEDIDOS TAB */}
+        {activeTab === 'pedidos' && (
           <div className="p-4 space-y-4">
             {/* Summary */}
             <div className="grid grid-cols-2 gap-3">
@@ -577,7 +530,7 @@ export function ContactPanel({
             )}
 
             {/* Order History */}
-            {orders.length > 0 && (
+            {orders.length > 0 ? (
               <div>
                 <h4 className="text-sm font-medium text-dark-300 mb-3">Últimos Pedidos</h4>
                 <div className="space-y-2">
@@ -615,9 +568,7 @@ export function ContactPanel({
                   ))}
                 </div>
               </div>
-            )}
-
-            {orders.length === 0 && !cart && (
+            ) : (
               <div className="text-center py-8 text-dark-400">
                 <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Nenhum pedido encontrado</p>
@@ -626,99 +577,79 @@ export function ContactPanel({
           </div>
         )}
 
-        {/* INVOICES TAB - NOVA */}
-        {activeTab === 'invoices' && (
-          <InvoicesTab
+        {/* NOTAS TAB */}
+        {activeTab === 'notas' && (
+          <NotesTab
             contactId={contact.id}
-            invoices={invoices}
+            notes={notes}
             isLoading={false}
-            onUploadInvoice={async (data) => {
-              if (onUploadInvoice) await onUploadInvoice(data)
+            onAddNote={async (content) => {
+              await onAddNote(contact.id, content, conversationId)
             }}
-            onDeleteInvoice={async (invoiceId) => {
-              if (onDeleteInvoice) await onDeleteInvoice(invoiceId)
-            }}
-            onRefresh={() => onRefreshContact?.()}
-          />
-        )}
-
-        {/* TIMELINE TAB - NOVA */}
-        {activeTab === 'timeline' && (
-          <TimelineTab
-            contactId={contact.id}
-            activities={activities}
-            comments={comments}
-            isLoading={false}
-            onAddComment={async (content, type) => {
-              if (onAddComment) await onAddComment(contact.id, content, type)
-            }}
-            onRefresh={() => onRefreshContact?.()}
+            onDeleteNote={onDeleteNote ? async (noteId) => {
+              await onDeleteNote(contact.id, noteId)
+            } : undefined}
           />
         )}
       </div>
 
       {/* ========== QUICK ACTIONS ========== */}
       <div className="p-4 border-t border-dark-700/50 bg-dark-800/30">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <button 
             onClick={() => setShowAddTag(true)}
-            className="flex flex-col items-center justify-center gap-1 p-2 bg-dark-700/50 
-                             text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+            className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 
+                       text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
             <Tag className="w-4 h-4" />
-            <span className="text-[10px]">Tag</span>
+            <span className="text-xs">Tag</span>
           </button>
-          <button className="flex flex-col items-center justify-center gap-1 p-2 bg-dark-700/50 
-                             text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+          <button 
+            onClick={() => setShowAssignModal(true)}
+            className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 
+                       text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
             <UserPlus className="w-4 h-4" />
-            <span className="text-[10px]">Atribuir</span>
+            <span className="text-xs">Atribuir</span>
           </button>
           <button 
             onClick={() => setShowCreateDeal(true)}
-            className="flex flex-col items-center justify-center gap-1 p-2 bg-dark-700/50 
-                             text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+            className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 
+                       text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
             <DollarSign className="w-4 h-4" />
-            <span className="text-[10px]">Deal</span>
+            <span className="text-xs">Deal</span>
           </button>
           <button 
             onClick={() => contact.is_blocked 
               ? onUnblockContact(contact.id) 
               : onBlockContact(contact.id)
             }
-            className={`flex flex-col items-center justify-center gap-1 p-2 rounded-xl transition-all ${
+            className={`flex items-center justify-center gap-2 p-3 rounded-xl transition-all ${
               contact.is_blocked
                 ? 'bg-success-500/10 text-success-400 hover:bg-success-500/20'
                 : 'bg-error-500/10 text-error-400 hover:bg-error-500/20'
             }`}
           >
             <Ban className="w-4 h-4" />
-            <span className="text-[10px]">{contact.is_blocked ? 'Liberar' : 'Bloquear'}</span>
+            <span className="text-xs">{contact.is_blocked ? 'Liberar' : 'Bloquear'}</span>
           </button>
         </div>
-        
-        {/* Links rápidos para CRM e Tasks */}
-        <div className="flex gap-2 mt-2">
-          <a
-            href={`/crm/contacts?id=${contact.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-1.5 p-2 bg-dark-700/30 
-                       text-dark-400 rounded-lg hover:bg-dark-700/50 hover:text-white transition-all text-xs"
-          >
-            <ExternalLink className="w-3 h-3" />
-            Ver no CRM
-          </a>
-          <a
-            href={`/tasks?contact_id=${contact.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-1.5 p-2 bg-dark-700/30 
-                       text-dark-400 rounded-lg hover:bg-dark-700/50 hover:text-white transition-all text-xs"
-          >
-            <CheckSquare className="w-3 h-3" />
-            Ver Tarefas
-          </a>
-        </div>
       </div>
+
+      {/* ========== MODALS ========== */}
+      <CreateDealModal
+        isOpen={showCreateDeal}
+        onClose={() => setShowCreateDeal(false)}
+        onCreateDeal={handleCreateDeal}
+        contactName={contact.name || contact.phone_number}
+        contactId={contact.id}
+      />
+
+      <AssignModal
+        isOpen={showAssignModal}
+        onClose={() => setShowAssignModal(false)}
+        onAssign={handleAssign}
+        currentAssignedId={conversation?.assigned_agent_id}
+        conversationId={conversationId}
+      />
     </div>
   )
 }
