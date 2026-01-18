@@ -1,5 +1,5 @@
 // src/app/api/whatsapp/inbox/contacts/[id]/tags/route.ts
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
 
 // POST - Adicionar ou remover tag
@@ -8,14 +8,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient()
     const contactId = params.id
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
     const { tag, action } = body // action: 'add' | 'remove'
 
@@ -29,7 +22,7 @@ export async function POST(
     // Buscar contato atual
     const { data: contact, error: fetchError } = await supabase
       .from('contacts')
-      .select('id, tags')
+      .select('id, tags, organization_id')
       .eq('id', contactId)
       .single()
 
@@ -40,12 +33,10 @@ export async function POST(
     let newTags = contact.tags || []
 
     if (action === 'add') {
-      // Adicionar tag se não existir
       if (!newTags.includes(tag)) {
         newTags = [...newTags, tag]
       }
     } else if (action === 'remove') {
-      // Remover tag
       newTags = newTags.filter((t: string) => t !== tag)
     }
 
@@ -63,16 +54,6 @@ export async function POST(
     if (updateError) {
       throw updateError
     }
-
-    // Registrar atividade
-    await supabase.from('contact_activities').insert({
-      contact_id: contactId,
-      organization_id: contact.organization_id || user.user_metadata?.organization_id,
-      activity_type: action === 'add' ? 'tag_added' : 'tag_removed',
-      title: action === 'add' ? 'Tag adicionada' : 'Tag removida',
-      description: tag,
-      created_by: user.id,
-    }).single()
 
     return NextResponse.json({ 
       success: true,
