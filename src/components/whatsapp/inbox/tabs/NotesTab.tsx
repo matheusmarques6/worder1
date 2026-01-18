@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   FileText, 
   Send, 
@@ -31,6 +31,12 @@ export function NotesTab({
   const [newNote, setNewNote] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
+
+  // ✅ CORREÇÃO: Limpar estado quando contactId mudar
+  useEffect(() => {
+    setNewNote('')
+    setMenuOpen(null)
+  }, [contactId])
 
   const handleSubmit = async () => {
     if (!newNote.trim() || isSaving) return
