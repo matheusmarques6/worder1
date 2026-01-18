@@ -244,6 +244,17 @@ export default function InboxPage() {
     }
   }
 
+  // WRAPPERS para corrigir tipos (Promise<T> -> Promise<void>)
+  const handleCreateTask = async (contactId: string, task: any): Promise<void> => {
+    await createTask(contactId, task)
+  }
+
+  const handleUploadInvoice = async (data: FormData): Promise<void> => {
+    if (contact?.id) {
+      await uploadInvoice(contact.id, data)
+    }
+  }
+
   // Filter conversations locally for instant feedback
   const filteredConversations = conversations.filter(conv => {
     if (!search) return true
@@ -450,10 +461,10 @@ export default function InboxPage() {
                 onCreateDeal={createDeal}
                 onAssignConversation={handleAssignConversation}
                 onToggleBot={handleContactToggleBot}
-                onCreateTask={createTask}
+                onCreateTask={handleCreateTask}
                 onCompleteTask={completeTask}
                 onDeleteTask={deleteTask}
-                onUploadInvoice={uploadInvoice}
+                onUploadInvoice={handleUploadInvoice}
                 onDeleteInvoice={deleteInvoice}
                 onAddComment={addComment}
                 onRefreshContact={handleRefreshContact}
