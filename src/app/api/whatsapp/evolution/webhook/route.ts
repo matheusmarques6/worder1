@@ -1,7 +1,7 @@
 // =============================================
 // API: Evolution - Webhook
 // src/app/api/whatsapp/evolution/webhook/route.ts
-// CORRIGIDO para schema v2
+// CORRIGIDO - Agora cria/vincula contatos corretamente
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,6 +10,84 @@ import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 // Constantes da Evolution API
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+
+// =============================================
+// HELPER: Criar ou atualizar contato
+// =============================================
+async function upsertContact(
+  organizationId: string,
+  phoneNumber: string,
+  pushName?: string,
+  profilePictureUrl?: string
+): Promise<string | null> {
+  try {
+    // Primeiro, tentar buscar contato existente pelo telefone
+    const { data: existingContact } = await supabase
+      .from('whatsapp_contacts')
+      .select('id, name, profile_name')
+      .eq('organization_id', organizationId)
+      .eq('phone_number', phoneNumber)
+      .single();
+
+    if (existingContact) {
+      // Atualizar contato existente se tiver novo pushName
+      if (pushName && pushName !== existingContact.name && pushName !== existingContact.profile_name) {
+        await supabase
+          .from('whatsapp_contacts')
+          .update({
+            profile_name: pushName,
+            name: existingContact.name || pushName, // Só atualiza name se estava vazio
+            last_message_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingContact.id);
+      } else {
+        // Apenas atualizar last_message_at
+        await supabase
+          .from('whatsapp_contacts')
+          .update({
+            last_message_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingContact.id);
+      }
+      
+      console.log('[Evolution] ✅ Contact found:', existingContact.id);
+      return existingContact.id;
+    }
+
+    // Criar novo contato
+    const { data: newContact, error: createError } = await supabase
+      .from('whatsapp_contacts')
+      .insert({
+        organization_id: organizationId,
+        phone_number: phoneNumber,
+        name: pushName || phoneNumber,
+        profile_name: pushName,
+        profile_picture_url: profilePictureUrl,
+        source: 'whatsapp',
+        first_message_at: new Date().toISOString(),
+        last_message_at: new Date().toISOString(),
+        total_conversations: 1,
+        total_messages_received: 0,
+        total_messages_sent: 0,
+        is_blocked: false,
+      })
+      .select('id')
+      .single();
+
+    if (createError) {
+      console.error('[Evolution] Error creating contact:', createError);
+      return null;
+    }
+
+    console.log('[Evolution] ✅ Contact created:', newContact.id);
+    return newContact.id;
+  } catch (error) {
+    console.error('[Evolution] Error in upsertContact:', error);
+    return null;
+  }
+}
 
 // =============================================
 // POST - Receber eventos
@@ -26,7 +104,6 @@ export async function POST(request: NextRequest) {
     console.log('[Evolution Webhook] Full body:', JSON.stringify(body).substring(0, 500));
 
     // Buscar instância na tabela whatsapp_instances
-    // IMPORTANTE: Buscar por unique_id (usado na Evolution API), instance_name ou instance_id
     const { data: instance, error: instanceError } = await supabase
       .from('whatsapp_instances')
       .select('*')
@@ -329,7 +406,21 @@ async function handleMessage(instance: any, body: any) {
     // Usar URL permanente se disponível, senão a original
     const finalMediaUrl = permanentMediaUrl || mediaUrl;
 
-    // 1. Buscar ou criar conversa
+    // =============================================
+    // CORREÇÃO: Criar/atualizar contato PRIMEIRO
+    // =============================================
+    const contactId = await upsertContact(
+      instance.organization_id,
+      phoneNumber,
+      pushName,
+      undefined // profile picture - não temos neste ponto
+    );
+
+    if (!contactId) {
+      console.error('[Evolution] ❌ Failed to create/get contact, continuing anyway...');
+    }
+
+    // 1. Buscar ou criar conversa (AGORA COM contact_id)
     let { data: conversation } = await supabase
       .from('whatsapp_conversations')
       .select('*')
@@ -346,13 +437,14 @@ async function handleMessage(instance: any, body: any) {
           organization_id: instance.organization_id,
           instance_id: instance.id,
           chat_id: chatId,
-          contact_phone: phoneNumber,
-          contact_name: contactName,
+          phone_number: phoneNumber, // CORRIGIDO: usando phone_number
+          contact_id: contactId, // CORREÇÃO: vinculando contact_id
           status: 'open',
           last_message_at: new Date().toISOString(),
           last_message_preview: content?.substring(0, 100) || '[Mídia]',
           last_message_direction: 'inbound',
           unread_count: 1,
+          is_bot_active: true,
         })
         .select()
         .single();
@@ -362,21 +454,29 @@ async function handleMessage(instance: any, body: any) {
         return;
       }
       conversation = newConv;
-      console.log('[Evolution] Conversation created:', conversation.id);
+      console.log('[Evolution] ✅ Conversation created:', conversation.id, '| Contact:', contactId);
     } else {
       // Atualizar conversa existente
+      // CORREÇÃO: Se não tinha contact_id, vincular agora
+      const updateData: any = {
+        status: 'open',
+        last_message_at: new Date().toISOString(),
+        last_message_preview: content?.substring(0, 100) || '[Mídia]',
+        last_message_direction: 'inbound',
+        last_customer_message_at: new Date().toISOString(),
+        unread_count: (conversation.unread_count || 0) + 1,
+        updated_at: new Date().toISOString(),
+      };
+      
+      // Vincular contact_id se ainda não tinha
+      if (!conversation.contact_id && contactId) {
+        updateData.contact_id = contactId;
+        console.log('[Evolution] Linking contact_id to existing conversation');
+      }
+      
       await supabase
         .from('whatsapp_conversations')
-        .update({
-          status: 'open',
-          contact_name: contactName,
-          last_message_at: new Date().toISOString(),
-          last_message_preview: content?.substring(0, 100) || '[Mídia]',
-          last_message_direction: 'inbound',
-          last_customer_message_at: new Date().toISOString(),
-          unread_count: (conversation.unread_count || 0) + 1,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', conversation.id);
     }
 

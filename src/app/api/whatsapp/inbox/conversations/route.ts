@@ -19,7 +19,19 @@ export async function GET(request: NextRequest) {
       .from('whatsapp_conversations')
       .select(`
         *,
-        contact:whatsapp_contacts(*)
+        contact:whatsapp_contacts(
+          id,
+          name,
+          profile_name,
+          phone_number,
+          email,
+          profile_picture_url,
+          tags,
+          total_orders,
+          total_spent,
+          is_blocked,
+          created_at
+        )
       `)
       .eq('organization_id', organizationId)
       .order('last_message_at', { ascending: false })
@@ -32,25 +44,43 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
-    // Formatar para o frontend
-    const conversations = (data || []).map(conv => ({
-      id: conv.id,
-      organization_id: conv.organization_id,
-      contact_id: conv.contact_id,
-      // Prioridade: campo direto da conversa > relacionamento > null
-      phone_number: conv.contact_phone || conv.phone_number || conv.contact?.phone_number,
-      status: conv.status,
-      is_bot_active: conv.is_bot_active,
-      last_message_at: conv.last_message_at,
-      last_message_preview: conv.last_message_preview,
-      unread_count: conv.unread_count || 0,
-      can_send_template_only: false,
-      // IMPORTANTE: Usar contact_name direto da conversa (salvo pelo webhook)
-      // Se não existir, tentar do relacionamento, se não existir, null (vai mostrar telefone)
-      contact_name: conv.contact_name || conv.contact?.name || conv.contact?.profile_name || null,
-      contact_avatar: conv.contact?.profile_picture_url,
-      contact_tags: conv.contact?.tags || [],
-    }))
+    // Formatar para o frontend com fallbacks robustos
+    const conversations = (data || []).map(conv => {
+      // CORREÇÃO: Usar phone_number ou contact_phone como fallback
+      const phoneNumber = conv.phone_number || conv.contact_phone || '';
+      
+      // Nome do contato: priorizar dados do contato vinculado
+      const contactName = conv.contact?.name || 
+                         conv.contact?.profile_name || 
+                         conv.contact_name || // fallback para campo inline
+                         phoneNumber;
+      
+      return {
+        id: conv.id,
+        organization_id: conv.organization_id,
+        contact_id: conv.contact_id || conv.contact?.id, // Garantir que contact_id está presente
+        phone_number: phoneNumber,
+        status: conv.status || 'open',
+        is_bot_active: conv.is_bot_active ?? true,
+        ai_enabled: conv.ai_enabled,
+        ai_agent_id: conv.ai_agent_id,
+        last_message_at: conv.last_message_at,
+        last_message_preview: conv.last_message_preview,
+        unread_count: conv.unread_count || 0,
+        can_send_template_only: conv.can_send_template_only || false,
+        
+        // Dados do contato (com fallbacks)
+        contact_name: contactName,
+        contact_avatar: conv.contact?.profile_picture_url || conv.contact_avatar,
+        contact_tags: conv.contact?.tags || conv.tags || [],
+        
+        // Dados extras do contato para o painel
+        contact_email: conv.contact?.email,
+        contact_total_orders: conv.contact?.total_orders || 0,
+        contact_total_spent: conv.contact?.total_spent || 0,
+        contact_is_blocked: conv.contact?.is_blocked || false,
+      };
+    });
 
     // Filtrar por busca se necessário
     let filtered = conversations
