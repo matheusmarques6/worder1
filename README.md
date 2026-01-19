@@ -11,21 +11,19 @@ fixo do `user.organization_id`.
 ```
 src/
 ├── app/api/shopify/stores/route.ts    ← CRIAR (nova API)
-├── hooks/
-│   ├── useCurrentOrganization.ts      ← CRIAR (novo hook)
-│   └── useStore.ts                    ← SUBSTITUIR
-└── stores/
-    └── PATCH-ShopifyStore-interface.ts ← INSTRUÇÕES para editar index.ts
+└── hooks/
+    ├── useCurrentOrganization.ts      ← CRIAR (novo hook)
+    └── useStore.ts                    ← SUBSTITUIR
 ```
 
 ---
 
 ## 🚀 Instalação
 
-### 1. Copiar arquivos novos
+### 1. Copiar arquivos
 
 ```bash
-# Copiar toda a pasta src para o projeto
+# Copiar toda a pasta src para o projeto (vai mesclar)
 cp -r src/* /caminho/do/projeto/src/
 ```
 
@@ -44,18 +42,14 @@ export interface ShopifyStore {
   totalOrders?: number
   totalRevenue?: number
   lastSyncAt?: string
-  organization_id: string        // ✅ ADICIONAR
-  organization_name?: string     // ✅ ADICIONAR
-  connectionStatus?: string
-  statusMessage?: string
-  healthCheckedAt?: string
-  consecutiveFailures?: number
+  organization_id?: string        // ✅ ADICIONAR
+  organization_name?: string      // ✅ ADICIONAR
 }
 ```
 
 ### 3. Corrigir src/app/(dashboard)/whatsapp/inbox/page.tsx
 
-**Adicionar import:**
+**Adicionar import no topo:**
 ```typescript
 import { useCurrentOrganization } from '@/hooks/useCurrentOrganization'
 ```
@@ -69,7 +63,7 @@ const organizationId = user?.organization_id || 'default-org'
 
 // ✅ DEPOIS:
 const { user } = useAuthStore()
-const { organizationId: currentOrgId, currentStore } = useCurrentOrganization()
+const { organizationId: currentOrgId } = useCurrentOrganization()
 const organizationId = currentOrgId || 'default-org'
 ```
 
@@ -91,11 +85,13 @@ useEffect(() => {
 
 Execute para encontrar todos os lugares:
 ```bash
-grep -rn "user?.organization_id\|user.organization_id" src/
+grep -rn "user?.organization_id\|user.organization_id" src/app src/components src/hooks
 ```
 
 E substitua por:
 ```typescript
+import { useCurrentOrganization } from '@/hooks/useCurrentOrganization'
+// ...
 const { organizationId } = useCurrentOrganization()
 ```
 

@@ -3,11 +3,21 @@
 import { useMemo } from 'react'
 import { useAuthStore, useStoreStore } from '@/stores'
 
+// Interface estendida para lojas com organization_id
+interface StoreWithOrg {
+  id: string
+  name: string
+  domain: string
+  organization_id?: string
+  organization_name?: string
+  [key: string]: any
+}
+
 interface UseCurrentOrganizationReturn {
   /** O organization_id ativo (da loja selecionada ou do user) */
   organizationId: string | null
   /** A loja atualmente selecionada */
-  currentStore: ReturnType<typeof useStoreStore>['currentStore']
+  currentStore: StoreWithOrg | null
   /** Se está carregando */
   isLoading: boolean
   /** Se tem uma organização válida */
@@ -33,7 +43,9 @@ interface UseCurrentOrganizationReturn {
  */
 export function useCurrentOrganization(): UseCurrentOrganizationReturn {
   const { user, isLoading: authLoading } = useAuthStore()
-  const { currentStore, isLoading: storeLoading } = useStoreStore()
+  const storeState = useStoreStore()
+  const currentStore = storeState.currentStore as StoreWithOrg | null
+  const storeLoading = storeState.isLoading
 
   const organizationId = useMemo(() => {
     // PRIORIDADE 1: Organization da loja selecionada

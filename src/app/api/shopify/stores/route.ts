@@ -1,11 +1,10 @@
-// GET - Lista TODAS as lojas do usuário (de todas as orgs que ele é membro)
-
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
+// GET - Lista TODAS as lojas do usuário (de todas as orgs que ele é membro)
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
@@ -20,7 +19,6 @@ export async function GET(request: NextRequest) {
       .select('organization_id, role')
       .eq('user_id', userId);
 
-    // Se não tem memberships explícitos, usar a org do profile
     let orgIds: string[] = [];
     
     if (memberships && memberships.length > 0) {
@@ -72,7 +70,7 @@ export async function GET(request: NextRequest) {
 
     const orgMap = new Map(orgs?.map(o => [o.id, o.name]) || []);
 
-    // 4. Formatar resposta - IMPORTANTE: incluir organization_id
+    // 4. Formatar resposta
     const formattedStores = stores?.map(s => ({
       id: s.id,
       organization_id: s.organization_id,

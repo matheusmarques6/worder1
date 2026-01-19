@@ -1,11 +1,30 @@
 'use client';
 
 import { useCallback, useEffect } from 'react';
-import { useStoreStore, type ShopifyStore } from '@/stores';
+import { useStoreStore } from '@/stores';
+
+// Interface para loja com organization_id
+interface StoreWithOrg {
+  id: string
+  name: string
+  domain: string
+  email?: string
+  currency?: string
+  isActive: boolean
+  totalOrders?: number
+  totalRevenue?: number
+  lastSyncAt?: string
+  organization_id: string
+  organization_name?: string
+  connectionStatus?: string
+  statusMessage?: string
+  healthCheckedAt?: string
+  consecutiveFailures?: number
+}
 
 export interface UseStoreReturn {
-  stores: ShopifyStore[];
-  currentStore: ShopifyStore | null;
+  stores: StoreWithOrg[];
+  currentStore: StoreWithOrg | null;
   loading: boolean;
   selectStore: (storeId: string) => void;
   refreshStores: () => Promise<void>;
@@ -34,7 +53,7 @@ export function useStore(): UseStoreReturn {
       const data = await response.json();
       
       if (data.stores && data.stores.length > 0) {
-        const formattedStores: ShopifyStore[] = data.stores.map((s: any) => ({
+        const formattedStores = data.stores.map((s: any) => ({
           id: s.id,
           name: s.name,
           domain: s.domain,
@@ -44,7 +63,6 @@ export function useStore(): UseStoreReturn {
           totalOrders: s.totalOrders,
           totalRevenue: s.totalRevenue,
           lastSyncAt: s.lastSyncAt,
-          // CRÍTICO: Incluir organization_id
           organization_id: s.organization_id,
           organization_name: s.organization_name,
           connectionStatus: s.connectionStatus,
@@ -62,7 +80,7 @@ export function useStore(): UseStoreReturn {
         
         // Se a loja atual não está mais na lista, selecionar a primeira
         if (currentStore) {
-          const storeStillExists = formattedStores.some(s => s.id === currentStore.id);
+          const storeStillExists = formattedStores.some((s: any) => s.id === currentStore.id);
           if (!storeStillExists && formattedStores.length > 0) {
             setCurrentStore(formattedStores[0]);
           }
@@ -78,7 +96,7 @@ export function useStore(): UseStoreReturn {
   const selectStore = useCallback((storeId: string) => {
     const store = stores.find(s => s.id === storeId);
     if (store) {
-      console.log(`🏪 [useStore] Selecionando loja: ${store.name} (org: ${store.organization_id})`);
+      console.log(`🏪 [useStore] Selecionando loja: ${store.name} (org: ${(store as any).organization_id})`);
       setCurrentStore(store);
     }
   }, [stores, setCurrentStore]);
@@ -89,15 +107,17 @@ export function useStore(): UseStoreReturn {
     }
   }, [stores.length, isLoading, refreshStores]);
 
+  const typedCurrentStore = currentStore as StoreWithOrg | null;
+
   return {
-    stores,
-    currentStore,
+    stores: stores as StoreWithOrg[],
+    currentStore: typedCurrentStore,
     loading: isLoading,
     selectStore,
     refreshStores,
     hasStores: stores.length > 0,
     storeId: currentStore?.id || null,
-    currentOrganizationId: currentStore?.organization_id || null,
+    currentOrganizationId: typedCurrentStore?.organization_id || null,
   };
 }
 
