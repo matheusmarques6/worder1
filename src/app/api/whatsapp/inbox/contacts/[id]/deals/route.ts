@@ -116,8 +116,65 @@ export async function POST(
       }
     }
 
+    // Se ainda não tem pipeline, CRIAR um padrão
     if (!finalPipelineId || !finalStageId) {
-      return NextResponse.json({ error: 'Nenhum pipeline disponível' }, { status: 400 })
+      console.log('Criando pipeline padrão para organização:', contact.organization_id)
+      
+      // Criar pipeline padrão
+      const { data: newPipeline, error: pipelineError } = await supabase
+        .from('pipelines')
+        .insert({
+          organization_id: contact.organization_id,
+          name: 'Pipeline Padrão',
+          description: 'Pipeline criado automaticamente',
+          is_active: true,
+          is_default: true,
+        })
+        .select()
+        .single()
+
+      if (pipelineError) {
+        console.error('Error creating pipeline:', pipelineError)
+        return NextResponse.json({ 
+          error: 'Nenhum pipeline disponível. Crie um pipeline no CRM primeiro.',
+          details: pipelineError.message 
+        }, { status: 400 })
+      }
+
+      finalPipelineId = newPipeline.id
+
+      // Criar stages padrão
+      const defaultStages = [
+        { name: 'Novo', position: 1, color: '#3B82F6', probability: 10 },
+        { name: 'Qualificado', position: 2, color: '#8B5CF6', probability: 30 },
+        { name: 'Proposta', position: 3, color: '#F59E0B', probability: 60 },
+        { name: 'Negociação', position: 4, color: '#EF4444', probability: 80 },
+        { name: 'Ganho', position: 5, color: '#10B981', probability: 100, is_won: true },
+        { name: 'Perdido', position: 6, color: '#6B7280', probability: 0, is_lost: true },
+      ]
+
+      const { data: stages, error: stagesError } = await supabase
+        .from('pipeline_stages')
+        .insert(
+          defaultStages.map(s => ({
+            ...s,
+            pipeline_id: finalPipelineId,
+          }))
+        )
+        .select()
+
+      if (stagesError) {
+        console.error('Error creating stages:', stagesError)
+      }
+
+      // Pegar primeiro stage
+      finalStageId = stages?.[0]?.id
+    }
+
+    if (!finalPipelineId || !finalStageId) {
+      return NextResponse.json({ 
+        error: 'Não foi possível criar pipeline/stage padrão' 
+      }, { status: 500 })
     }
 
     // Criar deal
