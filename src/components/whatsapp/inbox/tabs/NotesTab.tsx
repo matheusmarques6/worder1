@@ -368,9 +368,9 @@ function NoteCard({
           </p>
           
           {/* Attachments */}
-          {note.attachments && note.attachments.length > 0 && (
+          {(note as any).attachments && (note as any).attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
-              {note.attachments.map((att: any, index: number) => (
+              {(note as any).attachments.map((att: any, index: number) => (
                 <div key={index} className="relative group/att">
                   {att.type === 'image' ? (
                     <a href={att.url} target="_blank" rel="noopener noreferrer">

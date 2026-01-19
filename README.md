@@ -13,7 +13,39 @@
 
 ### ✅ Correções Aplicadas:
 
-## 1. NOVAS APIs CRIADAS
+## PASSO 1: ATUALIZAR TYPES (OBRIGATÓRIO)
+
+Edite `src/types/inbox.ts` e adicione antes do `InboxNote`:
+
+```typescript
+export interface NoteAttachment {
+  type: 'image' | 'document'
+  url: string
+  name: string
+  size?: number
+}
+```
+
+E modifique o `InboxNote` para incluir:
+
+```typescript
+export interface InboxNote {
+  id: string
+  organization_id: string
+  contact_id: string
+  conversation_id?: string
+  content: string
+  note_type: 'general' | 'call' | 'meeting' | 'follow_up' | 'important' | 'note'
+  is_pinned: boolean
+  attachments?: NoteAttachment[]  // <-- ADICIONAR
+  created_by: string
+  created_by_name?: string
+  created_at: string
+  updated_at?: string
+}
+```
+
+## PASSO 2: APIs CRIADAS
 
 ### `/api/users/route.ts`
 - Lista usuários da organização para o modal de Atribuir
