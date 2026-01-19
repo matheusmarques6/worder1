@@ -1,214 +1,228 @@
-// =============================================
-// API: Notificações - VERSÃO ROBUSTA
-// src/app/api/notifications/route.ts
-// =============================================
+import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
 
-export const dynamic = 'force-dynamic';
-
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
-
-// Helper para pegar organização do usuário
-async function getOrganizationId(request: NextRequest): Promise<string | null> {
-  try {
-    // Tentar pegar do query param
-    const { searchParams } = new URL(request.url);
-    const orgIdFromQuery = searchParams.get('organizationId');
-    if (orgIdFromQuery) return orgIdFromQuery;
-
-    // Tentar pegar do usuário autenticado
-    const supabaseClient = createRouteHandlerClient({ cookies });
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    
-    if (user) {
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('organization_id')
-        .eq('id', user.id)
-        .single();
-      
-      return profile?.organization_id || null;
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error getting organization:', error);
-    return null;
-  }
-}
-
+// GET - Listar notificações do usuário
 export async function GET(request: NextRequest) {
   try {
-    const organizationId = await getOrganizationId(request);
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    const { searchParams } = new URL(request.url)
+    const organizationId = searchParams.get('organization_id')
+    const unreadOnly = searchParams.get('unread_only') === 'true'
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const offset = parseInt(searchParams.get('offset') || '0')
+    const type = searchParams.get('type')
     
     if (!organizationId) {
-      // Retornar array vazio se não tiver organização (não falhar)
-      return NextResponse.json({
-        notifications: [],
-        unreadCount: 0,
-      });
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
-
-    const { searchParams } = new URL(request.url);
-    const unreadOnly = searchParams.get('unreadOnly') === 'true';
-    const limit = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 100);
     
-    // Verificar se tabela existe primeiro
-    const { data: tableCheck, error: tableError } = await supabaseAdmin
+    let query = supabase
       .from('notifications')
-      .select('id')
-      .limit(1);
-
-    // Se tabela não existe, retornar vazio
-    if (tableError && tableError.code === '42P01') {
-      console.log('Tabela notifications não existe, retornando vazio');
-      return NextResponse.json({
-        notifications: [],
-        unreadCount: 0,
-      });
-    }
-
-    let query = supabaseAdmin
-      .from('notifications')
-      .select('*')
+      .select('*', { count: 'exact' })
+      .eq('user_id', user.id)
       .eq('organization_id', organizationId)
+      .eq('dismissed', false)
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .range(offset, offset + limit - 1)
     
     if (unreadOnly) {
-      query = query.eq('read', false);
+      query = query.eq('read', false)
     }
     
-    const [notificationsResult, countResult] = await Promise.all([
-      query,
-      supabaseAdmin
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
+    if (type) {
+      query = query.eq('type', type)
+    }
+    
+    const { data: notifications, error, count } = await query
+    
+    if (error) {
+      console.error('Error fetching notifications:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    
+    // Buscar dados do actor para cada notificação
+    const actorIds = [...new Set(notifications?.filter(n => n.actor_id).map(n => n.actor_id))]
+    let actorMap: Record<string, any> = {}
+    
+    if (actorIds.length > 0) {
+      const { data: members } = await supabase
+        .from('organization_members')
+        .select('user_id, users:user_id(id, name, email, avatar_url)')
         .eq('organization_id', organizationId)
-        .eq('read', false)
-    ]);
-    
-    if (notificationsResult.error) {
-      console.error('Notifications query error:', notificationsResult.error);
-      // Retornar vazio em caso de erro, não falhar
-      return NextResponse.json({
-        notifications: [],
-        unreadCount: 0,
-      });
+        .in('user_id', actorIds)
+      
+      members?.forEach(m => {
+        if (m.users) {
+          actorMap[m.user_id] = m.users
+        }
+      })
     }
+    
+    // Adicionar actor aos notifications
+    const notificationsWithActor = notifications?.map(n => ({
+      ...n,
+      actor: n.actor_id ? actorMap[n.actor_id] || null : null
+    }))
+    
+    // Contar não lidas
+    const { count: unreadCount } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('organization_id', organizationId)
+      .eq('read', false)
+      .eq('dismissed', false)
     
     return NextResponse.json({
-      notifications: notificationsResult.data ?? [],
-      unreadCount: countResult.count ?? 0,
-    });
+      notifications: notificationsWithActor,
+      total: count || 0,
+      unread_count: unreadCount || 0,
+      limit,
+      offset
+    })
     
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    console.error('List notifications error:', message);
-    // Retornar vazio em caso de erro, não 500
-    return NextResponse.json({
-      notifications: [],
-      unreadCount: 0,
-    });
+    console.error('Notifications API error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
+// PATCH - Marcar como lida / Dispensar
+export async function PATCH(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    const body = await request.json()
+    const { notification_id, organization_id, action } = body
+    
+    // Marcar todas como lidas
+    if (action === 'mark_all_read' && organization_id) {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ 
+          read: true, 
+          read_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id)
+        .eq('organization_id', organization_id)
+        .eq('read', false)
+      
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+      
+      return NextResponse.json({ success: true, action: 'mark_all_read' })
+    }
+    
+    if (!notification_id) {
+      return NextResponse.json({ error: 'notification_id is required' }, { status: 400 })
+    }
+    
+    const updates: Record<string, any> = {
+      updated_at: new Date().toISOString()
+    }
+    
+    switch (action) {
+      case 'read':
+        updates.read = true
+        updates.read_at = new Date().toISOString()
+        break
+      case 'unread':
+        updates.read = false
+        updates.read_at = null
+        break
+      case 'dismiss':
+        updates.dismissed = true
+        updates.dismissed_at = new Date().toISOString()
+        break
+      default:
+        return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    }
+    
+    const { data, error } = await supabase
+      .from('notifications')
+      .update(updates)
+      .eq('id', notification_id)
+      .eq('user_id', user.id)
+      .select()
+      .single()
+    
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    
+    return NextResponse.json({ success: true, notification: data })
+    
+  } catch (error) {
+    console.error('Notifications PATCH error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+// POST - Criar notificação manual
 export async function POST(request: NextRequest) {
   try {
-    const organizationId = await getOrganizationId(request);
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!organizationId) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const { notificationIds, markAllRead } = body as {
-      notificationIds?: string[];
-      markAllRead?: boolean;
-    };
-    
-    const now = new Date().toISOString();
-    
-    if (markAllRead) {
-      const { error } = await supabaseAdmin
-        .from('notifications')
-        .update({ read: true, read_at: now })
-        .eq('organization_id', organizationId)
-        .eq('read', false);
-      
-      if (error && error.code !== '42P01') {
-        throw error;
-      }
-      
-    } else if (notificationIds && notificationIds.length > 0) {
-      const { error } = await supabaseAdmin
-        .from('notifications')
-        .update({ read: true, read_at: now })
-        .eq('organization_id', organizationId)
-        .in('id', notificationIds);
-      
-      if (error && error.code !== '42P01') {
-        throw error;
-      }
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     
-    return NextResponse.json({ success: true });
+    const body = await request.json()
+    const {
+      organization_id,
+      user_id,
+      type,
+      title,
+      message,
+      reference_type,
+      reference_id,
+      metadata
+    } = body
+    
+    if (!organization_id || !user_id || !type || !title) {
+      return NextResponse.json({ 
+        error: 'organization_id, user_id, type and title are required' 
+      }, { status: 400 })
+    }
+    
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert({
+        organization_id,
+        user_id,
+        type,
+        title,
+        message,
+        reference_type,
+        reference_id,
+        actor_id: user.id,
+        metadata: metadata || {}
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    
+    return NextResponse.json({ notification: data }, { status: 201 })
     
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    console.error('Mark read error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const organizationId = await getOrganizationId(request);
-    
-    if (!organizationId) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    const deleteAll = searchParams.get('deleteAll') === 'true';
-    
-    if (deleteAll) {
-      const { error } = await supabaseAdmin
-        .from('notifications')
-        .delete()
-        .eq('organization_id', organizationId)
-        .eq('read', true);
-      
-      if (error && error.code !== '42P01') {
-        throw error;
-      }
-      
-    } else if (id) {
-      const { error } = await supabaseAdmin
-        .from('notifications')
-        .delete()
-        .eq('organization_id', organizationId)
-        .eq('id', id);
-      
-      if (error && error.code !== '42P01') {
-        throw error;
-      }
-      
-    } else {
-      return NextResponse.json(
-        { error: 'id or deleteAll required' },
-        { status: 400 }
-      );
-    }
-    
-    return NextResponse.json({ success: true });
-    
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    console.error('Delete notification error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Notifications POST error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

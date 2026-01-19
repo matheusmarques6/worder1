@@ -1,6 +1,4 @@
-// =============================================
-// Exportações do módulo Notifications
-// src/components/notifications/index.ts
-// =============================================
-
-export { default as NotificationBell } from './NotificationBell';
+export { NotificationBell } from './NotificationBell'
+export { NotificationPanel } from './NotificationPanel'
+export { MentionInput, MentionText } from './MentionInput'
+export { NotificationSettingsPage } from './NotificationSettingsPage'
