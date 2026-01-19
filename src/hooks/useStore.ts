@@ -1,27 +1,17 @@
-/**
- * useStore - Hook para gerenciar lojas Shopify
- * 
- * Wrapper simplificado para useStoreStore
- */
-
 'use client';
 
 import { useCallback, useEffect } from 'react';
 import { useStoreStore, type ShopifyStore } from '@/stores';
 
 export interface UseStoreReturn {
-  // Estado
   stores: ShopifyStore[];
   currentStore: ShopifyStore | null;
   loading: boolean;
-  
-  // Ações
   selectStore: (storeId: string) => void;
   refreshStores: () => Promise<void>;
-  
-  // Helpers
   hasStores: boolean;
   storeId: string | null;
+  currentOrganizationId: string | null;
 }
 
 export function useStore(): UseStoreReturn {
@@ -34,19 +24,48 @@ export function useStore(): UseStoreReturn {
     setLoading
   } = useStoreStore();
 
-  // Carregar lojas do servidor
+  // Buscar da API que retorna organization_id
   const refreshStores = useCallback(async () => {
     try {
       setLoading(true);
+      
+      // IMPORTANTE: usar /api/shopify/stores (nova API)
       const response = await fetch('/api/shopify/stores');
       const data = await response.json();
       
-      if (data.stores) {
-        setStores(data.stores);
+      if (data.stores && data.stores.length > 0) {
+        const formattedStores: ShopifyStore[] = data.stores.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          domain: s.domain,
+          email: s.email,
+          currency: s.currency,
+          isActive: s.isActive ?? true,
+          totalOrders: s.totalOrders,
+          totalRevenue: s.totalRevenue,
+          lastSyncAt: s.lastSyncAt,
+          // CRÍTICO: Incluir organization_id
+          organization_id: s.organization_id,
+          organization_name: s.organization_name,
+          connectionStatus: s.connectionStatus,
+          statusMessage: s.statusMessage,
+          healthCheckedAt: s.healthCheckedAt,
+          consecutiveFailures: s.consecutiveFailures,
+        }));
         
-        // Se não tem loja selecionada e tem lojas, selecionar a primeira
-        if (!currentStore && data.stores.length > 0) {
-          setCurrentStore(data.stores[0]);
+        setStores(formattedStores);
+        
+        // Se não tem loja selecionada, selecionar a primeira
+        if (!currentStore && formattedStores.length > 0) {
+          setCurrentStore(formattedStores[0]);
+        }
+        
+        // Se a loja atual não está mais na lista, selecionar a primeira
+        if (currentStore) {
+          const storeStillExists = formattedStores.some(s => s.id === currentStore.id);
+          if (!storeStillExists && formattedStores.length > 0) {
+            setCurrentStore(formattedStores[0]);
+          }
         }
       }
     } catch (error) {
@@ -56,15 +75,14 @@ export function useStore(): UseStoreReturn {
     }
   }, [setStores, setCurrentStore, setLoading, currentStore]);
 
-  // Selecionar uma loja
   const selectStore = useCallback((storeId: string) => {
     const store = stores.find(s => s.id === storeId);
     if (store) {
+      console.log(`🏪 [useStore] Selecionando loja: ${store.name} (org: ${store.organization_id})`);
       setCurrentStore(store);
     }
   }, [stores, setCurrentStore]);
 
-  // Carregar lojas ao montar se não tiver
   useEffect(() => {
     if (stores.length === 0 && !isLoading) {
       refreshStores();
@@ -79,6 +97,7 @@ export function useStore(): UseStoreReturn {
     refreshStores,
     hasStores: stores.length > 0,
     storeId: currentStore?.id || null,
+    currentOrganizationId: currentStore?.organization_id || null,
   };
 }
 

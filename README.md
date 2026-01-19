@@ -1,90 +1,110 @@
-# Sistema de Notificações - Worder
+# 🔥 CORREÇÃO CRÍTICA: Vazamento de Dados entre Organizações
 
-## Estrutura
+## O Problema
+
+Quando o usuário troca de loja no dropdown da Sidebar, o WhatsApp Inbox continua 
+mostrando conversas da organização **ANTERIOR** porque o `organization_id` vinha 
+fixo do `user.organization_id`.
+
+## Arquivos Incluídos
 
 ```
 src/
-├── app/api/
-│   ├── notifications/
-│   │   ├── route.ts              # CRUD notificações
-│   │   └── preferences/route.ts  # Preferências
-│   └── users/search/route.ts     # Busca usuários (@menções)
-├── components/notifications/
-│   ├── index.ts
-│   ├── NotificationBell.tsx      # Sino com contador
-│   ├── NotificationPanel.tsx     # Lista de notificações
-│   ├── MentionInput.tsx          # Input com @menções
-│   └── NotificationSettingsPage.tsx
-├── hooks/useNotifications.ts
-└── types/notifications.ts
-
-sql/
-├── 00-reset-tudo.sql       # Limpa tabelas existentes
-├── 01-criar-tabelas.sql    # Cria as 4 tabelas
-├── 02-indices-rls.sql      # Índices e RLS
-└── 03-funcoes-triggers-v2.sql  # Funções e triggers
+├── app/api/shopify/stores/route.ts    ← CRIAR (nova API)
+├── hooks/
+│   ├── useCurrentOrganization.ts      ← CRIAR (novo hook)
+│   └── useStore.ts                    ← SUBSTITUIR
+└── stores/
+    └── PATCH-ShopifyStore-interface.ts ← INSTRUÇÕES para editar index.ts
 ```
 
-## Instalação
+---
 
-### 1. Execute o SQL no Supabase (em ordem!)
+## 🚀 Instalação
 
-```
-1. sql/00-reset-tudo.sql
-2. sql/01-criar-tabelas.sql
-3. sql/02-indices-rls.sql
-4. sql/03-funcoes-triggers-v2.sql
-```
+### 1. Copiar arquivos novos
 
-### 2. Copie os arquivos
-
-Copie o conteúdo de `src/` para o projeto Worder.
-
-### 3. Adicione NotificationBell no Header
-
-```tsx
-import { NotificationBell } from '@/components/notifications'
-
-// No header, após ter organizationId e userId:
-<NotificationBell organizationId={organizationId} userId={userId} />
+```bash
+# Copiar toda a pasta src para o projeto
+cp -r src/* /caminho/do/projeto/src/
 ```
 
-### 4. Use MentionInput nos comentários
+### 2. Editar src/stores/index.ts
 
-```tsx
-import { MentionInput, MentionText } from '@/components/notifications'
+Adicionar `organization_id` na interface `ShopifyStore`:
 
-// Para input
-<MentionInput
-  value={comment}
-  onChange={setComment}
-  onSubmit={handleSubmit}
-  organizationId={organizationId}
-/>
-
-// Para exibir
-<MentionText text={comment.content} />
+```typescript
+export interface ShopifyStore {
+  id: string
+  name: string
+  domain: string
+  email?: string
+  currency?: string
+  isActive: boolean
+  totalOrders?: number
+  totalRevenue?: number
+  lastSyncAt?: string
+  organization_id: string        // ✅ ADICIONAR
+  organization_name?: string     // ✅ ADICIONAR
+  connectionStatus?: string
+  statusMessage?: string
+  healthCheckedAt?: string
+  consecutiveFailures?: number
+}
 ```
 
-## Uso
+### 3. Corrigir src/app/(dashboard)/whatsapp/inbox/page.tsx
 
-Os componentes precisam de `organizationId` e `userId`:
-
-```tsx
-// Exemplo de uso no Header
-const { user } = useAuth() // ou de onde você pega o user
-const { organizationId } = useOrganization() // ou de onde você pega a org
-
-<NotificationBell 
-  organizationId={organizationId} 
-  userId={user.id} 
-/>
+**Adicionar import:**
+```typescript
+import { useCurrentOrganization } from '@/hooks/useCurrentOrganization'
 ```
 
-## Funcionalidades
+**Substituir (linha ~38-41):**
 
-- ✅ Menções @user em comentários
-- ✅ Notificações automáticas (tarefas atribuídas/concluídas)
-- ✅ Realtime via Supabase
-- ✅ Preferências por tipo de notificação
-- ✅ Modo "Não Perturbe"
+```typescript
+// ❌ ANTES:
+const { user } = useAuthStore()
+const organizationId = user?.organization_id || 'default-org'
+
+// ✅ DEPOIS:
+const { user } = useAuthStore()
+const { organizationId: currentOrgId, currentStore } = useCurrentOrganization()
+const organizationId = currentOrgId || 'default-org'
+```
+
+**Atualizar useEffect (linha ~163):**
+
+```typescript
+useEffect(() => {
+  console.log('🔄 Loading conversations for org:', organizationId)
+  selectConversation(null as any)
+  clearMessages()
+  clearContact()
+  fetchConversations()
+}, [organizationId])
+```
+
+---
+
+## ⚠️ IMPORTANTE: Outros Lugares para Corrigir
+
+Execute para encontrar todos os lugares:
+```bash
+grep -rn "user?.organization_id\|user.organization_id" src/
+```
+
+E substitua por:
+```typescript
+const { organizationId } = useCurrentOrganization()
+```
+
+---
+
+## 🔍 Como Testar
+
+1. Logar com usuário que tem múltiplas lojas
+2. Ir para WhatsApp Inbox
+3. Ver conversas da loja atual
+4. Trocar de loja no dropdown
+5. **Verificar**: Conversas devem mudar para a nova organização
