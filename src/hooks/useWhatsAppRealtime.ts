@@ -1,24 +1,14 @@
 // =============================================
 // REALTIME HOOK - Supabase Realtime
-// CORRIGIDO: Sem store side-effects, apenas callbacks
+// CORRIGIDO: Usa createBrowserClient existente do projeto
 // =============================================
 
 'use client';
 
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { createBrowserClient } from '@supabase/ssr';
+import { createBrowserClient } from '@/lib/supabase';
 import type { WhatsAppConversation, WhatsAppMessage } from '@/types';
-
-function getRealtimeClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    console.error('[Realtime] Missing Supabase config');
-    return null;
-  }
-  return createBrowserClient(url, key);
-}
 
 interface UseRealtimeOptions {
   organizationId?: string;
@@ -50,12 +40,12 @@ export function useWhatsAppRealtime(options: UseRealtimeOptions = {}): UseRealti
   const [isConnected, setIsConnected] = useState(false);
   const convChannelRef = useRef<RealtimeChannel | null>(null);
   const msgChannelRef = useRef<RealtimeChannel | null>(null);
-  const supabaseRef = useRef<ReturnType<typeof getRealtimeClient>>(null);
+  const supabaseRef = useRef<ReturnType<typeof createBrowserClient> | null>(null);
 
   // Inicializar cliente
   useEffect(() => {
     if (!supabaseRef.current) {
-      supabaseRef.current = getRealtimeClient();
+      supabaseRef.current = createBrowserClient();
     }
   }, []);
 
@@ -213,7 +203,6 @@ export function useWhatsAppRealtime(options: UseRealtimeOptions = {}): UseRealti
       msgChannelRef.current.unsubscribe();
       msgChannelRef.current = null;
     }
-    // useEffects vão recriar os canais
   }, []);
 
   return {
@@ -223,9 +212,6 @@ export function useWhatsAppRealtime(options: UseRealtimeOptions = {}): UseRealti
   };
 }
 
-// =============================================
-// HOOK PARA NOTIFICAÇÕES DESKTOP
-// =============================================
 export function useDesktopNotifications() {
   const requestPermission = useCallback(async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) return false;
@@ -248,8 +234,6 @@ export function useDesktopNotifications() {
     requestPermission,
     showNotification,
     isSupported: typeof window !== 'undefined' && 'Notification' in window,
-    permission: typeof window !== 'undefined' && 'Notification' in window 
-      ? Notification.permission 
-      : 'denied',
+    permission: typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'denied',
   };
 }
