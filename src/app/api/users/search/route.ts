@@ -1,15 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
 
+// GET - Buscar usuários para menção
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organization_id')
     const query = searchParams.get('q') || ''

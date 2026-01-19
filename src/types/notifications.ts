@@ -72,16 +72,6 @@ export interface MentionableUser {
   role?: string
 }
 
-export function extractMentions(text: string) {
-  const regex = /@\[([^\]]+)\]\(([a-f0-9-]+)\)/g
-  const mentions: Array<{ fullMatch: string; name: string; userId: string; startIndex: number; endIndex: number }> = []
-  let match
-  while ((match = regex.exec(text)) !== null) {
-    mentions.push({ fullMatch: match[0], name: match[1], userId: match[2], startIndex: match.index, endIndex: match.index + match[0].length })
-  }
-  return mentions
-}
-
 export function formatMention(userId: string, name: string): string {
   return `@[${name}](${userId})`
 }

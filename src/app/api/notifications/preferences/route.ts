@@ -1,33 +1,28 @@
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
 
+// GET - Buscar preferências do usuário
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organization_id')
+    const userId = searchParams.get('user_id')
     
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+    if (!organizationId || !userId) {
+      return NextResponse.json({ error: 'organization_id and user_id are required' }, { status: 400 })
     }
     
     let { data: preferences, error } = await supabase
       .from('notification_preferences')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('organization_id', organizationId)
       .single()
     
     if (error && error.code === 'PGRST116') {
       const { data: newPrefs, error: insertError } = await supabase
         .from('notification_preferences')
-        .insert({ user_id: user.id, organization_id: organizationId })
+        .insert({ user_id: userId, organization_id: organizationId })
         .select()
         .single()
       
@@ -45,20 +40,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// PUT - Atualizar preferências
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const body = await request.json()
-    const { organization_id, ...updates } = body
+    const { organization_id, user_id, ...updates } = body
     
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+    if (!organization_id || !user_id) {
+      return NextResponse.json({ error: 'organization_id and user_id are required' }, { status: 400 })
     }
     
     const allowedFields = [
@@ -76,7 +65,7 @@ export async function PUT(request: NextRequest) {
     
     const { data: preferences, error } = await supabase
       .from('notification_preferences')
-      .upsert({ user_id: user.id, organization_id, ...sanitizedUpdates }, { onConflict: 'user_id,organization_id' })
+      .upsert({ user_id, organization_id, ...sanitizedUpdates }, { onConflict: 'user_id,organization_id' })
       .select()
       .single()
     

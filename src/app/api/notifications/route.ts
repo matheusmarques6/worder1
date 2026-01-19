@@ -1,31 +1,25 @@
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
 
 // GET - Listar notificações do usuário
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organization_id')
+    const userId = searchParams.get('user_id')
     const unreadOnly = searchParams.get('unread_only') === 'true'
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = parseInt(searchParams.get('offset') || '0')
     const type = searchParams.get('type')
     
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+    if (!organizationId || !userId) {
+      return NextResponse.json({ error: 'organization_id and user_id are required' }, { status: 400 })
     }
     
     let query = supabase
       .from('notifications')
       .select('*', { count: 'exact' })
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('organization_id', organizationId)
       .eq('dismissed', false)
       .order('created_at', { ascending: false })
@@ -74,7 +68,7 @@ export async function GET(request: NextRequest) {
     const { count: unreadCount } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('organization_id', organizationId)
       .eq('read', false)
       .eq('dismissed', false)
@@ -96,18 +90,11 @@ export async function GET(request: NextRequest) {
 // PATCH - Marcar como lida / Dispensar
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const body = await request.json()
-    const { notification_id, organization_id, action } = body
+    const { notification_id, organization_id, user_id, action } = body
     
     // Marcar todas como lidas
-    if (action === 'mark_all_read' && organization_id) {
+    if (action === 'mark_all_read' && organization_id && user_id) {
       const { error } = await supabase
         .from('notifications')
         .update({ 
@@ -115,7 +102,7 @@ export async function PATCH(request: NextRequest) {
           read_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .eq('user_id', user.id)
+        .eq('user_id', user_id)
         .eq('organization_id', organization_id)
         .eq('read', false)
       
@@ -155,7 +142,6 @@ export async function PATCH(request: NextRequest) {
       .from('notifications')
       .update(updates)
       .eq('id', notification_id)
-      .eq('user_id', user.id)
       .select()
       .single()
     
@@ -174,13 +160,6 @@ export async function PATCH(request: NextRequest) {
 // POST - Criar notificação manual
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const body = await request.json()
     const {
       organization_id,
@@ -190,6 +169,7 @@ export async function POST(request: NextRequest) {
       message,
       reference_type,
       reference_id,
+      actor_id,
       metadata
     } = body
     
@@ -209,7 +189,7 @@ export async function POST(request: NextRequest) {
         message,
         reference_type,
         reference_id,
-        actor_id: user.id,
+        actor_id,
         metadata: metadata || {}
       })
       .select()

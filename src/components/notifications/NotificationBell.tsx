@@ -8,12 +8,13 @@ import { cn } from '@/lib/utils'
 
 interface NotificationBellProps {
   organizationId: string
+  userId: string
   className?: string
 }
 
-export function NotificationBell({ organizationId, className }: NotificationBellProps) {
+export function NotificationBell({ organizationId, userId, className }: NotificationBellProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const unreadCount = useUnreadCount(organizationId)
+  const unreadCount = useUnreadCount(organizationId, userId)
   const containerRef = useRef<HTMLDivElement>(null)
   
   useEffect(() => {
@@ -49,7 +50,7 @@ export function NotificationBell({ organizationId, className }: NotificationBell
       </button>
       {isOpen && (
         <div className="absolute right-0 top-full mt-2 z-50">
-          <NotificationPanel organizationId={organizationId} onClose={() => setIsOpen(false)} />
+          <NotificationPanel organizationId={organizationId} userId={userId} onClose={() => setIsOpen(false)} />
         </div>
       )}
     </div>

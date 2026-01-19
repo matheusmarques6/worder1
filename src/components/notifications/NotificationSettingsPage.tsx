@@ -23,8 +23,8 @@ function ToggleItem({ icon: Icon, label, description, checked, onChange, disable
   )
 }
 
-export function NotificationSettingsPage({ organizationId }: { organizationId: string }) {
-  const { preferences, fetchPreferences, updatePreferences } = useNotifications({ organizationId, autoFetch: false })
+export function NotificationSettingsPage({ organizationId, userId }: { organizationId: string; userId: string }) {
+  const { preferences, fetchPreferences, updatePreferences } = useNotifications({ organizationId, userId, autoFetch: false })
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [localPrefs, setLocalPrefs] = useState<Record<string, any>>({})

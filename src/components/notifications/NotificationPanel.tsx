@@ -9,14 +9,18 @@ import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { Notification, NotificationType } from '@/types/notifications'
 
-interface NotificationPanelProps { organizationId: string; onClose?: () => void }
+interface NotificationPanelProps { 
+  organizationId: string
+  userId: string
+  onClose?: () => void 
+}
 
 const ICONS: Record<NotificationType, React.ElementType> = { mention: AtSign, task_assigned: UserPlus, task_due_soon: Clock, task_overdue: AlertTriangle, task_completed: CheckCircle, comment_reply: MessageCircle, deal_assigned: Briefcase, deal_stage_changed: ArrowRight, whatsapp_mention: MessageSquare, reminder: Bell }
 const COLORS: Record<NotificationType, string> = { mention: 'text-blue-500 bg-blue-50', task_assigned: 'text-purple-500 bg-purple-50', task_due_soon: 'text-yellow-600 bg-yellow-50', task_overdue: 'text-red-500 bg-red-50', task_completed: 'text-green-500 bg-green-50', comment_reply: 'text-blue-500 bg-blue-50', deal_assigned: 'text-purple-500 bg-purple-50', deal_stage_changed: 'text-orange-500 bg-orange-50', whatsapp_mention: 'text-green-500 bg-green-50', reminder: 'text-gray-500 bg-gray-50' }
 
-export function NotificationPanel({ organizationId, onClose }: NotificationPanelProps) {
+export function NotificationPanel({ organizationId, userId, onClose }: NotificationPanelProps) {
   const router = useRouter()
-  const { notifications, unreadCount, isLoading, hasMore, markAsRead, markAllAsRead, dismiss, loadMore, refresh } = useNotifications({ organizationId })
+  const { notifications, unreadCount, isLoading, hasMore, markAsRead, markAllAsRead, dismiss, loadMore, refresh } = useNotifications({ organizationId, userId })
   
   useEffect(() => { refresh() }, [])
   
