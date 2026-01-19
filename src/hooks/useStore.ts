@@ -1,35 +1,24 @@
+// ===============================
+// CORREÇÃO: useStore hook
+// ===============================
+// Este hook agora salva organization_id ao carregar as lojas
+//
+// SUBSTITUIR: src/hooks/useStore.ts
+
 'use client';
 
 import { useCallback, useEffect } from 'react';
-import { useStoreStore } from '@/stores';
-
-// Interface para loja com organization_id
-interface StoreWithOrg {
-  id: string
-  name: string
-  domain: string
-  email?: string
-  currency?: string
-  isActive: boolean
-  totalOrders?: number
-  totalRevenue?: number
-  lastSyncAt?: string
-  organization_id: string
-  organization_name?: string
-  connectionStatus?: string
-  statusMessage?: string
-  healthCheckedAt?: string
-  consecutiveFailures?: number
-}
+import { useStoreStore, type ShopifyStore } from '@/stores';
 
 export interface UseStoreReturn {
-  stores: StoreWithOrg[];
-  currentStore: StoreWithOrg | null;
+  stores: ShopifyStore[];
+  currentStore: ShopifyStore | null;
   loading: boolean;
   selectStore: (storeId: string) => void;
   refreshStores: () => Promise<void>;
   hasStores: boolean;
   storeId: string | null;
+  // ✅ NOVO: organization_id da loja atual
   currentOrganizationId: string | null;
 }
 
@@ -43,16 +32,17 @@ export function useStore(): UseStoreReturn {
     setLoading
   } = useStoreStore();
 
-  // Buscar da API que retorna organization_id
+  // ✅ CORRIGIDO: Buscar lojas com organization_id
   const refreshStores = useCallback(async () => {
     try {
       setLoading(true);
       
-      // IMPORTANTE: usar /api/shopify/stores (nova API)
-      const response = await fetch('/api/shopify/stores');
+      // Usa a API corrigida que retorna organization_id
+      const response = await fetch('/api/shopify/connect');
       const data = await response.json();
       
       if (data.stores && data.stores.length > 0) {
+        // ✅ Salva COM organization_id
         const formattedStores = data.stores.map((s: any) => ({
           id: s.id,
           name: s.name,
@@ -63,12 +53,9 @@ export function useStore(): UseStoreReturn {
           totalOrders: s.totalOrders,
           totalRevenue: s.totalRevenue,
           lastSyncAt: s.lastSyncAt,
+          // ✅ CRÍTICO: Salvar organization_id
           organization_id: s.organization_id,
           organization_name: s.organization_name,
-          connectionStatus: s.connectionStatus,
-          statusMessage: s.statusMessage,
-          healthCheckedAt: s.healthCheckedAt,
-          consecutiveFailures: s.consecutiveFailures,
         }));
         
         setStores(formattedStores);
@@ -107,17 +94,16 @@ export function useStore(): UseStoreReturn {
     }
   }, [stores.length, isLoading, refreshStores]);
 
-  const typedCurrentStore = currentStore as StoreWithOrg | null;
-
   return {
-    stores: stores as StoreWithOrg[],
-    currentStore: typedCurrentStore,
+    stores,
+    currentStore,
     loading: isLoading,
     selectStore,
     refreshStores,
     hasStores: stores.length > 0,
     storeId: currentStore?.id || null,
-    currentOrganizationId: typedCurrentStore?.organization_id || null,
+    // ✅ NOVO: Retornar organization_id da loja atual
+    currentOrganizationId: (currentStore as any)?.organization_id || null,
   };
 }
 

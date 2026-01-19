@@ -1,5 +1,13 @@
+// ===============================
+// CORREÇÃO: /api/shopify/connect/route.ts
+// ===============================
+// MUDANÇAS:
+// 1. Incluir organization_id no response
+// 2. Buscar lojas de TODAS as organizações que o usuário é membro
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 
@@ -25,7 +33,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, domain, accessToken, apiSecret } = body;
 
-    // ✅ MUDANÇA: apiSecret agora é OPCIONAL
     if (!name || !domain || !accessToken) {
       return NextResponse.json(
         { error: 'Nome, domínio e access token são obrigatórios' },
@@ -75,7 +82,7 @@ export async function POST(request: NextRequest) {
         .update({
           shop_name: name,
           access_token: accessToken.trim(),
-          api_secret: apiSecret?.trim() || null, // ✅ Permite null
+          api_secret: apiSecret?.trim() || null,
           shop_email: shopData.email,
           currency: shopData.currency,
           timezone: shopData.timezone,
@@ -101,7 +108,7 @@ export async function POST(request: NextRequest) {
         shop_name: name,
         shop_email: shopData.email,
         access_token: accessToken.trim(),
-        api_secret: apiSecret?.trim() || null, // ✅ Permite null
+        api_secret: apiSecret?.trim() || null,
         currency: shopData.currency,
         timezone: shopData.timezone,
         is_active: true,
@@ -123,29 +130,51 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// ✅ GET CORRIGIDO - Retorna organization_id e busca de todas as orgs do usuário
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const organizationId = auth.user.organization_id;
-
-  const { searchParams } = new URL(request.url);
-  const orgParam = searchParams.get('organizationId') || searchParams.get('organization_id');
-  if (orgParam && orgParam !== organizationId) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  
+  const userId = auth.user.id;
+  const userOrgId = auth.user.organization_id;
 
   try {
-    const { data: stores, error } = await supabase
+    // ✅ 1. Buscar todas as organizações que o usuário é membro
+    const { data: memberships } = await supabaseAdmin
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', userId);
+
+    // Criar lista de org IDs (inclui a org padrão do usuário)
+    let orgIds: string[] = [userOrgId];
+    if (memberships && memberships.length > 0) {
+      const memberOrgIds = memberships.map(m => m.organization_id);
+      orgIds = [...new Set([...orgIds, ...memberOrgIds])]; // Remove duplicados
+    }
+
+    // ✅ 2. Buscar lojas de TODAS as organizações
+    const { data: stores, error } = await supabaseAdmin
       .from('shopify_stores')
-      .select('id, shop_name, shop_domain, shop_email, currency, is_active, total_orders, total_revenue, last_sync_at')
-      .eq('organization_id', organizationId)
+      .select('id, organization_id, shop_name, shop_domain, shop_email, currency, is_active, total_orders, total_revenue, last_sync_at')
+      .in('organization_id', orgIds)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
+    // ✅ 3. Buscar nomes das organizações
+    const { data: orgs } = await supabaseAdmin
+      .from('organizations')
+      .select('id, name')
+      .in('id', orgIds);
+    
+    const orgMap = new Map(orgs?.map(o => [o.id, o.name]) || []);
+
+    // ✅ 4. Retornar COM organization_id
     return NextResponse.json({
       stores: stores?.map(s => ({
         id: s.id,
+        organization_id: s.organization_id,  // ✅ INCLUIR!
+        organization_name: orgMap.get(s.organization_id) || 'Organização',
         name: s.shop_name,
         domain: s.shop_domain,
         email: s.shop_email,
