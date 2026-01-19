@@ -164,38 +164,82 @@ export function isSupabaseConfigured(): boolean {
 }
 
 /**
- * ✅ VALIDAÇÃO DE ACESSO À LOJA (Multi-tenant security)
- * Verifica se o storeId pertence à organização do usuário
- * @returns true se acesso permitido, false caso contrário
+ * ✅ CORRIGIDO: VALIDAÇÃO DE ACESSO À LOJA (Multi-tenant / Multi-org)
+ * 
+ * Verifica se o usuário tem acesso à loja através de:
+ * 1. A loja pertence à org padrão do usuário, OU
+ * 2. O usuário é MEMBRO da org da loja (via organization_members)
+ * 
+ * @param supabase - Cliente Supabase (mantido por compatibilidade)
+ * @param userOrganizationId - Organization padrão do perfil do usuário
+ * @param storeId - ID da loja a validar
+ * @param userId - ID do usuário (necessário para verificar membership)
+ * @returns objeto com valid, storeOrganizationId (se válido), ou error/status
  */
 export async function validateStoreAccess(
   supabase: SupabaseClient,
-  organizationId: string,
-  storeId: string | null | undefined
-): Promise<{ valid: boolean; error?: string; status?: number }> {
+  userOrganizationId: string,
+  storeId: string | null | undefined,
+  userId?: string
+): Promise<{ valid: boolean; error?: string; status?: number; storeOrganizationId?: string }> {
   // Se não tem storeId, retornar erro
   if (!storeId) {
     return { valid: false, error: 'storeId é obrigatório', status: 400 };
   }
 
+  // Usar admin client para queries sem RLS
+  const admin = getSupabaseAdmin();
+  if (!admin) {
+    return { valid: false, error: 'Database not configured', status: 503 };
+  }
+
   try {
-    // Verificar se a loja pertence à organização
-    const { data: store, error } = await supabase
+    // ✅ 1. Buscar a loja (SEM filtrar por org)
+    const { data: store, error: storeError } = await admin
       .from('shopify_stores')
       .select('id, organization_id')
       .eq('id', storeId)
-      .eq('organization_id', organizationId)
       .single();
 
-    if (error || !store) {
+    if (storeError || !store) {
+      console.log(`[validateStoreAccess] Store not found: ${storeId}`);
       return { 
         valid: false, 
-        error: 'Loja não encontrada ou sem permissão de acesso', 
-        status: 403 
+        error: 'Loja não encontrada', 
+        status: 404 
       };
     }
 
-    return { valid: true };
+    const storeOrgId = store.organization_id;
+
+    // ✅ 2. Se a loja é da mesma organização do usuário, OK
+    if (storeOrgId === userOrganizationId) {
+      return { valid: true, storeOrganizationId: storeOrgId };
+    }
+
+    // ✅ 3. Verificar se o usuário é MEMBRO da organização da loja
+    if (userId) {
+      const { data: membership, error: memberError } = await admin
+        .from('organization_members')
+        .select('id, role')
+        .eq('user_id', userId)
+        .eq('organization_id', storeOrgId)
+        .maybeSingle();
+
+      if (membership && !memberError) {
+        console.log(`[validateStoreAccess] User ${userId} is member of org ${storeOrgId} with role ${membership.role}`);
+        return { valid: true, storeOrganizationId: storeOrgId };
+      }
+    }
+
+    // ✅ 4. Usuário não tem acesso
+    console.log(`[validateStoreAccess] Access denied: user org ${userOrganizationId}, store org ${storeOrgId}, userId ${userId}`);
+    return { 
+      valid: false, 
+      error: 'Sem permissão de acesso a esta loja', 
+      status: 403 
+    };
+
   } catch (error) {
     console.error('[validateStoreAccess] Error:', error);
     return { valid: false, error: 'Erro ao validar acesso à loja', status: 500 };
@@ -204,14 +248,15 @@ export async function validateStoreAccess(
 
 /**
  * ✅ HELPER: Extrai e valida storeId de query params
- * Retorna NextResponse de erro ou o storeId validado
+ * Retorna NextResponse de erro ou objeto com storeId e storeOrganizationId
  */
 export async function requireStoreAccess(
   supabase: SupabaseClient,
   organizationId: string,
-  storeId: string | null | undefined
-): Promise<NextResponse | string> {
-  const validation = await validateStoreAccess(supabase, organizationId, storeId);
+  storeId: string | null | undefined,
+  userId?: string
+): Promise<NextResponse | { storeId: string; storeOrganizationId: string }> {
+  const validation = await validateStoreAccess(supabase, organizationId, storeId, userId);
   
   if (!validation.valid) {
     return NextResponse.json(
@@ -220,5 +265,8 @@ export async function requireStoreAccess(
     );
   }
   
-  return storeId as string;
+  return { 
+    storeId: storeId as string, 
+    storeOrganizationId: validation.storeOrganizationId! 
+  };
 }
