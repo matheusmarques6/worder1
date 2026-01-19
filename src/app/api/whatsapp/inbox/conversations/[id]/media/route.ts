@@ -1,41 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host'
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11'
+// ✅ CORREÇÃO: Sem fallback hardcoded
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY
 
-// POST - Enviar mídia
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+const MAX_FILE_SIZE = 16 * 1024 * 1024 // 16MB
+const ALLOWED_TYPES = {
+  image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+  video: ['video/mp4', 'video/webm', 'video/quicktime'],
+  audio: ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/webm', 'audio/mp4'],
+}
+
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    // ✅ CORREÇÃO: Verificar config antes de processar
+    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+      console.error('[Send Media] Missing EVOLUTION_API_URL or EVOLUTION_API_KEY')
+      return NextResponse.json({ 
+        error: 'WhatsApp API not configured. Set EVOLUTION_API_URL and EVOLUTION_API_KEY.',
+        success: false,
+      }, { status: 503 })
+    }
+
     const conversationId = params.id
     const formData = await request.formData()
     const file = formData.get('file') as File
     const mediaType = formData.get('mediaType') as string || 'document'
     const caption = formData.get('caption') as string || ''
 
-    console.log('[Send Media] ============================')
-    console.log('[Send Media] Conversation:', conversationId)
-    console.log('[Send Media] Type:', mediaType, '| File:', file?.name, '| Caption:', caption?.substring(0, 30))
+    console.log('[Send Media] Type:', mediaType, '| File:', file?.name, '| Size:', file?.size)
 
+    // Validações
     if (!file) {
-      return NextResponse.json({ error: 'file required' }, { status: 400 })
+      return NextResponse.json({ error: 'File required', success: false }, { status: 400 })
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: `File too large. Max: ${MAX_FILE_SIZE / (1024 * 1024)}MB`, success: false }, { status: 400 })
+    }
+
+    // Validar tipo
+    const allowedList = ALLOWED_TYPES[mediaType as keyof typeof ALLOWED_TYPES]
+    if (allowedList && !allowedList.includes(file.type)) {
+      console.warn('[Send Media] Type not in allowed list:', file.type)
     }
 
     // Buscar conversa
-    const { data: conversation, error: convError } = await supabase
+    const { data: conversation } = await supabase
       .from('whatsapp_conversations')
       .select('*')
       .eq('id', conversationId)
       .single()
 
-    if (convError || !conversation) {
-      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+    if (!conversation) {
+      return NextResponse.json({ error: 'Conversation not found', success: false }, { status: 404 })
     }
 
-    // Buscar instância conectada
+    // Buscar instância
     const { data: instances } = await supabase
       .from('whatsapp_instances')
       .select('*')
@@ -44,9 +65,8 @@ export async function POST(
       .limit(1)
 
     const instance = instances?.[0]
-
     if (!instance) {
-      return NextResponse.json({ error: 'No connected WhatsApp instance' }, { status: 400 })
+      return NextResponse.json({ error: 'No connected WhatsApp instance', success: false }, { status: 400 })
     }
 
     const apiUrl = instance.api_url || EVOLUTION_API_URL
@@ -54,53 +74,38 @@ export async function POST(
     const instanceName = instance.unique_id || instance.instance_name || instance.instance_id
     const phoneNumber = conversation.contact_phone || conversation.phone_number
 
-    // Converter arquivo para buffer e base64
+    // Converter para base64
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     const base64 = buffer.toString('base64')
 
-    // 1. Upload para Supabase Storage primeiro
+    // Upload para Storage
     let permanentMediaUrl = null
     try {
-      const ext = file.name.split('.').pop() || file.type.split('/')[1] || 'bin'
+      const ext = file.name.split('.').pop() || 'bin'
       const fileName = `${conversation.organization_id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
       
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('whatsapp-media')
-        .upload(fileName, buffer, {
-          contentType: file.type || 'application/octet-stream',
-          upsert: false,
-        })
+        .upload(fileName, buffer, { contentType: file.type })
 
-      if (uploadError) {
-        console.error('[Send Media] Storage upload error:', uploadError)
-      } else {
+      if (!uploadError) {
         const { data: publicUrlData } = supabase.storage
           .from('whatsapp-media')
           .getPublicUrl(fileName)
-        
         permanentMediaUrl = publicUrlData?.publicUrl
-        console.log('[Send Media] ✅ Uploaded to storage:', permanentMediaUrl?.substring(0, 60))
+        console.log('[Send Media] ✅ Uploaded:', permanentMediaUrl?.substring(0, 60))
       }
     } catch (storageError) {
       console.error('[Send Media] Storage error:', storageError)
     }
 
-    // 2. Enviar via Evolution API
-    let endpoint = ''
-    let payload: any = {
-      number: phoneNumber,
-    }
+    // Enviar via Evolution API
+    let endpoint = '', payload: any = { number: phoneNumber }
 
-    if (mediaType === 'image') {
+    if (mediaType === 'image' || mediaType === 'video') {
       endpoint = `/message/sendMedia/${instanceName}`
-      payload.mediatype = 'image'
-      payload.media = `data:${file.type};base64,${base64}`
-      payload.fileName = file.name
-      if (caption) payload.caption = caption
-    } else if (mediaType === 'video') {
-      endpoint = `/message/sendMedia/${instanceName}`
-      payload.mediatype = 'video'
+      payload.mediatype = mediaType
       payload.media = `data:${file.type};base64,${base64}`
       payload.fileName = file.name
       if (caption) payload.caption = caption
@@ -115,22 +120,18 @@ export async function POST(
       if (caption) payload.caption = caption
     }
 
-    console.log('[Send Media] Sending to Evolution API:', endpoint)
+    console.log('[Send Media] Sending to Evolution:', endpoint)
 
     const sendResponse = await fetch(`${apiUrl}${endpoint}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': apiKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
       body: JSON.stringify(payload),
     })
-
     const sendData = await sendResponse.json()
 
     console.log('[Send Media] Evolution response:', sendResponse.status, sendResponse.ok)
 
-    // 3. Salvar mensagem no banco com URL permanente
+    // Salvar no banco
     const { data: savedMessage, error: saveError } = await supabase
       .from('whatsapp_messages')
       .insert({
@@ -152,52 +153,39 @@ export async function POST(
       .select()
       .single()
 
-    if (saveError) {
-      console.error('[Send Media] Error saving:', saveError)
-    } else {
-      console.log('[Send Media] ✅ Message saved:', savedMessage.id)
-    }
+    if (saveError) console.error('[Send Media] Save error:', saveError)
+    else console.log('[Send Media] ✅ Saved:', savedMessage.id)
 
-    // 4. Atualizar conversa
-    let preview = ''
-    if (caption) {
-      preview = caption.substring(0, 50)
-    } else if (mediaType === 'image') {
-      preview = '📷 Imagem'
-    } else if (mediaType === 'video') {
-      preview = '🎬 Vídeo'
-    } else if (mediaType === 'audio') {
-      preview = '🎵 Áudio'
-    } else {
-      preview = `📎 ${file.name}`
-    }
+    // Atualizar conversa
+    let preview = caption?.substring(0, 50) || 
+      (mediaType === 'image' ? '📷 Imagem' : mediaType === 'video' ? '🎬 Vídeo' : `📎 ${file.name}`)
 
-    await supabase
-      .from('whatsapp_conversations')
-      .update({
-        last_message_at: new Date().toISOString(),
-        last_message_preview: preview,
-        last_message_direction: 'outbound',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', conversationId)
+    await supabase.from('whatsapp_conversations').update({
+      last_message_at: new Date().toISOString(),
+      last_message_preview: preview,
+      last_message_direction: 'outbound',
+      updated_at: new Date().toISOString(),
+    }).eq('id', conversationId)
 
-    if (!sendResponse.ok) {
-      return NextResponse.json({ 
-        message: savedMessage,
-        success: false,
-        error: 'Failed to send via Evolution API',
-        evolution_error: sendData,
-      })
-    }
-
-    return NextResponse.json({ 
-      message: savedMessage,
-      success: true,
+    return NextResponse.json({
+      message: savedMessage ? {
+        id: savedMessage.id,
+        conversation_id: savedMessage.conversation_id,
+        direction: savedMessage.direction,
+        message_type: savedMessage.message_type,
+        content: savedMessage.content || caption,
+        media_url: savedMessage.media_url,
+        media_filename: savedMessage.media_filename,
+        media_mime_type: savedMessage.media_mime_type,
+        status: savedMessage.status,
+        sent_by_bot: false,
+        created_at: savedMessage.created_at,
+      } : null,
+      success: sendResponse.ok,
     })
 
   } catch (error: any) {
     console.error('[Send Media] Error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
   }
 }

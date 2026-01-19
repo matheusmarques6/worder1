@@ -1,62 +1,108 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+// =============================================
+// HOOK: useInboxMessages
+// CORRIGIDO: sendMedia + paginação real + polling
+// =============================================
+
+import { useState, useCallback, useRef } from 'react'
 import type { InboxMessage } from '@/types/inbox'
 
 interface UseInboxMessagesReturn {
   messages: InboxMessage[]
   isLoading: boolean
   isSending: boolean
+  isUploading: boolean
   error: string | null
   hasMore: boolean
-  
-  // Actions
-  fetchMessages: (conversationId: string) => Promise<void>
+  fetchMessages: (conversationId: string, reset?: boolean) => Promise<void>
   sendMessage: (params: SendMessageParams) => Promise<InboxMessage | null>
+  sendMedia: (params: SendMediaParams) => Promise<InboxMessage | null>
   loadMore: () => Promise<void>
   addMessage: (message: InboxMessage) => void
   updateMessageStatus: (messageId: string, status: InboxMessage['status']) => void
   clear: () => void
+  refetchLatest: () => Promise<void>
 }
 
 interface SendMessageParams {
   conversationId: string
   content?: string
   messageType?: InboxMessage['message_type']
-  mediaUrl?: string
-  mediaMimeType?: string
-  mediaFilename?: string
-  templateId?: string
-  templateName?: string
-  templateVariables?: Record<string, any>
-  replyToMessageId?: string
-  sentByUserId?: string
-  sentByUserName?: string
 }
+
+interface SendMediaParams {
+  conversationId: string
+  file: File
+  mediaType: 'image' | 'video' | 'audio' | 'document'
+  caption?: string
+}
+
+const PAGE_SIZE = 50
 
 export function useInboxMessages(): UseInboxMessagesReturn {
   const [messages, setMessages] = useState<InboxMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
-  const pageRef = useRef(1)
+  
+  // Cursores para paginação
+  const oldestCursorRef = useRef<string | null>(null)
+  const newestCursorRef = useRef<string | null>(null)
 
-  const fetchMessages = useCallback(async (conversationId: string) => {
-    setIsLoading(true)
-    setError(null)
-    setCurrentConversationId(conversationId)
-    pageRef.current = 1
+  // =============================================
+  // FETCH MESSAGES (com paginação real)
+  // =============================================
+  const fetchMessages = useCallback(async (conversationId: string, reset: boolean = true) => {
+    if (reset) {
+      setIsLoading(true)
+      setError(null)
+      setCurrentConversationId(conversationId)
+      oldestCursorRef.current = null
+      newestCursorRef.current = null
+    }
 
     try {
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
+      
+      // Se não é reset, buscar mensagens mais antigas
+      if (!reset && oldestCursorRef.current) {
+        params.set('before', oldestCursorRef.current)
+      }
+
       const response = await fetch(
-        `/api/whatsapp/inbox/conversations/${conversationId}/messages?page=1&limit=50`
+        `/api/whatsapp/inbox/conversations/${conversationId}/messages?${params}`
       )
       const data = await response.json()
-
       if (!response.ok) throw new Error(data.error || 'Failed to fetch messages')
 
-      setMessages(data.messages || [])
-      setHasMore(data.pagination?.hasMore || false)
+      const fetchedMessages: InboxMessage[] = data.messages || []
+      
+      if (reset) {
+        setMessages(fetchedMessages)
+      } else {
+        // Prepend mensagens mais antigas (sem duplicar)
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.id))
+          const newMsgs = fetchedMessages.filter(m => !existingIds.has(m.id))
+          return [...newMsgs, ...prev]
+        })
+      }
+      
+      // Atualizar cursores
+      if (fetchedMessages.length > 0) {
+        const oldest = fetchedMessages[0]
+        if (!oldestCursorRef.current || oldest.created_at < oldestCursorRef.current) {
+          oldestCursorRef.current = oldest.created_at
+        }
+        const newest = fetchedMessages[fetchedMessages.length - 1]
+        if (!newestCursorRef.current || newest.created_at > newestCursorRef.current) {
+          newestCursorRef.current = newest.created_at
+        }
+      }
+      
+      setHasMore(data.hasMore ?? fetchedMessages.length >= PAGE_SIZE)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -64,36 +110,53 @@ export function useInboxMessages(): UseInboxMessagesReturn {
     }
   }, [])
 
+  // =============================================
+  // LOAD MORE (mensagens mais antigas)
+  // =============================================
   const loadMore = useCallback(async () => {
     if (!currentConversationId || isLoading || !hasMore) return
+    await fetchMessages(currentConversationId, false)
+  }, [currentConversationId, isLoading, hasMore, fetchMessages])
 
-    setIsLoading(true)
-    pageRef.current += 1
-
+  // =============================================
+  // REFETCH LATEST (polling - busca novas mensagens)
+  // =============================================
+  const refetchLatest = useCallback(async () => {
+    if (!currentConversationId) return
     try {
-      const oldestMessage = messages[0]
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
+      if (newestCursorRef.current) {
+        params.set('after', newestCursorRef.current)
+      }
+
       const response = await fetch(
-        `/api/whatsapp/inbox/conversations/${currentConversationId}/messages?page=${pageRef.current}&limit=50${
-          oldestMessage ? `&before=${oldestMessage.created_at}` : ''
-        }`
+        `/api/whatsapp/inbox/conversations/${currentConversationId}/messages?${params}`
       )
       const data = await response.json()
+      if (!response.ok) return
 
-      if (!response.ok) throw new Error(data.error || 'Failed to load more messages')
-
-      setMessages(prev => [...(data.messages || []), ...prev])
-      setHasMore(data.pagination?.hasMore || false)
+      const fetchedMessages: InboxMessage[] = data.messages || []
+      if (fetchedMessages.length > 0) {
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.id))
+          const newMsgs = fetchedMessages.filter(m => !existingIds.has(m.id))
+          if (newMsgs.length === 0) return prev
+          return [...prev, ...newMsgs]
+        })
+        const newest = fetchedMessages[fetchedMessages.length - 1]
+        newestCursorRef.current = newest.created_at
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setIsLoading(false)
+      console.warn('[useInboxMessages] Polling error:', err)
     }
-  }, [currentConversationId, isLoading, hasMore, messages])
+  }, [currentConversationId])
 
+  // =============================================
+  // SEND TEXT MESSAGE
+  // =============================================
   const sendMessage = useCallback(async (params: SendMessageParams): Promise<InboxMessage | null> => {
     setIsSending(true)
     setError(null)
-
     try {
       const response = await fetch(
         `/api/whatsapp/inbox/conversations/${params.conversationId}/messages`,
@@ -103,26 +166,18 @@ export function useInboxMessages(): UseInboxMessagesReturn {
           body: JSON.stringify({
             content: params.content,
             messageType: params.messageType || 'text',
-            mediaUrl: params.mediaUrl,
-            mediaMimeType: params.mediaMimeType,
-            mediaFilename: params.mediaFilename,
-            templateId: params.templateId,
-            templateName: params.templateName,
-            templateVariables: params.templateVariables,
-            replyToMessageId: params.replyToMessageId,
-            sentByUserId: params.sentByUserId,
-            sentByUserName: params.sentByUserName,
           })
         }
       )
-
       const data = await response.json()
-
       if (!response.ok) throw new Error(data.error || 'Failed to send message')
 
       const newMessage = data.message
-      setMessages(prev => [...prev, newMessage])
-      
+      setMessages(prev => {
+        if (prev.some(m => m.id === newMessage.id)) return prev
+        return [...prev, newMessage]
+      })
+      if (newMessage.created_at) newestCursorRef.current = newMessage.created_at
       return newMessage
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
@@ -132,14 +187,66 @@ export function useInboxMessages(): UseInboxMessagesReturn {
     }
   }, [])
 
-  const addMessage = useCallback((message: InboxMessage) => {
-    setMessages(prev => {
-      // Evita duplicatas
-      if (prev.some(m => m.id === message.id)) return prev
-      return [...prev, message]
-    })
+  // =============================================
+  // SEND MEDIA
+  // =============================================
+  const sendMedia = useCallback(async (params: SendMediaParams): Promise<InboxMessage | null> => {
+    setIsUploading(true)
+    setError(null)
+    try {
+      // Validar tamanho (16MB)
+      if (params.file.size > 16 * 1024 * 1024) {
+        throw new Error('Arquivo muito grande. Máximo: 16MB')
+      }
+
+      const formData = new FormData()
+      formData.append('file', params.file)
+      formData.append('mediaType', params.mediaType)
+      if (params.caption) formData.append('caption', params.caption)
+
+      const response = await fetch(
+        `/api/whatsapp/inbox/conversations/${params.conversationId}/media`,
+        { method: 'POST', body: formData }
+      )
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to upload media')
+      if (!data.success) throw new Error(data.error || 'Evolution API failed')
+
+      const newMessage = data.message
+      if (newMessage) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === newMessage.id)) return prev
+          return [...prev, newMessage]
+        })
+        if (newMessage.created_at) newestCursorRef.current = newMessage.created_at
+      }
+      return newMessage
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao enviar mídia')
+      return null
+    } finally {
+      setIsUploading(false)
+    }
   }, [])
 
+  // =============================================
+  // ADD MESSAGE (de realtime)
+  // =============================================
+  const addMessage = useCallback((message: InboxMessage) => {
+    setMessages(prev => {
+      if (prev.some(m => m.id === message.id)) return prev
+      return [...prev, message].sort((a, b) => 
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
+    })
+    if (message.created_at && (!newestCursorRef.current || message.created_at > newestCursorRef.current)) {
+      newestCursorRef.current = message.created_at
+    }
+  }, [])
+
+  // =============================================
+  // UPDATE MESSAGE STATUS
+  // =============================================
   const updateMessageStatus = useCallback((messageId: string, status: InboxMessage['status']) => {
     setMessages(prev =>
       prev.map(m =>
@@ -155,24 +262,31 @@ export function useInboxMessages(): UseInboxMessagesReturn {
     )
   }, [])
 
+  // =============================================
+  // CLEAR
+  // =============================================
   const clear = useCallback(() => {
     setMessages([])
     setCurrentConversationId(null)
     setHasMore(false)
-    pageRef.current = 1
+    oldestCursorRef.current = null
+    newestCursorRef.current = null
   }, [])
 
   return {
     messages,
     isLoading,
     isSending,
+    isUploading,
     error,
     hasMore,
     fetchMessages,
     sendMessage,
+    sendMedia,
     loadMore,
     addMessage,
     updateMessageStatus,
-    clear
+    clear,
+    refetchLatest,
   }
 }
