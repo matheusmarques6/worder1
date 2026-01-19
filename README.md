@@ -1,72 +1,140 @@
-# 🔧 Correções das APIs do Inbox - SISTEMA UNIFICADO
+# 🔧 Correções Completas do Inbox WhatsApp
 
-## Problema Principal
-As APIs estavam usando duas tabelas diferentes:
-- `whatsapp_contacts` - tabela antiga (legada)
-- `contacts` - tabela unificada (CORRETA)
+## Problemas Identificados e Corrigidos
 
-## Pré-requisitos SQL (JÁ EXECUTADOS)
-```sql
--- 1. Tabela whatsapp_contact_notes com colunas corretas
--- 2. Colunas contact_phone, contact_name, contact_email em deals
--- 3. FK de unified_contact_id para contacts
-```
+### ❌ Problemas Encontrados:
+1. **Botão Tag** - API retornava erro
+2. **Botão Atribuir** - API `/api/users` não existia
+3. **Botão Deal** - API `/api/crm/pipelines` não existia
+4. **Botão Bloquear** - API usava tabela errada
+5. **Toggle Bot** - Usava coluna `is_bot_active` (não existe)
+6. **Assign** - Usava coluna `assigned_agent_id` (não existe)
+7. **Notas** - Sem suporte a anexos
 
-## Arquivos Corrigidos
+### ✅ Correções Aplicadas:
 
-### 1. `/api/whatsapp/inbox/conversations/route.ts` ⭐ PRINCIPAL
-- **Antes**: Join com `whatsapp_contacts`
-- **Depois**: Join com `contacts` via `unified_contact_id`
+## 1. NOVAS APIs CRIADAS
 
-### 2. `/api/whatsapp/inbox/contacts/[id]/route.ts`
-- **Antes**: Misturava tabelas
-- **Depois**: Prioriza `contacts`, fallback para `whatsapp_contacts`
+### `/api/users/route.ts`
+- Lista usuários da organização para o modal de Atribuir
+- Filtra por role (agent, admin, owner)
 
-### 3. `/api/whatsapp/inbox/contacts/[id]/tags/route.ts`
-- **Antes**: Usava só `contacts`
-- **Depois**: Busca em `contacts` primeiro, fallback para `whatsapp_contacts`
+### `/api/crm/pipelines/route.ts`
+- Lista pipelines com stages para o modal de Criar Deal
+- Ordena stages por position
 
-### 4. `/api/whatsapp/inbox/contacts/[id]/deals/route.ts`
-- **Antes**: Usava `whatsapp_contacts` para buscar org_id
-- **Depois**: Busca em `contacts`, busca deals por `contact_id` OU `contact_phone`
+## 2. APIs CORRIGIDAS
 
-### 5. `/api/whatsapp/inbox/contacts/[id]/block/route.ts`
-- **Antes**: Usava só uma tabela
-- **Depois**: Atualiza ambas as tabelas se necessário (sync)
+### `/api/whatsapp/inbox/conversations/route.ts`
+- Usa `unified_contact_id` para buscar da tabela `contacts`
+- Fallback para `whatsapp_contacts` se necessário
 
-### 6. `/api/whatsapp/inbox/conversations/[id]/assign/route.ts`
-- **Antes**: Usava coluna `assigned_agent_id` (não existe)
-- **Depois**: Usa coluna `assigned_to` (correta)
+### `/api/whatsapp/inbox/conversations/[id]/assign/route.ts`
+- **ANTES**: `assigned_agent_id` (não existe)
+- **DEPOIS**: `assigned_to` (coluna correta)
 
-### 7. `/api/whatsapp/inbox/conversations/[id]/bot/route.ts`
-- **Antes**: Usava `is_bot_active` (não existe)
-- **Depois**: Usa `ai_enabled` (correta), mantém compatibilidade
+### `/api/whatsapp/inbox/conversations/[id]/bot/route.ts`
+- **ANTES**: `is_bot_active` (não existe)
+- **DEPOIS**: `ai_enabled` (coluna correta)
+
+### `/api/whatsapp/inbox/contacts/[id]/tags/route.ts`
+- Busca em `contacts` primeiro, fallback para `whatsapp_contacts`
+
+### `/api/whatsapp/inbox/contacts/[id]/deals/route.ts`
+- Busca contato em `contacts`, não só `whatsapp_contacts`
+- Busca deals por `contact_id` OU `contact_phone`
+
+### `/api/whatsapp/inbox/contacts/[id]/block/route.ts`
+- Atualiza ambas as tabelas se necessário (sync)
+
+### `/api/whatsapp/inbox/contacts/[id]/route.ts`
+- Prioriza tabela `contacts` unificada
+
+## 3. COMPONENTES MELHORADOS
+
+### `NotesTab.tsx`
+- ✅ Suporte a anexar **imagens**
+- ✅ Suporte a anexar **documentos** (PDF, DOC, XLS, etc)
+- ✅ Preview de anexos antes de enviar
+- ✅ Visualização de anexos nas notas existentes
+- ✅ Limpa estado ao mudar de contato (bug corrigido)
 
 ## Como Aplicar
 
-1. Copie TODOS os arquivos para as pastas correspondentes em `src/app/api/whatsapp/inbox/`
-2. Faça commit e deploy
-3. Teste cada funcionalidade
+### Passo 1: Copie os arquivos
 
-## Estrutura de Pastas
-```
-src/app/api/whatsapp/inbox/
-├── conversations/
-│   ├── route.ts              ← CORRIGIDO (lista conversas)
-│   └── [id]/
-│       ├── assign/route.ts   ← CORRIGIDO
-│       └── bot/route.ts      ← CORRIGIDO
-└── contacts/[id]/
-    ├── route.ts              ← CORRIGIDO
-    ├── tags/route.ts         ← CORRIGIDO
-    ├── deals/route.ts        ← CORRIGIDO
-    └── block/route.ts        ← CORRIGIDO
+```bash
+# Copie TODAS as pastas para seu projeto:
+src/app/api/users/
+src/app/api/crm/pipelines/
+src/app/api/whatsapp/inbox/conversations/
+src/app/api/whatsapp/inbox/contacts/
+src/components/whatsapp/inbox/tabs/NotesTab.tsx
 ```
 
-## Teste Checklist
-- [ ] Listar conversas (deve carregar dados do contato unificado)
-- [ ] Tags: adicionar/remover
-- [ ] Deals: criar/listar
-- [ ] Block: bloquear/desbloquear
-- [ ] Assign: atribuir conversa a agente
-- [ ] Bot: toggle IA on/off
+### Passo 2: Verifique as importações
+
+Todos os arquivos usam:
+```typescript
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+```
+
+### Passo 3: Deploy
+```bash
+git add .
+git commit -m "fix: correções completas do inbox"
+git push
+```
+
+## Estrutura de Arquivos
+
+```
+src/
+├── app/api/
+│   ├── users/
+│   │   └── route.ts          ← NOVO (lista usuários)
+│   ├── crm/pipelines/
+│   │   └── route.ts          ← NOVO (lista pipelines)
+│   └── whatsapp/inbox/
+│       ├── conversations/
+│       │   ├── route.ts      ← CORRIGIDO
+│       │   └── [id]/
+│       │       ├── assign/route.ts  ← CORRIGIDO
+│       │       └── bot/route.ts     ← CORRIGIDO
+│       └── contacts/[id]/
+│           ├── route.ts      ← CORRIGIDO
+│           ├── tags/route.ts ← CORRIGIDO
+│           ├── deals/route.ts← CORRIGIDO
+│           └── block/route.ts← CORRIGIDO
+└── components/whatsapp/inbox/tabs/
+    └── NotesTab.tsx          ← MELHORADO (anexos)
+```
+
+## Checklist de Testes
+
+Após aplicar, teste cada funcionalidade:
+
+- [ ] **Tag**: Clique em "Tag" → Deve abrir popup para adicionar
+- [ ] **Atribuir**: Clique em "Atribuir" → Deve listar usuários da org
+- [ ] **Deal**: Clique em "Deal" → Deve mostrar pipelines e stages
+- [ ] **Bloquear**: Clique em "Bloquear" → Deve bloquear contato
+- [ ] **Criar Deal (CRM)**: Clique em "+ Criar Novo Deal" → Deve criar
+- [ ] **Notas**: Adicione nota com texto → Deve salvar
+- [ ] **Notas com imagem**: Anexe imagem → Deve mostrar preview
+- [ ] **Toggle Bot**: Toggle na conversa → Deve ativar/desativar IA
+
+## Observações
+
+### Sobre Anexos nas Notas
+O componente NotesTab está preparado para anexos, mas você precisará:
+
+1. Implementar a API de upload (`/api/upload`) se quiser upload real
+2. Ou usar um serviço de storage como Supabase Storage
+
+Por enquanto, os anexos funcionam com URLs temporárias (blob) que não persistem após refresh.
+
+### Multi-tenant
+Todas as APIs respeitam `organization_id` para isolamento de dados.
+
+### Compatibilidade
+As APIs mantêm fallback para `whatsapp_contacts` enquanto a migração para `contacts` não está completa.

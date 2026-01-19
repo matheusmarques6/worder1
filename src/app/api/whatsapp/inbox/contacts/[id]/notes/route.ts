@@ -1,5 +1,7 @@
+// src/app/api/whatsapp/inbox/contacts/[id]/notes/route.ts
+// CORRIGIDO: Com suporte a anexos (attachments)
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 
 // GET - Buscar notas do contato
 export async function GET(
@@ -11,34 +13,8 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '50')
 
-    // Tentar buscar da nova tabela contact_comments
-    const { data: comments, error: commentsError } = await supabase
-      .from('contact_comments')
-      .select('*')
-      .eq('contact_id', contactId)
-      .order('is_pinned', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(limit)
-
-    if (!commentsError && comments && comments.length > 0) {
-      // Formatar como notes para manter compatibilidade
-      const notes = comments.map(c => ({
-        id: c.id,
-        contact_id: c.contact_id,
-        conversation_id: c.conversation_id,
-        content: c.content,
-        note_type: c.comment_type,
-        is_pinned: c.is_pinned,
-        created_by: c.created_by,
-        created_by_name: c.created_by_name,
-        created_at: c.created_at,
-        updated_at: c.updated_at,
-      }))
-      return NextResponse.json({ notes })
-    }
-
-    // Fallback para tabela antiga
-    const { data: legacyNotes, error } = await supabase
+    // Buscar da tabela whatsapp_contact_notes
+    const { data: notes, error } = await supabase
       .from('whatsapp_contact_notes')
       .select('*')
       .eq('contact_id', contactId)
@@ -46,12 +22,15 @@ export async function GET(
       .order('created_at', { ascending: false })
       .limit(limit)
 
-    if (error) throw error
+    if (error) {
+      console.error('Error fetching notes:', error)
+      throw error
+    }
 
-    return NextResponse.json({ notes: legacyNotes || [] })
+    return NextResponse.json({ notes: notes || [] })
   } catch (error: any) {
     console.error('Error fetching notes:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message, notes: [] }, { status: 500 })
   }
 }
 
@@ -67,17 +46,19 @@ export async function POST(
       content, 
       conversation_id, 
       note_type = 'note',
+      attachments = [], // NOVO: suporte a anexos
       created_by,
       created_by_name = 'Usuário' 
     } = body
 
-    if (!content) {
-      return NextResponse.json({ error: 'content required' }, { status: 400 })
+    if (!content && attachments.length === 0) {
+      return NextResponse.json({ error: 'content or attachments required' }, { status: 400 })
     }
 
-    // Buscar organization_id do contato (tentar nova tabela primeiro)
+    // Buscar organization_id do contato
     let organizationId: string | null = null
 
+    // Tentar tabela contacts primeiro
     const { data: contact } = await supabase
       .from('contacts')
       .select('organization_id')
@@ -87,91 +68,141 @@ export async function POST(
     if (contact) {
       organizationId = contact.organization_id
     } else {
-      // Fallback para tabela antiga
-      const { data: legacyContact } = await supabase
+      // Fallback para whatsapp_contacts
+      const { data: waContact } = await supabase
         .from('whatsapp_contacts')
         .select('organization_id')
         .eq('id', contactId)
         .single()
       
-      organizationId = legacyContact?.organization_id
+      organizationId = waContact?.organization_id
     }
 
     if (!organizationId) {
       return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })
     }
 
-    // Tentar criar na nova tabela contact_comments
-    const { data: comment, error: commentError } = await supabase
-      .from('contact_comments')
-      .insert({
-        organization_id: organizationId,
-        contact_id: contactId,
-        content: content.trim(),
-        comment_type: note_type,
-        conversation_id: conversation_id || null,
-        created_by: created_by || null,
-        created_by_name,
-      })
-      .select()
-      .single()
-
-    if (!commentError && comment) {
-      // Registrar atividade
-      try {
-        await supabase
-          .from('contact_activities')
-          .insert({
-            organization_id: organizationId,
-            contact_id: contactId,
-            conversation_id: conversation_id || null,
-            activity_type: 'note_added',
-            title: 'Nota adicionada',
-            description: content.substring(0, 200),
-            created_by,
-            created_by_name,
-          })
-      } catch (activityError) {
-        console.warn('Não foi possível registrar atividade:', activityError)
-      }
-
-      // Retornar como note para manter compatibilidade
-      return NextResponse.json({ 
-        note: {
-          id: comment.id,
-          contact_id: comment.contact_id,
-          conversation_id: comment.conversation_id,
-          content: comment.content,
-          note_type: comment.comment_type,
-          is_pinned: comment.is_pinned,
-          created_by: comment.created_by,
-          created_by_name: comment.created_by_name,
-          created_at: comment.created_at,
-          updated_at: comment.updated_at,
-        }
-      })
-    }
-
-    // Fallback para tabela antiga
+    // Criar nota
     const { data: note, error } = await supabase
       .from('whatsapp_contact_notes')
       .insert({
         organization_id: organizationId,
         contact_id: contactId,
-        content: content.trim(),
+        content: (content || '').trim(),
         note_type: note_type,
         conversation_id: conversation_id || null,
+        attachments: attachments, // NOVO
         created_by: created_by || null,
         created_by_name,
+        is_pinned: false,
       })
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Error creating note:', error)
+      throw error
+    }
+
+    // Registrar atividade
+    try {
+      await supabase
+        .from('contact_activities')
+        .insert({
+          organization_id: organizationId,
+          contact_id: contactId,
+          conversation_id: conversation_id || null,
+          activity_type: 'note_added',
+          title: attachments.length > 0 ? 'Nota com anexo adicionada' : 'Nota adicionada',
+          description: content ? content.substring(0, 200) : `${attachments.length} anexo(s)`,
+          created_by,
+          created_by_name,
+        })
+    } catch (activityError) {
+      console.warn('Não foi possível registrar atividade:', activityError)
+    }
 
     return NextResponse.json({ note })
   } catch (error: any) {
     console.error('Error adding note:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+// DELETE - Excluir nota
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const contactId = params.id
+    const { searchParams } = new URL(request.url)
+    const noteId = searchParams.get('note_id')
+
+    if (!noteId) {
+      return NextResponse.json({ error: 'note_id required' }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from('whatsapp_contact_notes')
+      .delete()
+      .eq('id', noteId)
+      .eq('contact_id', contactId)
+
+    if (error) {
+      console.error('Error deleting note:', error)
+      throw error
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('Error deleting note:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+// PATCH - Atualizar nota (ex: fixar/desafixar)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const contactId = params.id
+    const body = await request.json()
+    const { note_id, is_pinned, content } = body
+
+    if (!note_id) {
+      return NextResponse.json({ error: 'note_id required' }, { status: 400 })
+    }
+
+    const updates: any = {
+      updated_at: new Date().toISOString()
+    }
+
+    if (is_pinned !== undefined) {
+      updates.is_pinned = is_pinned
+    }
+
+    if (content !== undefined) {
+      updates.content = content.trim()
+    }
+
+    const { data: note, error } = await supabase
+      .from('whatsapp_contact_notes')
+      .update(updates)
+      .eq('id', note_id)
+      .eq('contact_id', contactId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error updating note:', error)
+      throw error
+    }
+
+    return NextResponse.json({ note })
+  } catch (error: any) {
+    console.error('Error updating note:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
