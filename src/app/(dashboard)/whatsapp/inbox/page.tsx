@@ -126,7 +126,7 @@ export default function InboxPage() {
       // Fetch contact se tiver contact_id ou unified_contact_id
       const contactId = selectedConversation.unified_contact_id || selectedConversation.contact_id
       if (contactId) {
-        fetchContact(contactId, organizationId, selectedConversation.id)
+        fetchContact(contactId, organizationId)
       }
     } else {
       clearMessages()
