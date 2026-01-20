@@ -163,23 +163,25 @@ export default function InboxPage() {
   const handleSendMessage = async (content: string) => {
     if (!selectedInstance || !selectedConversation) return
     await sendMessage({
-      instanceId: selectedInstance.id,
       conversationId: selectedConversation.id,
-      phoneNumber: selectedConversation.phone_number,
       content,
-      organizationId,
     })
   }
 
   const handleSendMedia = async (file: File, caption?: string) => {
     if (!selectedInstance || !selectedConversation) return
+    
+    // Determinar tipo de mídia baseado no arquivo
+    const mediaType = file.type.startsWith('image/') ? 'image' 
+      : file.type.startsWith('video/') ? 'video'
+      : file.type.startsWith('audio/') ? 'audio'
+      : 'document'
+    
     await sendMedia({
-      instanceId: selectedInstance.id,
       conversationId: selectedConversation.id,
-      phoneNumber: selectedConversation.phone_number,
       file,
+      mediaType,
       caption,
-      organizationId,
     })
   }
 

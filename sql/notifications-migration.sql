@@ -197,6 +197,9 @@ CREATE POLICY "Org members can delete comments" ON contact_comments
 -- 5. FUNÇÃO PARA EXTRAIR MENÇÕES DO TEXTO
 -- ===========================================
 
+-- Dropar função existente se houver
+DROP FUNCTION IF EXISTS extract_mentions(TEXT);
+
 CREATE OR REPLACE FUNCTION extract_mentions(content TEXT)
 RETURNS UUID[] AS $$
 DECLARE
@@ -217,6 +220,9 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- ===========================================
 -- 6. FUNÇÃO PARA CRIAR NOTIFICAÇÃO
 -- ===========================================
+
+-- Dropar função existente se houver
+DROP FUNCTION IF EXISTS create_notification(UUID, UUID, TEXT, TEXT, TEXT, TEXT, UUID, UUID, JSONB);
 
 CREATE OR REPLACE FUNCTION create_notification(
   p_organization_id UUID,
@@ -294,6 +300,10 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- 7. TRIGGER: Criar notificação ao inserir comentário com menções
 -- ===========================================
 
+-- Dropar função e trigger existentes
+DROP TRIGGER IF EXISTS trigger_notify_mentions ON contact_comments;
+DROP FUNCTION IF EXISTS notify_mentions_on_comment();
+
 CREATE OR REPLACE FUNCTION notify_mentions_on_comment()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -341,6 +351,10 @@ CREATE TRIGGER trigger_notify_mentions
 -- 8. TRIGGER: Notificar quando tarefa é atribuída
 -- ===========================================
 
+-- Dropar função e trigger existentes
+DROP TRIGGER IF EXISTS trigger_task_assigned ON tasks;
+DROP FUNCTION IF EXISTS notify_task_assigned();
+
 CREATE OR REPLACE FUNCTION notify_task_assigned()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -379,6 +393,10 @@ CREATE TRIGGER trigger_task_assigned
 -- ===========================================
 -- 9. TRIGGER: Notificar quando tarefa é concluída
 -- ===========================================
+
+-- Dropar função e trigger existentes
+DROP TRIGGER IF EXISTS trigger_task_completed ON tasks;
+DROP FUNCTION IF EXISTS notify_task_completed();
 
 CREATE OR REPLACE FUNCTION notify_task_completed()
 RETURNS TRIGGER AS $$
@@ -422,6 +440,10 @@ CREATE TRIGGER trigger_task_completed
 -- 10. TRIGGER: Notificar quando deal é atribuído
 -- ===========================================
 
+-- Dropar função e trigger existentes
+DROP TRIGGER IF EXISTS trigger_deal_assigned ON deals;
+DROP FUNCTION IF EXISTS notify_deal_assigned();
+
 CREATE OR REPLACE FUNCTION notify_deal_assigned()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -460,6 +482,10 @@ CREATE TRIGGER trigger_deal_assigned
 -- ===========================================
 -- 11. TRIGGER: Notificar quando deal muda de estágio
 -- ===========================================
+
+-- Dropar função e trigger existentes
+DROP TRIGGER IF EXISTS trigger_deal_stage_changed ON deals;
+DROP FUNCTION IF EXISTS notify_deal_stage_changed();
 
 CREATE OR REPLACE FUNCTION notify_deal_stage_changed()
 RETURNS TRIGGER AS $$
@@ -501,6 +527,9 @@ CREATE TRIGGER trigger_deal_stage_changed
 -- 12. FUNÇÃO PARA VERIFICAR TAREFAS VENCENDO
 -- (Execute via CRON - pg_cron ou API)
 -- ===========================================
+
+-- Dropar função existente
+DROP FUNCTION IF EXISTS check_tasks_due_soon();
 
 CREATE OR REPLACE FUNCTION check_tasks_due_soon()
 RETURNS INTEGER AS $$
@@ -549,6 +578,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- 13. FUNÇÃO PARA VERIFICAR TAREFAS ATRASADAS
 -- (Execute via CRON - pg_cron ou API)
 -- ===========================================
+
+-- Dropar função existente
+DROP FUNCTION IF EXISTS check_tasks_overdue();
 
 CREATE OR REPLACE FUNCTION check_tasks_overdue()
 RETURNS INTEGER AS $$
