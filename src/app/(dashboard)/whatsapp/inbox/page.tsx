@@ -96,7 +96,6 @@ export default function InboxPage() {
   // =============================================
   useWhatsAppRealtime({
     organizationId,
-    storeId, // ✅ NOVO: Passar storeId para realtime
     onConversationInsert: handleConversationInsert,
     onConversationUpdate: handleConversationUpdate,
     onMessageInsert: handleNewMessage,
