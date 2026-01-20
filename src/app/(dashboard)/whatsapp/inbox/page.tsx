@@ -318,6 +318,7 @@ export default function InboxPage() {
             invoices={invoices}
             comments={comments}
             isLoading={contactLoading}
+            conversationId={selectedConversation.id}
             onUpdateContact={updateContact}
             onAddTag={addTag}
             onRemoveTag={removeTag}
@@ -336,7 +337,7 @@ export default function InboxPage() {
             onUploadInvoice={uploadInvoice}
             onDeleteInvoice={deleteInvoice}
             onAddComment={addComment}
-            onRefresh={refreshContact}
+            onRefreshContact={refreshContact}
           />
         </div>
       )}

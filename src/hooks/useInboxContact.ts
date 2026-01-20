@@ -1,6 +1,7 @@
 // src/hooks/useInboxContact.ts
 // VERSÃO CORRIGIDA - Limpa dados ao mudar de contato
 import { useState, useCallback, useRef } from 'react'
+import { useAuthStore } from '@/stores'
 import type { 
   InboxContact, 
   InboxNote, 
@@ -51,7 +52,7 @@ interface UseInboxContactReturn {
   fetchInvoices: (contactId: string) => Promise<void>
   uploadInvoice: (contactId: string, data: FormData) => Promise<void>
   deleteInvoice: (invoiceId: string) => Promise<void>
-  addComment: (contactId: string, content: string, type?: string) => Promise<void>
+  addComment: (contactId: string, content: string, type?: string, mentions?: string[]) => Promise<void>
   refreshContact: (contactId: string, conversationId?: string) => Promise<void>
   clear: () => void
 }
@@ -64,6 +65,7 @@ interface CreateDealParams {
 }
 
 export function useInboxContact(): UseInboxContactReturn {
+  const { user } = useAuthStore()
   const [contact, setContact] = useState<InboxContact | null>(null)
   const [conversation, setConversation] = useState<InboxConversation | null>(null)
   const [notes, setNotes] = useState<InboxNote[]>([])
@@ -478,11 +480,17 @@ export function useInboxContact(): UseInboxContactReturn {
     setInvoices(prev => prev.filter(i => i.id !== invoiceId))
   }, [])
 
-  const addComment = useCallback(async (contactId: string, content: string, type?: string) => {
+  const addComment = useCallback(async (contactId: string, content: string, type?: string, mentions?: string[]) => {
     const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, comment_type: type || 'note' })
+      body: JSON.stringify({ 
+        content, 
+        comment_type: type || 'note',
+        mentions: mentions || [],
+        created_by: user?.id,
+        created_by_name: user?.name || user?.email?.split('@')[0],
+      })
     })
 
     if (!response.ok) throw new Error('Failed to add comment')
@@ -502,7 +510,7 @@ export function useInboxContact(): UseInboxContactReturn {
         created_at: comment.created_at,
       }, ...prev])
     }
-  }, [])
+  }, [user])
 
   const clear = useCallback(() => {
     currentContactIdRef.current = null

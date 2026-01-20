@@ -86,7 +86,7 @@ interface ContactPanelProps {
   onDeleteTask?: (taskId: string) => Promise<void>
   onUploadInvoice?: (data: FormData) => Promise<void>
   onDeleteInvoice?: (invoiceId: string) => Promise<void>
-  onAddComment?: (contactId: string, content: string, type?: string) => Promise<void>
+  onAddComment?: (contactId: string, content: string, type?: string, mentions?: string[]) => Promise<void>
   onRefreshContact?: () => void
 }
 
@@ -128,7 +128,7 @@ const getInitials = (name?: string) => {
 }
 
 // Tab types
-type TabId = 'info' | 'crm' | 'pedidos' | 'notas'
+type TabId = 'info' | 'crm' | 'pedidos' | 'notas' | 'timeline'
 
 // Main Component
 export function ContactPanel({
@@ -239,6 +239,7 @@ export function ContactPanel({
     { id: 'crm', label: 'CRM' },
     { id: 'pedidos', label: 'Pedidos' },
     { id: 'notas', label: 'Notas' },
+    { id: 'timeline', label: 'Timeline' },
   ]
 
   return (
@@ -589,6 +590,23 @@ export function ContactPanel({
             onDeleteNote={onDeleteNote ? async (noteId) => {
               await onDeleteNote(contact.id, noteId)
             } : undefined}
+          />
+        )}
+
+        {/* TIMELINE TAB */}
+        {activeTab === 'timeline' && (
+          <TimelineTab
+            contactId={contact.id}
+            organizationId={contact.organization_id}
+            activities={activities}
+            comments={comments}
+            isLoading={false}
+            onAddComment={async (content, type, mentions) => {
+              if (onAddComment) {
+                await onAddComment(contact.id, content, type, mentions)
+              }
+            }}
+            onRefresh={onRefreshContact || (() => {})}
           />
         )}
       </div>

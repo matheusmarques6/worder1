@@ -22,15 +22,19 @@ import {
   Filter,
   Loader2,
   ChevronDown,
+  Send,
 } from 'lucide-react'
 import type { InboxActivity, InboxComment } from '@/types/inbox'
+import { MentionInput, MentionText } from '@/components/notifications'
+import { extractMentionIds } from '@/lib/utils/mentions'
 
 interface TimelineTabProps {
   contactId: string
+  organizationId: string
   activities: InboxActivity[]
   comments: InboxComment[]
   isLoading: boolean
-  onAddComment: (content: string, type?: string) => Promise<void>
+  onAddComment: (content: string, type?: string, mentions?: string[]) => Promise<void>
   onRefresh: () => void
 }
 
@@ -136,6 +140,7 @@ const filterOptions = [
 
 export function TimelineTab({
   contactId,
+  organizationId,
   activities,
   comments,
   isLoading,
@@ -174,7 +179,9 @@ export function TimelineTab({
     
     setIsAddingComment(true)
     try {
-      await onAddComment(newComment.trim())
+      // Extrair IDs dos usuários mencionados
+      const mentionedUserIds = extractMentionIds(newComment)
+      await onAddComment(newComment.trim(), 'note', mentionedUserIds)
       setNewComment('')
       onRefresh()
     } finally {
@@ -249,34 +256,32 @@ export function TimelineTab({
         </div>
       </div>
 
-      {/* Adicionar comentário */}
+      {/* Adicionar comentário com menções */}
       <div className="flex gap-2">
-        <input
-          type="text"
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          placeholder="Adicionar nota..."
-          className="flex-1 px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg 
-                     text-white text-sm placeholder:text-dark-500 
-                     focus:outline-none focus:border-primary-500"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              handleAddComment()
-            }
-          }}
-        />
+        <div className="flex-1">
+          <MentionInput
+            value={newComment}
+            onChange={setNewComment}
+            onSubmit={handleAddComment}
+            placeholder="Adicionar nota... Use @ para mencionar"
+            organizationId={organizationId}
+            disabled={isAddingComment}
+            rows={1}
+            className="bg-dark-800 border-dark-700 text-white placeholder:text-dark-500 
+                       focus:border-primary-500 focus:ring-primary-500/20"
+          />
+        </div>
         <button
           onClick={handleAddComment}
           disabled={!newComment.trim() || isAddingComment}
           className="px-3 py-2 bg-primary-500 text-white rounded-lg 
                      hover:bg-primary-600 transition-colors disabled:opacity-50
-                     flex items-center gap-1"
+                     flex items-center gap-1 h-fit"
         >
           {isAddingComment ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            'Salvar'
+            <Send className="w-4 h-4" />
           )}
         </button>
       </div>
@@ -335,9 +340,10 @@ function TimelineItem({ item }: { item: any }) {
           )}
           
           {item.itemType === 'comment' && (
-            <p className="text-xs text-dark-300 mt-1">
-              {item.content}
-            </p>
+            <MentionText 
+              text={item.content} 
+              className="text-xs text-dark-300 mt-1 block" 
+            />
           )}
           
           <div className="flex items-center gap-2 mt-2 text-xs text-dark-500">
