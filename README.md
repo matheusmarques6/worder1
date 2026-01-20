@@ -1,137 +1,234 @@
-# 🔒 Sprint 2 - Segurança e Privacidade
+# 🚀 Sprint 3 - CRM Avançado (tipo edrone)
 
-## ⚠️ PROBLEMA CRÍTICO
+## 📦 O que está incluído
 
-A chave da Evolution API está **hardcoded em 9 arquivos**:
+### 1. Event Tracking
+- **API de eventos** (`/api/tracking/events`) - Captura comportamento do cliente
+- **Webhook do Shopify** (`/api/tracking/shopify-webhook`) - Eventos automáticos
+- **Script de tracking** (`public/tracking.js`) - Pixel para sites
 
-```
-429683C4C977415CAAFCCE10F7D57E11
-```
+### 2. Segmentação RFM
+- **Scores R/F/M** (1-5) calculados automaticamente
+- **9 segmentos** pré-definidos: Champions, Loyal, At Risk, Lost, etc.
+- **API de analytics** (`/api/analytics/rfm`)
 
-Qualquer pessoa com acesso ao código pode ver essa chave!
+### 3. Segmentos Dinâmicos
+- **Estáticos**: Lista manual de contatos
+- **Dinâmicos**: Regras com AND/OR (ex: "total_spent > 500")
+- **RFM**: Baseado em segmentos RFM (ex: "at_risk" + "cant_lose")
 
----
-
-## ✅ Correções Neste Pacote
-
-### Arquivos para Substituir
-
-| Arquivo | Correções |
-|---------|-----------|
-| `src/app/api/whatsapp/inbox/conversations/[id]/messages/route.ts` | Sem hardcode + paginação real |
-| `src/app/api/whatsapp/inbox/conversations/[id]/media/route.ts` | Sem hardcode + Signed URLs + validações |
-
-### Arquivos que Precisam de Patch Manual
-
-Execute o `patch-security.sh` ou faça manualmente:
-
-```typescript
-// ❌ REMOVER o fallback (|| 'chave')
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
-
-// ✅ DEIXAR ASSIM
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL;
-```
-
-**Arquivos para patch:**
-- `src/app/api/whatsapp/instances/route.ts`
-- `src/app/api/whatsapp/evolution/webhook/route.ts`
-- `src/app/api/whatsapp/media/route.ts`
-- `src/app/api/whatsapp/inbox/contacts/[id]/profile-picture/route.ts`
-- `src/app/api/whatsapp/webhook/route.ts` (linha 313)
-- `src/app/api/whatsapp/fix-webhook/route.ts`
-- `src/app/api/whatsapp/debug/route.ts`
+### 4. Playbooks de Automação
+- **5 templates prontos**:
+  - Carrinho Abandonado
+  - Winback (Reativação)
+  - Boas-vindas
+  - Pós-compra
+  - Aniversário
+- **Triggers**: Evento, Schedule, Entrada em segmento
+- **Steps**: Wait, Send WhatsApp, Condition, etc.
 
 ---
 
-## 🚀 Deploy
+## 🗄️ SQL Migration
 
-### 1. Verificar env vars no Vercel
+Execute o arquivo `migration.sql` no **Supabase SQL Editor**.
+
+Cria as tabelas:
+- `customer_events` - Eventos de comportamento
+- `customer_rfm_scores` - Scores RFM por contato
+- `customer_segments` - Segmentos de clientes
+- `segment_members` - Membros de segmentos estáticos
+- `automation_playbooks` - Playbooks de automação
+- `playbook_runs` - Execuções de playbooks
+- `revenue_attribution` - Atribuição de receita
+
+---
+
+## 📁 Estrutura de Arquivos
 
 ```
-Settings → Environment Variables
-
-EVOLUTION_API_URL = https://n8n-evolution-api.1fpac5.easypanel.host
-EVOLUTION_API_KEY = sua_chave_aqui
-```
-
-### 2. Substituir arquivos
-
-```bash
-# Copiar arquivos deste pacote
-cp -r src/* /caminho/projeto/src/
-```
-
-### 3. Rodar script de patch
-
-```bash
-# Na raiz do projeto
-bash patch-security.sh
-```
-
-### 4. Verificar
-
-```bash
-# Deve retornar VAZIO
-grep -rn "429683C4C977415" src/
-```
-
-### 5. Commit e push
-
-```bash
-git add .
-git commit -m "security: remove hardcoded API keys, add signed URLs"
-git push
+sprint3-crm-avancado/
+├── migration.sql                              # SQL das tabelas
+├── public/
+│   └── tracking.js                            # Script de tracking
+└── src/
+    ├── types/
+    │   └── crm.ts                             # Tipos TypeScript
+    └── app/api/
+        ├── tracking/
+        │   ├── events/route.ts                # POST/GET eventos
+        │   └── shopify-webhook/route.ts       # Webhook Shopify
+        ├── segments/route.ts                  # CRUD segmentos
+        ├── playbooks/route.ts                 # CRUD playbooks
+        └── analytics/
+            └── rfm/route.ts                   # RFM analytics
 ```
 
 ---
 
-## 📊 O Que Mudou
+## 🔌 Integrações
 
-### 🔐 Segurança
-- Sem chaves hardcoded no código
-- Erro 503 claro se API não configurada
+### Tracking Pixel (sites)
 
-### 📎 Upload de Mídia
-- Validação de tamanho (max 16MB)
-- Validação de tipos MIME
-- Bloqueio de extensões perigosas (.exe, .bat, etc)
+Adicione no `<head>` do site:
 
-### 🔗 Signed URLs
-- URLs de mídia expiram em 1 hora
-- Novo endpoint GET para refresh de URL
-- Campo `media_storage_path` para regenerar URLs
+```html
+<script>
+  window.worderConfig = { 
+    organizationId: 'SEU_ORG_ID',
+    apiUrl: 'https://worder1.vercel.app'
+  };
+</script>
+<script src="https://worder1.vercel.app/tracking.js" async></script>
+```
+
+Uso:
+```javascript
+// Identificar usuário
+worder.identify({ email: 'cliente@email.com', phone: '+5511999999999' });
+
+// Visualização de produto
+worder.productView({ id: '123', name: 'Camiseta', price: 99.90 });
+
+// Adicionar ao carrinho
+worder.addToCart({ id: '123', name: 'Camiseta', price: 99.90, quantity: 1 });
+
+// Compra
+worder.purchase({ id: 'order_456', total: 199.80, email: 'cliente@email.com' });
+```
+
+### Webhook do Shopify
+
+Configure no Shopify Admin:
+1. Settings → Notifications → Webhooks
+2. Adicione webhook para:
+   - `checkouts/create`
+   - `orders/create`
+   - `orders/paid`
+   - `carts/update`
+3. URL: `https://worder1.vercel.app/api/tracking/shopify-webhook`
 
 ---
 
-## 🗄️ Migration (opcional)
+## 📊 APIs
 
-Se quiser salvar o path do storage para regenerar URLs:
+### Event Tracking
 
-```sql
-ALTER TABLE whatsapp_messages 
-ADD COLUMN IF NOT EXISTS media_storage_path TEXT;
+```bash
+# Registrar evento
+POST /api/tracking/events
+{
+  "organization_id": "xxx",
+  "event_type": "product_view",
+  "product_id": "123",
+  "product_name": "Camiseta",
+  "product_price": 99.90,
+  "customer_email": "cliente@email.com"
+}
+
+# Listar eventos
+GET /api/tracking/events?organization_id=xxx&contact_id=yyy
 ```
+
+### Segmentos
+
+```bash
+# Criar segmento dinâmico
+POST /api/segments
+{
+  "organization_id": "xxx",
+  "name": "Big Spenders",
+  "segment_type": "dynamic",
+  "rules": [
+    { "field": "total_spent", "operator": "greater_than", "value": 1000 }
+  ]
+}
+
+# Criar segmento RFM
+POST /api/segments
+{
+  "organization_id": "xxx",
+  "name": "Clientes em Risco",
+  "segment_type": "rfm",
+  "rfm_segments": ["at_risk", "cant_lose"]
+}
+```
+
+### RFM Analytics
+
+```bash
+# Resumo por segmento
+GET /api/analytics/rfm?organization_id=xxx&view=summary
+
+# Recalcular scores
+POST /api/analytics/rfm
+{ "organization_id": "xxx", "period_days": 365 }
+```
+
+### Playbooks
+
+```bash
+# Listar templates
+GET /api/playbooks?templates=true
+
+# Clonar template para organização
+POST /api/playbooks
+{
+  "organization_id": "xxx",
+  "template_id": "playbook-abandoned-cart"
+}
+
+# Ativar playbook
+PATCH /api/playbooks
+{ "id": "xxx", "is_active": true }
+```
+
+---
+
+## 🎯 Segmentos RFM
+
+| Segmento | R | F | M | Descrição |
+|----------|---|---|---|-----------|
+| Champions | 4-5 | 4-5 | 4-5 | Melhores clientes |
+| Loyal | 3-5 | 3-5 | 3-5 | Clientes fiéis |
+| Potential Loyal | 3-5 | 3-5 | 1-2 | Potencial para crescer |
+| New Customers | 4-5 | 1-2 | * | Compraram recentemente |
+| At Risk | 1-2 | 3-5 | * | Compravam, mas sumiram |
+| Can't Lose | 1-2 | 4-5 | 4-5 | Grandes clientes sumindo |
+| Hibernating | 1-3 | 1-2 | * | Inativos há muito tempo |
+| Lost | 1-2 | 1-2 | 1-2 | Perdidos |
+
+---
+
+## 🔄 Fluxo de Automação
+
+```
+[Evento] → [Trigger] → [Playbook Run] → [Steps] → [Conversão]
+    ↓           ↓            ↓              ↓           ↓
+checkout    abandoned    criar run     wait 1h      atribuir
+started       cart       para         send msg     receita
+            playbook    contato      condition
+```
+
+---
+
+## ⚙️ Próximos Passos
+
+1. **Executar migration.sql** no Supabase
+2. **Copiar arquivos** para o projeto
+3. **Configurar webhooks** do Shopify
+4. **Instalar tracking pixel** nos sites
 
 ---
 
 ## 🧪 Testes
 
-1. **Build não contém chave:**
 ```bash
-grep -r "429683C4C977415" .next/ || echo "✅ OK"
+# Testar tracking
+curl -X POST https://worder1.vercel.app/api/tracking/events \
+  -H "Content-Type: application/json" \
+  -d '{"organization_id":"xxx","event_type":"page_view"}'
+
+# Testar RFM
+curl "https://worder1.vercel.app/api/analytics/rfm?organization_id=xxx&view=summary"
 ```
-
-2. **Enviar mídia funciona:**
-- Enviar imagem
-- Verificar URL tem `?token=` (Signed URL)
-
-3. **Validações funcionam:**
-- Tentar enviar arquivo > 16MB → erro
-- Tentar enviar .exe → erro
-
-4. **Erro sem config:**
-- Remover env vars
-- Tentar enviar → erro 503 claro
