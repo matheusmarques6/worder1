@@ -25,7 +25,8 @@ interface UseInboxConversationsReturn {
   refresh: () => Promise<void>
 }
 
-export function useInboxConversations(organizationId: string): UseInboxConversationsReturn {
+// ✅ CORREÇÃO: Recebe storeId além de organizationId
+export function useInboxConversations(organizationId: string, storeId?: string | null): UseInboxConversationsReturn {
   const [conversations, setConversations] = useState<InboxConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<InboxConversation | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -34,9 +35,15 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
   const [filters, setFilters] = useState<ConversationFilters>({})
 
   const fetchConversations = useCallback(async (newFilters?: ConversationFilters) => {
-    // Permitir buscar mesmo com organizationId = 'default-org', a API vai resolver
     if (!organizationId) {
       console.log('⚠️ No organizationId yet, waiting...')
+      return
+    }
+    
+    // ✅ CRÍTICO: Exigir storeId para buscar conversas
+    if (!storeId) {
+      console.log('⚠️ No storeId yet, waiting...')
+      setConversations([])
       return
     }
     
@@ -47,6 +54,7 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
       const currentFilters = newFilters || filters
       const params = new URLSearchParams({
         organizationId,
+        storeId, // ✅ CRÍTICO: Passar storeId
         ...(currentFilters.status && currentFilters.status !== 'all' && { status: currentFilters.status }),
         ...(currentFilters.assignedTo && currentFilters.assignedTo !== 'all' && { assignedTo: currentFilters.assignedTo }),
         ...(currentFilters.priority && currentFilters.priority !== 'all' && { priority: currentFilters.priority }),
@@ -63,6 +71,7 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
       console.log('📥 API Response:', { 
         ok: response.ok, 
         conversationsCount: data.conversations?.length,
+        storeId,
         error: data.error 
       })
 
@@ -80,12 +89,11 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
     } finally {
       setIsLoading(false)
     }
-  }, [organizationId, filters])
+  }, [organizationId, storeId, filters])
 
   const selectConversation = useCallback((conversation: InboxConversation | null) => {
     setSelectedConversation(conversation)
     
-    // Marca como lido ao selecionar
     if (conversation && conversation.unread_count > 0) {
       markAsRead(conversation.id)
     }
@@ -103,12 +111,10 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
 
       const { conversation } = await response.json()
       
-      // Atualiza na lista
       setConversations(prev => 
         prev.map(c => c.id === id ? { ...c, ...conversation } : c)
       )
       
-      // Atualiza selecionada se for a mesma
       if (selectedConversation?.id === id) {
         setSelectedConversation(prev => prev ? { ...prev, ...conversation } : null)
       }
@@ -118,70 +124,38 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
   }, [selectedConversation])
 
   const closeConversation = useCallback(async (id: string, resolution?: string) => {
-    try {
-      const response = await fetch(`/api/whatsapp/inbox/conversations/${id}/close`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resolution })
-      })
-
-      if (!response.ok) throw new Error('Failed to close conversation')
-
-      // Atualiza na lista
-      setConversations(prev => 
-        prev.map(c => c.id === id ? { ...c, status: 'closed' } : c)
-      )
-      
-      if (selectedConversation?.id === id) {
-        setSelectedConversation(prev => prev ? { ...prev, status: 'closed' } : null)
-      }
-    } catch (err) {
-      throw err
-    }
-  }, [selectedConversation])
+    await updateConversation(id, { 
+      status: 'closed',
+      ...(resolution && { resolution })
+    } as Partial<InboxConversation>)
+  }, [updateConversation])
 
   const assignConversation = useCallback(async (id: string, agentId: string | null) => {
-    try {
-      const response = await fetch(`/api/whatsapp/inbox/conversations/${id}/assign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId })
-      })
-
-      if (!response.ok) throw new Error('Failed to assign conversation')
-
-      const { conversation } = await response.json()
-      
-      setConversations(prev => 
-        prev.map(c => c.id === id ? { ...c, ...conversation } : c)
-      )
-      
-      if (selectedConversation?.id === id) {
-        setSelectedConversation(prev => prev ? { ...prev, ...conversation } : null)
-      }
-    } catch (err) {
-      throw err
-    }
-  }, [selectedConversation])
+    await updateConversation(id, { 
+      assigned_to: agentId,
+      assigned_agent_id: agentId 
+    } as Partial<InboxConversation>)
+  }, [updateConversation])
 
   const toggleBot = useCallback(async (id: string, isActive: boolean, reason?: string) => {
     try {
       const response = await fetch(`/api/whatsapp/inbox/conversations/${id}/bot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive, reason })
+        body: JSON.stringify({ 
+          ai_enabled: isActive,
+          reason 
+        })
       })
 
       if (!response.ok) throw new Error('Failed to toggle bot')
 
-      const { conversation } = await response.json()
-      
       setConversations(prev => 
-        prev.map(c => c.id === id ? { ...c, is_bot_active: isActive } : c)
+        prev.map(c => c.id === id ? { ...c, ai_enabled: isActive, is_bot_active: isActive } : c)
       )
       
       if (selectedConversation?.id === id) {
-        setSelectedConversation(prev => prev ? { ...prev, is_bot_active: isActive } : null)
+        setSelectedConversation(prev => prev ? { ...prev, ai_enabled: isActive, is_bot_active: isActive } : null)
       }
     } catch (err) {
       throw err
@@ -197,14 +171,10 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
       setConversations(prev => 
         prev.map(c => c.id === id ? { ...c, unread_count: 0 } : c)
       )
-      
-      if (selectedConversation?.id === id) {
-        setSelectedConversation(prev => prev ? { ...prev, unread_count: 0 } : null)
-      }
     } catch (err) {
-      console.error('Failed to mark as read:', err)
+      console.error('Error marking as read:', err)
     }
-  }, [selectedConversation])
+  }, [])
 
   const refresh = useCallback(async () => {
     await fetchConversations(filters)
@@ -225,6 +195,6 @@ export function useInboxConversations(organizationId: string): UseInboxConversat
     toggleBot,
     markAsRead,
     setFilters,
-    refresh
+    refresh,
   }
 }

@@ -9,10 +9,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 export interface WhatsAppInstance {
   id: string
   organization_id: string
+  store_id?: string // ✅ NOVO
   title: string
   phone_number: string | null
   phone_number_id: string | null
-  status: 'ACTIVE' | 'INACTIVE' | 'GENERATING' | 'connected' | 'disconnected'
+  status: 'ACTIVE' | 'INACTIVE' | 'GENERATING' | 'connected' | 'disconnected' | 'qr_pending'
   online_status: 'available' | 'unavailable' | null
   api_type: 'EVOLUTION' | 'META_CLOUD'
   api_url?: string
@@ -38,7 +39,6 @@ export interface WhatsAppConfig {
 }
 
 interface UseWhatsAppConnectionReturn {
-  // State
   instances: WhatsAppInstance[]
   selectedInstance: WhatsAppInstance | null
   loading: boolean
@@ -46,7 +46,6 @@ interface UseWhatsAppConnectionReturn {
   qrCode: string | null
   connectionStatus: 'idle' | 'generating' | 'connecting' | 'connected' | 'error' | 'timeout'
   
-  // Actions
   fetchInstances: () => Promise<void>
   selectInstance: (instance: WhatsAppInstance | null) => void
   createInstance: (params: CreateInstanceParams) => Promise<WhatsAppInstance | null>
@@ -56,13 +55,13 @@ interface UseWhatsAppConnectionReturn {
   deleteInstance: (instanceId: string) => Promise<boolean>
   connectOfficial: (params: ConnectOfficialParams) => Promise<ConnectOfficialResult>
   
-  // QR Polling
   startQRPolling: (instanceId: string) => void
   stopQRPolling: () => void
 }
 
 interface CreateInstanceParams {
   organizationId: string
+  storeId: string // ✅ NOVO: Obrigatório
   title: string
   apiType?: 'EVOLUTION' | 'META_CLOUD'
   apiUrl?: string
@@ -71,6 +70,7 @@ interface CreateInstanceParams {
 
 interface ConnectOfficialParams {
   organizationId: string
+  storeId: string // ✅ NOVO
   phoneNumberId: string
   wabaId?: string
   accessToken: string
@@ -93,8 +93,8 @@ interface ConnectionStatusResult {
 // HOOK
 // =============================================
 
-export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnectionReturn {
-  // State
+// ✅ CORREÇÃO: Recebe storeId como parâmetro
+export function useWhatsAppConnection(organizationId: string, storeId?: string | null): UseWhatsAppConnectionReturn {
   const [instances, setInstances] = useState<WhatsAppInstance[]>([])
   const [selectedInstance, setSelectedInstance] = useState<WhatsAppInstance | null>(null)
   const [loading, setLoading] = useState(true)
@@ -102,28 +102,38 @@ export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnec
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<UseWhatsAppConnectionReturn['connectionStatus']>('idle')
   
-  // Refs
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // =============================================
-  // FETCH INSTANCES
+  // FETCH INSTANCES - FILTRADO POR STORE_ID
   // =============================================
 
   const fetchInstances = useCallback(async () => {
     if (!organizationId) return
     
+    // ✅ CRÍTICO: Não buscar se não tiver storeId
+    if (!storeId) {
+      console.log('[WhatsAppConnection] No storeId, clearing instances')
+      setInstances([])
+      setSelectedInstance(null)
+      setLoading(false)
+      return
+    }
+    
     try {
       setLoading(true)
       setError(null)
 
-      const response = await fetch(`/api/whatsapp/instances?organization_id=${organizationId}`)
+      // ✅ CRÍTICO: Passar store_id na query
+      const response = await fetch(`/api/whatsapp/instances?organization_id=${organizationId}&store_id=${storeId}`)
       const data = await response.json()
 
       if (!response.ok) {
         throw new Error(data.error || 'Erro ao buscar instâncias')
       }
 
+      console.log(`[WhatsAppConnection] Found ${data.instances?.length || 0} instances for store ${storeId}`)
       setInstances(data.instances || [])
 
       // Auto-select first active if none selected
@@ -141,29 +151,29 @@ export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnec
     } finally {
       setLoading(false)
     }
-  }, [organizationId, selectedInstance])
+  }, [organizationId, storeId, selectedInstance])
 
-  // Initial fetch
+  // ✅ CORREÇÃO: Refetch quando storeId mudar
   useEffect(() => {
+    console.log('[WhatsAppConnection] Store changed to:', storeId)
+    setSelectedInstance(null) // Limpar seleção ao trocar loja
     fetchInstances()
-  }, [organizationId])
+  }, [organizationId, storeId])
 
-  // Auto-refresh instances quando status muda (polling a cada 5s quando conectando)
+  // Auto-refresh quando conectando
   const statusPollingRef = useRef<NodeJS.Timeout | null>(null)
   
   useEffect(() => {
-    // Limpar polling anterior
     if (statusPollingRef.current) {
       clearInterval(statusPollingRef.current)
       statusPollingRef.current = null
     }
     
-    // Se estiver conectando ou gerando QR, fazer polling mais frequente
     if (connectionStatus === 'connecting' || connectionStatus === 'generating') {
-      console.log('[WhatsAppConnection] Starting status polling (connecting/generating)...')
+      console.log('[WhatsAppConnection] Starting status polling...')
       statusPollingRef.current = setInterval(() => {
         fetchInstances()
-      }, 3000) // A cada 3 segundos enquanto conecta
+      }, 3000)
     }
     
     return () => {
@@ -188,18 +198,17 @@ export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnec
 
   const selectInstance = useCallback((instance: WhatsAppInstance | null) => {
     setSelectedInstance(instance)
-    // Salvar no localStorage para persistência
-    if (instance) {
-      localStorage.setItem(`whatsapp_selected_${organizationId}`, instance.id)
-    } else {
-      localStorage.removeItem(`whatsapp_selected_${organizationId}`)
+    if (instance && storeId) {
+      localStorage.setItem(`whatsapp_selected_${storeId}`, instance.id)
+    } else if (storeId) {
+      localStorage.removeItem(`whatsapp_selected_${storeId}`)
     }
-  }, [organizationId])
+  }, [storeId])
 
   // Restaurar seleção do localStorage
   useEffect(() => {
-    if (instances.length > 0 && !selectedInstance) {
-      const savedId = localStorage.getItem(`whatsapp_selected_${organizationId}`)
+    if (storeId && instances.length > 0 && !selectedInstance) {
+      const savedId = localStorage.getItem(`whatsapp_selected_${storeId}`)
       if (savedId) {
         const saved = instances.find(i => i.id === savedId)
         if (saved) {
@@ -207,14 +216,21 @@ export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnec
         }
       }
     }
-  }, [instances, organizationId])
+  }, [storeId, instances, selectedInstance])
 
   // =============================================
-  // CREATE INSTANCE
+  // CREATE INSTANCE - COM STORE_ID
   // =============================================
 
   const createInstance = useCallback(async (params: CreateInstanceParams): Promise<WhatsAppInstance | null> => {
+    // ✅ CRÍTICO: Validar storeId
+    if (!params.storeId) {
+      setError('storeId é obrigatório')
+      return null
+    }
+
     try {
+      setLoading(true)
       setError(null)
       setConnectionStatus('generating')
 
@@ -224,11 +240,12 @@ export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnec
         body: JSON.stringify({
           action: 'create',
           organization_id: params.organizationId,
+          store_id: params.storeId, // ✅ CRÍTICO
           title: params.title,
           api_type: params.apiType || 'EVOLUTION',
           api_url: params.apiUrl,
-          api_key: params.apiKey
-        })
+          api_key: params.apiKey,
+        }),
       })
 
       const data = await response.json()
@@ -237,90 +254,56 @@ export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnec
         throw new Error(data.error || 'Erro ao criar instância')
       }
 
-      // Refresh list
+      console.log('[WhatsAppConnection] Instance created:', data.instance?.id)
       await fetchInstances()
-
       return data.instance
     } catch (err: any) {
       setError(err.message)
       setConnectionStatus('error')
-      console.error('createInstance error:', err)
       return null
+    } finally {
+      setLoading(false)
     }
   }, [fetchInstances])
 
   // =============================================
-  // GENERATE QR
+  // GENERATE QR CODE
   // =============================================
 
   const generateQR = useCallback(async (instanceId: string): Promise<string | null> => {
     try {
-      setError(null)
       setConnectionStatus('generating')
-      setQrCode(null)
+      setError(null)
 
       const response = await fetch('/api/whatsapp/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'qr',
-          id: instanceId,
-          organization_id: organizationId
-        })
-      })
-
-      const data = await response.json()
-
-      if (data.qr_code) {
-        setQrCode(data.qr_code)
-        return data.qr_code
-      }
-
-      if (data.status === 'ACTIVE') {
-        setConnectionStatus('connected')
-        await fetchInstances()
-        return null
-      }
-
-      throw new Error(data.error || 'Erro ao gerar QR Code')
-    } catch (err: any) {
-      setError(err.message)
-      setConnectionStatus('error')
-      console.error('generateQR error:', err)
-      return null
-    }
-  }, [organizationId, fetchInstances])
-
-  // =============================================
-  // CHECK STATUS
-  // =============================================
-
-  const checkStatus = useCallback(async (instanceId: string): Promise<ConnectionStatusResult> => {
-    try {
-      const response = await fetch('/api/whatsapp/instances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'status',
-          id: instanceId
-        })
+          instance_id: instanceId,
+        }),
       })
 
       const data = await response.json()
 
       if (data.connected) {
         setConnectionStatus('connected')
+        setQrCode(null)
         await fetchInstances()
+        return null
       }
 
-      return {
-        connected: data.connected || false,
-        state: data.state,
-        phoneNumber: data.phoneNumber
+      if (data.qrcode) {
+        setQrCode(data.qrcode)
+        setConnectionStatus('connecting')
+        return data.qrcode
       }
+
+      throw new Error(data.error || 'QR code não disponível')
     } catch (err: any) {
-      console.error('checkStatus error:', err)
-      return { connected: false, error: err.message }
+      setError(err.message)
+      setConnectionStatus('error')
+      return null
     }
   }, [fetchInstances])
 
@@ -329,31 +312,26 @@ export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnec
   // =============================================
 
   const startQRPolling = useCallback((instanceId: string) => {
-    // Clear existing polling
-    if (pollingRef.current) clearInterval(pollingRef.current)
-    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    stopQRPolling()
 
-    // Set timeout (2 minutes)
     timeoutRef.current = setTimeout(() => {
+      console.log('[WhatsAppConnection] QR polling timeout')
+      stopQRPolling()
       setConnectionStatus('timeout')
-      if (pollingRef.current) clearInterval(pollingRef.current)
-    }, 120000)
+    }, 120000) // 2 minutos
 
-    // Start polling every 3 seconds
     pollingRef.current = setInterval(async () => {
-      const status = await checkStatus(instanceId)
+      const result = await checkStatus(instanceId)
       
-      if (status.connected) {
-        // Connected! Stop polling
-        if (pollingRef.current) clearInterval(pollingRef.current)
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (result.connected) {
+        console.log('[WhatsAppConnection] Connected!')
+        stopQRPolling()
         setConnectionStatus('connected')
-      } else if (status.state === 'close') {
-        // QR expired, generate new one
-        await generateQR(instanceId)
+        setQrCode(null)
+        await fetchInstances()
       }
     }, 3000)
-  }, [checkStatus, generateQR])
+  }, [fetchInstances])
 
   const stopQRPolling = useCallback(() => {
     if (pollingRef.current) {
@@ -367,129 +345,114 @@ export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnec
   }, [])
 
   // =============================================
-  // DISCONNECT INSTANCE
+  // CHECK STATUS
+  // =============================================
+
+  const checkStatus = useCallback(async (instanceId: string): Promise<ConnectionStatusResult> => {
+    try {
+      const response = await fetch('/api/whatsapp/instances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'status',
+          instance_id: instanceId,
+        }),
+      })
+
+      const data = await response.json()
+      return data
+    } catch (err: any) {
+      return { connected: false, error: err.message }
+    }
+  }, [])
+
+  // =============================================
+  // DISCONNECT
   // =============================================
 
   const disconnectInstance = useCallback(async (instanceId: string): Promise<boolean> => {
     try {
-      setError(null)
-
       const response = await fetch('/api/whatsapp/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'disconnect',
-          id: instanceId
-        })
+          instance_id: instanceId,
+        }),
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao desconectar')
+      if (response.ok) {
+        await fetchInstances()
+        setConnectionStatus('idle')
+        return true
       }
-
-      // Clear selection if disconnected current
-      if (selectedInstance?.id === instanceId) {
-        setSelectedInstance(null)
-      }
-
-      await fetchInstances()
-      return true
-    } catch (err: any) {
-      setError(err.message)
-      console.error('disconnectInstance error:', err)
       return false
-    }
-  }, [selectedInstance, fetchInstances])
-
-  // =============================================
-  // DELETE INSTANCE
-  // =============================================
-
-  const deleteInstance = useCallback(async (instanceId: string): Promise<boolean> => {
-    try {
-      setError(null)
-
-      const response = await fetch(`/api/whatsapp/instances?id=${instanceId}`, {
-        method: 'DELETE'
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao remover instância')
-      }
-
-      // Clear selection if deleted current
-      if (selectedInstance?.id === instanceId) {
-        setSelectedInstance(null)
-      }
-
-      await fetchInstances()
-      return true
-    } catch (err: any) {
-      setError(err.message)
-      console.error('deleteInstance error:', err)
+    } catch (err) {
       return false
-    }
-  }, [selectedInstance, fetchInstances])
-
-  // =============================================
-  // CONNECT OFFICIAL API
-  // =============================================
-
-  const connectOfficial = useCallback(async (params: ConnectOfficialParams): Promise<ConnectOfficialResult> => {
-    try {
-      setError(null)
-      setConnectionStatus('connecting')
-
-      const response = await fetch('/api/whatsapp/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organizationId: params.organizationId,
-          phoneNumberId: params.phoneNumberId,
-          wabaId: params.wabaId,
-          accessToken: params.accessToken
-        })
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao conectar')
-      }
-
-      setConnectionStatus('connected')
-      await fetchInstances()
-
-      return {
-        success: true,
-        config: data.config
-      }
-    } catch (err: any) {
-      setError(err.message)
-      setConnectionStatus('error')
-      console.error('connectOfficial error:', err)
-      return { success: false, error: err.message }
     }
   }, [fetchInstances])
 
   // =============================================
-  // RETURN
+  // DELETE
   // =============================================
 
+  const deleteInstance = useCallback(async (instanceId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/whatsapp/instances?id=${instanceId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        if (selectedInstance?.id === instanceId) {
+          setSelectedInstance(null)
+        }
+        await fetchInstances()
+        return true
+      }
+      return false
+    } catch (err) {
+      return false
+    }
+  }, [fetchInstances, selectedInstance])
+
+  // =============================================
+  // CONNECT OFFICIAL (META CLOUD)
+  // =============================================
+
+  const connectOfficial = useCallback(async (params: ConnectOfficialParams): Promise<ConnectOfficialResult> => {
+    try {
+      const response = await fetch('/api/whatsapp/cloud/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id: params.organizationId,
+          store_id: params.storeId, // ✅ NOVO
+          phone_number_id: params.phoneNumberId,
+          waba_id: params.wabaId,
+          access_token: params.accessToken,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        return { success: false, error: data.error }
+      }
+
+      await fetchInstances()
+      return { success: true, config: data.config }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  }, [fetchInstances])
+
   return {
-    // State
     instances,
     selectedInstance,
     loading,
     error,
     qrCode,
     connectionStatus,
-    
-    // Actions
     fetchInstances,
     selectInstance,
     createInstance,
@@ -498,11 +461,7 @@ export function useWhatsAppConnection(organizationId: string): UseWhatsAppConnec
     disconnectInstance,
     deleteInstance,
     connectOfficial,
-    
-    // QR Polling
     startQRPolling,
-    stopQRPolling
+    stopQRPolling,
   }
 }
-
-export default useWhatsAppConnection

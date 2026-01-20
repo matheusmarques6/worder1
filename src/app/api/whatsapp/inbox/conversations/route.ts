@@ -1,5 +1,5 @@
 // src/app/api/whatsapp/inbox/conversations/route.ts
-// CORRIGIDO: Usa unified_contact_id para buscar da tabela CONTACTS
+// ✅ CORREÇÃO: Filtrar por store_id para isolamento multi-loja
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
+    const storeId = searchParams.get('storeId') // ✅ NOVO: Filtro por loja
     const status = searchParams.get('status')
     const search = searchParams.get('search')
 
@@ -16,7 +17,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
     }
 
-    // CORREÇÃO: Buscar conversas com contato UNIFICADO
+    // ✅ CRÍTICO: Exigir store_id para isolamento
+    if (!storeId) {
+      console.warn('[Conversations] ⚠️ No storeId provided - returning empty')
+      return NextResponse.json({ conversations: [] })
+    }
+
+    // Buscar conversas com contato UNIFICADO
     let query = supabase
       .from('whatsapp_conversations')
       .select(`
@@ -54,6 +61,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('organization_id', organizationId)
+      .eq('store_id', storeId) // ✅ CRÍTICO: Filtrar por loja
       .order('last_message_at', { ascending: false })
 
     if (status && status !== 'all') {
@@ -65,11 +73,12 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Conversations query error:', error)
       
-      // Fallback: query simples sem joins se der erro
+      // Fallback: query simples sem joins
       const { data: simpleData, error: simpleError } = await supabase
         .from('whatsapp_conversations')
         .select('*')
         .eq('organization_id', organizationId)
+        .eq('store_id', storeId) // ✅ CRÍTICO: Filtrar por loja
         .order('last_message_at', { ascending: false })
 
       if (simpleError) throw simpleError
@@ -78,7 +87,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ conversations })
     }
 
-    // Formatar para o frontend com fallbacks robustos
+    // Formatar para o frontend
     const conversations = (data || []).map(conv => {
       return formatConversation(conv, conv.unified_contact, conv.legacy_contact)
     })
@@ -93,6 +102,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    console.log(`[Conversations] Found ${filteredConversations.length} for store ${storeId}`)
     return NextResponse.json({ conversations: filteredConversations })
   } catch (error: any) {
     console.error('Error fetching conversations:', error)
@@ -102,14 +112,11 @@ export async function GET(request: NextRequest) {
 
 // Helper para formatar conversa
 function formatConversation(conv: any, unifiedContact: any, legacyContact: any) {
-  // Priorizar contato unificado, fallback para legado
   const contact = unifiedContact || legacyContact
   
-  // Phone number
   const phoneNumber = conv.phone_number || conv.contact_phone || 
                      contact?.whatsapp || contact?.phone || contact?.phone_number || ''
   
-  // Nome do contato
   const contactName = contact?.full_name || 
                      contact?.first_name ||
                      contact?.name || 
@@ -117,7 +124,6 @@ function formatConversation(conv: any, unifiedContact: any, legacyContact: any) 
                      conv.contact_name ||
                      phoneNumber
   
-  // Avatar
   const contactAvatar = contact?.profile_picture_url || 
                        contact?.avatar_url || 
                        conv.contact_avatar
@@ -125,9 +131,9 @@ function formatConversation(conv: any, unifiedContact: any, legacyContact: any) 
   return {
     id: conv.id,
     organization_id: conv.organization_id,
+    store_id: conv.store_id, // ✅ NOVO: Incluir store_id
     instance_id: conv.instance_id,
     
-    // IMPORTANTE: Retornar o ID do contato UNIFICADO se disponível
     contact_id: conv.unified_contact_id || conv.contact_id || contact?.id,
     unified_contact_id: conv.unified_contact_id,
     legacy_contact_id: conv.contact_id,
@@ -136,31 +142,25 @@ function formatConversation(conv: any, unifiedContact: any, legacyContact: any) 
     chat_id: conv.chat_id,
     status: conv.status || 'open',
     
-    // Bot/IA - usar ai_enabled com fallback
     is_bot_active: conv.ai_enabled ?? conv.is_bot_active ?? true,
     ai_enabled: conv.ai_enabled ?? true,
     ai_agent_id: conv.ai_agent_id,
     
-    // Mensagens
     last_message_at: conv.last_message_at,
     last_message_preview: conv.last_message_preview,
     last_message_direction: conv.last_message_direction,
     unread_count: conv.unread_count || 0,
     
-    // Window
     is_window_open: conv.is_window_open ?? true,
     window_expires_at: conv.window_expires_at,
     last_customer_message_at: conv.last_customer_message_at,
     
-    // Atribuição - usar assigned_to
     assigned_to: conv.assigned_to,
-    assigned_agent_id: conv.assigned_to, // compatibilidade
+    assigned_agent_id: conv.assigned_to,
     
-    // Labels/Priority
     labels: conv.labels || [],
     priority: conv.priority || 'normal',
     
-    // Dados do contato
     contact_name: contactName,
     contact_avatar: contactAvatar,
     contact_tags: contact?.tags || [],
@@ -171,7 +171,6 @@ function formatConversation(conv: any, unifiedContact: any, legacyContact: any) 
     contact_company: contact?.company,
     contact_position: contact?.position,
     
-    // Datas
     created_at: conv.created_at,
     updated_at: conv.updated_at,
   }

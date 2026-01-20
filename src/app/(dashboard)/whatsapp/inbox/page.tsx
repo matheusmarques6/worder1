@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores'
 import { Search, RefreshCw, Plus, MessageSquare, AlertCircle, Wifi, WifiOff } from 'lucide-react'
 
 // Components
@@ -26,17 +26,20 @@ const POLLING_INTERVAL = 5000
 
 export default function InboxPage() {
   const { user } = useAuthStore()
-  const organizationId = user?.organization_id || 'default-org'
+  const { currentStore } = useStoreStore() // ✅ NOVO: Pegar loja atual
   
-  // WhatsApp Connection
-  const { instances, selectedInstance, loading: instancesLoading, selectInstance, fetchInstances } = useWhatsAppConnection(organizationId)
+  const organizationId = user?.organization_id || 'default-org'
+  const storeId = currentStore?.id || null // ✅ CRÍTICO: ID da loja atual
+  
+  // ✅ CORREÇÃO: Passar storeId para o hook de conexão
+  const { instances, selectedInstance, loading: instancesLoading, selectInstance, fetchInstances } = useWhatsAppConnection(organizationId, storeId)
   const [showConnectModal, setShowConnectModal] = useState(false)
 
-  // Inbox Hooks
+  // ✅ CORREÇÃO: Passar storeId para os hooks
   const {
     conversations, selectedConversation, isLoading: conversationsLoading, filters,
     selectConversation, fetchConversations, updateConversation, toggleBot, setFilters, refresh: refreshConversations,
-  } = useInboxConversations(organizationId)
+  } = useInboxConversations(organizationId, storeId)
 
   const {
     messages, isLoading: messagesLoading, isSending, isUploading,
@@ -55,14 +58,23 @@ export default function InboxPage() {
   // REALTIME CALLBACKS
   // =============================================
   const handleConversationInsert = useCallback((conv: any) => {
+    // ✅ CRÍTICO: Verificar se conversa pertence à loja atual
+    if (storeId && conv.store_id !== storeId) {
+      console.log('📥 [Inbox] Ignoring conversation from different store')
+      return
+    }
     console.log('📥 [Inbox] New conversation:', conv.id)
     refreshConversations()
-  }, [refreshConversations])
+  }, [refreshConversations, storeId])
 
   const handleConversationUpdate = useCallback((conv: any) => {
+    // ✅ CRÍTICO: Verificar se conversa pertence à loja atual
+    if (storeId && conv.store_id !== storeId) {
+      return
+    }
     console.log('📝 [Inbox] Conversation update:', conv.id)
     updateConversation(conv.id, conv)
-  }, [updateConversation])
+  }, [updateConversation, storeId])
 
   const handleNewMessage = useCallback((msg: any) => {
     console.log('📨 [Inbox] New message:', msg.id)
@@ -79,62 +91,47 @@ export default function InboxPage() {
     }
   }, [updateMessageStatus])
 
-  // Realtime Hook
-  const { isConnected, reconnect } = useWhatsAppRealtime({
+  // =============================================
+  // REALTIME SUBSCRIPTIONS
+  // =============================================
+  useWhatsAppRealtime({
     organizationId,
-    conversationId: selectedConversation?.id,
+    storeId, // ✅ NOVO: Passar storeId para realtime
     onConversationInsert: handleConversationInsert,
     onConversationUpdate: handleConversationUpdate,
-    onNewMessage: handleNewMessage,
-    onStatusUpdate: handleStatusUpdate,
-    enabled: true,
+    onMessageInsert: handleNewMessage,
+    onMessageUpdate: handleStatusUpdate,
   })
 
   // =============================================
-  // POLLING FALLBACK
+  // EFFECTS
   // =============================================
-  const pollingRef = useRef<NodeJS.Timeout | null>(null)
-
-  useEffect(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
-
-    if (selectedConversation && !isConnected) {
-      console.log('[Inbox] Starting polling (realtime disconnected)')
-      pollingRef.current = setInterval(() => {
-        refetchLatest()
-      }, POLLING_INTERVAL)
-    }
-
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
-    }
-  }, [selectedConversation?.id, isConnected, refetchLatest])
-
-  // State
-  const [showContactPanel, setShowContactPanel] = useState(true)
-  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
-  const [search, setSearch] = useState('')
-
-  // Effects
-  useEffect(() => { fetchConversations() }, [organizationId])
   
+  // ✅ CORREÇÃO: Refetch quando trocar de loja
   useEffect(() => {
-    if (selectedInstance) refreshConversations()
-  }, [selectedInstance?.id, refreshConversations])
+    if (storeId) {
+      console.log('🏪 [Inbox] Store changed to:', storeId)
+      fetchConversations()
+      fetchInstances()
+    }
+  }, [storeId])
 
+  // Fetch conversations on mount
+  useEffect(() => { 
+    if (organizationId && storeId) {
+      fetchConversations() 
+    }
+  }, [organizationId, storeId])
+
+  // Fetch messages when conversation selected
   useEffect(() => {
     if (selectedConversation) {
       fetchMessages(selectedConversation.id)
-      if (selectedConversation.contact_id) {
-        fetchContact(selectedConversation.contact_id, selectedConversation.id)
-        fetchOrders(selectedConversation.contact_id)
-        fetchDeals(selectedConversation.contact_id)
+      
+      // Fetch contact se tiver contact_id ou unified_contact_id
+      const contactId = selectedConversation.unified_contact_id || selectedConversation.contact_id
+      if (contactId) {
+        fetchContact(contactId, organizationId, selectedConversation.id)
       }
     } else {
       clearMessages()
@@ -142,162 +139,215 @@ export default function InboxPage() {
     }
   }, [selectedConversation?.id])
 
-  // Handlers
-  const handleConnectionSuccess = () => { fetchInstances(); setShowConnectModal(false) }
-  const handleInstanceSelect = (instance: WhatsAppInstance | null) => { selectInstance(instance); if (instance) refreshConversations() }
-  const handleSelectConversation = (conv: InboxConversation) => { selectConversation(conv); setMobileView('chat') }
-  const handleBackToList = () => setMobileView('list')
+  // Polling fallback
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
-  const handleSendMessage = async (content: string, type?: string) => {
-    if (!selectedConversation) return
-    await sendMessage({ conversationId: selectedConversation.id, content, messageType: type as any || 'text' })
-  }
+  useEffect(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+    }
 
-  const handleSendMedia = async (file: File, mediaType: string, caption?: string) => {
-    if (!selectedConversation) return
-    await sendMedia({
-      conversationId: selectedConversation.id, file,
-      mediaType: mediaType as 'image' | 'video' | 'audio' | 'document', caption,
+    pollingRef.current = setInterval(() => {
+      if (selectedConversation) {
+        refetchLatest(selectedConversation.id)
+      }
+      refreshConversations()
+    }, POLLING_INTERVAL)
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+      }
+    }
+  }, [selectedConversation?.id, refetchLatest, refreshConversations])
+
+  // =============================================
+  // HANDLERS
+  // =============================================
+
+  const handleSendMessage = async (content: string) => {
+    if (!selectedInstance || !selectedConversation) return
+    await sendMessage({
+      instanceId: selectedInstance.id,
+      conversationId: selectedConversation.id,
+      phoneNumber: selectedConversation.phone_number,
+      content,
+      organizationId,
+      storeId, // ✅ NOVO: Passar storeId
     })
   }
 
-  const handleToggleBot = async () => {
+  const handleSendMedia = async (file: File, caption?: string) => {
+    if (!selectedInstance || !selectedConversation) return
+    await sendMedia({
+      instanceId: selectedInstance.id,
+      conversationId: selectedConversation.id,
+      phoneNumber: selectedConversation.phone_number,
+      file,
+      caption,
+      organizationId,
+      storeId, // ✅ NOVO: Passar storeId
+    })
+  }
+
+  const handleToggleBot = async (conversationId: string, isActive: boolean) => {
+    await toggleBot(conversationId, isActive)
+  }
+
+  const handleContactToggleBot = async (isActive: boolean) => {
     if (!selectedConversation) return
-    await toggleBot(selectedConversation.id, !selectedConversation.is_bot_active)
+    await toggleBot(selectedConversation.id, isActive)
   }
 
-  const handleFilterChange = (newFilters: ConversationFilters) => { setFilters(newFilters); fetchConversations(newFilters) }
-  const handleSearch = (value: string) => { setSearch(value); fetchConversations({ ...filters, search: value }) }
-
-  // Contact handlers - CORRIGIDO: assinatura correta
-  const handleAssignConversation = async (userId: string) => { 
-    if (selectedConversation?.id) await assignConversation(selectedConversation.id, userId) 
+  const handleConnectionSuccess = () => {
+    setShowConnectModal(false)
+    fetchInstances()
   }
+
+  // =============================================
+  // RENDER
+  // =============================================
   
-  // ✅ CORREÇÃO: Assinatura correta (conversationId: string, active: boolean)
-  const handleContactToggleBot = async (conversationId: string, active: boolean) => { 
-    await toggleContactBot(conversationId, active)
+  // ✅ NOVO: Mensagem se não tiver loja selecionada
+  if (!storeId) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-white mb-2">Selecione uma loja</h2>
+          <p className="text-dark-400">Escolha uma loja no menu para ver as conversas do WhatsApp.</p>
+        </div>
+      </div>
+    )
   }
-  
-  const handleCreateTask = async (data: any) => { if (contact?.id) await createTask(contact.id, data) }
-  const handleRefreshContact = async () => { if (contact?.id && selectedConversation?.id) await refreshContact(contact.id, selectedConversation.id) }
-  const handleUploadInvoice = async (data: FormData): Promise<void> => { if (contact?.id) await uploadInvoice(contact.id, data) }
-
-  const filteredConversations = conversations.filter(conv => {
-    if (!search) return true
-    const searchLower = search.toLowerCase()
-    return conv.contact_name?.toLowerCase().includes(searchLower) || conv.phone_number?.includes(search)
-  })
-
-  const hasConnectedInstance = instances.some(i => i.status === 'ACTIVE' || i.status === 'connected')
 
   return (
-    <>
-      <WhatsAppConnectUnified isOpen={showConnectModal} onClose={() => setShowConnectModal(false)}
-        onSuccess={handleConnectionSuccess} organizationId={organizationId} />
+    <div className="flex h-[calc(100vh-4rem)] bg-dark-950 overflow-hidden">
+      {/* Connect Modal */}
+      <AnimatePresence>
+        {showConnectModal && (
+          <WhatsAppConnectUnified
+            onClose={() => setShowConnectModal(false)}
+            onSuccess={handleConnectionSuccess} 
+            organizationId={organizationId}
+            storeId={storeId} // ✅ NOVO: Passar storeId
+          />
+        )}
+      </AnimatePresence>
 
-      <div className="h-[calc(100vh-80px)] flex bg-dark-900/50 rounded-2xl border border-dark-700/50 overflow-hidden">
-        {/* Conversation List */}
-        <div className={`w-full md:w-[360px] flex-shrink-0 border-r border-dark-700/50 flex flex-col bg-dark-900/30 ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
-          <div className="p-4 border-b border-dark-700/50">
-            <div className="mb-4">
-              <WhatsAppConnectionManager organizationId={organizationId} selectedInstance={selectedInstance}
-                onSelectInstance={handleInstanceSelect} onConnectClick={() => setShowConnectModal(true)} />
+      {/* Left Panel - Connection Manager + Conversations */}
+      <div className="w-80 flex-shrink-0 border-r border-dark-800 flex flex-col">
+        {/* Connection Manager */}
+        <div className="p-3 border-b border-dark-800">
+          <WhatsAppConnectionManager
+            organizationId={organizationId}
+            storeId={storeId} // ✅ NOVO: Passar storeId
+            selectedInstance={selectedInstance}
+            onSelectInstance={selectInstance}
+            onConnectClick={() => setShowConnectModal(true)}
+          />
+        </div>
+
+        {/* Search */}
+        <div className="p-3 border-b border-dark-800">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+            <input
+              type="text"
+              placeholder="Buscar conversas..."
+              className="w-full pl-10 pr-4 py-2 bg-dark-800 border border-dark-700 rounded-lg text-sm text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+              value={filters.search || ''}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            />
+          </div>
+        </div>
+
+        {/* Conversations List */}
+        <div className="flex-1 overflow-y-auto">
+          {conversationsLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <RefreshCw className="w-6 h-6 text-primary-500 animate-spin" />
             </div>
-
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-white">Conversas</h2>
-                <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${isConnected ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                  {isConnected ? <><Wifi className="w-3 h-3" /> Live</> : <><WifiOff className="w-3 h-3" /> Polling</>}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => refreshConversations()} disabled={conversationsLoading}
-                  className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white disabled:opacity-50">
-                  <RefreshCw className={`w-5 h-5 ${conversationsLoading ? 'animate-spin' : ''}`} />
-                </button>
-                <button className="p-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600">
-                  <Plus className="w-5 h-5" />
-                </button>
-              </div>
+          ) : conversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-32 text-dark-500">
+              <MessageSquare className="w-8 h-8 mb-2" />
+              <p className="text-sm">Nenhuma conversa</p>
+              <p className="text-xs mt-1">para esta loja</p>
             </div>
+          ) : (
+            <ConversationList
+              conversations={conversations}
+              selectedId={selectedConversation?.id}
+              onSelect={selectConversation}
+              onToggleBot={handleToggleBot}
+            />
+          )}
+        </div>
+      </div>
 
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
-              <input type="text" placeholder="Buscar por nome ou telefone..." value={search} onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50" />
-            </div>
-
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {[{ id: 'all', label: 'Todas' }, { id: 'open', label: 'Abertas' }, { id: 'pending', label: 'Pendentes' }, { id: 'closed', label: 'Fechadas' }].map((filter) => (
-                <button key={filter.id} onClick={() => handleFilterChange({ ...filters, status: filter.id as any })}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap ${(filters.status || 'all') === filter.id ? 'bg-primary-500 text-white' : 'bg-dark-800/50 text-dark-400 hover:text-white hover:bg-dark-700/50'}`}>
-                  {filter.label}
-                </button>
-              ))}
+      {/* Center Panel - Chat */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {selectedConversation ? (
+          <ChatPanel
+            conversation={selectedConversation}
+            messages={messages}
+            isLoading={messagesLoading}
+            isSending={isSending}
+            isUploading={isUploading}
+            onSendMessage={handleSendMessage}
+            onSendMedia={handleSendMedia}
+            onToggleBot={handleToggleBot}
+            instanceConnected={selectedInstance?.status === 'connected'}
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-dark-500">
+            <div className="text-center">
+              <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
+              <p className="text-lg">Selecione uma conversa</p>
+              <p className="text-sm mt-1">para começar a conversar</p>
             </div>
           </div>
-
-          {!hasConnectedInstance && !instancesLoading && (
-            <div className="p-4 mx-4 mt-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm text-amber-300 font-medium">WhatsApp não conectado</p>
-                  <button onClick={() => setShowConnectModal(true)} className="mt-2 text-xs text-amber-400 hover:text-amber-300 font-medium">
-                    Conectar agora →
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <ConversationList conversations={filteredConversations} selectedId={selectedConversation?.id}
-            isLoading={conversationsLoading} onSelect={handleSelectConversation} />
-        </div>
-
-        {/* Chat Panel */}
-        <div className={`flex-1 flex flex-col min-w-0 ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
-          {selectedConversation ? (
-            <ChatPanel
-              conversation={selectedConversation} messages={messages} isLoading={messagesLoading}
-              isSending={isSending} isUploading={isUploading}
-              onSendMessage={handleSendMessage} onSendMedia={handleSendMedia}
-              onToggleBot={handleToggleBot} onBack={handleBackToList}
-              onToggleContactPanel={() => setShowContactPanel(!showContactPanel)} showContactPanel={showContactPanel}
-            />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-dark-400">
-              <MessageSquare className="w-16 h-16 mb-4 opacity-30" />
-              <p className="text-lg font-medium">Selecione uma conversa</p>
-            </div>
-          )}
-        </div>
-
-        {/* Contact Panel */}
-        <AnimatePresence>
-          {selectedConversation && showContactPanel && (
-            <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 380, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.2 }}
-              className="hidden lg:flex flex-shrink-0 border-l border-dark-700/50 bg-dark-900/30 overflow-hidden">
-              <ContactPanel
-                contact={contact} conversation={contactConversation || selectedConversation}
-                notes={notes} activities={activities} orders={orders} cart={cart}
-                activeDeal={activeDeal} deals={deals} tasks={tasks} invoices={invoices} comments={comments}
-                isLoading={contactLoading} conversationId={selectedConversation.id}
-                onUpdateContact={updateContact} onAddTag={addTag} onRemoveTag={removeTag}
-                onAddNote={addNote} onDeleteNote={deleteNote} onBlockContact={blockContact}
-                onUnblockContact={unblockContact} onCreateDeal={createDeal}
-                onAssignConversation={handleAssignConversation} onToggleBot={handleContactToggleBot}
-                onCreateTask={handleCreateTask} onCompleteTask={completeTask} onDeleteTask={deleteTask}
-                onUploadInvoice={handleUploadInvoice} onDeleteInvoice={deleteInvoice}
-                onAddComment={addComment} onRefreshContact={handleRefreshContact}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        )}
       </div>
-    </>
+
+      {/* Right Panel - Contact Details */}
+      {selectedConversation && (
+        <div className="w-80 flex-shrink-0 border-l border-dark-800 overflow-y-auto">
+          <ContactPanel
+            contact={contact}
+            conversation={contactConversation || selectedConversation}
+            notes={notes}
+            activities={activities}
+            orders={orders}
+            cart={cart}
+            activeDeal={activeDeal}
+            deals={deals}
+            tasks={tasks}
+            invoices={invoices}
+            comments={comments}
+            isLoading={contactLoading}
+            onUpdateContact={updateContact}
+            onAddTag={addTag}
+            onRemoveTag={removeTag}
+            onAddNote={addNote}
+            onDeleteNote={deleteNote}
+            onBlockContact={blockContact}
+            onUnblockContact={unblockContact}
+            onFetchOrders={fetchOrders}
+            onFetchDeals={fetchDeals}
+            onCreateDeal={createDeal}
+            onAssignConversation={assignConversation}
+            onToggleBot={handleContactToggleBot}
+            onCreateTask={createTask}
+            onCompleteTask={completeTask}
+            onDeleteTask={deleteTask}
+            onUploadInvoice={uploadInvoice}
+            onDeleteInvoice={deleteInvoice}
+            onAddComment={addComment}
+            onRefresh={refreshContact}
+          />
+        </div>
+      )}
+    </div>
   )
 }
