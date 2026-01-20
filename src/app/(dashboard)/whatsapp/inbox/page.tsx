@@ -30,7 +30,7 @@ export default function InboxPage() {
   const organizationId = user?.organization_id || 'default-org'
   const storeId = currentStore?.id || null // ✅ CRÍTICO: ID da loja atual
   
-  // ✅ CORREÇÃO: Passar storeId para o hook de conexão
+  // ✅ CORREÇÃO: Passar storeId para filtrar instâncias por loja
   const { instances, selectedInstance, loading: instancesLoading, selectInstance, fetchInstances } = useWhatsAppConnection(organizationId, storeId)
   const [showConnectModal, setShowConnectModal] = useState(false)
 
@@ -144,7 +144,7 @@ export default function InboxPage() {
 
     pollingRef.current = setInterval(() => {
       if (selectedConversation) {
-        refetchLatest(selectedConversation.id)
+        refetchLatest()
       }
       refreshConversations()
     }, POLLING_INTERVAL)
@@ -168,7 +168,6 @@ export default function InboxPage() {
       phoneNumber: selectedConversation.phone_number,
       content,
       organizationId,
-      storeId, // ✅ NOVO: Passar storeId
     })
   }
 
@@ -181,7 +180,6 @@ export default function InboxPage() {
       file,
       caption,
       organizationId,
-      storeId, // ✅ NOVO: Passar storeId
     })
   }
 
@@ -225,7 +223,6 @@ export default function InboxPage() {
             onClose={() => setShowConnectModal(false)}
             onSuccess={handleConnectionSuccess} 
             organizationId={organizationId}
-            storeId={storeId} // ✅ NOVO: Passar storeId
           />
         )}
       </AnimatePresence>
