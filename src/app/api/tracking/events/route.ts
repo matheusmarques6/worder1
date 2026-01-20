@@ -115,20 +115,31 @@ export async function POST(request: NextRequest) {
 
     // Se for compra, atualizar contato
     if (event_type === 'purchase' && resolvedContactId && order_total) {
-      await supabase.rpc('increment_contact_revenue', {
-        p_contact_id: resolvedContactId,
-        p_amount: order_total,
-      }).catch(() => {
-        // Fallback se RPC não existir
-        supabase
+      try {
+        // Tentar usar RPC
+        await supabase.rpc('increment_contact_revenue', {
+          p_contact_id: resolvedContactId,
+          p_amount: order_total,
+        })
+      } catch {
+        // Fallback: atualizar manualmente
+        const { data: currentContact } = await supabase
           .from('contacts')
-          .update({ 
-            total_revenue: supabase.sql`total_revenue + ${order_total}`,
-            total_orders: supabase.sql`total_orders + 1`,
-            last_order_date: new Date().toISOString(),
-          })
+          .select('total_revenue, total_orders')
           .eq('id', resolvedContactId)
-      })
+          .single()
+
+        if (currentContact) {
+          await supabase
+            .from('contacts')
+            .update({ 
+              total_revenue: (currentContact.total_revenue || 0) + order_total,
+              total_orders: (currentContact.total_orders || 0) + 1,
+              last_order_date: new Date().toISOString(),
+            })
+            .eq('id', resolvedContactId)
+        }
+      }
     }
 
     // Trigger automações (async)
@@ -193,11 +204,14 @@ async function triggerAutomations(event: any) {
       .eq('organization_id', event.organization_id)
       .eq('is_active', true)
       .eq('trigger_type', 'event')
-      .contains('trigger_config', { event_type: event.event_type })
 
     if (!playbooks?.length) return
 
     for (const playbook of playbooks) {
+      // Verificar se o evento corresponde
+      const triggerEventType = playbook.trigger_config?.event_type
+      if (triggerEventType && triggerEventType !== event.event_type) continue
+
       // Verificar cooldown
       if (playbook.settings?.cooldown_days && event.contact_id) {
         const cooldownDate = new Date()
