@@ -274,7 +274,6 @@ export default function InboxPage() {
               conversations={conversations}
               selectedId={selectedConversation?.id}
               onSelect={selectConversation}
-              onToggleBot={handleToggleBot}
             />
           )}
         </div>

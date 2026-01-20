@@ -438,8 +438,11 @@ CREATE TRIGGER trigger_task_completed
 
 -- ===========================================
 -- 10. TRIGGER: Notificar quando deal é atribuído
+-- NOTA: Desabilitado - tabela deals não possui coluna owner_id
+-- Se você adicionar a coluna owner_id na tabela deals, descomente este trigger
 -- ===========================================
 
+/*
 -- Dropar função e trigger existentes
 DROP TRIGGER IF EXISTS trigger_deal_assigned ON deals;
 DROP FUNCTION IF EXISTS notify_deal_assigned() CASCADE;
@@ -478,11 +481,15 @@ CREATE TRIGGER trigger_deal_assigned
   FOR EACH ROW
   WHEN (NEW.owner_id IS NOT NULL)
   EXECUTE FUNCTION notify_deal_assigned();
+*/
 
 -- ===========================================
 -- 11. TRIGGER: Notificar quando deal muda de estágio
+-- NOTA: Desabilitado - tabela deals não possui coluna owner_id
+-- Se você adicionar a coluna owner_id na tabela deals, descomente este trigger
 -- ===========================================
 
+/*
 -- Dropar função e trigger existentes
 DROP TRIGGER IF EXISTS trigger_deal_stage_changed ON deals;
 DROP FUNCTION IF EXISTS notify_deal_stage_changed() CASCADE;
@@ -522,6 +529,7 @@ CREATE TRIGGER trigger_deal_stage_changed
   FOR EACH ROW
   WHEN (OLD.stage_id IS DISTINCT FROM NEW.stage_id)
   EXECUTE FUNCTION notify_deal_stage_changed();
+*/
 
 -- ===========================================
 -- 12. FUNÇÃO PARA VERIFICAR TAREFAS VENCENDO
