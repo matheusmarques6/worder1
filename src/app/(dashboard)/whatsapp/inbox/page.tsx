@@ -273,6 +273,7 @@ export default function InboxPage() {
             <ConversationList
               conversations={conversations}
               selectedId={selectedConversation?.id}
+              isLoading={conversationsLoading}
               onSelect={selectConversation}
             />
           )}
