@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       if (error) throw error
 
       // Buscar membros se for estático
-      let members = []
+      let members: any[] = []
       if (data.segment_type === 'static') {
         const { data: memberData } = await supabase
           .from('segment_members')
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Listar todos
-    let query = supabase
+    const query = supabase
       .from('customer_segments')
       .select('*')
       .eq('organization_id', organization_id)
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       rules = [],
       rules_logic = 'AND',
       rfm_segments = [],
-      contact_ids = [], // Para segmentos estáticos
+      contact_ids = [],
     } = body
 
     if (!organization_id || !name) {
@@ -119,7 +119,6 @@ export async function POST(request: NextRequest) {
 
       await supabase.from('segment_members').insert(members)
       
-      // Atualizar contagem
       await supabase
         .from('customer_segments')
         .update({ contact_count: contact_ids.length, last_count_at: new Date().toISOString() })
@@ -181,7 +180,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
-    // Remover membros primeiro
     await supabase.from('segment_members').delete().eq('segment_id', id)
 
     const { error } = await supabase
@@ -222,7 +220,6 @@ async function getSegmentCount(segment: any): Promise<number> {
     }
 
     if (segment.segment_type === 'dynamic' && segment.rules?.length) {
-      // Construir query dinâmica baseada nas regras
       let query = supabase
         .from('contacts')
         .select('*', { count: 'exact', head: true })
