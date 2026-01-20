@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const organization_id = searchParams.get('organization_id')
-    const view = searchParams.get('view') || 'summary' // summary, segments, contacts
+    const view = searchParams.get('view') || 'summary'
 
     if (!organization_id) {
       return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
@@ -19,9 +19,10 @@ export async function GET(request: NextRequest) {
 
     // Resumo por segmento
     if (view === 'summary') {
+      // Buscar segmentos E calculated_at
       const { data: segments } = await supabase
         .from('customer_rfm_scores')
-        .select('rfm_segment')
+        .select('rfm_segment, calculated_at')
         .eq('organization_id', organization_id)
 
       const summary: Record<string, { count: number; label: string; color: string; description: string }> = {
@@ -44,17 +45,22 @@ export async function GET(request: NextRequest) {
 
       // Calcular totais
       const total = segments?.length || 0
-      const totalRevenue = await supabase
+      
+      const { data: revenueData } = await supabase
         .from('customer_rfm_scores')
         .select('total_spent')
         .eq('organization_id', organization_id)
-        .then(({ data }) => data?.reduce((sum, r) => sum + (r.total_spent || 0), 0) || 0)
+      
+      const totalRevenue = revenueData?.reduce((sum, r) => sum + (r.total_spent || 0), 0) || 0
+
+      // Pegar calculated_at do primeiro registro
+      const lastCalculated = segments?.[0]?.calculated_at || null
 
       return NextResponse.json({ 
         summary, 
         total_contacts: total,
         total_revenue: totalRevenue,
-        last_calculated: segments?.[0]?.calculated_at,
+        last_calculated: lastCalculated,
       })
     }
 
@@ -124,7 +130,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
     }
 
-    // Chamar função do banco
+    // Tentar chamar função do banco
     const { error } = await supabase.rpc('calculate_rfm_scores', {
       p_organization_id: organization_id,
       p_period_days: period_days,
@@ -167,7 +173,7 @@ async function calculateRFMManual(organization_id: string, period_days: number) 
   const cutoffDate = new Date()
   cutoffDate.setDate(cutoffDate.getDate() - period_days)
 
-  // Buscar todos os contatos com compras
+  // Buscar todos os contatos
   const { data: contacts } = await supabase
     .from('contacts')
     .select('id')
