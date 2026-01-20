@@ -1,154 +1,137 @@
-# 🔧 Correção WhatsApp Inbox - COMPLETA
+# 🔒 Sprint 2 - Segurança e Privacidade
 
-## ✅ Problemas Corrigidos
+## ⚠️ PROBLEMA CRÍTICO
 
-| Prioridade | Problema | Status |
-|------------|----------|--------|
-| **P0** | Realtime desconectado do estado da UI | ✅ Corrigido |
-| **P0** | Paginação fake (API ignorava limit/before) | ✅ Corrigido |
-| **P0** | Chave de API hardcoded no código (SEGURANÇA!) | ✅ Corrigido |
-| **P1** | Botão de anexo não funciona | ✅ Corrigido |
-| **P1** | Hook sem sendMedia | ✅ Corrigido |
-| **P2** | Status de mensagem não atualiza na UI | ✅ Corrigido |
-| **P2** | Sem fallback quando realtime cai | ✅ Corrigido (polling 5s) |
-| **P2** | Stale state no realtime | ✅ Corrigido |
+A chave da Evolution API está **hardcoded em 9 arquivos**:
+
+```
+429683C4C977415CAAFCCE10F7D57E11
+```
+
+Qualquer pessoa com acesso ao código pode ver essa chave!
 
 ---
 
-## 📁 Arquivos para Substituir
+## ✅ Correções Neste Pacote
 
+### Arquivos para Substituir
+
+| Arquivo | Correções |
+|---------|-----------|
+| `src/app/api/whatsapp/inbox/conversations/[id]/messages/route.ts` | Sem hardcode + paginação real |
+| `src/app/api/whatsapp/inbox/conversations/[id]/media/route.ts` | Sem hardcode + Signed URLs + validações |
+
+### Arquivos que Precisam de Patch Manual
+
+Execute o `patch-security.sh` ou faça manualmente:
+
+```typescript
+// ❌ REMOVER o fallback (|| 'chave')
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
+
+// ✅ DEIXAR ASSIM
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL;
 ```
-src/
-├── hooks/
-│   ├── useInboxMessages.ts       ← SUBSTITUIR (sendMedia + paginação)
-│   └── useWhatsAppRealtime.ts    ← SUBSTITUIR (sem store, apenas callbacks)
-├── components/
-│   └── whatsapp/
-│       └── inbox/
-│           └── ChatPanel.tsx     ← SUBSTITUIR (upload de mídia completo)
-└── app/
-    ├── (dashboard)/
-    │   └── whatsapp/
-    │       └── inbox/
-    │           └── page.tsx      ← SUBSTITUIR (polling + status updates)
-    └── api/
-        └── whatsapp/
-            └── inbox/
-                └── conversations/
-                    └── [id]/
-                        ├── messages/
-                        │   └── route.ts  ← SUBSTITUIR (paginação real)
-                        └── media/
-                            └── route.ts  ← SUBSTITUIR (sem chave hardcoded)
-```
+
+**Arquivos para patch:**
+- `src/app/api/whatsapp/instances/route.ts`
+- `src/app/api/whatsapp/evolution/webhook/route.ts`
+- `src/app/api/whatsapp/media/route.ts`
+- `src/app/api/whatsapp/inbox/contacts/[id]/profile-picture/route.ts`
+- `src/app/api/whatsapp/webhook/route.ts` (linha 313)
+- `src/app/api/whatsapp/fix-webhook/route.ts`
+- `src/app/api/whatsapp/debug/route.ts`
 
 ---
 
-## 🚀 Instruções de Deploy
+## 🚀 Deploy
 
-### 1. Instalar dependência
-```bash
-npm install @supabase/ssr
-# ou
-pnpm add @supabase/ssr
+### 1. Verificar env vars no Vercel
+
+```
+Settings → Environment Variables
+
+EVOLUTION_API_URL = https://n8n-evolution-api.1fpac5.easypanel.host
+EVOLUTION_API_KEY = sua_chave_aqui
 ```
 
-### 2. Verificar variáveis de ambiente
+### 2. Substituir arquivos
+
 ```bash
-# .env.local DEVE ter (SEM fallback hardcoded!)
-EVOLUTION_API_URL=https://sua-evolution-api.com
-EVOLUTION_API_KEY=sua_chave_secreta_aqui
+# Copiar arquivos deste pacote
+cp -r src/* /caminho/projeto/src/
 ```
 
-### 3. Backup dos arquivos originais
+### 3. Rodar script de patch
+
 ```bash
-cp src/hooks/useInboxMessages.ts src/hooks/useInboxMessages.ts.bak
-cp src/hooks/useWhatsAppRealtime.ts src/hooks/useWhatsAppRealtime.ts.bak
-# ... etc
+# Na raiz do projeto
+bash patch-security.sh
 ```
 
-### 4. Substituir arquivos
-Copie os arquivos deste pacote para suas respectivas pastas no projeto.
+### 4. Verificar
 
-### 5. Testar localmente
 ```bash
-npm run dev
+# Deve retornar VAZIO
+grep -rn "429683C4C977415" src/
 ```
 
-### 6. Deploy
+### 5. Commit e push
+
 ```bash
 git add .
-git commit -m "fix: WhatsApp inbox - realtime, media upload, pagination, security"
+git commit -m "security: remove hardcoded API keys, add signed URLs"
 git push
 ```
 
 ---
 
-## 🧪 Checklist de Teste
+## 📊 O Que Mudou
 
-- [ ] Abrir conversa → mensagens carregam
-- [ ] Receber mensagem → aparece em tempo real OU via polling
-- [ ] Enviar texto → mensagem aparece com status ✓
-- [ ] Enviar imagem → preview → upload → aparece no chat
-- [ ] Enviar documento → preview → upload → aparece no chat
-- [ ] Status atualiza → sent → delivered → read (✓✓ azul)
-- [ ] Scroll para cima → carrega mensagens antigas (paginação)
-- [ ] Indicador de conexão → mostra "Live" ou "Polling"
-- [ ] Sem chave hardcoded → verificar build não contém chave
+### 🔐 Segurança
+- Sem chaves hardcoded no código
+- Erro 503 claro se API não configurada
+
+### 📎 Upload de Mídia
+- Validação de tamanho (max 16MB)
+- Validação de tipos MIME
+- Bloqueio de extensões perigosas (.exe, .bat, etc)
+
+### 🔗 Signed URLs
+- URLs de mídia expiram em 1 hora
+- Novo endpoint GET para refresh de URL
+- Campo `media_storage_path` para regenerar URLs
 
 ---
 
-## 🔒 Verificação de Segurança
+## 🗄️ Migration (opcional)
 
-Após deploy, verificar que a chave da API NÃO aparece no código:
+Se quiser salvar o path do storage para regenerar URLs:
 
-```bash
-# Buscar por chaves hardcoded no build
-grep -r "429683C4C977415" .next/ || echo "✅ Nenhuma chave hardcoded encontrada"
+```sql
+ALTER TABLE whatsapp_messages 
+ADD COLUMN IF NOT EXISTS media_storage_path TEXT;
 ```
 
 ---
 
-## ⚠️ Pendências para Sprint 2
+## 🧪 Testes
 
-1. **Storage privado + Signed URL** - URLs de mídia ainda são públicas
-2. **Rate limit no upload** - Não implementado
-3. **Validação mais rígida de MIME types**
+1. **Build não contém chave:**
+```bash
+grep -r "429683C4C977415" .next/ || echo "✅ OK"
+```
 
----
+2. **Enviar mídia funciona:**
+- Enviar imagem
+- Verificar URL tem `?token=` (Signed URL)
 
-## 📊 O que mudou em cada arquivo
+3. **Validações funcionam:**
+- Tentar enviar arquivo > 16MB → erro
+- Tentar enviar .exe → erro
 
-### useInboxMessages.ts
-- ✅ Adicionado `sendMedia()` para upload de arquivos
-- ✅ Paginação com cursores (`before`/`after`)
-- ✅ `refetchLatest()` para polling de novas mensagens
-- ✅ `isUploading` state
-
-### useWhatsAppRealtime.ts
-- ✅ Usa `createBrowserClient` do `@supabase/ssr` (com sessão)
-- ✅ Não manipula store diretamente (apenas callbacks)
-- ✅ `onStatusUpdate` callback para status de mensagem
-
-### ChatPanel.tsx
-- ✅ Menu de anexo (Imagem/Vídeo/Documento)
-- ✅ Input file com ref
-- ✅ Modal de preview antes de enviar
-- ✅ Campo de caption
-- ✅ Validação de tamanho (16MB)
-
-### inbox/page.tsx
-- ✅ Conecta `onStatusUpdate` ao hook
-- ✅ Polling fallback quando realtime desconectado
-- ✅ Indicador visual de conexão (Live/Polling)
-- ✅ Handler `handleSendMedia`
-
-### messages/route.ts (API)
-- ✅ Paginação real com `limit + 1` para `hasMore`
-- ✅ Filtros `before`/`after` funcionando
-- ✅ Sem chave hardcoded (falha com erro claro)
-
-### media/route.ts (API)
-- ✅ Sem chave hardcoded
-- ✅ Validação de tamanho (16MB)
-- ✅ Validação de MIME types
+4. **Erro sem config:**
+- Remover env vars
+- Tentar enviar → erro 503 claro
