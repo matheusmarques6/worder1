@@ -16,7 +16,6 @@ import WhatsAppConnectUnified from '@/components/whatsapp/WhatsAppConnectUnified
 import { useInboxConversations } from '@/hooks/useInboxConversations'
 import { useInboxMessages } from '@/hooks/useInboxMessages'
 import { useInboxContact } from '@/hooks/useInboxContact'
-import { useWhatsAppRealtime } from '@/hooks/useWhatsAppRealtime'
 import { useWhatsAppConnection, type WhatsAppInstance } from '@/hooks/useWhatsAppConnectionManager'
 
 // Types
@@ -94,13 +93,10 @@ export default function InboxPage() {
   // =============================================
   // REALTIME SUBSCRIPTIONS
   // =============================================
-  useWhatsAppRealtime({
-    organizationId,
-    onConversationInsert: handleConversationInsert,
-    onConversationUpdate: handleConversationUpdate,
-    onMessageInsert: handleNewMessage,
-    onMessageUpdate: handleStatusUpdate,
-  })
+  // =============================================
+  // REALTIME via POLLING (mais confiável)
+  // O polling já está implementado abaixo e funciona bem
+  // =============================================
 
   // =============================================
   // EFFECTS
