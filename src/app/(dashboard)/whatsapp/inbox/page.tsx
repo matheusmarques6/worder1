@@ -72,7 +72,6 @@ export default function InboxPage() {
     refreshConversations()
   }, [selectedConversation?.id, addMessage, refreshConversations])
 
-  // ✅ CORREÇÃO: Conectar status updates
   const handleStatusUpdate = useCallback((msg: any) => {
     console.log('✓ [Inbox] Status update:', msg.id, '->', msg.status)
     if (msg.id && msg.status) {
@@ -92,7 +91,7 @@ export default function InboxPage() {
   })
 
   // =============================================
-  // ✅ CORREÇÃO: POLLING FALLBACK
+  // POLLING FALLBACK
   // =============================================
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -102,7 +101,6 @@ export default function InboxPage() {
       pollingRef.current = null
     }
 
-    // Polling quando realtime desconectado
     if (selectedConversation && !isConnected) {
       console.log('[Inbox] Starting polling (realtime disconnected)')
       pollingRef.current = setInterval(() => {
@@ -171,9 +169,16 @@ export default function InboxPage() {
   const handleFilterChange = (newFilters: ConversationFilters) => { setFilters(newFilters); fetchConversations(newFilters) }
   const handleSearch = (value: string) => { setSearch(value); fetchConversations({ ...filters, search: value }) }
 
-  // Contact handlers
-  const handleAssignConversation = async (userId: string) => { if (selectedConversation?.id) await assignConversation(selectedConversation.id, userId) }
-  const handleContactToggleBot = async (enabled: boolean) => { if (selectedConversation?.id) await toggleContactBot(selectedConversation.id, enabled) }
+  // Contact handlers - CORRIGIDO: assinatura correta
+  const handleAssignConversation = async (userId: string) => { 
+    if (selectedConversation?.id) await assignConversation(selectedConversation.id, userId) 
+  }
+  
+  // ✅ CORREÇÃO: Assinatura correta (conversationId: string, active: boolean)
+  const handleContactToggleBot = async (conversationId: string, active: boolean) => { 
+    await toggleContactBot(conversationId, active)
+  }
+  
   const handleCreateTask = async (data: any) => { if (contact?.id) await createTask(contact.id, data) }
   const handleRefreshContact = async () => { if (contact?.id && selectedConversation?.id) await refreshContact(contact.id, selectedConversation.id) }
   const handleUploadInvoice = async (data: FormData): Promise<void> => { if (contact?.id) await uploadInvoice(contact.id, data) }
