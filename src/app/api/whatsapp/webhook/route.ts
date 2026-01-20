@@ -10,7 +10,6 @@ export async function POST(request: NextRequest) {
     console.log('[Webhook] Received event:', body.event)
     console.log('[Webhook] Instance:', body.instance)
     console.log('[Webhook] Data keys:', body.data ? Object.keys(body.data) : 'no data')
-    console.log('[Webhook] Full body:', JSON.stringify(body, null, 2).substring(0, 1000))
 
     // Tratar diferentes formatos de evento
     const eventType = body.event?.toLowerCase() || ''
@@ -57,10 +56,10 @@ async function processConnectionUpdate(body: any) {
   const state = data?.state || data?.instance?.state
   console.log('[Webhook] Connection state:', state, 'for instance:', instanceName)
   
-  // Buscar e atualizar instância - tentar múltiplas formas
+  // Buscar instância - APENAS por nome exato, sem fallbacks perigosos
   const { data: instance } = await supabase
     .from('whatsapp_instances')
-    .select('id')
+    .select('id, organization_id')
     .or(`instance_name.eq.${instanceName},instance_id.eq.${instanceName},unique_id.eq.${instanceName}`)
     .single()
     
@@ -78,9 +77,9 @@ async function processConnectionUpdate(body: any) {
       })
       .eq('id', instance.id)
       
-    console.log('[Webhook] Instance status updated to:', newStatus)
+    console.log('[Webhook] Instance status updated to:', newStatus, 'org:', instance.organization_id)
   } else {
-    console.log('[Webhook] Instance not found for connection update:', instanceName)
+    console.log('[Webhook] ⚠️ Instance not found for connection update:', instanceName)
   }
 }
 
@@ -117,64 +116,50 @@ async function processMessage(body: any) {
 
   console.log('[Webhook] Processing message for instance:', instanceName)
 
-  // 1. Buscar instância - tentar múltiplas formas
-  let instance = null
+  // =====================================================
+  // CORREÇÃO CRÍTICA: Buscar instância APENAS por nome exato
+  // SEM fallbacks que vazam dados entre organizações!
+  // =====================================================
   
-  // Primeiro: tentar por instance_name ou instance_id exato
-  if (instanceName) {
-    const { data: instances1 } = await supabase
-      .from('whatsapp_instances')
-      .select('*')
-      .or(`instance_name.eq.${instanceName},instance_id.eq.${instanceName},unique_id.eq.${instanceName}`)
-      .limit(1)
-
-    instance = instances1?.[0]
-    
-    // Se não encontrou, tentar busca parcial
-    if (!instance) {
-      console.log('[Webhook] Instância não encontrada por nome exato:', instanceName)
-      
-      const { data: instances2 } = await supabase
-        .from('whatsapp_instances')
-        .select('*')
-        .or(`instance_name.ilike.%${instanceName}%,unique_id.ilike.%${instanceName}%`)
-        .limit(1)
-        
-      instance = instances2?.[0]
-    }
-  }
-  
-  // Se ainda não encontrou, usar a primeira instância conectada (fallback importante!)
-  if (!instance) {
-    console.log('[Webhook] Tentando buscar qualquer instância conectada...')
-    
-    const { data: instances3 } = await supabase
-      .from('whatsapp_instances')
-      .select('*')
-      .eq('status', 'connected')
-      .limit(1)
-      
-    instance = instances3?.[0]
-  }
-  
-  // Último fallback: qualquer instância
-  if (!instance) {
-    console.log('[Webhook] Tentando buscar qualquer instância...')
-    
-    const { data: instances4 } = await supabase
-      .from('whatsapp_instances')
-      .select('*')
-      .limit(1)
-      
-    instance = instances4?.[0]
-  }
-  
-  if (!instance) {
-    console.log('[Webhook] ❌ Nenhuma instância encontrada')
+  if (!instanceName) {
+    console.log('[Webhook] ❌ No instance name in webhook payload')
     return
   }
 
-  console.log('[Webhook] ✅ Instância encontrada:', instance.instance_name || instance.unique_id, 'Org:', instance.organization_id)
+  // Buscar instância por nome exato - múltiplas formas de identificação
+  const { data: instances } = await supabase
+    .from('whatsapp_instances')
+    .select('*')
+    .or(`instance_name.eq.${instanceName},instance_id.eq.${instanceName},unique_id.eq.${instanceName}`)
+    .limit(1)
+
+  let instance = instances?.[0]
+  
+  // Se não encontrou por nome exato, tentar busca parcial (mas ainda específica!)
+  if (!instance) {
+    console.log('[Webhook] Instance not found by exact name, trying partial match:', instanceName)
+    
+    const { data: instances2 } = await supabase
+      .from('whatsapp_instances')
+      .select('*')
+      .or(`instance_name.ilike.%${instanceName}%,unique_id.ilike.%${instanceName}%`)
+      .limit(1)
+      
+    instance = instances2?.[0]
+  }
+  
+  // =====================================================
+  // REMOVIDO: Fallbacks perigosos que buscavam QUALQUER instância
+  // Isso causava vazamento de dados entre organizações!
+  // =====================================================
+  
+  if (!instance) {
+    console.log('[Webhook] ❌ Instance not found:', instanceName)
+    console.log('[Webhook] ❌ This message will be DROPPED to prevent data leakage')
+    return
+  }
+
+  console.log('[Webhook] ✅ Instance found:', instance.instance_name || instance.unique_id, 'Org:', instance.organization_id)
 
   const orgId = instance.organization_id
   
@@ -182,35 +167,20 @@ async function processMessage(body: any) {
   // EXTRAIR DADOS - Suportar múltiplos formatos do Evolution
   // =====================================================
   
-  // Log para debug da estrutura
-  console.log('[Webhook] Data structure:', JSON.stringify({
-    hasData: !!data,
-    dataKeys: data ? Object.keys(data) : [],
-    hasKey: !!data?.key,
-    hasMessage: !!data?.message,
-    isArray: Array.isArray(data),
-  }))
-  
   // IMPORTANTE: Verificar se é uma mensagem real ou apenas status update
-  // Status updates têm: keyId, remoteJid, fromMe, status, instanceId, messageId (sem key e message)
-  // Mensagens reais têm: key, pushName, status, message, messageType, messageTimestamp
-  
   if (!data?.key && !data?.message && data?.status) {
-    // É um status update (delivered, read, etc.), não uma mensagem nova
-    console.log('[Webhook] ⏭️ Ignorando status update:', data?.status)
+    console.log('[Webhook] ⏭️ Ignoring status update:', data?.status)
     return
   }
   
-  // Verificar se tem os campos necessários para uma mensagem
   if (!data?.key && !data?.message) {
-    console.log('[Webhook] ⏭️ Ignorando evento sem key/message')
+    console.log('[Webhook] ⏭️ Ignoring event without key/message')
     return
   }
   
   // Tentar extrair de diferentes estruturas do Evolution API
   let messageData = data
   
-  // Se data é um array (messages.upsert pode enviar array)
   if (Array.isArray(data)) {
     messageData = data[0]
     console.log('[Webhook] Data is array, using first element')
@@ -218,30 +188,27 @@ async function processMessage(body: any) {
   
   // Extrair key
   const key = messageData?.key || body?.key
-  
-  // Extrair message
   const message = messageData?.message || body?.message
   
   console.log('[Webhook] Extracted key:', JSON.stringify(key))
 
   // Ignorar mensagens próprias
   if (key?.fromMe) {
-    console.log('[Webhook] ⏭️ Ignorando mensagem própria')
+    console.log('[Webhook] ⏭️ Ignoring own message')
     return
   }
 
   // Extrair remoteJid
   const remoteJid = key?.remoteJid || key?.remoteJidAlt
-                    
+  
   console.log('[Webhook] Extracted remoteJid:', remoteJid)
   
   if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('@lid')) {
-    console.log('[Webhook] ⏭️ Ignorando grupo ou lid:', remoteJid)
+    console.log('[Webhook] ⏭️ Ignoring group or lid:', remoteJid)
     return
   }
 
   const phoneNumber = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '')
-  // NÃO usar phoneNumber como fallback - deixar null se não tiver nome
   const pushName = messageData?.pushName || data?.pushName || body?.pushName || null
 
   // Extrair conteúdo da mensagem
@@ -249,356 +216,261 @@ async function processMessage(body: any) {
                 message?.extendedTextMessage?.text || 
                 message?.imageMessage?.caption ||
                 message?.videoMessage?.caption ||
-                messageData?.body ||
+                message?.documentMessage?.caption ||
+                message?.audioMessage?.caption ||
                 ''
-
-  // ✅ CORREÇÃO: Variáveis para mídia
+  
+  // Tipo de mensagem
   let messageType = 'text'
   let mediaUrl = null
-  let mediaMimeType = null
+  let mediaKey = null
+  let mediaMimetype = null
+  let fileName = null
 
-  // ✅ CORREÇÃO: Extrair URL e tipo de cada tipo de mídia
   if (message?.imageMessage) {
     messageType = 'image'
-    content = content || '[Imagem]'
     mediaUrl = message.imageMessage.url
-    mediaMimeType = message.imageMessage.mimetype
-  }
-  else if (message?.audioMessage) {
-    messageType = 'audio'
-    content = '[Áudio]'
-    mediaUrl = message.audioMessage.url
-    mediaMimeType = message.audioMessage.mimetype
-  }
-  else if (message?.videoMessage) {
+    mediaKey = message.imageMessage.mediaKey
+    mediaMimetype = message.imageMessage.mimetype
+  } else if (message?.videoMessage) {
     messageType = 'video'
-    content = content || '[Vídeo]'
     mediaUrl = message.videoMessage.url
-    mediaMimeType = message.videoMessage.mimetype
-  }
-  else if (message?.documentMessage) {
+    mediaKey = message.videoMessage.mediaKey
+    mediaMimetype = message.videoMessage.mimetype
+  } else if (message?.audioMessage) {
+    messageType = message.audioMessage.ptt ? 'ptt' : 'audio'
+    mediaUrl = message.audioMessage.url
+    mediaKey = message.audioMessage.mediaKey
+    mediaMimetype = message.audioMessage.mimetype
+  } else if (message?.documentMessage) {
     messageType = 'document'
-    content = message.documentMessage.fileName || '[Documento]'
     mediaUrl = message.documentMessage.url
-    mediaMimeType = message.documentMessage.mimetype
-  }
-  else if (message?.stickerMessage) {
+    mediaKey = message.documentMessage.mediaKey
+    mediaMimetype = message.documentMessage.mimetype
+    fileName = message.documentMessage.fileName
+  } else if (message?.stickerMessage) {
     messageType = 'sticker'
-    content = '[Sticker]'
     mediaUrl = message.stickerMessage.url
-  }
-  else if (message?.locationMessage) {
+    mediaKey = message.stickerMessage.mediaKey
+    mediaMimetype = message.stickerMessage.mimetype
+  } else if (message?.locationMessage) {
     messageType = 'location'
-    content = `[Localização: ${message.locationMessage.degreesLatitude}, ${message.locationMessage.degreesLongitude}]`
-  }
-  else if (message?.contactMessage) {
+    content = `📍 ${message.locationMessage.degreesLatitude}, ${message.locationMessage.degreesLongitude}`
+  } else if (message?.contactMessage) {
     messageType = 'contact'
-    content = '[Contato]'
+    content = `👤 ${message.contactMessage.displayName || 'Contact'}`
   }
-  else if (!content) {
-    content = '[Mídia]'
-  }
-  
-  console.log('[Webhook] 📩 Mensagem de:', phoneNumber, '| Nome:', pushName, '| Conteúdo:', content?.substring(0, 50))
-  console.log('[Webhook] 📩 Tipo:', messageType, '| Media URL inicial:', mediaUrl ? 'SIM' : 'NÃO')
+
+  console.log('[Webhook] Message type:', messageType, '| Content:', content?.substring(0, 100))
 
   // =====================================================
-  // DOWNLOAD DE MÍDIA E UPLOAD PARA SUPABASE STORAGE
+  // BUSCAR OU CRIAR CONTATO - SEMPRE na organização correta
   // =====================================================
-  if (!mediaUrl && messageType !== 'text' && messageType !== 'location' && messageType !== 'contact' && key?.id) {
-    console.log('[Webhook] 📥 Tentando baixar mídia via Evolution API...')
-    
-    try {
-      const EVOLUTION_API_URL = instance.api_url || process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host'
-      const EVOLUTION_API_KEY = instance.api_key || process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11'
-      
-      // 1. Baixar mídia da Evolution API
-      const downloadResponse = await fetch(
-        `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${instance.unique_id}`,
-        {
-          method: 'POST',
-          headers: {
-            'apikey': EVOLUTION_API_KEY,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            message: { key },
-            convertToMp4: false
-          })
-        }
-      )
-      
-      if (downloadResponse.ok) {
-        const mediaData = await downloadResponse.json()
-        
-        if (mediaData.base64) {
-          // Determinar tipo MIME e extensão
-          const mimeType = mediaMimeType || mediaData.mimetype ||
-            (messageType === 'image' ? 'image/jpeg' : 
-             messageType === 'audio' ? 'audio/ogg' : 
-             messageType === 'video' ? 'video/mp4' : 
-             messageType === 'document' ? 'application/pdf' :
-             'application/octet-stream')
-          
-          // Determinar extensão do arquivo
-          const extensionMap: Record<string, string> = {
-            'image/jpeg': 'jpg',
-            'image/png': 'png',
-            'image/gif': 'gif',
-            'image/webp': 'webp',
-            'audio/ogg': 'ogg',
-            'audio/mpeg': 'mp3',
-            'audio/mp4': 'm4a',
-            'audio/opus': 'opus',
-            'video/mp4': 'mp4',
-            'video/3gpp': '3gp',
-            'application/pdf': 'pdf',
-          }
-          const extension = extensionMap[mimeType] || 'bin'
-          
-          // 2. Converter base64 para Buffer
-          const buffer = Buffer.from(mediaData.base64, 'base64')
-          
-          // 3. Gerar nome único para o arquivo
-          const timestamp = Date.now()
-          const messageId = key?.id || `${timestamp}`
-          const fileName = `${orgId}/${phoneNumber}/${timestamp}-${messageId.substring(0, 8)}.${extension}`
-          
-          console.log('[Webhook] 📤 Fazendo upload para Storage:', fileName, '| Tamanho:', buffer.length, 'bytes')
-          
-          // 4. Upload para Supabase Storage
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('whatsapp-media')
-            .upload(fileName, buffer, {
-              contentType: mimeType,
-              cacheControl: '31536000', // 1 ano de cache
-              upsert: false
-            })
-          
-          if (uploadError) {
-            console.error('[Webhook] ❌ Erro no upload:', uploadError)
-            // Fallback para data URL se o upload falhar
-            mediaUrl = `data:${mimeType};base64,${mediaData.base64}`
-            console.log('[Webhook] ⚠️ Usando fallback base64')
-          } else {
-            // 5. Obter URL pública
-            const { data: { publicUrl } } = supabase.storage
-              .from('whatsapp-media')
-              .getPublicUrl(fileName)
-            
-            mediaUrl = publicUrl
-            console.log('[Webhook] ✅ Upload concluído! URL:', mediaUrl)
-          }
-        } else {
-          console.log('[Webhook] ⚠️ Resposta sem base64:', JSON.stringify(mediaData).substring(0, 200))
-        }
-      } else {
-        console.log('[Webhook] ⚠️ Erro ao baixar mídia:', downloadResponse.status, downloadResponse.statusText)
-      }
-    } catch (downloadError) {
-      console.error('[Webhook] ❌ Erro no download/upload de mídia:', downloadError)
-    }
-  }
-
-  console.log('[Webhook] 📩 Media URL final:', mediaUrl ? `SIM (${mediaUrl.substring(0, 80)}...)` : 'NÃO')
-
-  // 2. Buscar ou criar CONVERSA diretamente (sem depender de whatsapp_contacts)
-  const chatId = remoteJid
   
-  let { data: conversation, error: convFetchError } = await supabase
-    .from('whatsapp_conversations')
-    .select('*')
-    .eq('organization_id', orgId)
-    .eq('chat_id', chatId)
+  // 1. Buscar contato unificado
+  let { data: unifiedContact } = await supabase
+    .from('contacts')
+    .select('id, full_name, first_name, profile_picture_url')
+    .eq('organization_id', orgId)  // ✅ SEMPRE filtrar por org!
+    .or(`whatsapp.eq.${phoneNumber},phone.eq.${phoneNumber}`)
+    .limit(1)
     .single()
 
-  if (convFetchError && convFetchError.code !== 'PGRST116') {
-    console.error('[Webhook] Erro ao buscar conversa:', convFetchError)
-  }
+  // 2. Buscar ou criar contato legado (whatsapp_contacts)
+  let { data: legacyContact } = await supabase
+    .from('whatsapp_contacts')
+    .select('id, name, profile_name, profile_picture_url')
+    .eq('organization_id', orgId)  // ✅ SEMPRE filtrar por org!
+    .eq('phone_number', phoneNumber)
+    .limit(1)
+    .single()
 
-  if (!conversation) {
-    // Criar nova conversa
-    console.log('[Webhook] Criando nova conversa para:', phoneNumber)
+  // 3. Criar contato legado se não existir
+  if (!legacyContact) {
+    const contactName = pushName || phoneNumber
     
-    const { data: newConv, error: convError } = await supabase
-      .from('whatsapp_conversations')
+    const { data: newContact, error: contactError } = await supabase
+      .from('whatsapp_contacts')
       .insert({
-        organization_id: orgId,
-        instance_id: instance.id,
-        chat_id: chatId,
-        contact_phone: phoneNumber,
-        contact_name: pushName,
-        status: 'open',
-        last_message_at: new Date().toISOString(),
-        last_message_preview: content.substring(0, 100),
-        last_message_direction: 'inbound',
-        unread_count: 1,
+        organization_id: orgId,  // ✅ SEMPRE com org!
+        phone_number: phoneNumber,
+        name: contactName,
+        profile_name: pushName,
+        jid: remoteJid,
+        created_at: new Date().toISOString()
       })
       .select()
       .single()
-    
-    if (convError) {
-      console.error('[Webhook] ❌ Erro ao criar conversa:', convError)
-      return
-    }
-    conversation = newConv
-    console.log('[Webhook] ✅ Nova conversa criada:', conversation?.id)
-  } else {
-    console.log('[Webhook] Conversa existente:', conversation.id)
-    // Atualizar conversa existente
-    const { error: updateError } = await supabase
-      .from('whatsapp_conversations')
-      .update({
-        status: 'open',
-        contact_name: pushName,
-        last_message_at: new Date().toISOString(),
-        last_message_preview: content.substring(0, 100),
-        last_message_direction: 'inbound',
-        last_customer_message_at: new Date().toISOString(),
-        unread_count: (conversation.unread_count || 0) + 1,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', conversation.id)
-      
-    if (updateError) {
-      console.error('[Webhook] Erro ao atualizar conversa:', updateError)
+
+    if (contactError) {
+      console.error('[Webhook] Error creating contact:', contactError)
+    } else {
+      legacyContact = newContact
+      console.log('[Webhook] ✅ Created new contact:', contactName, 'for org:', orgId)
     }
   }
+
+  // 4. Criar contato unificado se não existir e tiver contato legado
+  if (!unifiedContact && legacyContact) {
+    const { data: newUnified, error: unifiedError } = await supabase
+      .from('contacts')
+      .insert({
+        organization_id: orgId,  // ✅ SEMPRE com org!
+        whatsapp: phoneNumber,
+        phone: phoneNumber,
+        first_name: pushName || phoneNumber,
+        full_name: pushName || phoneNumber,
+        source: 'whatsapp',
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (!unifiedError) {
+      unifiedContact = newUnified
+      console.log('[Webhook] ✅ Created unified contact for org:', orgId)
+    }
+  }
+
+  // =====================================================
+  // BUSCAR OU CRIAR CONVERSA - SEMPRE na organização correta
+  // =====================================================
+  
+  let { data: conversation } = await supabase
+    .from('whatsapp_conversations')
+    .select('*')
+    .eq('organization_id', orgId)  // ✅ SEMPRE filtrar por org!
+    .eq('phone_number', phoneNumber)
+    .limit(1)
+    .single()
 
   if (!conversation) {
-    console.error('[Webhook] ❌ Conversa não criada, abortando')
-    return
+    const { data: newConv, error: convError } = await supabase
+      .from('whatsapp_conversations')
+      .insert({
+        organization_id: orgId,  // ✅ SEMPRE com org!
+        instance_id: instance.id,
+        phone_number: phoneNumber,
+        chat_id: remoteJid,
+        contact_id: legacyContact?.id,
+        unified_contact_id: unifiedContact?.id,
+        contact_name: pushName || phoneNumber,
+        contact_avatar: null,
+        status: 'open',
+        unread_count: 1,
+        last_message_at: new Date().toISOString(),
+        last_message_preview: content?.substring(0, 100) || `[${messageType}]`,
+        last_message_direction: 'incoming',
+        ai_enabled: true,
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (convError) {
+      console.error('[Webhook] Error creating conversation:', convError)
+      return
+    }
+    
+    conversation = newConv
+    console.log('[Webhook] ✅ Created new conversation for org:', orgId)
   }
 
-  // 3. Verificar se mensagem já existe (evitar duplicação)
-  const messageId = key?.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  // =====================================================
+  // SALVAR MENSAGEM - SEMPRE na organização correta
+  // =====================================================
   
-  const { data: existingMsg } = await supabase
+  const messageId = key?.id || `msg_${Date.now()}`
+  
+  // Verificar se mensagem já existe
+  const { data: existingMessage } = await supabase
     .from('whatsapp_messages')
     .select('id')
     .eq('message_id', messageId)
-    .maybeSingle()
-
-  if (existingMsg) {
-    console.log('[Webhook] Mensagem já existe, ignorando:', messageId)
-    return
-  }
-
-  // 4. Salvar mensagem
-  const { data: savedMsg, error: msgError } = await supabase
-    .from('whatsapp_messages')
-    .insert({
-      organization_id: orgId,
-      instance_id: instance.id,
-      conversation_id: conversation.id,
-      message_id: messageId,
-      direction: 'inbound',
-      message_type: messageType,
-      content: { text: content }, // JSONB - deve ser objeto
-      text_body: content, // Campo para texto simples
-      from_number: phoneNumber,
-      status: 'received',
-      timestamp: new Date().toISOString(), // Obrigatório
-      // ✅ CORREÇÃO: Adicionar mídia
-      media_url: mediaUrl,
-      media_mime_type: mediaMimeType,
-    })
-    .select()
+    .eq('organization_id', orgId)  // ✅ SEMPRE filtrar por org!
+    .limit(1)
     .single()
 
-  if (msgError) {
-    console.error('[Webhook] ❌ Erro ao salvar mensagem:', msgError)
-    return
-  }
-  
-  console.log('[Webhook] ✅ Mensagem salva:', savedMsg?.id, '| Conversa:', conversation.id)
-
-  // =====================================================
-  // 5. PROCESSAR COM AGENTE DE IA (VIA FILA OU SYNC)
-  // =====================================================
-  
-  // Só processar mensagens de texto
-  if (messageType !== 'text') {
-    console.log('[Webhook] 📷 Mensagem não é texto, pulando IA')
+  if (existingMessage) {
+    console.log('[Webhook] ⏭️ Message already exists:', messageId)
     return
   }
 
-  const aiParams = {
-    organizationId: orgId,
-    conversationId: conversation.id,
-    contactId: '', // Não temos contato separado, usar string vazia
-    instanceId: instance.id,
-    instanceName: instance.unique_id || instance.instance_name || '',
-    phoneNumber: phoneNumber,
-    message: content,
-    messageId: key?.id,
-    contactName: pushName,
-  }
-
-  // Tentar enfileirar para processamento durável
-  const { enqueueWhatsAppAI, isQStashConfigured } = await import('@/lib/queue')
-  
-  if (isQStashConfigured()) {
-    // Produção: usar fila para garantir durabilidade
-    const messageQueueId = await enqueueWhatsAppAI(aiParams)
-    
-    if (messageQueueId) {
-      console.log(`[Webhook] 📤 Enfileirado para processamento: ${messageQueueId}`)
-      return
-    }
-    
-    // Fallback se falhar ao enfileirar
-    console.warn('[Webhook] ⚠️ Falha ao enfileirar, processando sync')
-  }
-
-  // Dev/Fallback: processar síncrono
-  processWithAI(aiParams).catch((aiError) => {
-    console.error('[Webhook] ❌ Erro ao processar com IA:', aiError)
-  })
-}
-
-// =====================================================
-// PROCESSADOR DE IA (SYNC FALLBACK)
-// =====================================================
-
-async function processWithAI(params: {
-  organizationId: string
-  conversationId: string
-  contactId: string
-  instanceId: string
-  instanceName: string
-  phoneNumber: string
-  message: string
-  messageId?: string
-  contactName?: string
-}) {
-  try {
-    const { processWebhookWithAI } = await import('@/lib/ai/webhook-processor')
-    
-    const result = await processWebhookWithAI(params)
-
-    console.log('[Webhook] 🤖 Resultado IA:', {
-      processed: result.processed,
-      replied: result.replied,
-      transferred: result.transferred,
-      agentName: result.agentName,
-      error: result.error,
+  const { error: msgError } = await supabase
+    .from('whatsapp_messages')
+    .insert({
+      organization_id: orgId,  // ✅ SEMPRE com org!
+      conversation_id: conversation.id,
+      contact_id: legacyContact?.id,
+      instance_id: instance.id,
+      message_id: messageId,
+      direction: 'incoming',
+      content: content,
+      message_type: messageType,
+      media_url: mediaUrl,
+      media_key: mediaKey,
+      media_mimetype: mediaMimetype,
+      file_name: fileName,
+      sender_name: pushName,
+      sender_phone: phoneNumber,
+      status: 'received',
+      raw_payload: body,
+      timestamp: new Date().toISOString(),
+      created_at: new Date().toISOString()
     })
 
-  } catch (error) {
-    console.error('[Webhook] ❌ Erro no processador de IA:', error)
+  if (msgError) {
+    console.error('[Webhook] Error saving message:', msgError)
+    return
   }
-}
 
-export async function GET() {
-  const { isQStashConfigured } = await import('@/lib/queue')
+  console.log('[Webhook] ✅ Message saved for org:', orgId)
+
+  // =====================================================
+  // ATUALIZAR CONVERSA
+  // =====================================================
   
-  return NextResponse.json({ 
-    status: 'Webhook WhatsApp ativo',
-    ai_enabled: true,
-    queue_enabled: isQStashConfigured(),
-    version: '2.6-schema-fix',
-    features: ['message_processing', 'ai_agent_response', 'typing_indicator', 'durable_queue'],
-    timestamp: new Date().toISOString(),
-  })
+  await supabase
+    .from('whatsapp_conversations')
+    .update({
+      last_message_at: new Date().toISOString(),
+      last_message_preview: content?.substring(0, 100) || `[${messageType}]`,
+      last_message_direction: 'incoming',
+      unread_count: (conversation.unread_count || 0) + 1,
+      status: 'open',
+      // Atualizar contato unificado se criado
+      unified_contact_id: unifiedContact?.id || conversation.unified_contact_id,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', conversation.id)
+
+  console.log('[Webhook] ✅ Conversation updated')
+
+  // =====================================================
+  // PROCESSAR IA (se habilitada)
+  // =====================================================
+  
+  if (conversation.ai_enabled && messageType === 'text' && content) {
+    console.log('[Webhook] 🤖 AI enabled, triggering response...')
+    
+    try {
+      // Chamar API de IA de forma assíncrona
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app'}/api/ai/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: conversation.id,
+          message: content,
+          contact_id: legacyContact?.id,
+          unified_contact_id: unifiedContact?.id,
+          organization_id: orgId,
+          instance_id: instance.id,
+        })
+      }).catch(err => console.error('[Webhook] AI call error:', err))
+    } catch (aiError) {
+      console.error('[Webhook] Error calling AI:', aiError)
+    }
+  }
+
+  console.log('[Webhook] ======================================')
 }
