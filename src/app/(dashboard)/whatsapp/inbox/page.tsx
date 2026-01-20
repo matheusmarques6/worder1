@@ -33,6 +33,7 @@ export default function InboxPage() {
   // ✅ CORREÇÃO: Passar storeId para filtrar instâncias por loja
   const { instances, selectedInstance, loading: instancesLoading, selectInstance, fetchInstances } = useWhatsAppConnection(organizationId, storeId)
   const [showConnectModal, setShowConnectModal] = useState(false)
+  const [showContactPanel, setShowContactPanel] = useState(true)
 
   // ✅ CORREÇÃO: Passar storeId para os hooks
   const {
@@ -168,19 +169,13 @@ export default function InboxPage() {
     })
   }
 
-  const handleSendMedia = async (file: File, caption?: string) => {
+  const handleSendMedia = async (file: File, mediaType: string, caption?: string) => {
     if (!selectedInstance || !selectedConversation) return
-    
-    // Determinar tipo de mídia baseado no arquivo
-    const mediaType = file.type.startsWith('image/') ? 'image' 
-      : file.type.startsWith('video/') ? 'video'
-      : file.type.startsWith('audio/') ? 'audio'
-      : 'document'
     
     await sendMedia({
       conversationId: selectedConversation.id,
       file,
-      mediaType,
+      mediaType: mediaType as 'image' | 'video' | 'audio' | 'document',
       caption,
     })
   }
@@ -189,9 +184,23 @@ export default function InboxPage() {
     await toggleBot(conversationId, isActive)
   }
 
+  // Wrapper para ChatPanel que não recebe argumentos
+  const handleChatToggleBot = async () => {
+    if (!selectedConversation) return
+    await toggleBot(selectedConversation.id, !selectedConversation.is_bot_active)
+  }
+
   const handleContactToggleBot = async (isActive: boolean) => {
     if (!selectedConversation) return
     await toggleBot(selectedConversation.id, isActive)
+  }
+
+  const handleBack = () => {
+    selectConversation(null)
+  }
+
+  const handleToggleContactPanel = () => {
+    setShowContactPanel(prev => !prev)
   }
 
   const handleConnectionSuccess = () => {
@@ -291,8 +300,10 @@ export default function InboxPage() {
             isUploading={isUploading}
             onSendMessage={handleSendMessage}
             onSendMedia={handleSendMedia}
-            onToggleBot={handleToggleBot}
-            instanceConnected={selectedInstance?.status === 'connected'}
+            onToggleBot={handleChatToggleBot}
+            onBack={handleBack}
+            onToggleContactPanel={handleToggleContactPanel}
+            showContactPanel={showContactPanel}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-dark-500">
@@ -306,7 +317,7 @@ export default function InboxPage() {
       </div>
 
       {/* Right Panel - Contact Details */}
-      {selectedConversation && (
+      {selectedConversation && showContactPanel && (
         <div className="w-80 flex-shrink-0 border-l border-dark-800 overflow-y-auto">
           <ContactPanel
             contact={contact}
@@ -329,11 +340,9 @@ export default function InboxPage() {
             onDeleteNote={deleteNote}
             onBlockContact={blockContact}
             onUnblockContact={unblockContact}
-            onFetchOrders={fetchOrders}
-            onFetchDeals={fetchDeals}
             onCreateDeal={createDeal}
             onAssignConversation={assignConversation}
-            onToggleBot={handleContactToggleBot}
+            onToggleBot={handleToggleBot}
             onCreateTask={createTask}
             onCompleteTask={completeTask}
             onDeleteTask={deleteTask}
