@@ -222,6 +222,7 @@ export default function InboxPage() {
       <AnimatePresence>
         {showConnectModal && (
           <WhatsAppConnectUnified
+            isOpen={showConnectModal}
             onClose={() => setShowConnectModal(false)}
             onSuccess={handleConnectionSuccess} 
             organizationId={organizationId}

@@ -198,7 +198,7 @@ CREATE POLICY "Org members can delete comments" ON contact_comments
 -- ===========================================
 
 -- Dropar função existente se houver
-DROP FUNCTION IF EXISTS extract_mentions(TEXT);
+DROP FUNCTION IF EXISTS extract_mentions(TEXT) CASCADE;
 
 CREATE OR REPLACE FUNCTION extract_mentions(content TEXT)
 RETURNS UUID[] AS $$
@@ -222,7 +222,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- ===========================================
 
 -- Dropar função existente se houver
-DROP FUNCTION IF EXISTS create_notification(UUID, UUID, TEXT, TEXT, TEXT, TEXT, UUID, UUID, JSONB);
+DROP FUNCTION IF EXISTS create_notification(UUID, UUID, TEXT, TEXT, TEXT, TEXT, UUID, UUID, JSONB) CASCADE;
 
 CREATE OR REPLACE FUNCTION create_notification(
   p_organization_id UUID,
@@ -302,7 +302,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Dropar função e trigger existentes
 DROP TRIGGER IF EXISTS trigger_notify_mentions ON contact_comments;
-DROP FUNCTION IF EXISTS notify_mentions_on_comment();
+DROP FUNCTION IF EXISTS notify_mentions_on_comment() CASCADE;
 
 CREATE OR REPLACE FUNCTION notify_mentions_on_comment()
 RETURNS TRIGGER AS $$
@@ -353,7 +353,7 @@ CREATE TRIGGER trigger_notify_mentions
 
 -- Dropar função e trigger existentes
 DROP TRIGGER IF EXISTS trigger_task_assigned ON tasks;
-DROP FUNCTION IF EXISTS notify_task_assigned();
+DROP FUNCTION IF EXISTS notify_task_assigned() CASCADE;
 
 CREATE OR REPLACE FUNCTION notify_task_assigned()
 RETURNS TRIGGER AS $$
@@ -396,7 +396,7 @@ CREATE TRIGGER trigger_task_assigned
 
 -- Dropar função e trigger existentes
 DROP TRIGGER IF EXISTS trigger_task_completed ON tasks;
-DROP FUNCTION IF EXISTS notify_task_completed();
+DROP FUNCTION IF EXISTS notify_task_completed() CASCADE;
 
 CREATE OR REPLACE FUNCTION notify_task_completed()
 RETURNS TRIGGER AS $$
@@ -442,7 +442,7 @@ CREATE TRIGGER trigger_task_completed
 
 -- Dropar função e trigger existentes
 DROP TRIGGER IF EXISTS trigger_deal_assigned ON deals;
-DROP FUNCTION IF EXISTS notify_deal_assigned();
+DROP FUNCTION IF EXISTS notify_deal_assigned() CASCADE;
 
 CREATE OR REPLACE FUNCTION notify_deal_assigned()
 RETURNS TRIGGER AS $$
@@ -485,7 +485,7 @@ CREATE TRIGGER trigger_deal_assigned
 
 -- Dropar função e trigger existentes
 DROP TRIGGER IF EXISTS trigger_deal_stage_changed ON deals;
-DROP FUNCTION IF EXISTS notify_deal_stage_changed();
+DROP FUNCTION IF EXISTS notify_deal_stage_changed() CASCADE;
 
 CREATE OR REPLACE FUNCTION notify_deal_stage_changed()
 RETURNS TRIGGER AS $$
@@ -529,7 +529,7 @@ CREATE TRIGGER trigger_deal_stage_changed
 -- ===========================================
 
 -- Dropar função existente
-DROP FUNCTION IF EXISTS check_tasks_due_soon();
+DROP FUNCTION IF EXISTS check_tasks_due_soon() CASCADE;
 
 CREATE OR REPLACE FUNCTION check_tasks_due_soon()
 RETURNS INTEGER AS $$
@@ -580,7 +580,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ===========================================
 
 -- Dropar função existente
-DROP FUNCTION IF EXISTS check_tasks_overdue();
+DROP FUNCTION IF EXISTS check_tasks_overdue() CASCADE;
 
 CREATE OR REPLACE FUNCTION check_tasks_overdue()
 RETURNS INTEGER AS $$
