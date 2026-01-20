@@ -8,8 +8,6 @@ import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 
 export async function POST(request: NextRequest) {
   try {
-    // Verificar HMAC do Shopify
-    const hmac = request.headers.get('x-shopify-hmac-sha256')
     const topic = request.headers.get('x-shopify-topic')
     const shopDomain = request.headers.get('x-shopify-shop-domain')
 
@@ -83,7 +81,6 @@ async function handleCheckout(org_id: string, data: any, event_type: string) {
   const customer = data.customer || {}
   const lineItems = data.line_items || []
 
-  // Encontrar/criar contato
   const contact_id = await findOrCreateContact(org_id, {
     email: data.email || customer.email,
     phone: data.phone || customer.phone,
@@ -91,7 +88,6 @@ async function handleCheckout(org_id: string, data: any, event_type: string) {
     shopify_customer_id: customer.id?.toString(),
   })
 
-  // Registrar evento de checkout
   await supabase.from('customer_events').insert({
     organization_id: org_id,
     contact_id,
@@ -115,7 +111,6 @@ async function handleCheckout(org_id: string, data: any, event_type: string) {
     },
   })
 
-  // Registrar evento para cada produto
   for (const item of lineItems) {
     await supabase.from('customer_events').insert({
       organization_id: org_id,
@@ -143,7 +138,6 @@ async function handleOrder(org_id: string, data: any, event_type: string) {
     shopify_customer_id: customer.id?.toString(),
   })
 
-  // Registrar compra
   await supabase.from('customer_events').insert({
     organization_id: org_id,
     contact_id,
@@ -173,15 +167,24 @@ async function handleOrder(org_id: string, data: any, event_type: string) {
   if (event_type === 'purchase' && contact_id) {
     const orderTotal = parseFloat(data.total_price || 0)
     
-    await supabase
+    // Buscar valores atuais
+    const { data: currentContact } = await supabase
       .from('contacts')
-      .update({
-        total_revenue: supabase.sql`COALESCE(total_revenue, 0) + ${orderTotal}`,
-        total_orders: supabase.sql`COALESCE(total_orders, 0) + 1`,
-        last_order_date: new Date().toISOString(),
-        shopify_customer_id: customer.id?.toString(),
-      })
+      .select('total_revenue, total_orders')
       .eq('id', contact_id)
+      .single()
+
+    if (currentContact) {
+      await supabase
+        .from('contacts')
+        .update({
+          total_revenue: (currentContact.total_revenue || 0) + orderTotal,
+          total_orders: (currentContact.total_orders || 0) + 1,
+          last_order_date: new Date().toISOString(),
+          shopify_customer_id: customer.id?.toString(),
+        })
+        .eq('id', contact_id)
+    }
   }
 }
 
@@ -237,7 +240,6 @@ async function findOrCreateContact(
   const { data: existing } = await query.limit(1).single()
 
   if (existing) {
-    // Atualizar dados
     if (data.shopify_customer_id) {
       await supabase
         .from('contacts')
