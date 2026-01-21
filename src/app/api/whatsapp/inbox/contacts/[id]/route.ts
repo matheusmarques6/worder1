@@ -3,6 +3,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 
+// ✅ FASE 4: Garantir que não há cache
+export const dynamic = 'force-dynamic'
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, max-age=0',
+}
+
 // GET - Buscar contato UNIFICADO
 export async function GET(
   request: NextRequest,
