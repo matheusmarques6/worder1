@@ -93,6 +93,7 @@ export interface InboxContact {
 export interface InboxConversation {
   id: string
   organization_id: string
+  store_id?: string // Loja associada
   contact_id: string
   unified_contact_id?: string // Novo campo para tabela contacts
   instance_id?: string
