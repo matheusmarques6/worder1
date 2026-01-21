@@ -168,6 +168,7 @@ export function useInboxMessages(): UseInboxMessagesReturn {
       content: params.content || '',
       status: 'pending', // Status visual de "enviando"
       sent_by_bot: false,
+      is_deleted: false,
       created_at: new Date().toISOString(),
     }
     
