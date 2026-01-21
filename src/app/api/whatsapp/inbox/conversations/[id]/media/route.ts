@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 
-// ✅ SPRINT 2: SEM FALLBACK HARDCODED
+// ✅ FASE 3: Force dynamic para evitar cache
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+// Headers padrão sem cache
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, max-age=0',
+}
+
+// ✅ FASE 2: SEM FALLBACK HARDCODED
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY
 
-// ✅ SPRINT 2: CONFIGURAÇÕES DE SEGURANÇA
+// ✅ FASE 2: CONFIGURAÇÕES DE SEGURANÇA
 const MAX_FILE_SIZE = 16 * 1024 * 1024 // 16MB
 const SIGNED_URL_EXPIRY = 3600 // 1 hora
 
@@ -30,19 +39,16 @@ function getEvolutionConfig(instance?: any) {
   return { apiUrl, apiKey }
 }
 
-// ✅ SPRINT 2: Validação de arquivo
+// Validação de arquivo
 function validateFile(file: File, mediaType: string): { valid: boolean; error?: string } {
-  // Validar tamanho
   if (file.size > MAX_FILE_SIZE) {
     return { valid: false, error: `Arquivo muito grande. Máximo: ${MAX_FILE_SIZE / (1024 * 1024)}MB` }
   }
 
-  // Validar extensões perigosas
   if (DANGEROUS_EXTENSIONS.some(ext => file.name.toLowerCase().endsWith(ext))) {
     return { valid: false, error: 'Tipo de arquivo não permitido por segurança' }
   }
 
-  // Validar tipo MIME (menos restritivo para documentos)
   const allowedList = ALLOWED_TYPES[mediaType as keyof typeof ALLOWED_TYPES]
   if (allowedList && mediaType !== 'document') {
     const baseType = file.type.split('/')[0]
@@ -63,52 +69,129 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const mediaType = formData.get('mediaType') as string || 'document'
     const caption = formData.get('caption') as string || ''
 
-    console.log('[Send Media] Type:', mediaType, '| File:', file?.name, '| Size:', file?.size)
+    console.log('[Media POST] Starting upload:', {
+      mediaType,
+      fileName: file?.name,
+      fileSize: file?.size,
+      conversation_id: conversationId
+    })
 
-    // ✅ SPRINT 2: Validações
+    // Validações
     if (!file) {
-      return NextResponse.json({ error: 'File required', success: false }, { status: 400 })
+      return NextResponse.json(
+        { error: 'File required', success: false },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
     }
 
     const validation = validateFile(file, mediaType)
     if (!validation.valid) {
-      return NextResponse.json({ error: validation.error, success: false }, { status: 400 })
+      return NextResponse.json(
+        { error: validation.error, success: false },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
     }
 
-    // Buscar conversa
-    const { data: conversation } = await supabase
-      .from('whatsapp_conversations').select('*').eq('id', conversationId).single()
+    // ✅ FASE 3: Buscar conversa COM instance_id e store_id
+    const { data: conversation, error: convError } = await supabase
+      .from('whatsapp_conversations')
+      .select('*, instance_id, store_id, contact_phone, phone_number, organization_id')
+      .eq('id', conversationId)
+      .single()
 
-    if (!conversation) {
-      return NextResponse.json({ error: 'Conversation not found', success: false }, { status: 404 })
+    if (convError || !conversation) {
+      console.error('[Media POST] Conversation not found:', conversationId)
+      return NextResponse.json(
+        { error: 'Conversation not found', success: false },
+        { status: 404, headers: NO_CACHE_HEADERS }
+      )
     }
 
-    // Buscar instância
-    const { data: instances } = await supabase.from('whatsapp_instances').select('*')
-      .eq('organization_id', conversation.organization_id).in('status', ['connected', 'ACTIVE']).limit(1)
-
-    const instance = instances?.[0]
-    if (!instance) {
-      return NextResponse.json({ error: 'No connected WhatsApp instance', success: false }, { status: 400 })
+    // ✅ FASE 3: Verificar se conversa tem instance_id
+    if (!conversation.instance_id) {
+      console.error('[Media POST] Conversa sem instance_id:', {
+        conversation_id: conversationId,
+        store_id: conversation.store_id
+      })
+      return NextResponse.json(
+        { error: 'Conversa não tem instância associada. Reabra a conversa.', success: false },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
     }
 
-    // ✅ SPRINT 2: Verificar config sem fallback
+    // ✅ FASE 3: Buscar instância ESPECÍFICA da conversa
+    const { data: instance, error: instError } = await supabase
+      .from('whatsapp_instances')
+      .select('*')
+      .eq('id', conversation.instance_id)
+      .single()
+
+    if (instError || !instance) {
+      console.error('[Media POST] Instância não encontrada:', {
+        instance_id: conversation.instance_id,
+        conversation_id: conversationId
+      })
+      return NextResponse.json(
+        { error: 'Instância WhatsApp não encontrada', success: false },
+        { status: 404, headers: NO_CACHE_HEADERS }
+      )
+    }
+
+    // ✅ FASE 3: Validar que store_id bate
+    if (conversation.store_id && instance.store_id && conversation.store_id !== instance.store_id) {
+      console.error('[Media POST] Store mismatch:', {
+        conversation_store: conversation.store_id,
+        instance_store: instance.store_id
+      })
+      return NextResponse.json(
+        { error: 'Instância não pertence à mesma loja da conversa', success: false },
+        { status: 403, headers: NO_CACHE_HEADERS }
+      )
+    }
+
+    // ✅ FASE 3: Validar que instância está conectada
+    const connectedStatuses = ['connected', 'ACTIVE', 'open']
+    if (!connectedStatuses.includes(instance.status?.toLowerCase())) {
+      console.error('[Media POST] Instância desconectada:', {
+        instance_id: instance.id,
+        status: instance.status
+      })
+      return NextResponse.json(
+        { error: `Instância WhatsApp não está conectada (status: ${instance.status})`, success: false },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
+    }
+
+    // ✅ FASE 3: Verificar config sem fallback
     const config = getEvolutionConfig(instance)
     if (!config) {
       return NextResponse.json({ 
         error: 'Evolution API not configured. Set EVOLUTION_API_URL and EVOLUTION_API_KEY.',
         success: false 
-      }, { status: 503 })
+      }, { status: 503, headers: NO_CACHE_HEADERS })
     }
 
     const instanceName = instance.unique_id || instance.instance_name || instance.instance_id
     const phoneNumber = conversation.contact_phone || conversation.phone_number
 
+    // ✅ FASE 3: Log detalhado
+    console.log('[Media POST] Enviando mídia:', {
+      conversation_id: conversationId,
+      store_id: conversation.store_id,
+      instance_id: instance.id,
+      instance_name: instanceName,
+      instance_status: instance.status,
+      to: phoneNumber,
+      media_type: mediaType,
+      file_name: file.name,
+      file_size: file.size
+    })
+
     // Converter arquivo
     const buffer = Buffer.from(await file.arrayBuffer())
     const base64 = buffer.toString('base64')
 
-    // ✅ SPRINT 2: Upload com Signed URL
+    // Upload para Storage
     let mediaUrl = null
     let storagePath = null
 
@@ -117,7 +200,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const ext = sanitizedName.split('.').pop() || file.type.split('/')[1] || 'bin'
       const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
       
-      // Path: org_id/conversation_id/timestamp-random.ext
       storagePath = `${conversation.organization_id}/${conversationId}/${uniqueId}.${ext}`
       
       const { error: uploadError } = await supabase.storage
@@ -129,7 +211,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         })
 
       if (!uploadError) {
-        // ✅ SPRINT 2: Signed URL em vez de pública
+        // ✅ Usar Signed URL (mais seguro)
         const { data: signedData, error: signedError } = await supabase.storage
           .from('whatsapp-media')
           .createSignedUrl(storagePath, SIGNED_URL_EXPIRY)
@@ -137,17 +219,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         if (!signedError && signedData?.signedUrl) {
           mediaUrl = signedData.signedUrl
         } else {
-          // Fallback para URL pública se signed falhar
+          // Fallback para URL pública
           const { data: publicData } = supabase.storage
             .from('whatsapp-media')
             .getPublicUrl(storagePath)
           mediaUrl = publicData?.publicUrl
         }
         
-        console.log('[Send Media] ✅ Uploaded:', mediaUrl?.substring(0, 60))
+        console.log('[Media POST] ✅ Uploaded to storage:', storagePath)
       }
     } catch (storageError) {
-      console.error('[Send Media] Storage error:', storageError)
+      console.error('[Media POST] Storage error:', storageError)
     }
 
     // Enviar via Evolution API
@@ -171,7 +253,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (caption) payload.caption = caption
     }
 
-    console.log('[Send Media] Sending to Evolution:', endpoint)
+    console.log('[Media POST] Sending to Evolution:', endpoint)
 
     const sendResponse = await fetch(`${config.apiUrl}${endpoint}`, {
       method: 'POST',
@@ -180,13 +262,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     })
 
     const sendData = await sendResponse.json()
-    console.log('[Send Media] Evolution response:', sendResponse.status, sendResponse.ok)
+    
+    // ✅ FASE 3: Log detalhado da resposta
+    if (!sendResponse.ok) {
+      console.error('[Media POST] Evolution API error:', {
+        status: sendResponse.status,
+        response: sendData,
+        instance: instanceName,
+        endpoint
+      })
+    } else {
+      console.log('[Media POST] ✅ Enviado com sucesso:', sendData?.key?.id)
+    }
 
     // Salvar no banco
     const { data: saved, error: saveError } = await supabase
       .from('whatsapp_messages')
       .insert({
         organization_id: conversation.organization_id,
+        store_id: conversation.store_id,
         instance_id: instance.id,
         conversation_id: conversationId,
         message_id: sendData?.key?.id || `media-${Date.now()}`,
@@ -199,16 +293,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         media_url: mediaUrl,
         media_filename: file.name,
         media_mime_type: file.type,
-        media_storage_path: storagePath, // Para refresh de signed URL
+        media_storage_path: storagePath,
         timestamp: new Date().toISOString(),
       })
       .select()
       .single()
 
     if (saveError) {
-      console.error('[Send Media] Save error:', saveError)
-    } else {
-      console.log('[Send Media] ✅ Saved:', saved.id)
+      console.error('[Media POST] Save error:', saveError)
     }
 
     // Atualizar conversa
@@ -243,22 +335,28 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       message: responseMessage,
       success: sendResponse.ok,
       ...(sendResponse.ok ? {} : { error: 'Failed to send via Evolution API', evolution_error: sendData })
-    })
+    }, { headers: NO_CACHE_HEADERS })
 
   } catch (error: any) {
-    console.error('[Send Media] Error:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    console.error('[Media POST] Error:', error)
+    return NextResponse.json(
+      { error: error.message, success: false },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    )
   }
 }
 
-// ✅ SPRINT 2: GET para refresh de Signed URL
+// GET - Refresh de Signed URL
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { searchParams } = new URL(request.url)
     const messageId = searchParams.get('messageId')
     
     if (!messageId) {
-      return NextResponse.json({ error: 'messageId required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'messageId required' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
     }
 
     const { data: message, error } = await supabase
@@ -269,30 +367,40 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .single()
 
     if (error || !message) {
-      return NextResponse.json({ error: 'Message not found' }, { status: 404 })
+      return NextResponse.json(
+        { error: 'Message not found' },
+        { status: 404, headers: NO_CACHE_HEADERS }
+      )
     }
 
-    // Se não tem storage path, retornar URL existente
     if (!message.media_storage_path) {
-      return NextResponse.json({ url: message.media_url })
+      return NextResponse.json(
+        { url: message.media_url },
+        { headers: NO_CACHE_HEADERS }
+      )
     }
 
-    // Gerar nova Signed URL
     const { data: signedData, error: signedError } = await supabase.storage
       .from('whatsapp-media')
       .createSignedUrl(message.media_storage_path, SIGNED_URL_EXPIRY)
 
     if (signedError) {
-      console.error('[Refresh URL] Error:', signedError)
-      return NextResponse.json({ url: message.media_url }) // Fallback
+      console.error('[Media GET] Refresh URL error:', signedError)
+      return NextResponse.json(
+        { url: message.media_url },
+        { headers: NO_CACHE_HEADERS }
+      )
     }
 
     return NextResponse.json({ 
       url: signedData?.signedUrl,
       expiresIn: SIGNED_URL_EXPIRY,
-    })
+    }, { headers: NO_CACHE_HEADERS })
   } catch (error: any) {
-    console.error('[Refresh URL] Error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('[Media GET] Error:', error)
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    )
   }
 }

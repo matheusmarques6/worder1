@@ -30,6 +30,8 @@ interface WhatsAppNumber {
 }
 
 interface NumberSelectorProps {
+  organizationId: string    // ✅ FASE 1: Obrigatório
+  storeId: string           // ✅ FASE 1: Obrigatório
   selectedNumberId: string | null
   onNumberChange: (numberId: string | null) => void
   showAllOption?: boolean
@@ -37,6 +39,8 @@ interface NumberSelectorProps {
 }
 
 export default function NumberSelector({
+  organizationId,
+  storeId,
   selectedNumberId,
   onNumberChange,
   showAllOption = true,
@@ -47,22 +51,51 @@ export default function NumberSelector({
   const [loading, setLoading] = useState(true)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Fetch numbers
+  // ✅ FASE 1: Fetch com storeId obrigatório e refetch ao trocar loja
   useEffect(() => {
+    // Reset ao trocar de loja
+    setNumbers([])
+    setLoading(true)
+    
+    // ✅ FASE 1: Resetar seleção ao trocar de loja
+    onNumberChange(null)
+
     const fetchNumbers = async () => {
+      // Validar parâmetros obrigatórios
+      if (!organizationId || !storeId) {
+        console.log('[NumberSelector] Missing required params:', { organizationId, storeId })
+        setLoading(false)
+        return
+      }
+
       try {
-        const res = await fetch('/api/whatsapp/numbers?include_stats=true')
+        console.log('[NumberSelector] Fetching for store:', storeId)
+        
+        const res = await fetch(
+          `/api/whatsapp/numbers?organization_id=${organizationId}&store_id=${storeId}&include_stats=true`
+        )
+        
+        if (!res.ok) {
+          const error = await res.json()
+          console.error('[NumberSelector] API Error:', error)
+          setNumbers([])
+          return
+        }
+        
         const data = await res.json()
         setNumbers(data.numbers || [])
+        
+        console.log('[NumberSelector] Found', data.numbers?.length || 0, 'numbers')
       } catch (error) {
-        console.error('Error fetching numbers:', error)
+        console.error('[NumberSelector] Fetch error:', error)
+        setNumbers([])
       } finally {
         setLoading(false)
       }
     }
 
     fetchNumbers()
-  }, [])
+  }, [organizationId, storeId]) // ✅ FASE 1: Refetch quando storeId mudar
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -269,28 +302,46 @@ export default function NumberSelector({
   )
 }
 
-// Compact version for header
+// Compact version for header - também com storeId
+interface NumberSelectorCompactProps {
+  organizationId: string
+  storeId: string
+  selectedNumberId: string | null
+  onNumberChange: (numberId: string | null) => void
+}
+
 export function NumberSelectorCompact({
+  organizationId,
+  storeId,
   selectedNumberId,
   onNumberChange,
-}: NumberSelectorProps) {
+}: NumberSelectorCompactProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [numbers, setNumbers] = useState<WhatsAppNumber[]>([])
   const dropdownRef = useRef<HTMLDivElement>(null)
 
+  // ✅ FASE 1: Refetch ao trocar de loja
   useEffect(() => {
+    setNumbers([])
+    
     const fetchNumbers = async () => {
+      if (!organizationId || !storeId) return
+      
       try {
-        const res = await fetch('/api/whatsapp/numbers?connected_only=true')
-        const data = await res.json()
-        setNumbers(data.numbers || [])
+        const res = await fetch(
+          `/api/whatsapp/numbers?organization_id=${organizationId}&store_id=${storeId}&connected_only=true`
+        )
+        if (res.ok) {
+          const data = await res.json()
+          setNumbers(data.numbers || [])
+        }
       } catch (error) {
-        console.error('Error fetching numbers:', error)
+        console.error('[NumberSelectorCompact] Error:', error)
       }
     }
 
     fetchNumbers()
-  }, [])
+  }, [organizationId, storeId])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

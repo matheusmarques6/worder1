@@ -19,7 +19,7 @@ import { useInboxContact } from '@/hooks/useInboxContact'
 import { useWhatsAppConnection, type WhatsAppInstance } from '@/hooks/useWhatsAppConnectionManager'
 
 // Types
-import type { InboxConversation, ConversationFilters } from '@/types/inbox'
+import type { InboxConversation, ConversationFilters, InboxTask } from '@/types/inbox'
 
 const POLLING_INTERVAL = 5000
 
@@ -208,6 +208,25 @@ export default function InboxPage() {
     fetchInstances()
   }
 
+  // ✅ FASE 1: Wrappers para corrigir tipos TypeScript
+  // ContactPanel espera Promise<void>, mas hook retorna Promise<InboxTask | null>
+  const handleCreateTask = async (contactId: string, task: Partial<InboxTask>): Promise<void> => {
+    await createTask(contactId, task)
+  }
+
+  // ContactPanel espera (data: FormData), mas hook recebe (contactId, data)
+  const handleUploadInvoice = async (data: FormData): Promise<void> => {
+    if (!contact?.id) return
+    await uploadInvoice(contact.id, data)
+  }
+
+  // ContactPanel espera () => void, mas hook recebe (contactId, conversationId?)
+  const handleRefreshContact = (): void => {
+    if (contact?.id && selectedConversation?.id) {
+      refreshContact(contact.id, selectedConversation.id)
+    }
+  }
+
   // =============================================
   // RENDER
   // =============================================
@@ -343,13 +362,13 @@ export default function InboxPage() {
             onCreateDeal={createDeal}
             onAssignConversation={assignConversation}
             onToggleBot={handleToggleBot}
-            onCreateTask={createTask}
+            onCreateTask={handleCreateTask}
             onCompleteTask={completeTask}
             onDeleteTask={deleteTask}
-            onUploadInvoice={uploadInvoice}
+            onUploadInvoice={handleUploadInvoice}
             onDeleteInvoice={deleteInvoice}
             onAddComment={addComment}
-            onRefreshContact={refreshContact}
+            onRefreshContact={handleRefreshContact}
           />
         </div>
       )}

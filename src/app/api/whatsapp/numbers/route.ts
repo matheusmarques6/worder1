@@ -1,67 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { getSupabaseClient } from '@/lib/api-utils'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 
-async function getOrgIdFromSession(supabase: any) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  const { data } = await supabase
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
-    .single()
-  return data?.organization_id
+// ✅ FASE 1: Force dynamic para evitar cache
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+// Headers padrão sem cache
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, max-age=0',
 }
 
 // GET - Lista números de WhatsApp
 export async function GET(request: NextRequest) {
-  // Primeiro tenta pegar organization_id da query string
-  const orgIdFromQuery = request.nextUrl.searchParams.get('organization_id') || 
-                          request.nextUrl.searchParams.get('organizationId')
-  
-  let supabase: any
-  let orgId: string | null = null
-
-  if (orgIdFromQuery) {
-    // Usar client direto se organization_id foi fornecido
-    supabase = getSupabaseClient()
-    if (!supabase) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-    }
-    orgId = orgIdFromQuery
-  } else {
-    // Fallback para autenticação por sessão
-    try {
-      supabase = createRouteHandlerClient({ cookies })
-      orgId = await getOrgIdFromSession(supabase)
-    } catch {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  }
-  
-  if (!orgId) {
-    return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-  }
-
   try {
-    // Parâmetros
-    const includeStats = request.nextUrl.searchParams.get('include_stats') === 'true'
-    const connectedOnly = request.nextUrl.searchParams.get('connected_only') === 'true'
+    const { searchParams } = new URL(request.url)
+    
+    // Parâmetros obrigatórios
+    const organizationId = searchParams.get('organization_id') || searchParams.get('organizationId')
+    const storeId = searchParams.get('store_id') || searchParams.get('storeId')
+    
+    // ✅ FASE 1: storeId OBRIGATÓRIO
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'organization_id is required' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
+    }
+    
+    if (!storeId) {
+      return NextResponse.json(
+        { error: 'store_id is required for multi-store isolation' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
+    }
 
-    // Tenta a nova tabela primeiro
+    // Parâmetros opcionais
+    const includeStats = searchParams.get('include_stats') === 'true'
+    const connectedOnly = searchParams.get('connected_only') === 'true'
+
+    console.log('[Numbers API] Fetching for org:', organizationId, 'store:', storeId)
+
+    // ✅ FASE 1: Query filtrada por organization_id E store_id
     let { data: numbers, error } = await supabase
       .from('whatsapp_numbers')
       .select('*')
-      .eq('organization_id', orgId)
+      .eq('organization_id', organizationId)
+      .eq('store_id', storeId)
       .order('created_at', { ascending: false })
 
     // Se a nova tabela não existe, usa a antiga (whatsapp_instances)
     if (error && error.code === '42P01') {
+      console.log('[Numbers API] Fallback to whatsapp_instances')
+      
       const result = await supabase
         .from('whatsapp_instances')
         .select('*')
-        .eq('organization_id', orgId)
+        .eq('organization_id', organizationId)
+        .eq('store_id', storeId)
         .order('created_at', { ascending: false })
 
       if (result.data) {
@@ -69,6 +64,7 @@ export async function GET(request: NextRequest) {
         numbers = result.data.map((instance: any) => ({
           id: instance.id,
           organization_id: instance.organization_id,
+          store_id: instance.store_id,
           phone_number: instance.phone_number || instance.instance_name,
           phone_number_id: instance.phone_number_id,
           display_name: instance.display_name || instance.instance_name,
@@ -102,11 +98,12 @@ export async function GET(request: NextRequest) {
     // Incluir estatísticas
     if (includeStats && result.length > 0) {
       for (const number of result) {
-        // Contar conversas
+        // Contar conversas da mesma loja
         const { count: conversationsCount } = await supabase
           .from('whatsapp_conversations')
           .select('*', { count: 'exact', head: true })
-          .eq('whatsapp_number_id', number.id)
+          .eq('store_id', storeId)
+          .or(`whatsapp_number_id.eq.${number.id},instance_id.eq.${number.id}`)
 
         // Contar mensagens hoje
         const today = new Date()
@@ -115,7 +112,8 @@ export async function GET(request: NextRequest) {
         const { count: messagesToday } = await supabase
           .from('whatsapp_messages')
           .select('*', { count: 'exact', head: true })
-          .eq('whatsapp_number_id', number.id)
+          .eq('store_id', storeId)
+          .or(`whatsapp_number_id.eq.${number.id},instance_id.eq.${number.id}`)
           .gte('created_at', today.toISOString())
 
         number.stats = {
@@ -125,26 +123,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ numbers: result })
+    console.log('[Numbers API] Found', result.length, 'numbers for store:', storeId)
+
+    return NextResponse.json(
+      { numbers: result },
+      { headers: NO_CACHE_HEADERS }
+    )
 
   } catch (error: any) {
-    console.error('Error fetching WhatsApp numbers:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('[Numbers API] Error:', error)
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    )
   }
 }
 
 // POST - Adicionar número de WhatsApp
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const orgId = await getOrgIdFromSession(supabase)
-    
-    if (!orgId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
     const { 
+      organization_id,
+      store_id,
       provider = 'evolution',
       phone_number,
       display_name,
@@ -159,16 +160,32 @@ export async function POST(request: NextRequest) {
       base_url,
     } = body
 
+    // ✅ FASE 1: Validações obrigatórias
+    if (!organization_id) {
+      return NextResponse.json(
+        { error: 'organization_id is required' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
+    }
+
+    if (!store_id) {
+      return NextResponse.json(
+        { error: 'store_id is required' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
+    }
+
     if (!phone_number && !instance_name) {
       return NextResponse.json(
         { error: 'phone_number ou instance_name é obrigatório' },
-        { status: 400 }
+        { status: 400, headers: NO_CACHE_HEADERS }
       )
     }
 
     // Dados do número
     const numberData: any = {
-      organization_id: orgId,
+      organization_id,
+      store_id,
       provider,
       phone_number: phone_number || instance_name,
       display_name: display_name || phone_number || instance_name,
@@ -199,7 +216,8 @@ export async function POST(request: NextRequest) {
     // Se a tabela não existe, usa a antiga
     if (error && error.code === '42P01') {
       const instanceData = {
-        organization_id: orgId,
+        organization_id,
+        store_id,
         instance_name: instance_name || phone_number,
         phone_number,
         display_name: display_name || phone_number,
@@ -220,34 +238,46 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (result.error) throw result.error
-      return NextResponse.json({ number: result.data }, { status: 201 })
+      return NextResponse.json(
+        { number: result.data },
+        { status: 201, headers: NO_CACHE_HEADERS }
+      )
     }
 
     if (error) throw error
 
-    return NextResponse.json({ number: data }, { status: 201 })
+    return NextResponse.json(
+      { number: data },
+      { status: 201, headers: NO_CACHE_HEADERS }
+    )
 
   } catch (error: any) {
-    console.error('Error creating WhatsApp number:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('[Numbers API] POST Error:', error)
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    )
   }
 }
 
 // PATCH - Atualizar número de WhatsApp
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const orgId = await getOrgIdFromSession(supabase)
-    
-    if (!orgId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
-    const { id, ...updateData } = body
+    const { id, organization_id, store_id, ...updateData } = body
 
     if (!id) {
-      return NextResponse.json({ error: 'id é obrigatório' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'id é obrigatório' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
+    }
+
+    if (!organization_id || !store_id) {
+      return NextResponse.json(
+        { error: 'organization_id and store_id are required' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
     }
 
     // Campos permitidos
@@ -266,12 +296,13 @@ export async function PATCH(request: NextRequest) {
     })
     filtered.updated_at = new Date().toISOString()
 
-    // Atualizar
+    // ✅ FASE 1: Filtrar por organization_id E store_id
     let { data, error } = await supabase
       .from('whatsapp_numbers')
       .update(filtered)
       .eq('id', id)
-      .eq('organization_id', orgId)
+      .eq('organization_id', organization_id)
+      .eq('store_id', store_id)
       .select()
       .single()
 
@@ -281,7 +312,8 @@ export async function PATCH(request: NextRequest) {
         .from('whatsapp_instances')
         .update(filtered)
         .eq('id', id)
-        .eq('organization_id', orgId)
+        .eq('organization_id', organization_id)
+        .eq('store_id', store_id)
         .select()
         .single()
 
@@ -291,36 +323,49 @@ export async function PATCH(request: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json({ number: data })
+    return NextResponse.json(
+      { number: data },
+      { headers: NO_CACHE_HEADERS }
+    )
 
   } catch (error: any) {
-    console.error('Error updating WhatsApp number:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('[Numbers API] PATCH Error:', error)
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    )
   }
 }
 
 // DELETE - Remover número de WhatsApp
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const orgId = await getOrgIdFromSession(supabase)
-    
-    if (!orgId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const id = request.nextUrl.searchParams.get('id')
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    const organizationId = searchParams.get('organization_id') || searchParams.get('organizationId')
+    const storeId = searchParams.get('store_id') || searchParams.get('storeId')
     
     if (!id) {
-      return NextResponse.json({ error: 'id é obrigatório' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'id é obrigatório' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
     }
 
-    // Deletar
+    if (!organizationId || !storeId) {
+      return NextResponse.json(
+        { error: 'organization_id and store_id are required' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      )
+    }
+
+    // ✅ FASE 1: Filtrar por organization_id E store_id
     let { error } = await supabase
       .from('whatsapp_numbers')
       .delete()
       .eq('id', id)
-      .eq('organization_id', orgId)
+      .eq('organization_id', organizationId)
+      .eq('store_id', storeId)
 
     // Tentar tabela antiga
     if (error && error.code === '42P01') {
@@ -328,18 +373,25 @@ export async function DELETE(request: NextRequest) {
         .from('whatsapp_instances')
         .delete()
         .eq('id', id)
-        .eq('organization_id', orgId)
+        .eq('organization_id', organizationId)
+        .eq('store_id', storeId)
 
       error = result.error
     }
 
     if (error) throw error
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json(
+      { success: true },
+      { headers: NO_CACHE_HEADERS }
+    )
 
   } catch (error: any) {
-    console.error('Error deleting WhatsApp number:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('[Numbers API] DELETE Error:', error)
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    )
   }
 }
 

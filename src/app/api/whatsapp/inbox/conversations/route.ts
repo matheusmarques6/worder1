@@ -84,7 +84,10 @@ export async function GET(request: NextRequest) {
       if (simpleError) throw simpleError
 
       const conversations = (simpleData || []).map(conv => formatConversation(conv, null, null))
-      return NextResponse.json({ conversations })
+      return NextResponse.json(
+        { conversations },
+        { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+      )
     }
 
     // Formatar para o frontend
@@ -103,10 +106,16 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(`[Conversations] Found ${filteredConversations.length} for store ${storeId}`)
-    return NextResponse.json({ conversations: filteredConversations })
+    return NextResponse.json(
+      { conversations: filteredConversations },
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    )
   } catch (error: any) {
     console.error('Error fetching conversations:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500, headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    )
   }
 }
 
