@@ -272,13 +272,44 @@ async function handleMessage(instance: any, body: any) {
   // BUSCAR/CRIAR CONVERSA - SEMPRE na organização correta
   // =====================================================
   
+  // PATCH 0: Buscar conversa INCLUINDO instance_id para evitar mistura
   let { data: conversation } = await supabase
     .from('whatsapp_conversations')
     .select('*')
     .eq('organization_id', orgId)  // ✅ SEMPRE filtrar por org!
     .eq('phone_number', phoneNumber)
+    .eq('instance_id', instance.id) // ✅ NOVO: Filtrar por instância também!
     .limit(1)
     .single();
+  
+  // Se não encontrou com instance_id, buscar conversa antiga (sem instance_id ou com outro)
+  if (!conversation) {
+    const { data: legacyConv } = await supabase
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('phone_number', phoneNumber)
+      .is('instance_id', null)  // Conversa antiga sem instance_id
+      .limit(1)
+      .single();
+    
+    if (legacyConv) {
+      // AUTO-HEAL: Atualizar conversa antiga com instance_id e store_id
+      console.log('[Evolution Webhook] 🔧 Auto-heal: Atualizando conversa antiga com instance_id');
+      const { data: healedConv } = await supabase
+        .from('whatsapp_conversations')
+        .update({
+          instance_id: instance.id,
+          store_id: instance.store_id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', legacyConv.id)
+        .select()
+        .single();
+      
+      conversation = healedConv || legacyConv;
+    }
+  }
     
   if (!conversation) {
     const { data: newConv, error: convError } = await supabase
@@ -286,6 +317,7 @@ async function handleMessage(instance: any, body: any) {
       .insert({
         organization_id: orgId,  // ✅ SEMPRE com org!
         instance_id: instance.id,
+        store_id: instance.store_id, // ✅ NOVO: Incluir store_id
         phone_number: phoneNumber,
         chat_id: remoteJid,
         contact_id: contact?.id,
@@ -303,7 +335,7 @@ async function handleMessage(instance: any, body: any) {
       
     if (!convError) {
       conversation = newConv;
-      console.log('[Evolution Webhook] ✅ Created conversation for org:', orgId);
+      console.log('[Evolution Webhook] ✅ Created conversation for org:', orgId, 'instance:', instance.id);
     }
   }
   
@@ -318,12 +350,13 @@ async function handleMessage(instance: any, body: any) {
   
   const messageId = key.id || `msg_${Date.now()}`;
   
-  // Verificar duplicata
+  // Verificar duplicata - CORRIGIDO: dedupe por (org, instance, message_id)
   const { data: existing } = await supabase
     .from('whatsapp_messages')
     .select('id')
     .eq('message_id', messageId)
-    .eq('organization_id', orgId)  // ✅ SEMPRE filtrar por org!
+    .eq('organization_id', orgId)
+    .eq('instance_id', instance.id)  // ✅ NOVO: Dedupe por instância também
     .limit(1)
     .single();
     
@@ -336,6 +369,7 @@ async function handleMessage(instance: any, body: any) {
     .from('whatsapp_messages')
     .insert({
       organization_id: orgId,  // ✅ SEMPRE com org!
+      store_id: instance.store_id,  // ✅ NOVO: Incluir store_id para filtros por loja
       conversation_id: conversation.id,
       contact_id: contact?.id,
       instance_id: instance.id,
@@ -357,7 +391,7 @@ async function handleMessage(instance: any, body: any) {
     return;
   }
   
-  console.log('[Evolution Webhook] ✅ Message saved for org:', orgId);
+  console.log('[Evolution Webhook] ✅ Message saved for org:', orgId, 'store:', instance.store_id);
   
   // Atualizar conversa
   await supabase

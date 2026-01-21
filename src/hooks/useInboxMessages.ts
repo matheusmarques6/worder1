@@ -152,11 +152,28 @@ export function useInboxMessages(): UseInboxMessagesReturn {
   }, [currentConversationId])
 
   // =============================================
-  // SEND TEXT MESSAGE
+  // SEND TEXT MESSAGE - COM OPTIMISTIC UI
   // =============================================
   const sendMessage = useCallback(async (params: SendMessageParams): Promise<InboxMessage | null> => {
     setIsSending(true)
     setError(null)
+    
+    // PATCH 1: OPTIMISTIC UI - Adicionar mensagem imediatamente com status "sending"
+    const tempId = `temp-${Date.now()}`
+    const optimisticMessage: InboxMessage = {
+      id: tempId,
+      conversation_id: params.conversationId,
+      direction: 'outbound',
+      message_type: params.messageType || 'text',
+      content: params.content || '',
+      status: 'pending', // Status visual de "enviando"
+      sent_by_bot: false,
+      created_at: new Date().toISOString(),
+    }
+    
+    // Adicionar mensagem otimista à lista
+    setMessages(prev => [...prev, optimisticMessage])
+    
     try {
       const response = await fetch(
         `/api/whatsapp/inbox/conversations/${params.conversationId}/messages`,
@@ -170,16 +187,35 @@ export function useInboxMessages(): UseInboxMessagesReturn {
         }
       )
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Failed to send message')
+      
+      if (!response.ok) {
+        // PATCH 1: Se falhou, atualizar mensagem otimista para "failed"
+        setMessages(prev => prev.map(m => 
+          m.id === tempId 
+            ? { ...m, status: 'failed' as const, error: data.error } 
+            : m
+        ))
+        setError(data.error || 'Failed to send message')
+        return null
+      }
 
+      // Substituir mensagem otimista pela real
       const newMessage = data.message
       setMessages(prev => {
-        if (prev.some(m => m.id === newMessage.id)) return prev
-        return [...prev, newMessage]
+        // Remover a otimista e adicionar a real
+        const filtered = prev.filter(m => m.id !== tempId)
+        if (filtered.some(m => m.id === newMessage.id)) return filtered
+        return [...filtered, newMessage]
       })
       if (newMessage.created_at) newestCursorRef.current = newMessage.created_at
       return newMessage
     } catch (err) {
+      // PATCH 1: Se erro de rede, marcar como failed
+      setMessages(prev => prev.map(m => 
+        m.id === tempId 
+          ? { ...m, status: 'failed' as const, error: 'Erro de conexão' } 
+          : m
+      ))
       setError(err instanceof Error ? err.message : 'Unknown error')
       return null
     } finally {

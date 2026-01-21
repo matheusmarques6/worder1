@@ -243,6 +243,16 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
     })
   }
 
+  // NOVO: Função para tentar reenviar mensagem falha
+  const handleRetryMessage = async (message: any) => {
+    if (!selectedConversation || !message.content) return
+    await sendMessage({
+      conversationId: selectedConversation.id,
+      content: message.content,
+      messageType: message.message_type || 'text',
+    })
+  }
+
   const handleToggleBot = async (conversationId: string, isActive: boolean) => {
     await toggleBot(conversationId, isActive)
   }
@@ -384,6 +394,7 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
             onBack={handleBack}
             onToggleContactPanel={handleToggleContactPanel}
             showContactPanel={showContactPanel}
+            onRetryMessage={handleRetryMessage} // NOVO: Passar função de retry
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-dark-500">

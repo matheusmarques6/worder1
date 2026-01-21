@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import {
   ArrowLeft, Bot, MoreVertical, UserPlus, PanelRightClose, PanelRightOpen,
   Send, Smile, Paperclip, Image as ImageIcon, FileText, Film, X,
-  Check, CheckCheck, Clock, AlertCircle, Loader2,
+  Check, CheckCheck, Clock, AlertCircle, Loader2, RefreshCw,
 } from 'lucide-react'
 import { AIToggleButton } from './AIToggleButton'
 import type { InboxConversation, InboxMessage } from '@/types/inbox'
@@ -21,6 +21,7 @@ interface ChatPanelProps {
   onBack: () => void
   onToggleContactPanel: () => void
   showContactPanel: boolean
+  onRetryMessage?: (message: InboxMessage) => Promise<void> // NOVO: Prop para retry
 }
 
 // Helpers
@@ -62,9 +63,11 @@ function MessageStatus({ status }: { status: InboxMessage['status'] }) {
 }
 
 // Message Bubble
-function MessageBubble({ message, contactName }: { message: InboxMessage, contactName?: string }) {
+function MessageBubble({ message, contactName, onRetry }: { message: InboxMessage, contactName?: string, onRetry?: (msg: InboxMessage) => void }) {
   const isOutbound = message.direction === 'outbound'
   const isBot = message.sent_by_bot
+  const isFailed = message.status === 'failed'
+  const isPending = message.status === 'pending'
 
   return (
     <div className={`flex gap-3 ${isOutbound ? 'justify-end' : 'justify-start'}`}>
@@ -76,9 +79,13 @@ function MessageBubble({ message, contactName }: { message: InboxMessage, contac
 
       <div className={`max-w-[70%] ${isOutbound ? 'items-end' : 'items-start'}`}>
         <div className={`relative rounded-2xl px-4 py-2.5 ${
-          isOutbound 
-            ? isBot ? 'bg-gradient-to-r from-primary-500 to-primary-600 rounded-tr-md' : 'bg-primary-500 rounded-tr-md'
-            : 'bg-dark-800 border border-dark-700/50 rounded-tl-md'
+          isFailed 
+            ? 'bg-red-900/50 border border-red-500/50 rounded-tr-md' // ❌ Estilo de erro
+            : isPending
+              ? 'bg-dark-700 opacity-70 rounded-tr-md' // ⏳ Estilo de enviando
+              : isOutbound 
+                ? isBot ? 'bg-gradient-to-r from-primary-500 to-primary-600 rounded-tr-md' : 'bg-primary-500 rounded-tr-md'
+                : 'bg-dark-800 border border-dark-700/50 rounded-tl-md'
         }`}>
           {isBot && <div className="absolute top-2 right-2"><Bot className="w-3 h-3 text-white/50" /></div>}
 
@@ -117,10 +124,28 @@ function MessageBubble({ message, contactName }: { message: InboxMessage, contac
               {message.content}
             </p>
           )}
+          
+          {/* ❌ Mostrar erro e botão de retry quando falha */}
+          {isFailed && (
+            <div className="mt-2 pt-2 border-t border-red-500/30">
+              <p className="text-xs text-red-300 mb-1">
+                {(message as any).error || message.error_message || 'Falha ao enviar'}
+              </p>
+              {onRetry && (
+                <button 
+                  onClick={() => onRetry(message)}
+                  className="text-xs text-red-300 hover:text-white flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" /> Tentar novamente
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className={`flex items-center gap-1.5 mt-1 px-1 ${isOutbound ? 'justify-end' : 'justify-start'}`}>
-          {isBot && isOutbound && <span className="text-[10px] text-dark-500">via Bot</span>}
+          {isPending && <span className="text-[10px] text-dark-400">Enviando...</span>}
+          {isBot && isOutbound && !isPending && <span className="text-[10px] text-dark-500">via Bot</span>}
           <span className="text-[10px] text-dark-500">{formatMessageTime(message.created_at)}</span>
           {isOutbound && <MessageStatus status={message.status} />}
         </div>
@@ -239,6 +264,7 @@ function MediaPreviewModal({ file, onClose, onSend, isSending }: {
 export function ChatPanel({
   conversation, messages, isLoading, isSending, isUploading = false,
   onSendMessage, onSendMedia, onToggleBot, onBack, onToggleContactPanel, showContactPanel,
+  onRetryMessage, // NOVO: Prop para retry de mensagens falhas
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const [showAttachMenu, setShowAttachMenu] = useState(false)
@@ -384,7 +410,14 @@ export function ChatPanel({
               <div key={group.date}>
                 <DateSeparator date={group.date} />
                 <div className="space-y-3">
-                  {group.messages.map((msg) => <MessageBubble key={msg.id} message={msg} contactName={contactName} />)}
+                  {group.messages.map((msg) => (
+                    <MessageBubble 
+                      key={msg.id} 
+                      message={msg} 
+                      contactName={contactName}
+                      onRetry={onRetryMessage} // NOVO: Passar função de retry
+                    />
+                  ))}
                 </div>
               </div>
             ))}
