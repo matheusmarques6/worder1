@@ -62,10 +62,19 @@ export function NotesTab({
   const handleSubmit = async () => {
     if ((!newNote.trim() && attachments.length === 0) || isSaving) return
     
+    // Verificar se há anexos que são blob URLs (não foram uploaded)
+    const hasBlobAttachments = attachments.some(att => att.url.startsWith('blob:'))
+    const hasRealAttachments = attachments.some(att => !att.url.startsWith('blob:'))
+    
+    // Se tem APENAS blob URLs (sem texto), mostrar erro
+    if (!newNote.trim() && hasBlobAttachments && !hasRealAttachments) {
+      alert('Anexos ainda não são suportados. Por favor, digite uma nota de texto.')
+      return
+    }
+    
     setIsSaving(true)
     try {
-      // IMPORTANTE: Filtrar blob URLs (não persistem no servidor)
-      // Anexos só funcionarão quando implementar upload real para Supabase Storage
+      // Filtrar blob URLs (não persistem no servidor)
       const validAttachments = attachments.filter(att => !att.url.startsWith('blob:'))
       
       await onAddNote(newNote.trim(), validAttachments.length > 0 ? validAttachments : undefined)
