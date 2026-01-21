@@ -669,6 +669,8 @@ export function ContactPanel({
         onAssign={handleAssign}
         currentAssignedId={conversation?.assigned_agent_id}
         conversationId={conversationId}
+        organizationId={conversation?.organization_id || contact?.organization_id}
+        storeId={conversation?.store_id}
       />
     </div>
   )

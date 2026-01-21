@@ -5,8 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-    const userId = searchParams.get('user_id')
+    // Aceitar tanto snake_case quanto camelCase
+    const organizationId = searchParams.get('organization_id') || searchParams.get('organizationId')
+    const userId = searchParams.get('user_id') || searchParams.get('userId')
     const unreadOnly = searchParams.get('unread_only') === 'true'
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = parseInt(searchParams.get('offset') || '0')
