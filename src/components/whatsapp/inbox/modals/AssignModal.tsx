@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Loader2, UserPlus, Search, Check } from 'lucide-react'
+import { X, Loader2, UserPlus, Search, Check, Bot, Users } from 'lucide-react'
 
 interface User {
   id: string
@@ -9,6 +9,7 @@ interface User {
   email: string
   avatar_url?: string
   role?: string
+  source?: 'user' | 'agent' // De onde veio
 }
 
 interface AssignModalProps {
@@ -17,6 +18,8 @@ interface AssignModalProps {
   onAssign: (userId: string | null) => Promise<void>
   currentAssignedId?: string | null
   conversationId: string
+  organizationId?: string
+  storeId?: string
 }
 
 export function AssignModal({
@@ -25,28 +28,81 @@ export function AssignModal({
   onAssign,
   currentAssignedId,
   conversationId,
+  organizationId,
+  storeId,
 }: AssignModalProps) {
   const [users, setUsers] = useState<User[]>([])
   const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isFetching, setIsFetching] = useState(true)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(currentAssignedId || null)
+  const [error, setError] = useState<string | null>(null)
 
-  // Carregar usuários
+  // Carregar usuários de múltiplas fontes
   useEffect(() => {
     if (!isOpen) return
 
     async function loadUsers() {
       setIsFetching(true)
+      setError(null)
+      const allUsers: User[] = []
+      
       try {
-        const response = await fetch('/api/users?role=agent,admin,owner')
-        const data = await response.json()
-        
-        if (response.ok) {
-          setUsers(data.users || data || [])
+        // 1. Tentar buscar usuários da API de users (profiles)
+        try {
+          const usersResponse = await fetch('/api/users?role=agent,admin,owner')
+          if (usersResponse.ok) {
+            const usersData = await usersResponse.json()
+            const profileUsers = (usersData.users || usersData || []).map((u: any) => ({
+              ...u,
+              source: 'user' as const
+            }))
+            allUsers.push(...profileUsers)
+          }
+        } catch (e) {
+          console.log('Não foi possível buscar de /api/users:', e)
         }
+
+        // 2. Tentar buscar agentes da tabela whatsapp_agents
+        try {
+          let agentsUrl = '/api/whatsapp/agents?is_active=true'
+          if (organizationId) agentsUrl += `&organization_id=${organizationId}`
+          if (storeId) agentsUrl += `&store_id=${storeId}`
+          
+          const agentsResponse = await fetch(agentsUrl)
+          if (agentsResponse.ok) {
+            const agentsData = await agentsResponse.json()
+            const agents = (agentsData.agents || agentsData || [])
+              .filter((a: any) => a.is_active !== false)
+              .map((a: any) => ({
+                id: a.user_id || a.id,
+                name: a.name || a.full_name || 'Agente',
+                email: a.email || '',
+                avatar_url: a.avatar_url,
+                role: 'agent',
+                source: 'agent' as const
+              }))
+            
+            // Adicionar apenas agentes que não estão na lista de usuários
+            agents.forEach((agent: User) => {
+              if (!allUsers.find(u => u.id === agent.id)) {
+                allUsers.push(agent)
+              }
+            })
+          }
+        } catch (e) {
+          console.log('Não foi possível buscar agentes:', e)
+        }
+
+        // Se não encontrou nenhum usuário, mostrar erro
+        if (allUsers.length === 0) {
+          setError('Nenhum usuário ou agente encontrado. Certifique-se de que existem usuários ou agentes cadastrados.')
+        }
+
+        setUsers(allUsers)
       } catch (err) {
         console.error('Error loading users:', err)
+        setError('Erro ao carregar usuários')
       } finally {
         setIsFetching(false)
       }
@@ -54,7 +110,7 @@ export function AssignModal({
 
     loadUsers()
     setSelectedUserId(currentAssignedId || null)
-  }, [isOpen, currentAssignedId])
+  }, [isOpen, currentAssignedId, organizationId, storeId])
 
   const handleAssign = async () => {
     setIsLoading(true)
@@ -63,6 +119,7 @@ export function AssignModal({
       onClose()
     } catch (err) {
       console.error('Error assigning:', err)
+      setError('Erro ao atribuir conversa')
     } finally {
       setIsLoading(false)
     }
@@ -77,6 +134,7 @@ export function AssignModal({
   )
 
   const getInitials = (name: string) => {
+    if (!name) return '??'
     return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   }
 
@@ -118,6 +176,13 @@ export function AssignModal({
             />
           </div>
 
+          {/* Error message */}
+          {error && (
+            <div className="mb-4 p-3 bg-error-500/10 border border-error-500/20 rounded-xl text-error-400 text-sm">
+              {error}
+            </div>
+          )}
+
           {/* Opção de remover atribuição */}
           {currentAssignedId && (
             <button
@@ -148,8 +213,13 @@ export function AssignModal({
             </div>
           ) : filteredUsers.length === 0 ? (
             <div className="text-center py-8 text-dark-400">
-              <UserPlus className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Nenhum usuário encontrado</p>
+              <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">
+                {search ? 'Nenhum usuário encontrado com esse termo' : 'Nenhum usuário disponível'}
+              </p>
+              <p className="text-xs mt-2 text-dark-500">
+                Verifique se há usuários ou agentes cadastrados
+              </p>
             </div>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -179,16 +249,23 @@ export function AssignModal({
                   )}
                   <div className="flex-1 text-left">
                     <p className="text-sm font-medium text-white">{user.name || 'Sem nome'}</p>
-                    <p className="text-xs text-dark-400">{user.email}</p>
+                    <p className="text-xs text-dark-400">{user.email || user.role || ''}</p>
                   </div>
-                  {selectedUserId === user.id && (
-                    <Check className="w-5 h-5 text-primary-400" />
-                  )}
-                  {currentAssignedId === user.id && selectedUserId !== user.id && (
-                    <span className="px-2 py-0.5 text-[10px] bg-dark-600 text-dark-300 rounded-full">
-                      Atual
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {user.source === 'agent' && (
+                      <span className="px-2 py-0.5 text-[10px] bg-purple-500/20 text-purple-400 rounded-full flex items-center gap-1">
+                        <Bot className="w-3 h-3" /> Agente
+                      </span>
+                    )}
+                    {selectedUserId === user.id && (
+                      <Check className="w-5 h-5 text-primary-400" />
+                    )}
+                    {currentAssignedId === user.id && selectedUserId !== user.id && (
+                      <span className="px-2 py-0.5 text-[10px] bg-dark-600 text-dark-300 rounded-full">
+                        Atual
+                      </span>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>

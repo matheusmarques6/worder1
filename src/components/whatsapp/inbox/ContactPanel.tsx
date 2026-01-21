@@ -296,21 +296,23 @@ export function ContactPanel({
         </div>
       </div>
 
-      {/* ========== TABS ========== */}
-      <div className="flex border-b border-dark-700/50">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 px-3 py-3 text-xs font-medium transition-all border-b-2 ${
-              activeTab === tab.id
-                ? 'text-primary-400 border-primary-500'
-                : 'text-dark-400 border-transparent hover:text-white'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* ========== TABS - CORRIGIDO: Sem scroll horizontal ========== */}
+      <div className="border-b border-dark-700/50">
+        <div className="flex">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 px-2 py-3 text-[11px] font-medium transition-all border-b-2 whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'text-primary-400 border-primary-500'
+                  : 'text-dark-400 border-transparent hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ========== TAB CONTENT ========== */}
