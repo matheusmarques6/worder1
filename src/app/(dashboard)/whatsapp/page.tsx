@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { MessageSquare, Send, Bot } from 'lucide-react'
-import InboxTab from './components/InboxTab'
+// ✅ FASE 2: Usando InboxContent NOVO (com storeId) em vez do InboxTab antigo
+import InboxContent from '@/components/whatsapp/inbox/InboxContent'
 import CampaignsTab from './components/CampaignsTab'
 import AgentsTab from './components/AgentsTab'
 import { useAgentPermissions } from '@/hooks/useAgentPermissions'
@@ -59,7 +60,8 @@ export default function WhatsAppPage() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'inbox' && <InboxTab />}
+        {/* ✅ FASE 2: InboxContent usa storeId para isolamento multi-loja */}
+        {activeTab === 'inbox' && <InboxContent height="calc(100vh-8rem)" />}
         {activeTab === 'campaigns' && !isAgent && <CampaignsTab />}
         {activeTab === 'agents' && !isAgent && <AgentsTab />}
       </div>
