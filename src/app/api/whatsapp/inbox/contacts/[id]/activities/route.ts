@@ -13,7 +13,7 @@ export async function GET(
     const type = searchParams.get('type')
 
     let query = supabase
-      .from('whatsapp_contact_activities')
+      .from('contact_activities')
       .select('*')
       .eq('contact_id', id)
       .order('created_at', { ascending: false })

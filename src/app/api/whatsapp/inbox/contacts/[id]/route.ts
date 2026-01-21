@@ -45,6 +45,7 @@ export async function GET(
         deals: [],
         tasks: [],
         invoices: [],
+        comments: [],
         _source: 'whatsapp_contacts'
       })
     }
@@ -94,7 +95,16 @@ export async function GET(
       .order('issue_date', { ascending: false })
       .limit(20)
 
-    // 8. Formatar contato para resposta
+    // 8. Buscar comentários do contato (para Timeline)
+    const { data: comments } = await supabase
+      .from('contact_comments')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    // 9. Formatar contato para resposta
     const formattedContact = {
       id: contact.id,
       organization_id: contact.organization_id,
@@ -174,6 +184,7 @@ export async function GET(
       deals: deals || [],
       tasks: tasks || [],
       invoices: invoices || [],
+      comments: comments || [],
       _source: 'contacts'
     })
   } catch (error: any) {

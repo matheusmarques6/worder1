@@ -27,7 +27,7 @@ export async function POST(
 
     // Registra atividade
     if (data?.contact) {
-      await supabase.from('whatsapp_contact_activities').insert({
+      await supabase.from('contact_activities').insert({
         organization_id: data.contact.organization_id,
         contact_id: data.contact.id,
         conversation_id: id,
