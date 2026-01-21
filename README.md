@@ -1,125 +1,179 @@
-# 🔧 CORREÇÕES CONSOLIDADAS - WORDER INBOX
+# 🚀 PLANO DE CORREÇÃO WORDER
 
-## 📋 O QUE FOI CORRIGIDO
-
-| # | Problema | Causa Real | Correção |
-|---|----------|------------|----------|
-| 1 | **Notes 400** | Frontend pode estar enviando `content: ""` | Validação adicionada no callback |
-| 2 | **Comments 404** | Rota não existia em produção | Arquivo criado |
-| 3 | **Agents 400** | AssignModal não recebia `organizationId` | Props adicionadas |
-| 4 | **Notifications 400** | API só aceitava snake_case | Agora aceita camelCase também |
-| 5 | **Users Search 500** | Join com tabela `users` que não existe | Corrigido para usar `profiles` |
-| 6 | **Timeline "zera"** | GET não retornava `comments` | Adicionado retorno de `comments` |
-| 7 | **Activities errado** | Usava tabela `whatsapp_contact_activities` | Padronizado para `contact_activities` |
+**Data:** 21 de Janeiro de 2026
 
 ---
 
-## 🚀 COMO APLICAR
+## 📋 RESUMO DOS PROBLEMAS E SOLUÇÕES
 
-### PASSO 1: SQL no Supabase
+| # | Problema | Causa | Solução | Arquivo |
+|---|----------|-------|---------|---------|
+| 1 | Mensagens não aparecem | Race condition + conversas duplicadas | SQL + Webhook corrigido | `PLANO-EXECUCAO-SQL.sql` + `webhook-route-fixed.ts` |
+| 2 | Timeline 404 | Deploy desatualizado | Verificar deploy | - |
+| 3 | Notas sem anexos | Feature incompleta | Fase 2 | - |
+| 4 | Notifications 400 | Falta user_id | API corrigida | `notifications-route-fixed.ts` |
+| 5 | CRM 500 | store_id obrigatório | APIs corrigidas | `pipelines-route-fixed.ts` + `deals-route-fixed.ts` |
+| 6 | Bot toggle | Sem orquestrador | Fase 2 | - |
 
-1. Abra Supabase → SQL Editor
-2. Cole o conteúdo do arquivo `sql-consolidado.sql`
-3. Execute
+---
 
-### PASSO 2: Copiar arquivos
+## 🔧 ORDEM DE EXECUÇÃO
 
-```bash
-# Extrair o ZIP
-unzip correcoes-consolidadas.zip
+### FASE 1: BANCO DE DADOS (5-10 min)
 
-# Copiar para seu projeto
-cp -r correcoes-consolidadas/src/* seu-projeto/src/
+Execute o arquivo `PLANO-EXECUCAO-SQL.sql` no Supabase SQL Editor **na ordem**:
+
+```
+1. FASE 0: Backup (IMPORTANTE!)
+2. FASE 1: Limpar conversas duplicadas
+3. FASE 2: Sincronizar phone_number
+4. FASE 3: Adicionar constraint unique
+5. FASE 4: Criar função upsert
+6. FASE 5: Índices de performance
+7. FASE 6: Trigger de sincronização
+8. FASE 7: Verificação final
 ```
 
-### PASSO 3: Deploy
+### FASE 2: CÓDIGO (substituir arquivos)
+
+**2.1 Webhook Evolution API**
+```
+Origem:  webhook-route-fixed.ts
+Destino: src/app/api/whatsapp/evolution/webhook/route.ts
+```
+
+**2.2 Notifications API**
+```
+Origem:  notifications-route-fixed.ts
+Destino: src/app/api/notifications/route.ts
+```
+
+**2.3 CRM Pipelines API**
+```
+Origem:  pipelines-route-fixed.ts
+Destino: src/app/api/crm/pipelines/route.ts
+```
+
+**2.4 Deals API**
+```
+Origem:  deals-route-fixed.ts
+Destino: src/app/api/deals/route.ts
+```
+
+### FASE 3: DEPLOY
 
 ```bash
-cd seu-projeto
 git add .
-git commit -m "fix: correções inbox (agents, notifications, comments, timeline)"
+git commit -m "fix: corrigir race conditions, CRM 500, notifications 400"
 git push
 ```
 
-### PASSO 4: Verificar
+Verificar na Vercel se o deploy foi bem sucedido.
 
-1. Limpar cache: `Ctrl+Shift+R`
-2. Testar cada funcionalidade
+### FASE 4: TESTES
+
+1. **Testar mensagens:**
+   - Enviar mensagem para o WhatsApp
+   - Verificar se aparece no chat
+   - Verificar se não cria conversa duplicada
+
+2. **Testar CRM:**
+   - Acessar /crm/deals
+   - Criar pipeline
+   - Criar deal
+
+3. **Testar notifications:**
+   - Verificar console do navegador
+   - Não deve mais dar 400
 
 ---
 
 ## 📁 ARQUIVOS INCLUÍDOS
 
 ```
-correcoes-consolidadas/
-├── sql-consolidado.sql                    # SQL para criar tabelas
-├── README.md                              # Este arquivo
-└── src/
-    ├── app/api/
-    │   ├── ai/process/route.ts            # NOVA rota para IA do webhook
-    │   ├── notifications/route.ts         # Aceita camelCase
-    │   ├── users/search/route.ts          # Usa profiles ao invés de users
-    │   └── whatsapp/inbox/
-    │       ├── contacts/[id]/
-    │       │   ├── route.ts               # Retorna comments
-    │       │   ├── activities/route.ts    # Usa contact_activities
-    │       │   └── comments/route.ts      # Rota de comentários
-    │       └── conversations/[id]/
-    │           └── close/route.ts         # Usa contact_activities
-    ├── components/whatsapp/inbox/
-    │   ├── ContactPanel.tsx               # Passa props para AssignModal
-    │   └── tabs/NotesTab.tsx              # Filtra blob URLs
-    └── hooks/
-        └── useInboxContact.ts             # Suporte a attachments
+/home/claude/worder-fix/
+├── PLANO-EXECUCAO-SQL.sql      # Migrations e correções do banco
+├── webhook-route-fixed.ts       # Webhook com upsert (evita duplicatas)
+├── notifications-route-fixed.ts # API corrigida (resolve user do token)
+├── pipelines-route-fixed.ts     # API corrigida (store_id opcional)
+├── deals-route-fixed.ts         # API corrigida (store_id opcional)
+└── README.md                    # Este arquivo
 ```
 
 ---
 
-## ⚠️ VERIFICAÇÕES IMPORTANTES
+## ⚠️ PONTOS DE ATENÇÃO
 
-### Se Notes ainda der 400:
+### 1. Backup
+Antes de rodar o SQL, os backups são criados automaticamente:
+- `_backup_whatsapp_conversations_20260121`
+- `_backup_whatsapp_messages_20260121`
 
-1. Abra DevTools → Network
-2. Encontre a requisição POST `/notes`
-3. Veja o Request Payload
-4. Se `content` vier vazio `""`, o problema é no frontend (state do textarea)
+Se algo der errado, restaure com:
+```sql
+DROP TABLE whatsapp_conversations;
+CREATE TABLE whatsapp_conversations AS SELECT * FROM _backup_whatsapp_conversations_20260121;
+```
 
-### Se Comments ainda der 404:
+### 2. Constraint Unique
+Após a FASE 3 do SQL, novas conversas duplicadas são **impossíveis**. O webhook agora usa UPSERT.
 
-1. Teste no browser: `GET /api/whatsapp/inbox/contacts/<id>/comments`
-2. Se 404, o deploy não foi feito corretamente
-3. Verifique se o arquivo existe no projeto deployado
+### 3. Realtime
+Não é necessário mudar nada no Supabase Realtime. As tabelas já estão habilitadas.
 
-### Se Pipelines/Deals der 500:
-
-Execute o SQL para criar as tabelas necessárias:
-- `stores`
-- `organization_members`
-- `pipelines`
-- `pipeline_stages`
-- `deals`
+### 4. RLS
+As correções usam `supabaseAdmin` onde necessário. RLS continua funcionando para o cliente.
 
 ---
 
-## 🔍 DEBUG RÁPIDO
+## 🔍 COMO VERIFICAR SE FUNCIONOU
 
-```bash
-# Verificar se tabelas existem
-SELECT table_name 
-FROM information_schema.tables 
-WHERE table_schema = 'public' 
-AND table_name IN (
-  'whatsapp_contact_notes',
-  'contact_activities', 
-  'contact_comments',
-  'whatsapp_agents',
-  'pipelines',
-  'pipeline_stages',
-  'deals',
-  'organization_members',
-  'notifications',
-  'stores'
-);
+### Verificar duplicatas (deve retornar 0 linhas)
+```sql
+SELECT store_id, instance_id, contact_phone, COUNT(*) 
+FROM whatsapp_conversations
+WHERE store_id IS NOT NULL
+GROUP BY store_id, instance_id, contact_phone
+HAVING COUNT(*) > 1;
 ```
 
-Se alguma tabela não aparecer, execute o SQL completo.
+### Verificar phone_number sincronizado (deve retornar 0)
+```sql
+SELECT COUNT(*) as dessincronizados
+FROM whatsapp_conversations
+WHERE contact_phone IS NOT NULL
+AND (phone_number IS NULL OR phone_number != contact_phone);
+```
+
+### Verificar índice criado
+```sql
+SELECT indexname FROM pg_indexes 
+WHERE tablename = 'whatsapp_conversations' 
+AND indexname LIKE '%unique%';
+```
+
+---
+
+## 📞 PRÓXIMOS PASSOS (FASE 2)
+
+Após confirmar que a Fase 1 está funcionando:
+
+1. **Sistema de filas com QStash** - Para retry automático da IA
+2. **Pipeline de attachments** - Para notas com anexos
+3. **ContactChannel** - Abstração multi-canal (WhatsApp/Email/Instagram)
+
+---
+
+## ✅ CHECKLIST
+
+- [ ] Backup criado
+- [ ] Duplicatas limpas
+- [ ] phone_number sincronizado
+- [ ] Constraint unique adicionada
+- [ ] Função upsert criada
+- [ ] Webhook atualizado
+- [ ] Notifications API atualizada
+- [ ] Pipelines API atualizada
+- [ ] Deals API atualizada
+- [ ] Deploy feito
+- [ ] Testes passaram

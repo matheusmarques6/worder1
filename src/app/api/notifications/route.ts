@@ -1,22 +1,56 @@
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthClient, authError } from '@/lib/api-utils'
+
+// =============================================
+// NOTIFICATIONS API - CORRIGIDA
+// =============================================
+// Mudanças:
+// 1. Resolve user_id e organization_id do TOKEN, não da query
+// 2. Aceita parâmetros opcionais na query como override
+// 3. Melhor tratamento de erros
+// =============================================
 
 // GET - Listar notificações do usuário
 export async function GET(request: NextRequest) {
   try {
+    // =====================================================
+    // CORREÇÃO: Resolver contexto do token PRIMEIRO
+    // =====================================================
+    const auth = await getAuthClient()
+    
+    let userId: string | null = null
+    let organizationId: string | null = null
+    
+    if (auth) {
+      userId = auth.user.id
+      organizationId = auth.user.organization_id
+    }
+    
+    // Query params como fallback/override (para compatibilidade)
     const { searchParams } = new URL(request.url)
-    // Aceitar tanto snake_case quanto camelCase
-    const organizationId = searchParams.get('organization_id') || searchParams.get('organizationId')
-    const userId = searchParams.get('user_id') || searchParams.get('userId')
+    const queryOrgId = searchParams.get('organization_id') || searchParams.get('organizationId')
+    const queryUserId = searchParams.get('user_id') || searchParams.get('userId')
+    
+    // Usar query params se fornecidos (para admin ou testes)
+    if (queryOrgId) organizationId = queryOrgId
+    if (queryUserId) userId = queryUserId
+    
+    // Validar
+    if (!organizationId || !userId) {
+      return NextResponse.json({ 
+        error: 'Authentication required. Please login.',
+        hint: 'organization_id and user_id could not be resolved from token'
+      }, { status: 401 })
+    }
+    
+    // Parâmetros de filtro
     const unreadOnly = searchParams.get('unread_only') === 'true'
-    const limit = parseInt(searchParams.get('limit') || '20')
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
     const offset = parseInt(searchParams.get('offset') || '0')
     const type = searchParams.get('type')
     
-    if (!organizationId || !userId) {
-      return NextResponse.json({ error: 'organization_id and user_id are required' }, { status: 400 })
-    }
-    
+    // Buscar notificações
     let query = supabase
       .from('notifications')
       .select('*', { count: 'exact' })
@@ -37,7 +71,7 @@ export async function GET(request: NextRequest) {
     const { data: notifications, error, count } = await query
     
     if (error) {
-      console.error('Error fetching notifications:', error)
+      console.error('[Notifications] Error fetching:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
     
@@ -46,15 +80,16 @@ export async function GET(request: NextRequest) {
     let actorMap: Record<string, any> = {}
     
     if (actorIds.length > 0) {
-      const { data: members } = await supabase
-        .from('organization_members')
-        .select('user_id, users:user_id(id, name, email, avatar_url)')
-        .eq('organization_id', organizationId)
-        .in('user_id', actorIds)
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, full_name, avatar_url, email')
+        .in('id', actorIds)
       
-      members?.forEach(m => {
-        if (m.users) {
-          actorMap[m.user_id] = m.users
+      profiles?.forEach(p => {
+        actorMap[p.id] = {
+          id: p.id,
+          name: p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email,
+          avatar_url: p.avatar_url
         }
       })
     }
@@ -75,7 +110,7 @@ export async function GET(request: NextRequest) {
       .eq('dismissed', false)
     
     return NextResponse.json({
-      notifications: notificationsWithActor,
+      notifications: notificationsWithActor || [],
       total: count || 0,
       unread_count: unreadCount || 0,
       limit,
@@ -83,7 +118,7 @@ export async function GET(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('Notifications API error:', error)
+    console.error('[Notifications] API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -91,11 +126,22 @@ export async function GET(request: NextRequest) {
 // PATCH - Marcar como lida / Dispensar
 export async function PATCH(request: NextRequest) {
   try {
+    // Resolver contexto do token
+    const auth = await getAuthClient()
+    if (!auth) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    
+    const { user } = auth
     const body = await request.json()
-    const { notification_id, organization_id, user_id, action } = body
+    const { notification_id, action } = body
+    
+    // Usar org/user do token, não do body
+    const organizationId = user.organization_id
+    const userId = user.id
     
     // Marcar todas como lidas
-    if (action === 'mark_all_read' && organization_id && user_id) {
+    if (action === 'mark_all_read') {
       const { error } = await supabase
         .from('notifications')
         .update({ 
@@ -103,8 +149,8 @@ export async function PATCH(request: NextRequest) {
           read_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .eq('user_id', user_id)
-        .eq('organization_id', organization_id)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .eq('read', false)
       
       if (error) {
@@ -114,6 +160,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: true, action: 'mark_all_read' })
     }
     
+    // Ações em notificação específica
     if (!notification_id) {
       return NextResponse.json({ error: 'notification_id is required' }, { status: 400 })
     }
@@ -136,13 +183,15 @@ export async function PATCH(request: NextRequest) {
         updates.dismissed_at = new Date().toISOString()
         break
       default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+        return NextResponse.json({ error: 'Invalid action. Use: read, unread, dismiss, mark_all_read' }, { status: 400 })
     }
     
+    // Atualizar garantindo que pertence ao usuário
     const { data, error } = await supabase
       .from('notifications')
       .update(updates)
       .eq('id', notification_id)
+      .eq('user_id', userId) // Segurança: só pode atualizar as próprias
       .select()
       .single()
     
@@ -150,47 +199,72 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
     
+    if (!data) {
+      return NextResponse.json({ error: 'Notification not found or access denied' }, { status: 404 })
+    }
+    
     return NextResponse.json({ success: true, notification: data })
     
   } catch (error) {
-    console.error('Notifications PATCH error:', error)
+    console.error('[Notifications] PATCH error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// POST - Criar notificação manual
+// POST - Criar notificação manual (para uso interno)
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    
     const body = await request.json()
     const {
-      organization_id,
-      user_id,
+      user_id,        // Destinatário (pode ser outro usuário)
       type,
       title,
       message,
       reference_type,
       reference_id,
-      actor_id,
       metadata
     } = body
     
-    if (!organization_id || !user_id || !type || !title) {
+    // organization_id do criador
+    const organizationId = auth.user.organization_id
+    const actorId = auth.user.id
+    
+    if (!user_id || !type || !title) {
       return NextResponse.json({ 
-        error: 'organization_id, user_id, type and title are required' 
+        error: 'user_id, type and title are required' 
       }, { status: 400 })
+    }
+    
+    // Verificar se o destinatário pertence à mesma organização
+    const { data: targetUser } = await supabase
+      .from('profiles')
+      .select('id, organization_id')
+      .eq('id', user_id)
+      .eq('organization_id', organizationId)
+      .single()
+    
+    if (!targetUser) {
+      return NextResponse.json({ 
+        error: 'Target user not found or not in your organization' 
+      }, { status: 404 })
     }
     
     const { data, error } = await supabase
       .from('notifications')
       .insert({
-        organization_id,
+        organization_id: organizationId,
         user_id,
+        actor_id: actorId,
         type,
         title,
         message,
         reference_type,
         reference_id,
-        actor_id,
         metadata: metadata || {}
       })
       .select()
@@ -203,7 +277,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ notification: data }, { status: 201 })
     
   } catch (error) {
-    console.error('Notifications POST error:', error)
+    console.error('[Notifications] POST error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -1,63 +1,86 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
+import { getAuthClient, authError } from '@/lib/api-utils';
 import { EventBus, EventType } from '@/lib/events';
 
-// ✅ MIGRADO PARA RLS - Não usa mais getSupabaseClient()
+// =============================================
+// DEALS API - CORRIGIDA
+// =============================================
+// Mudanças:
+// 1. store_id é OPCIONAL (não bloqueia se não fornecido)
+// 2. Resolve contexto do token corretamente
+// 3. Melhor tratamento de erros
+// 4. Pipelines também ficam opcionais
+// =============================================
 
-// GET - List deals, pipelines, or single deal
+// GET - List deals or pipelines
 export async function GET(request: NextRequest) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  
-  const { supabase, user } = auth;
-  const organizationId = user.organization_id;
-
-  const searchParams = request.nextUrl.searchParams;
-  const type = searchParams.get('type') || 'deals';
-  const dealId = searchParams.get('id');
-  const pipelineId = searchParams.get('pipelineId');
-  const stageId = searchParams.get('stageId');
-  const contactId = searchParams.get('contactId');
-  const storeId = searchParams.get('storeId'); // ✅ FILTRO POR LOJA - OBRIGATÓRIO
-
   try {
-    // ✅ NOVO: Validar acesso à loja (exceto para busca por ID específico)
-    if (!dealId) {
-      const storeValidation = await validateStoreAccess(supabase, organizationId, storeId);
-      if (!storeValidation.valid) {
-        return NextResponse.json(
-          { error: storeValidation.error },
-          { status: storeValidation.status || 400 }
-        );
-      }
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    
+    const { supabase, user } = auth;
+    const organizationId = user.organization_id;
+
+    if (!organizationId) {
+      return NextResponse.json({ 
+        error: 'Organization not found for user' 
+      }, { status: 400 });
     }
 
+    const searchParams = request.nextUrl.searchParams;
+    const type = searchParams.get('type') || 'deals';
+    const dealId = searchParams.get('id');
+    const pipelineId = searchParams.get('pipelineId') || searchParams.get('pipeline_id');
+    const stageId = searchParams.get('stageId') || searchParams.get('stage_id');
+    const contactId = searchParams.get('contactId') || searchParams.get('contact_id');
+    const storeId = searchParams.get('storeId') || searchParams.get('store_id');
+    const status = searchParams.get('status');
+
+    // =====================================================
+    // PIPELINES
+    // =====================================================
     if (type === 'pipelines') {
-      // ✅ CORRIGIDO: Filtrar pipelines por store_id (agora obrigatório)
-      const { data: pipelines, error: pipelineError } = await supabase
+      let query = supabase
         .from('pipelines')
         .select('*')
-        .eq('store_id', storeId)
+        .eq('organization_id', organizationId)
         .order('position');
 
-      if (pipelineError) throw pipelineError;
+      // store_id OPCIONAL - se fornecido, filtra; se não, busca todos
+      if (storeId) {
+        query = query.or(`store_id.eq.${storeId},store_id.is.null`);
+      }
+
+      const { data: pipelines, error: pipelineError } = await query;
+
+      if (pipelineError) {
+        console.error('[Deals] Error fetching pipelines:', pipelineError);
+        return NextResponse.json({ 
+          error: pipelineError.message,
+          pipelines: [] 
+        }, { status: 500 });
+      }
 
       const pipelineIds = pipelines?.map(p => p.id) || [];
       
       if (pipelineIds.length > 0) {
-        const { data: stages, error: stagesError } = await supabase
+        const { data: stages } = await supabase
           .from('pipeline_stages')
           .select('*')
           .in('pipeline_id', pipelineIds)
           .order('position');
 
-        if (stagesError) throw stagesError;
-
-        // ✅ FILTRAR DEALS POR STORE_ID
-        const { data: dealCounts } = await supabase
+        // Contar deals por stage
+        let dealsQuery = supabase
           .from('deals')
           .select('stage_id, status')
-          .eq('store_id', storeId);
+          .eq('organization_id', organizationId);
+        
+        if (storeId) {
+          dealsQuery = dealsQuery.or(`store_id.eq.${storeId},store_id.is.null`);
+        }
+        
+        const { data: dealCounts } = await dealsQuery;
 
         const stageDealsMap: Record<string, number> = {};
         dealCounts?.forEach(deal => {
@@ -83,17 +106,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ pipelines: pipelines || [] });
     }
 
+    // =====================================================
+    // SINGLE DEAL
+    // =====================================================
     if (dealId) {
       const { data: deal, error: dealError } = await supabase
         .from('deals')
         .select('*')
         .eq('id', dealId)
+        .eq('organization_id', organizationId) // Segurança
         .single();
 
-      if (dealError) throw dealError;
+      if (dealError) {
+        return NextResponse.json({ error: dealError.message }, { status: 500 });
+      }
 
+      if (!deal) {
+        return NextResponse.json({ error: 'Deal not found' }, { status: 404 });
+      }
+
+      // Buscar relacionamentos
       let contact = null;
-      if (deal?.contact_id) {
+      if (deal.contact_id) {
         const { data: contactData } = await supabase
           .from('contacts')
           .select('*')
@@ -103,7 +137,7 @@ export async function GET(request: NextRequest) {
       }
 
       let stage = null;
-      if (deal?.stage_id) {
+      if (deal.stage_id) {
         const { data: stageData } = await supabase
           .from('pipeline_stages')
           .select('*')
@@ -115,23 +149,40 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ deal: { ...deal, contact, stage } });
     }
 
+    // =====================================================
+    // LIST DEALS
+    // =====================================================
     let dealsQuery = supabase
       .from('deals')
       .select('*')
+      .eq('organization_id', organizationId)
       .order('position');
     
-    // ✅ FILTRAR POR STORE_ID SE FORNECIDO
+    // Filtros OPCIONAIS
     if (storeId) {
-      dealsQuery = dealsQuery.eq('store_id', storeId);
+      dealsQuery = dealsQuery.or(`store_id.eq.${storeId},store_id.is.null`);
     }
-    
+    if (pipelineId) {
+      dealsQuery = dealsQuery.eq('pipeline_id', pipelineId);
+    }
+    if (stageId) {
+      dealsQuery = dealsQuery.eq('stage_id', stageId);
+    }
     if (contactId) {
       dealsQuery = dealsQuery.eq('contact_id', contactId);
     }
+    if (status) {
+      dealsQuery = dealsQuery.eq('status', status);
+    }
 
     const { data: deals, error: dealsError } = await dealsQuery;
-    if (dealsError) throw dealsError;
+    
+    if (dealsError) {
+      console.error('[Deals] Error fetching:', dealsError);
+      return NextResponse.json({ error: dealsError.message }, { status: 500 });
+    }
 
+    // Buscar relacionamentos em batch
     const contactIds = [...new Set(deals?.filter(d => d.contact_id).map(d => d.contact_id))];
     const stageIds = [...new Set(deals?.filter(d => d.stage_id).map(d => d.stage_id))];
 
@@ -139,9 +190,14 @@ export async function GET(request: NextRequest) {
     if (contactIds.length > 0) {
       const { data: contacts } = await supabase
         .from('contacts')
-        .select('id, email, first_name, last_name, avatar_url, company')
+        .select('id, email, first_name, last_name, full_name, avatar_url, company, phone, whatsapp')
         .in('id', contactIds);
-      contacts?.forEach(c => { contactsMap[c.id] = c; });
+      contacts?.forEach(c => { 
+        contactsMap[c.id] = {
+          ...c,
+          name: c.full_name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email
+        }; 
+      });
     }
 
     let stagesMap: Record<string, any> = {};
@@ -159,57 +215,164 @@ export async function GET(request: NextRequest) {
       stage: deal.stage_id ? stagesMap[deal.stage_id] : null
     }));
 
-    let filteredDeals = dealsWithRelations || [];
-    if (pipelineId) filteredDeals = filteredDeals.filter(d => d.pipeline_id === pipelineId);
-    if (stageId) filteredDeals = filteredDeals.filter(d => d.stage_id === stageId);
-
-    return NextResponse.json({ deals: filteredDeals });
+    return NextResponse.json({ 
+      deals: dealsWithRelations || [],
+      total: dealsWithRelations?.length || 0,
+      filter: {
+        store_id: storeId || 'all',
+        pipeline_id: pipelineId || 'all',
+        stage_id: stageId || 'all',
+        status: status || 'all'
+      }
+    });
+    
   } catch (error: any) {
+    console.error('[Deals] GET error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// POST - Create deal or pipeline
+// POST - Create deal
 export async function POST(request: NextRequest) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  
-  const { supabase, user } = auth;
-  const organizationId = user.organization_id;
-
-  const body = await request.json();
-  const { action, ...data } = body;
-
   try {
-    switch (action) {
-      case 'create-pipeline':
-        return await createPipeline(supabase, organizationId, data);
-      case 'create-stage':
-        return await createStage(supabase, data);
-      case 'create-deal':
-        return await createDeal(supabase, organizationId, data);
-      case 'add-activity':
-        return await addActivity(supabase, data);
-      default:
-        return await createDeal(supabase, organizationId, data);
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    
+    const { supabase, user } = auth;
+    const organizationId = user.organization_id;
+
+    const body = await request.json();
+    const { action, ...data } = body;
+
+    // Actions especiais
+    if (action === 'create-pipeline') {
+      return await createPipeline(supabase, organizationId, data);
     }
+    if (action === 'create-stage') {
+      return await createStage(supabase, data);
+    }
+
+    // Criar deal
+    const pipelineId = data.pipelineId || data.pipeline_id;
+    const stageId = data.stageId || data.stage_id;
+    const contactId = data.contactId || data.contact_id;
+    const storeId = data.storeId || data.store_id;
+
+    if (!pipelineId || !stageId) {
+      return NextResponse.json({ 
+        error: 'pipeline_id and stage_id are required' 
+      }, { status: 400 });
+    }
+
+    if (!data.title) {
+      return NextResponse.json({ 
+        error: 'title is required' 
+      }, { status: 400 });
+    }
+
+    // Buscar probabilidade do stage
+    let dealProbability = data.probability;
+    if (dealProbability === undefined) {
+      const { data: stageInfo } = await supabase
+        .from('pipeline_stages')
+        .select('probability')
+        .eq('id', stageId)
+        .single();
+      dealProbability = stageInfo?.probability ?? 50;
+    }
+
+    // Buscar última posição
+    const { data: existingDeals } = await supabase
+      .from('deals')
+      .select('position')
+      .eq('stage_id', stageId)
+      .order('position', { ascending: false })
+      .limit(1);
+
+    const position = (existingDeals?.[0]?.position || 0) + 1;
+
+    // Criar deal
+    const { data: deal, error } = await supabase
+      .from('deals')
+      .insert({
+        organization_id: organizationId,
+        store_id: storeId || null,
+        pipeline_id: pipelineId,
+        stage_id: stageId,
+        contact_id: contactId || null,
+        title: data.title,
+        value: data.value || 0,
+        currency: data.currency || 'BRL',
+        probability: dealProbability,
+        expected_close_date: data.expected_close_date || data.expectedCloseDate,
+        notes: data.notes || data.description,
+        assigned_to: data.assigned_to || data.assignedTo,
+        position,
+        status: 'open',
+        commit_level: data.commit_level || 'pipeline',
+        tags: data.tags || [],
+        custom_fields: data.custom_fields || {},
+        contact_phone: data.contact_phone,
+        contact_name: data.contact_name,
+        contact_email: data.contact_email,
+      })
+      .select(`
+        *,
+        contact:contacts(*),
+        stage:pipeline_stages(*)
+      `)
+      .single();
+
+    if (error) {
+      console.error('[Deals] Error creating:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Emitir evento
+    try {
+      await EventBus.emit(EventType.DEAL_CREATED, {
+        organization_id: organizationId,
+        deal_id: deal.id,
+        contact_id: contactId,
+        email: deal.contact?.email,
+        data: {
+          deal_title: data.title,
+          deal_value: data.value || 0,
+          pipeline_id: pipelineId,
+          stage_id: stageId,
+          stage_name: deal.stage?.name,
+        },
+        source: 'crm',
+      });
+    } catch (e) {
+      console.warn('[Deals] Event emission failed:', e);
+    }
+
+    return NextResponse.json({ deal }, { status: 201 });
+    
   } catch (error: any) {
+    console.error('[Deals] POST error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// PUT - Update deal or stage
+// PUT - Update deal
 export async function PUT(request: NextRequest) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  
-  const { supabase, user } = auth;
-  const organizationId = user.organization_id;
-
-  const body = await request.json();
-  const { type, id, organizationId: _, ...updates } = body;
-
   try {
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    
+    const { supabase, user } = auth;
+    const organizationId = user.organization_id;
+
+    const body = await request.json();
+    const { type, id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+    }
+
+    // Atualizar stage
     if (type === 'stage') {
       const { data, error } = await supabase
         .from('pipeline_stages')
@@ -221,139 +384,184 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ stage: data });
     }
 
+    // Atualizar pipeline
     if (type === 'pipeline') {
       const { data, error } = await supabase
         .from('pipelines')
         .update(updates)
         .eq('id', id)
+        .eq('organization_id', organizationId)
         .select()
         .single();
       if (error) throw error;
       return NextResponse.json({ pipeline: data });
     }
 
-    // UPDATE DEAL
+    // Atualizar deal
     const { data: previousDeal } = await supabase
       .from('deals')
-      .select('stage_id, value, status')
+      .select('stage_id, value, status, contact_id')
       .eq('id', id)
       .single();
 
-    // Auto-set won_at/lost_at when status changes
+    // Auto-set timestamps para status changes
     if (updates.status) {
       if (updates.status === 'won' && previousDeal?.status !== 'won') {
-        updates.won_at = updates.won_at || new Date().toISOString();
+        updates.won_at = new Date().toISOString();
         updates.lost_at = null;
-        if (updates.probability === undefined) updates.probability = 100;
+        updates.probability = 100;
       } else if (updates.status === 'lost' && previousDeal?.status !== 'lost') {
-        updates.lost_at = updates.lost_at || new Date().toISOString();
+        updates.lost_at = new Date().toISOString();
         updates.won_at = null;
-        if (updates.probability === undefined) updates.probability = 0;
+        updates.probability = 0;
       } else if (updates.status === 'open') {
         updates.won_at = null;
         updates.lost_at = null;
       }
     }
 
-    const { data, error } = await supabase
+    updates.updated_at = new Date().toISOString();
+
+    const { data: deal, error } = await supabase
       .from('deals')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update(updates)
       .eq('id', id)
-      .select(`*, contact:contacts(*), stage:pipeline_stages(*)`)
+      .eq('organization_id', organizationId)
+      .select(`
+        *,
+        contact:contacts(*),
+        stage:pipeline_stages(*)
+      `)
       .single();
 
-    if (error) throw error;
-
-    // Emit events
-    if (updates.stage_id && previousDeal?.stage_id !== updates.stage_id) {
-      EventBus.emit(EventType.DEAL_STAGE_CHANGED, {
-        organization_id: organizationId,
-        deal_id: id,
-        contact_id: data.contact_id,
-        email: data.contact?.email,
-        data: {
-          deal_title: data.title,
-          deal_value: data.value,
-          from_stage_id: previousDeal?.stage_id,
-          to_stage_id: updates.stage_id,
-          to_stage_name: data.stage?.name,
-        },
-        source: 'crm',
-      }).catch(console.error);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    if (updates.status === 'won' && previousDeal?.status !== 'won') {
-      EventBus.emit(EventType.DEAL_WON, {
-        organization_id: organizationId,
-        deal_id: id,
-        contact_id: data.contact_id,
-        email: data.contact?.email,
-        data: { deal_title: data.title, deal_value: data.value },
-        source: 'crm',
-      }).catch(console.error);
+    // Emitir eventos de status change
+    try {
+      if (updates.status === 'won' && previousDeal?.status !== 'won') {
+        await EventBus.emit(EventType.DEAL_WON, {
+          organization_id: organizationId,
+          deal_id: id,
+          contact_id: deal.contact_id,
+          data: { deal_title: deal.title, deal_value: deal.value },
+          source: 'crm',
+        });
+      }
+
+      if (updates.status === 'lost' && previousDeal?.status !== 'lost') {
+        await EventBus.emit(EventType.DEAL_LOST, {
+          organization_id: organizationId,
+          deal_id: id,
+          contact_id: deal.contact_id,
+          data: { deal_title: deal.title, deal_value: deal.value },
+          source: 'crm',
+        });
+      }
+    } catch (e) {
+      console.warn('[Deals] Event emission failed:', e);
     }
 
-    if (updates.status === 'lost' && previousDeal?.status !== 'lost') {
-      EventBus.emit(EventType.DEAL_LOST, {
-        organization_id: organizationId,
-        deal_id: id,
-        contact_id: data.contact_id,
-        email: data.contact?.email,
-        data: { deal_title: data.title, deal_value: data.value },
-        source: 'crm',
-      }).catch(console.error);
-    }
-
-    return NextResponse.json({ deal: data });
+    return NextResponse.json({ deal });
+    
   } catch (error: any) {
+    console.error('[Deals] PUT error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// DELETE - Delete deal or pipeline
+// DELETE - Delete deal
 export async function DELETE(request: NextRequest) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  
-  const { supabase } = auth;
-
-  const searchParams = request.nextUrl.searchParams;
-  const type = searchParams.get('type') || 'deal';
-  const id = searchParams.get('id');
-
-  if (!id) {
-    return NextResponse.json({ error: 'ID required' }, { status: 400 });
-  }
-
   try {
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    
+    const { supabase, user } = auth;
+    const organizationId = user.organization_id;
+
+    const searchParams = request.nextUrl.searchParams;
+    const type = searchParams.get('type') || 'deal';
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+    }
+
     if (type === 'pipeline') {
+      // Verificar deals
+      const { count } = await supabase
+        .from('deals')
+        .select('*', { count: 'exact', head: true })
+        .eq('pipeline_id', id);
+      
+      if (count && count > 0) {
+        return NextResponse.json({ 
+          error: `Cannot delete pipeline with ${count} deals` 
+        }, { status: 400 });
+      }
+      
       await supabase.from('pipeline_stages').delete().eq('pipeline_id', id);
-      const { error } = await supabase.from('pipelines').delete().eq('id', id);
+      const { error } = await supabase
+        .from('pipelines')
+        .delete()
+        .eq('id', id)
+        .eq('organization_id', organizationId);
       if (error) throw error;
       return NextResponse.json({ success: true });
     }
 
     if (type === 'stage') {
-      const { error } = await supabase.from('pipeline_stages').delete().eq('id', id);
+      // Verificar deals
+      const { count } = await supabase
+        .from('deals')
+        .select('*', { count: 'exact', head: true })
+        .eq('stage_id', id);
+      
+      if (count && count > 0) {
+        return NextResponse.json({ 
+          error: `Cannot delete stage with ${count} deals` 
+        }, { status: 400 });
+      }
+      
+      const { error } = await supabase
+        .from('pipeline_stages')
+        .delete()
+        .eq('id', id);
       if (error) throw error;
       return NextResponse.json({ success: true });
     }
 
-    const { error } = await supabase.from('deals').delete().eq('id', id);
+    // Delete deal
+    const { error } = await supabase
+      .from('deals')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organizationId);
     if (error) throw error;
     return NextResponse.json({ success: true });
+    
   } catch (error: any) {
+    console.error('[Deals] DELETE error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// Helper functions with supabase client passed in
+// =============================================
+// HELPERS
+// =============================================
+
 async function createPipeline(supabase: any, organizationId: string, data: any) {
-  const { name, description, color, stages, store_id } = data; // ✅ ADICIONADO store_id
+  const { name, description, color, stages, store_id } = data;
+
+  if (!name) {
+    return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+  }
 
   const { data: existingPipelines } = await supabase
     .from('pipelines')
     .select('position')
+    .eq('organization_id', organizationId)
     .order('position', { ascending: false })
     .limit(1);
 
@@ -363,10 +571,10 @@ async function createPipeline(supabase: any, organizationId: string, data: any) 
     .from('pipelines')
     .insert({
       organization_id: organizationId,
-      store_id: store_id || null, // ✅ ADICIONADO store_id
+      store_id: store_id || null,
       name,
       description,
-      color: color || '#f97316',
+      color: color || '#6366f1',
       position,
     })
     .select()
@@ -374,50 +582,51 @@ async function createPipeline(supabase: any, organizationId: string, data: any) 
 
   if (error) throw error;
 
-  if (stages && stages.length > 0) {
-    const stageInserts = stages.map((stage: any, index: number) => ({
-      pipeline_id: pipeline.id,
-      name: stage.name,
-      color: stage.color,
-      position: index,
-      probability: stage.probability ?? 50,
-      is_won: stage.is_won ?? false,
-      is_lost: stage.is_lost ?? false,
-    }));
-    await supabase.from('pipeline_stages').insert(stageInserts);
-  } else {
-    const defaultStages = [
-      { name: 'Lead', color: '#6366f1', probability: 10, is_won: false, is_lost: false },
-      { name: 'Qualificado', color: '#8b5cf6', probability: 25, is_won: false, is_lost: false },
-      { name: 'Proposta', color: '#a855f7', probability: 50, is_won: false, is_lost: false },
-      { name: 'Negociação', color: '#f59e0b', probability: 75, is_won: false, is_lost: false },
-      { name: 'Ganho', color: '#22c55e', probability: 100, is_won: true, is_lost: false },
-      { name: 'Perdido', color: '#ef4444', probability: 0, is_won: false, is_lost: true },
-    ];
-    const stageInserts = defaultStages.map((stage, index) => ({
-      pipeline_id: pipeline.id,
-      ...stage,
-      position: index,
-    }));
-    await supabase.from('pipeline_stages').insert(stageInserts);
-  }
+  // Create default stages
+  const stagesToCreate = stages && stages.length > 0 ? stages : [
+    { name: 'Lead', color: '#6366f1', probability: 10 },
+    { name: 'Qualificado', color: '#8b5cf6', probability: 25 },
+    { name: 'Proposta', color: '#a855f7', probability: 50 },
+    { name: 'Negociação', color: '#f59e0b', probability: 75 },
+    { name: 'Ganho', color: '#22c55e', probability: 100, is_won: true },
+    { name: 'Perdido', color: '#ef4444', probability: 0, is_lost: true },
+  ];
 
-  const { data: pipelineStages } = await supabase
-    .from('pipeline_stages')
-    .select('*')
-    .eq('pipeline_id', pipeline.id)
-    .order('position');
+  const stageInserts = stagesToCreate.map((stage: any, index: number) => ({
+    pipeline_id: pipeline.id,
+    name: stage.name,
+    color: stage.color || '#6366f1',
+    position: index,
+    probability: stage.probability ?? 50,
+    is_won: stage.is_won ?? false,
+    is_lost: stage.is_lost ?? false,
+  }));
 
-  return NextResponse.json({ pipeline: { ...pipeline, stages: pipelineStages || [] } }, { status: 201 });
+  await supabase.from('pipeline_stages').insert(stageInserts);
+
+  const { data: pipelineWithStages } = await supabase
+    .from('pipelines')
+    .select(`*, stages:pipeline_stages(*)`)
+    .eq('id', pipeline.id)
+    .single();
+
+  return NextResponse.json({ pipeline: pipelineWithStages }, { status: 201 });
 }
 
 async function createStage(supabase: any, data: any) {
-  const { pipelineId, name, color, probability, is_won, is_lost } = data;
+  const { pipelineId, pipeline_id, name, color, probability, is_won, is_lost } = data;
+  const pid = pipelineId || pipeline_id;
+
+  if (!pid || !name) {
+    return NextResponse.json({ 
+      error: 'pipeline_id and name are required' 
+    }, { status: 400 });
+  }
 
   const { data: existingStages } = await supabase
     .from('pipeline_stages')
     .select('position')
-    .eq('pipeline_id', pipelineId)
+    .eq('pipeline_id', pid)
     .order('position', { ascending: false })
     .limit(1);
 
@@ -426,9 +635,9 @@ async function createStage(supabase: any, data: any) {
   const { data: stage, error } = await supabase
     .from('pipeline_stages')
     .insert({
-      pipeline_id: pipelineId,
+      pipeline_id: pid,
       name,
-      color,
+      color: color || '#6366f1',
       position,
       probability: probability ?? 50,
       is_won: is_won ?? false,
@@ -439,98 +648,4 @@ async function createStage(supabase: any, data: any) {
 
   if (error) throw error;
   return NextResponse.json({ stage }, { status: 201 });
-}
-
-async function createDeal(supabase: any, organizationId: string, data: any) {
-  const pipelineId = data.pipelineId || data.pipeline_id;
-  const stageId = data.stageId || data.stage_id;
-  const contactId = data.contactId || data.contact_id;
-  const storeId = data.storeId || data.store_id; // ✅ ADICIONAR STORE_ID
-  const expDate = data.expectedCloseDate || data.expected_close_date;
-  const assignTo = data.assignedTo || data.assigned_to;
-
-  if (!pipelineId || !stageId) {
-    throw new Error('pipelineId and stageId are required');
-  }
-
-  let dealProbability = data.probability;
-  if (dealProbability === undefined) {
-    const { data: stageInfo } = await supabase
-      .from('pipeline_stages')
-      .select('probability')
-      .eq('id', stageId)
-      .single();
-    dealProbability = stageInfo?.probability ?? 50;
-  }
-
-  const { data: existingDeals } = await supabase
-    .from('deals')
-    .select('position')
-    .eq('stage_id', stageId)
-    .order('position', { ascending: false })
-    .limit(1);
-
-  const position = (existingDeals?.[0]?.position || 0) + 1;
-
-  const { data: deal, error } = await supabase
-    .from('deals')
-    .insert({
-      organization_id: organizationId,
-      store_id: storeId || null, // ✅ SALVAR STORE_ID
-      pipeline_id: pipelineId,
-      stage_id: stageId,
-      contact_id: contactId || null,
-      title: data.title,
-      value: data.value || 0,
-      currency: data.currency || 'BRL',
-      probability: dealProbability,
-      expected_close_date: expDate,
-      description: data.description,
-      assigned_to: assignTo,
-      position,
-      status: 'open',
-      commit_level: data.commit_level || 'pipeline',
-      tags: [],
-      custom_fields: {},
-    })
-    .select(`*, contact:contacts(*), stage:pipeline_stages(*)`)
-    .single();
-
-  if (error) throw error;
-
-  EventBus.emit(EventType.DEAL_CREATED, {
-    organization_id: organizationId,
-    deal_id: deal.id,
-    contact_id: contactId,
-    email: deal.contact?.email,
-    data: {
-      deal_title: data.title,
-      deal_value: data.value || 0,
-      pipeline_id: pipelineId,
-      stage_id: stageId,
-      stage_name: deal.stage?.name,
-      assigned_to: assignTo,
-    },
-    source: 'crm',
-  }).catch(console.error);
-
-  return NextResponse.json({ deal }, { status: 201 });
-}
-
-async function addActivity(supabase: any, data: any) {
-  const { dealId, type, description, userId } = data;
-
-  const { data: activity, error } = await supabase
-    .from('deal_activities')
-    .insert({
-      deal_id: dealId,
-      type,
-      description,
-      user_id: userId,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return NextResponse.json({ activity }, { status: 201 });
 }
