@@ -73,7 +73,7 @@ interface ContactPanelProps {
   onUpdateContact: (id: string, updates: Partial<InboxContact>) => Promise<void>
   onAddTag: (id: string, tag: string) => Promise<void>
   onRemoveTag: (id: string, tag: string) => Promise<void>
-  onAddNote: (id: string, content: string, conversationId?: string) => Promise<void>
+  onAddNote: (id: string, content: string, conversationId?: string, attachments?: any[]) => Promise<void>
   onDeleteNote?: (id: string, noteId: string) => Promise<void>
   onBlockContact: (id: string, reason?: string) => Promise<void>
   onUnblockContact: (id: string) => Promise<void>
@@ -586,8 +586,8 @@ export function ContactPanel({
             contactId={contact.id}
             notes={notes}
             isLoading={false}
-            onAddNote={async (content) => {
-              await onAddNote(contact.id, content, conversationId)
+            onAddNote={async (content, attachments) => {
+              await onAddNote(contact.id, content, conversationId, attachments)
             }}
             onDeleteNote={onDeleteNote ? async (noteId) => {
               await onDeleteNote(contact.id, noteId)

@@ -35,7 +35,7 @@ interface UseInboxContactReturn {
   updateContact: (contactId: string, updates: Partial<InboxContact>) => Promise<void>
   addTag: (contactId: string, tag: string) => Promise<void>
   removeTag: (contactId: string, tag: string) => Promise<void>
-  addNote: (contactId: string, content: string, conversationId?: string) => Promise<void>
+  addNote: (contactId: string, content: string, conversationId?: string, attachments?: any[]) => Promise<void>
   deleteNote: (contactId: string, noteId: string) => Promise<void>
   blockContact: (contactId: string, reason?: string) => Promise<void>
   unblockContact: (contactId: string) => Promise<void>
@@ -240,11 +240,20 @@ export function useInboxContact(): UseInboxContactReturn {
     }
   }, [])
 
-  const addNote = useCallback(async (contactId: string, content: string, conversationId?: string) => {
+  const addNote = useCallback(async (
+    contactId: string, 
+    content: string, 
+    conversationId?: string,
+    attachments?: any[]
+  ) => {
     const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/notes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, conversation_id: conversationId })
+      body: JSON.stringify({ 
+        content, 
+        conversation_id: conversationId,
+        attachments: attachments || []
+      })
     })
 
     if (!response.ok) throw new Error('Failed to add note')

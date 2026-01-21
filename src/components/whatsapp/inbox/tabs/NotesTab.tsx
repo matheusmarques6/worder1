@@ -64,7 +64,11 @@ export function NotesTab({
     
     setIsSaving(true)
     try {
-      await onAddNote(newNote.trim(), attachments.length > 0 ? attachments : undefined)
+      // IMPORTANTE: Filtrar blob URLs (não persistem no servidor)
+      // Anexos só funcionarão quando implementar upload real para Supabase Storage
+      const validAttachments = attachments.filter(att => !att.url.startsWith('blob:'))
+      
+      await onAddNote(newNote.trim(), validAttachments.length > 0 ? validAttachments : undefined)
       setNewNote('')
       setAttachments([])
     } catch (error) {
@@ -206,7 +210,7 @@ export function NotesTab({
                 onClick={() => imageInputRef.current?.click()}
                 disabled={isUploading}
                 className="p-2 text-dark-400 hover:text-white hover:bg-dark-600 rounded-lg transition-colors"
-                title="Anexar imagem"
+                title="Anexar imagem (preview local)"
               >
                 <Image className="w-4 h-4" />
               </button>
@@ -224,7 +228,7 @@ export function NotesTab({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
                 className="p-2 text-dark-400 hover:text-white hover:bg-dark-600 rounded-lg transition-colors"
-                title="Anexar documento"
+                title="Anexar documento (preview local)"
               >
                 <Paperclip className="w-4 h-4" />
               </button>
@@ -239,6 +243,13 @@ export function NotesTab({
               
               {isUploading && (
                 <Loader2 className="w-4 h-4 text-dark-400 animate-spin ml-2" />
+              )}
+              
+              {/* Aviso de que anexos são preview */}
+              {attachments.length > 0 && (
+                <span className="text-[10px] text-yellow-500 ml-2" title="Anexos não serão salvos até implementar upload">
+                  ⚠️ Preview
+                </span>
               )}
             </div>
             
