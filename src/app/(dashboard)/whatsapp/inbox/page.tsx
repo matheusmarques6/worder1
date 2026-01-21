@@ -338,7 +338,7 @@ export default function InboxPage() {
 
       {/* Right Panel - Contact Details */}
       {selectedConversation && showContactPanel && (
-        <div className="w-80 flex-shrink-0 border-l border-dark-800 overflow-y-auto">
+        <div className="w-80 lg:w-[380px] flex-shrink-0 border-l border-dark-800 overflow-hidden">
           <ContactPanel
             contact={contact}
             conversation={contactConversation || selectedConversation}

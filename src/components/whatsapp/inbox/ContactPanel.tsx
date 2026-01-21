@@ -243,7 +243,7 @@ export function ContactPanel({
   ]
 
   return (
-    <div className="w-[380px] flex flex-col h-full bg-dark-900">
+    <div className="w-full flex flex-col h-full bg-dark-900 overflow-hidden">
       {/* ========== HEADER ========== */}
       <div className="p-6 border-b border-dark-700/50 text-center">
         {/* Avatar */}
@@ -297,7 +297,7 @@ export function ContactPanel({
       </div>
 
       {/* ========== TABS - CORRIGIDO: Sem scroll horizontal ========== */}
-      <div className="border-b border-dark-700/50">
+      <div className="border-b border-dark-700/50 overflow-hidden">
         <div className="flex">
           {tabs.map((tab) => (
             <button
