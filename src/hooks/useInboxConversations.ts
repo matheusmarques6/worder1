@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import type { 
   InboxConversation, 
   ConversationFilters, 
@@ -8,7 +8,8 @@ import type {
 interface UseInboxConversationsReturn {
   conversations: InboxConversation[]
   selectedConversation: InboxConversation | null
-  isLoading: boolean
+  isLoading: boolean      // ✅ Primeira carga (mostra loader)
+  isRefreshing: boolean   // ✅ Polling silencioso (não mostra loader)
   error: string | null
   pagination: Pagination | null
   filters: ConversationFilters
@@ -29,10 +30,14 @@ interface UseInboxConversationsReturn {
 export function useInboxConversations(organizationId: string, storeId?: string | null): UseInboxConversationsReturn {
   const [conversations, setConversations] = useState<InboxConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<InboxConversation | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)      // ✅ Primeira carga
+  const [isRefreshing, setIsRefreshing] = useState(false) // ✅ Polling silencioso
   const [error, setError] = useState<string | null>(null)
   const [pagination, setPagination] = useState<Pagination | null>(null)
   const [filters, setFilters] = useState<ConversationFilters>({})
+  
+  // ✅ Flag para saber se já carregou uma vez
+  const hasLoadedOnce = useRef(false)
 
   const fetchConversations = useCallback(async (newFilters?: ConversationFilters) => {
     if (!organizationId) {
@@ -47,7 +52,12 @@ export function useInboxConversations(organizationId: string, storeId?: string |
       return
     }
     
-    setIsLoading(true)
+    // ✅ CORREÇÃO: Só mostra loading na PRIMEIRA carga
+    if (!hasLoadedOnce.current) {
+      setIsLoading(true)
+    } else {
+      setIsRefreshing(true) // Polling silencioso
+    }
     setError(null)
     
     try {
@@ -79,6 +89,7 @@ export function useInboxConversations(organizationId: string, storeId?: string |
 
       setConversations(data.conversations || [])
       setPagination(data.pagination || null)
+      hasLoadedOnce.current = true // ✅ Marca que já carregou
       
       if (newFilters) {
         setFilters(newFilters)
@@ -88,6 +99,7 @@ export function useInboxConversations(organizationId: string, storeId?: string |
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setIsLoading(false)
+      setIsRefreshing(false)
     }
   }, [organizationId, storeId, filters])
 
@@ -184,6 +196,7 @@ export function useInboxConversations(organizationId: string, storeId?: string |
     conversations,
     selectedConversation,
     isLoading,
+    isRefreshing, // ✅ NOVO: polling silencioso
     error,
     pagination,
     filters,

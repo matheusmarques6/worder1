@@ -36,11 +36,11 @@ import type { InboxConversation, InboxTask } from '@/types/inbox'
 const POLLING_INTERVAL = 5000
 
 interface InboxContentProps {
-  /** Altura customizada (default: calc(100vh-4rem)) */
+  /** Altura customizada (default: calc(100vh - 4rem)) */
   height?: string
 }
 
-export default function InboxContent({ height = 'calc(100vh-4rem)' }: InboxContentProps) {
+export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxContentProps) {
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
   
@@ -63,7 +63,8 @@ export default function InboxContent({ height = 'calc(100vh-4rem)' }: InboxConte
   const {
     conversations, 
     selectedConversation, 
-    isLoading: conversationsLoading, 
+    isLoading: conversationsLoading,
+    isRefreshing, // ✅ NOVO: polling silencioso (não mostra loader)
     filters,
     selectConversation, 
     fetchConversations, 
@@ -304,7 +305,7 @@ export default function InboxContent({ height = 'calc(100vh-4rem)' }: InboxConte
   }
 
   return (
-    <div className="flex bg-dark-950 overflow-hidden" style={{ height }}>
+    <div className="flex bg-dark-950 overflow-hidden min-h-0" style={{ height }}>
       {/* Connect Modal */}
       <AnimatePresence>
         {showConnectModal && (
@@ -346,7 +347,8 @@ export default function InboxContent({ height = 'calc(100vh-4rem)' }: InboxConte
 
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto">
-          {conversationsLoading ? (
+          {/* ✅ CORREÇÃO: Só mostra spinner na PRIMEIRA carga (lista vazia) */}
+          {conversationsLoading && conversations.length === 0 ? (
             <div className="flex items-center justify-center h-32">
               <RefreshCw className="w-6 h-6 text-primary-500 animate-spin" />
             </div>
@@ -360,7 +362,7 @@ export default function InboxContent({ height = 'calc(100vh-4rem)' }: InboxConte
             <ConversationList
               conversations={conversations}
               selectedId={selectedConversation?.id}
-              isLoading={conversationsLoading}
+              isLoading={false} // ✅ Nunca mostrar loading interno após primeira carga
               onSelect={selectConversation}
             />
           )}
@@ -368,7 +370,7 @@ export default function InboxContent({ height = 'calc(100vh-4rem)' }: InboxConte
       </div>
 
       {/* Center Panel - Chat */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {selectedConversation ? (
           <ChatPanel
             conversation={selectedConversation}

@@ -82,12 +82,25 @@ function MessageBubble({ message, contactName }: { message: InboxMessage, contac
         }`}>
           {isBot && <div className="absolute top-2 right-2"><Bot className="w-3 h-3 text-white/50" /></div>}
 
+          {/* ✅ CORREÇÃO: Imagem com tamanho limitado + object-contain */}
           {message.message_type === 'image' && message.media_url && (
-            <img src={message.media_url} alt="Imagem" className="rounded-lg max-w-full mb-2 cursor-pointer hover:opacity-90"
-              onClick={() => window.open(message.media_url, '_blank')} />
+            <img 
+              src={message.media_url} 
+              alt="Imagem" 
+              loading="lazy"
+              className="rounded-lg mb-2 cursor-pointer hover:opacity-90 w-full max-w-[320px] max-h-[360px] object-contain bg-dark-900/30"
+              onClick={() => window.open(message.media_url, '_blank')} 
+            />
           )}
+          {/* ✅ CORREÇÃO: Vídeo com preload, playsInline e tamanho limitado */}
           {message.message_type === 'video' && message.media_url && (
-            <video src={message.media_url} controls className="rounded-lg max-w-full mb-2" />
+            <video 
+              src={message.media_url} 
+              controls 
+              preload="metadata"
+              playsInline
+              className="rounded-lg mb-2 w-full max-w-[360px] max-h-[360px] object-contain bg-dark-900/30" 
+            />
           )}
           {message.message_type === 'audio' && message.media_url && (
             <audio src={message.media_url} controls className="mb-2" />
@@ -366,8 +379,9 @@ export function ChatPanel({
           </div>
         ) : (
           <>
-            {groupedMessages.map((group, i) => (
-              <div key={i}>
+            {/* ✅ CORREÇÃO: Key estável usando group.date em vez de índice */}
+            {groupedMessages.map((group) => (
+              <div key={group.date}>
                 <DateSeparator date={group.date} />
                 <div className="space-y-3">
                   {group.messages.map((msg) => <MessageBubble key={msg.id} message={msg} contactName={contactName} />)}

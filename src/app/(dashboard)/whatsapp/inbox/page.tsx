@@ -37,7 +37,7 @@ export default function InboxPage() {
 
   // ✅ CORREÇÃO: Passar storeId para os hooks
   const {
-    conversations, selectedConversation, isLoading: conversationsLoading, filters,
+    conversations, selectedConversation, isLoading: conversationsLoading, isRefreshing, filters,
     selectConversation, fetchConversations, updateConversation, toggleBot, setFilters, refresh: refreshConversations,
   } = useInboxConversations(organizationId, storeId)
 
@@ -245,7 +245,7 @@ export default function InboxPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-dark-950 overflow-hidden">
+    <div className="flex h-[calc(100vh-4rem)] bg-dark-950 overflow-hidden min-h-0">
       {/* Connect Modal */}
       <AnimatePresence>
         {showConnectModal && (
@@ -287,7 +287,8 @@ export default function InboxPage() {
 
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto">
-          {conversationsLoading ? (
+          {/* ✅ CORREÇÃO: Só mostra spinner na PRIMEIRA carga (lista vazia) */}
+          {conversationsLoading && conversations.length === 0 ? (
             <div className="flex items-center justify-center h-32">
               <RefreshCw className="w-6 h-6 text-primary-500 animate-spin" />
             </div>
@@ -301,7 +302,7 @@ export default function InboxPage() {
             <ConversationList
               conversations={conversations}
               selectedId={selectedConversation?.id}
-              isLoading={conversationsLoading}
+              isLoading={false} // ✅ Nunca mostrar loading interno após primeira carga
               onSelect={selectConversation}
             />
           )}
@@ -309,7 +310,7 @@ export default function InboxPage() {
       </div>
 
       {/* Center Panel - Chat */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {selectedConversation ? (
           <ChatPanel
             conversation={selectedConversation}

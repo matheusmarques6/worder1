@@ -59,9 +59,9 @@ export default function WhatsAppPage() {
       )}
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden min-h-0">
         {/* ✅ FASE 2: InboxContent usa storeId para isolamento multi-loja */}
-        {activeTab === 'inbox' && <InboxContent height="calc(100vh-8rem)" />}
+        {activeTab === 'inbox' && <InboxContent height="calc(100vh - 8rem)" />}
         {activeTab === 'campaigns' && !isAgent && <CampaignsTab />}
         {activeTab === 'agents' && !isAgent && <AgentsTab />}
       </div>
