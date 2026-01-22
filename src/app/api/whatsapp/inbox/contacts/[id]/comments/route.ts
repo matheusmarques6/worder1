@@ -101,16 +101,40 @@ export async function POST(
     const contactId = params.id
     const body = await request.json()
 
-    // Buscar dados do contato
-    const { data: contact, error: contactError } = await supabase
+    // =====================================================
+    // CORREÇÃO: Buscar contato em AMBAS as tabelas
+    // O contactId pode vir de 'contacts' OU 'whatsapp_contacts'
+    // =====================================================
+    
+    let organizationId: string | null = null
+    let finalContactId = contactId
+    
+    // 1. Tentar buscar da tabela unificada (contacts)
+    const { data: unifiedContact } = await supabase
       .from('contacts')
       .select('id, organization_id')
       .eq('id', contactId)
       .single()
 
-    if (contactError) {
-      // Fallback: criar na tabela antiga
-      return await createLegacyNote(contactId, body)
+    if (unifiedContact) {
+      organizationId = unifiedContact.organization_id
+    } else {
+      // 2. Tentar buscar da tabela legada (whatsapp_contacts)
+      const { data: waContact } = await supabase
+        .from('whatsapp_contacts')
+        .select('id, organization_id')
+        .eq('id', contactId)
+        .single()
+      
+      if (waContact) {
+        organizationId = waContact.organization_id
+      }
+    }
+    
+    // 3. Se não encontrou em nenhuma tabela
+    if (!organizationId) {
+      console.error(`[Comments] Contact not found in any table: ${contactId}`)
+      return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })
     }
 
     const {
@@ -133,7 +157,7 @@ export async function POST(
     const { data: comment, error } = await supabase
       .from('contact_comments')
       .insert({
-        organization_id: contact.organization_id,
+        organization_id: organizationId,
         contact_id: contactId,
         content: content.trim(),
         comment_type,
@@ -148,8 +172,9 @@ export async function POST(
       .single()
 
     if (error) {
+      console.error('[Comments] Error creating comment:', error)
       // Fallback: criar na tabela antiga
-      return await createLegacyNote(contactId, body)
+      return await createLegacyNote(contactId, body, organizationId)
     }
 
     // Registrar atividade
@@ -157,7 +182,7 @@ export async function POST(
       await supabase
         .from('contact_activities')
         .insert({
-          organization_id: contact.organization_id,
+          organization_id: organizationId,
           contact_id: contactId,
           conversation_id: conversation_id || null,
           deal_id: deal_id || null,
@@ -180,7 +205,7 @@ export async function POST(
     if (mentions.length > 0) {
       try {
         const notifications = mentions.map((userId: string) => ({
-          organization_id: contact.organization_id,
+          organization_id: organizationId,
           user_id: userId,
           type: 'mention',
           title: `${created_by_name || 'Alguém'} mencionou você`,
@@ -325,21 +350,27 @@ export async function DELETE(
 }
 
 // Helper para criar nota na tabela antiga (fallback)
-async function createLegacyNote(contactId: string, body: any) {
-  const { data: contact } = await supabase
-    .from('whatsapp_contacts')
-    .select('organization_id')
-    .eq('id', contactId)
-    .single()
+async function createLegacyNote(contactId: string, body: any, organizationId?: string) {
+  // Se já temos o organizationId, usar direto
+  let orgId = organizationId
+  
+  if (!orgId) {
+    const { data: contact } = await supabase
+      .from('whatsapp_contacts')
+      .select('organization_id')
+      .eq('id', contactId)
+      .single()
 
-  if (!contact) {
-    return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })
+    if (!contact) {
+      return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })
+    }
+    orgId = contact.organization_id
   }
 
   const { data: note, error } = await supabase
     .from('whatsapp_contact_notes')
     .insert({
-      organization_id: contact.organization_id,
+      organization_id: orgId,
       contact_id: contactId,
       content: body.content,
       note_type: body.comment_type || 'general',
