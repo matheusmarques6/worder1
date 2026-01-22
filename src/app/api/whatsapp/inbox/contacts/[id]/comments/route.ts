@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { getAuthClient, authError } from '@/lib/api-utils'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+
+// =====================================================
+// COMMENTS API - COM RLS
+// =====================================================
+// Esta rota usa cliente autenticado para respeitar RLS.
+// O supabaseAdmin só é usado como fallback para webhooks.
+// =====================================================
 
 // GET - Buscar comentários/notas do contato
 export async function GET(
@@ -8,17 +16,19 @@ export async function GET(
 ) {
   try {
     const contactId = params.id
+
+    // Tentar autenticação primeiro
+    const auth = await getAuthClient()
+    const supabase = auth?.supabase || supabaseAdmin
+
     const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type') // 'note', 'call_log', 'meeting_note', etc
+    const type = searchParams.get('type')
     const pinned_only = searchParams.get('pinned_only') === 'true'
     const limit = parseInt(searchParams.get('limit') || '50')
 
     let query = supabase
       .from('contact_comments')
-      .select(`
-        *,
-        created_by_user:profiles!contact_comments_created_by_fkey(id, first_name, last_name, avatar_url)
-      `)
+      .select('*')
       .eq('contact_id', contactId)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
@@ -35,7 +45,7 @@ export async function GET(
     const { data: comments, error } = await query
 
     if (error) {
-      // Fallback para whatsapp_contact_notes
+      // Fallback para whatsapp_contact_notes (tabela legada)
       const { data: legacyNotes, error: legacyError } = await supabase
         .from('whatsapp_contact_notes')
         .select('*')
@@ -44,7 +54,10 @@ export async function GET(
         .order('created_at', { ascending: false })
         .limit(limit)
       
-      if (legacyError) throw error
+      if (legacyError) {
+        console.error('[Comments] Error fetching:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
 
       return NextResponse.json({ 
         comments: (legacyNotes || []).map(note => ({
@@ -63,20 +76,12 @@ export async function GET(
       is_pinned: comment.is_pinned,
       pinned_at: comment.pinned_at,
       mentions: comment.mentions || [],
-      
-      // Contexto
       contact_id: comment.contact_id,
       conversation_id: comment.conversation_id,
       deal_id: comment.deal_id,
       task_id: comment.task_id,
-      
-      // Criador
       created_by: comment.created_by,
-      created_by_name: comment.created_by_name || 
-        (comment.created_by_user ? `${comment.created_by_user.first_name} ${comment.created_by_user.last_name || ''}`.trim() : 'Usuário'),
-      created_by_avatar: comment.created_by_user?.avatar_url,
-      
-      // Datas
+      created_by_name: comment.created_by_name,
       created_at: comment.created_at,
       updated_at: comment.updated_at,
     }))
@@ -87,7 +92,7 @@ export async function GET(
       total: formattedComments.length,
     })
   } catch (error: any) {
-    console.error('Error fetching comments:', error)
+    console.error('[Comments] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
@@ -102,41 +107,16 @@ export async function POST(
     const body = await request.json()
 
     // =====================================================
-    // CORREÇÃO: Buscar contato em AMBAS as tabelas
-    // O contactId pode vir de 'contacts' OU 'whatsapp_contacts'
+    // AUTENTICAÇÃO OBRIGATÓRIA PARA POST
     // =====================================================
-    
-    let organizationId: string | null = null
-    let finalContactId = contactId
-    
-    // 1. Tentar buscar da tabela unificada (contacts)
-    const { data: unifiedContact } = await supabase
-      .from('contacts')
-      .select('id, organization_id')
-      .eq('id', contactId)
-      .single()
-
-    if (unifiedContact) {
-      organizationId = unifiedContact.organization_id
-    } else {
-      // 2. Tentar buscar da tabela legada (whatsapp_contacts)
-      const { data: waContact } = await supabase
-        .from('whatsapp_contacts')
-        .select('id, organization_id')
-        .eq('id', contactId)
-        .single()
-      
-      if (waContact) {
-        organizationId = waContact.organization_id
-      }
-    }
-    
-    // 3. Se não encontrou em nenhuma tabela
-    if (!organizationId) {
-      console.error(`[Comments] Contact not found in any table: ${contactId}`)
-      return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })
+    const auth = await getAuthClient()
+    if (!auth) {
+      return authError('Authentication required', 401)
     }
 
+    const { supabase, user } = auth
+
+    // Extrair dados do body
     const {
       content,
       comment_type = 'note',
@@ -144,8 +124,6 @@ export async function POST(
       deal_id,
       task_id,
       mentions = [],
-      created_by,
-      created_by_name,
     } = body
 
     // Validação
@@ -153,11 +131,13 @@ export async function POST(
       return NextResponse.json({ error: 'Conteúdo é obrigatório' }, { status: 400 })
     }
 
-    // Criar comentário
+    // =====================================================
+    // CRIAR COMENTÁRIO (RLS valida automaticamente)
+    // =====================================================
     const { data: comment, error } = await supabase
       .from('contact_comments')
       .insert({
-        organization_id: organizationId,
+        organization_id: user.organization_id,
         contact_id: contactId,
         content: content.trim(),
         comment_type,
@@ -165,24 +145,47 @@ export async function POST(
         deal_id: deal_id || null,
         task_id: task_id || null,
         mentions,
-        created_by,
-        created_by_name,
+        created_by: user.id,
+        created_by_name: body.created_by_name || user.email?.split('@')[0],
       })
       .select()
       .single()
 
     if (error) {
-      console.error('[Comments] Error creating comment:', error)
-      // Fallback: criar na tabela antiga
-      return await createLegacyNote(contactId, body, organizationId)
+      console.error('[Comments] Error creating:', error)
+      
+      // Tentar fallback na tabela legada
+      const { data: note, error: legacyError } = await supabase
+        .from('whatsapp_contact_notes')
+        .insert({
+          organization_id: user.organization_id,
+          contact_id: contactId,
+          content: content.trim(),
+          note_type: comment_type || 'general',
+          conversation_id: conversation_id || null,
+          created_by: user.id,
+          created_by_name: body.created_by_name || user.email?.split('@')[0],
+        })
+        .select()
+        .single()
+
+      if (legacyError) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json({ 
+        comment: { ...note, comment_type: note.note_type },
+        _legacy: true,
+        message: 'Nota adicionada com sucesso'
+      })
     }
 
-    // Registrar atividade
+    // Registrar atividade (opcional, não bloqueia se falhar)
     try {
       await supabase
         .from('contact_activities')
         .insert({
-          organization_id: organizationId,
+          organization_id: user.organization_id,
           contact_id: contactId,
           conversation_id: conversation_id || null,
           deal_id: deal_id || null,
@@ -190,38 +193,29 @@ export async function POST(
           activity_type: comment_type === 'note' ? 'note_added' : 'comment_added',
           title: `${getCommentTypeLabel(comment_type)} adicionado`,
           description: content.substring(0, 200),
-          metadata: {
-            comment_type,
-            has_mentions: mentions.length > 0,
-          },
-          created_by,
-          created_by_name,
+          metadata: { comment_type, has_mentions: mentions.length > 0 },
+          created_by: user.id,
+          created_by_name: body.created_by_name || user.email?.split('@')[0],
         })
     } catch (activityError) {
-      console.warn('Não foi possível registrar atividade:', activityError)
+      console.warn('[Comments] Could not log activity:', activityError)
     }
 
-    // Se tiver menções, criar notificações
+    // Criar notificações para menções (opcional)
     if (mentions.length > 0) {
       try {
         const notifications = mentions.map((userId: string) => ({
-          organization_id: organizationId,
+          organization_id: user.organization_id,
           user_id: userId,
           type: 'mention',
-          title: `${created_by_name || 'Alguém'} mencionou você`,
+          title: `${body.created_by_name || 'Alguém'} mencionou você`,
           message: content.substring(0, 100),
-          data: {
-            contact_id: contactId,
-            comment_id: comment.id,
-            conversation_id,
-          },
+          data: { contact_id: contactId, comment_id: comment.id, conversation_id },
         }))
 
-        await supabase
-          .from('notifications')
-          .insert(notifications)
+        await supabase.from('notifications').insert(notifications)
       } catch (notifError) {
-        console.warn('Não foi possível criar notificações:', notifError)
+        console.warn('[Comments] Could not create notifications:', notifError)
       }
     }
 
@@ -230,18 +224,26 @@ export async function POST(
       message: 'Comentário adicionado com sucesso'
     })
   } catch (error: any) {
-    console.error('Error creating comment:', error)
+    console.error('[Comments] POST error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
-// PATCH - Atualizar comentário (fixar, editar conteúdo)
+// PATCH - Atualizar comentário
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const contactId = params.id
+    
+    // Autenticação obrigatória
+    const auth = await getAuthClient()
+    if (!auth) {
+      return authError('Authentication required', 401)
+    }
+
+    const { supabase } = auth
     const body = await request.json()
     const { comment_id, ...updates } = body
 
@@ -264,6 +266,7 @@ export async function PATCH(
       filteredUpdates.pinned_at = new Date().toISOString()
     }
 
+    // RLS garante que só pode atualizar da própria organização
     const { data: comment, error } = await supabase
       .from('contact_comments')
       .update({
@@ -276,7 +279,7 @@ export async function PATCH(
       .single()
 
     if (error) {
-      // Tentar atualizar na tabela antiga
+      // Tentar tabela legada
       const legacyUpdates: Record<string, any> = {}
       if (filteredUpdates.content) legacyUpdates.content = filteredUpdates.content
       if (filteredUpdates.is_pinned !== undefined) legacyUpdates.is_pinned = filteredUpdates.is_pinned
@@ -284,16 +287,15 @@ export async function PATCH(
 
       const { data: legacyNote, error: legacyError } = await supabase
         .from('whatsapp_contact_notes')
-        .update({
-          ...legacyUpdates,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ ...legacyUpdates, updated_at: new Date().toISOString() })
         .eq('id', comment_id)
         .eq('contact_id', contactId)
         .select()
         .single()
 
-      if (legacyError) throw error
+      if (legacyError) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
 
       return NextResponse.json({ comment: legacyNote, _legacy: true })
     }
@@ -303,7 +305,7 @@ export async function PATCH(
       message: 'Comentário atualizado com sucesso'
     })
   } catch (error: any) {
-    console.error('Error updating comment:', error)
+    console.error('[Comments] PATCH error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
@@ -315,6 +317,14 @@ export async function DELETE(
 ) {
   try {
     const contactId = params.id
+    
+    // Autenticação obrigatória
+    const auth = await getAuthClient()
+    if (!auth) {
+      return authError('Authentication required', 401)
+    }
+
+    const { supabase } = auth
     const { searchParams } = new URL(request.url)
     const commentId = searchParams.get('comment_id')
 
@@ -322,7 +332,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'comment_id é obrigatório' }, { status: 400 })
     }
 
-    // Tentar deletar da nova tabela
+    // RLS garante que só pode deletar da própria organização
     const { error } = await supabase
       .from('contact_comments')
       .delete()
@@ -330,67 +340,26 @@ export async function DELETE(
       .eq('contact_id', contactId)
 
     if (error) {
-      // Fallback: tentar deletar da tabela antiga
+      // Tentar tabela legada
       const { error: legacyError } = await supabase
         .from('whatsapp_contact_notes')
         .delete()
         .eq('id', commentId)
         .eq('contact_id', contactId)
 
-      if (legacyError) throw error
+      if (legacyError) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
     }
 
-    return NextResponse.json({ 
-      message: 'Comentário removido com sucesso'
-    })
+    return NextResponse.json({ message: 'Comentário removido com sucesso' })
   } catch (error: any) {
-    console.error('Error deleting comment:', error)
+    console.error('[Comments] DELETE error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
-// Helper para criar nota na tabela antiga (fallback)
-async function createLegacyNote(contactId: string, body: any, organizationId?: string) {
-  // Se já temos o organizationId, usar direto
-  let orgId = organizationId
-  
-  if (!orgId) {
-    const { data: contact } = await supabase
-      .from('whatsapp_contacts')
-      .select('organization_id')
-      .eq('id', contactId)
-      .single()
-
-    if (!contact) {
-      return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })
-    }
-    orgId = contact.organization_id
-  }
-
-  const { data: note, error } = await supabase
-    .from('whatsapp_contact_notes')
-    .insert({
-      organization_id: orgId,
-      contact_id: contactId,
-      content: body.content,
-      note_type: body.comment_type || 'general',
-      conversation_id: body.conversation_id || null,
-      created_by: body.created_by,
-      created_by_name: body.created_by_name,
-    })
-    .select()
-    .single()
-
-  if (error) throw error
-
-  return NextResponse.json({ 
-    comment: { ...note, comment_type: note.note_type },
-    _legacy: true,
-    message: 'Nota adicionada com sucesso'
-  })
-}
-
-// Helper para label do tipo de comentário
+// Helper
 function getCommentTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     note: 'Nota',
