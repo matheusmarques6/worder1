@@ -105,16 +105,20 @@ export async function POST(
   try {
     const contactId = params.id
     const body = await request.json()
+    
+    console.log('[Comments POST] Starting...', { contactId, body })
 
     // =====================================================
     // AUTENTICAÇÃO OBRIGATÓRIA PARA POST
     // =====================================================
     const auth = await getAuthClient()
     if (!auth) {
+      console.error('[Comments POST] Auth failed')
       return authError('Authentication required', 401)
     }
 
     const { supabase, user } = auth
+    console.log('[Comments POST] Auth OK, user:', user.id, 'org:', user.organization_id)
 
     // Extrair dados do body
     const {
@@ -134,6 +138,7 @@ export async function POST(
     // =====================================================
     // CRIAR COMENTÁRIO (RLS valida automaticamente)
     // =====================================================
+    console.log('[Comments POST] Inserting comment...')
     const { data: comment, error } = await supabase
       .from('contact_comments')
       .insert({
@@ -152,7 +157,7 @@ export async function POST(
       .single()
 
     if (error) {
-      console.error('[Comments] Error creating:', error)
+      console.error('[Comments POST] Error creating:', error)
       
       // Tentar fallback na tabela legada
       const { data: note, error: legacyError } = await supabase

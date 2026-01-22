@@ -177,13 +177,20 @@ export function TimelineTab({
   const handleAddComment = async () => {
     if (!newComment.trim()) return
     
+    console.log('[Timeline] Adding comment:', { contactId, content: newComment.trim() })
+    
     setIsAddingComment(true)
     try {
       // Extrair IDs dos usuários mencionados
       const mentionedUserIds = extractMentionIds(newComment)
+      console.log('[Timeline] Calling onAddComment...')
       await onAddComment(newComment.trim(), 'note', mentionedUserIds)
+      console.log('[Timeline] Comment added successfully!')
       setNewComment('')
       onRefresh()
+    } catch (error) {
+      console.error('[Timeline] Error adding comment:', error)
+      alert('Erro ao adicionar nota. Verifique o console.')
     } finally {
       setIsAddingComment(false)
     }
