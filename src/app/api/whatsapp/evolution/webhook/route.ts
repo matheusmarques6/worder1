@@ -213,56 +213,60 @@ async function handleMessage(instance: any, body: any) {
   }
 
   // =====================================================
-  // SALVAR MENSAGEM - COM VERIFICAÇÃO DE DUPLICATA
-  // =====================================================
-  const messageId = key.id || `msg_${Date.now()}`;
-  
-  // Verificar duplicata
-  const { data: existing } = await supabase
+  // SALVAR MENSAGEM - IDEMPOTENTE (UPSERT)
+// =====================================================
+const messageId = key.id || `msg_${Date.now()}`;
+
+const messagePayload = {
+  organization_id: orgId,
+  store_id: storeId,
+  instance_id: instance.id,
+  conversation_id: conversation.id,
+  contact_id: contact?.id,
+  message_id: messageId,
+  direction: 'inbound',
+  from_number: phoneNumber,
+  message_type: messageType,
+  content: typeof content === 'string' ? { text: content } : content,
+  text_body: typeof content === 'string' ? content : null,
+  media_url: mediaUrl,
+  media_mime_type: mediaMimetype,
+  status: 'received',
+  timestamp: new Date().toISOString(),
+};
+
+// ✅ À prova de retry/concorrência: DO NOTHING em conflito (instance_id, message_id)
+const { data: upserted, error: msgError } = await supabase
+  .from('whatsapp_messages')
+  .upsert(messagePayload, {
+    onConflict: 'instance_id,message_id',
+    ignoreDuplicates: true,
+  })
+  .select('id')
+  .maybeSingle();
+
+if (msgError) {
+  console.error('[Webhook] ❌ Error saving message:', msgError);
+  return;
+}
+
+// Se foi duplicata (DO NOTHING), o PostgREST pode não retornar linha.
+// Buscamos o id só quando necessário (ex.: IA).
+let savedMessage = upserted;
+if (!savedMessage?.id) {
+  const { data: existingMsg } = await supabase
     .from('whatsapp_messages')
     .select('id')
-    .eq('message_id', messageId)
-    .eq('organization_id', orgId)
     .eq('instance_id', instance.id)
-    .limit(1)
-    .single();
-    
-  if (existing) {
-    console.log('[Webhook] ⏭️ Message already exists:', messageId);
-    return;
-  }
-  
-  // Inserir mensagem
-  const { data: savedMessage, error: msgError } = await supabase
-    .from('whatsapp_messages')
-    .insert({
-      organization_id: orgId,
-      store_id: storeId,
-      instance_id: instance.id,
-      conversation_id: conversation.id,
-      contact_id: contact?.id,
-      message_id: messageId,
-      direction: 'inbound',
-      from_number: phoneNumber,
-      message_type: messageType,
-      content: typeof content === 'string' ? { text: content } : content,
-      text_body: typeof content === 'string' ? content : null,
-      media_url: mediaUrl,
-      media_mime_type: mediaMimetype,
-      status: 'received',
-      timestamp: new Date().toISOString(),
-    })
-    .select()
-    .single();
-    
-  if (msgError) {
-    console.error('[Webhook] ❌ Error saving message:', msgError);
-    return;
-  }
-  
-  console.log('[Webhook] ✅ Message saved:', savedMessage.id);
-  
-  // Atualizar conversa
+    .eq('message_id', messageId)
+    .maybeSingle();
+
+  savedMessage = existingMsg || null;
+}
+
+console.log('[Webhook] ✅ Message processed:', messageId);
+
+// Atualizar conversa
   await supabase
     .from('whatsapp_conversations')
     .update({
@@ -278,7 +282,7 @@ async function handleMessage(instance: any, body: any) {
     .eq('id', conversation.id);
 
   // Processar IA se habilitada
-  if (conversation.ai_enabled && messageType === 'text' && content) {
+  if (conversation.ai_enabled && messageType === 'text' && content && savedMessage?.id) {
     await triggerAIProcessing(conversation, savedMessage, content, orgId, instance.id);
   }
 }

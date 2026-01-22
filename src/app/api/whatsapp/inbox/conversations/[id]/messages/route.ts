@@ -204,20 +204,37 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       console.log('[Messages POST] ✅ Enviado com sucesso:', sendData?.key?.id)
     }
 
-    const { data: saved } = await supabase.from('whatsapp_messages').insert({
-      organization_id: conversation.organization_id,
-      store_id: conversation.store_id,
-      instance_id: conversation.instance_id,
-      conversation_id: conversationId, 
-      message_id: sendData?.key?.id || `out-${Date.now()}`,
-      direction: 'outbound', 
-      message_type, 
-      content: { text: content }, 
-      text_body: content,
-      to_number: phoneNumber,
-      status: sendResponse.ok ? 'sent' : 'failed', 
-      timestamp: new Date().toISOString(),
-    }).select().single()
+    const payload = {
+  organization_id: conversation.organization_id,
+  store_id: conversation.store_id,
+  instance_id: conversation.instance_id,
+  conversation_id: conversationId,
+  message_id: sendData?.key?.id || `out-${Date.now()}`,
+  direction: 'outbound',
+  message_type,
+  content: { text: content },
+  text_body: content,
+  to_number: phoneNumber,
+  status: sendResponse.ok ? 'sent' : 'failed',
+  timestamp: new Date().toISOString(),
+};
+
+// ✅ Idempotente: se a Evolution fizer retry e vier o mesmo key.id, não quebra com 23505.
+const { data: savedUpsert, error: msgError } = await supabase
+  .from('whatsapp_messages')
+  .upsert(payload, {
+    onConflict: 'instance_id,message_id',
+    ignoreDuplicates: true,
+  })
+  .select('*')
+  .maybeSingle();
+
+if (msgError) {
+  console.error('[Messages POST] ❌ Error saving outbound message:', msgError);
+}
+
+const saved = savedUpsert || null;
+
 
     await supabase.from('whatsapp_conversations').update({
       last_message_at: new Date().toISOString(), 

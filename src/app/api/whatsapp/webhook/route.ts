@@ -167,7 +167,7 @@ async function handleMessageStatus(instanceName: string, data: any) {
           status: mappedStatus,
           updated_at: new Date().toISOString()
         })
-        .eq('external_id', messageId);
+        .or(`message_id.eq.${messageId},external_id.eq.${messageId}`);
         
       console.log('[Webhook] ✅ Message status updated:', messageId, '->', mappedStatus);
     }
@@ -341,25 +341,36 @@ async function handleIncomingMessage(instanceName: string, data: any, body: any)
   const messageTimestamp = data.messageTimestamp || Math.floor(Date.now() / 1000);
   const messageDate = new Date(messageTimestamp * 1000).toISOString();
 
-  const { error: msgError } = await supabase
-    .from('whatsapp_messages')
-    .insert({
-      organization_id: orgId,
-      store_id: storeId, // ✅ CRÍTICO
-      conversation_id: conversationId,
-      instance_id: instance.id,
-      external_id: key.id,
-      direction: 'inbound',
-      sender_phone: phoneNumber,
-      sender_name: pushName,
-      content: content || null,
-      message_type: messageType,
-      status: 'received',
-      raw_payload: body,
-      created_at: messageDate,
-    });
+  const messageId = key.id || `msg_${Date.now()}`;
+const messagePayload = {
+  organization_id: orgId,
+  store_id: storeId, // ✅ CRÍTICO
+  conversation_id: conversationId,
+  instance_id: instance.id,
+  // ✅ Normalização: message_id (padrão novo) + external_id (compat legado)
+  message_id: messageId,
+  external_id: messageId,
+  direction: 'inbound',
+  sender_phone: phoneNumber,
+  sender_name: pushName,
+  from_number: phoneNumber,
+  content: content || null,
+  text_body: typeof content === 'string' ? content : null,
+  message_type: messageType,
+  status: 'received',
+  raw_payload: body,
+  created_at: messageDate,
+  timestamp: messageDate,
+};
 
-  if (msgError) {
+const { error: msgError } = await supabase
+  .from('whatsapp_messages')
+  .upsert(messagePayload, {
+    onConflict: 'instance_id,message_id',
+    ignoreDuplicates: true,
+  });
+
+if (msgError) {
     console.error('[Webhook] ❌ Error saving message:', msgError);
   } else {
     console.log('[Webhook] ✅ Message saved for store:', storeId);

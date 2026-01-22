@@ -1,0 +1,242 @@
+--- a/src/app/api/whatsapp/evolution/webhook/route.ts
++++ b/src/app/api/whatsapp/evolution/webhook/route.ts
+@@ -213,56 +213,60 @@
+   }
+ 
+   // =====================================================
+-  // SALVAR MENSAGEM - COM VERIFICAÇÃO DE DUPLICATA
+-  // =====================================================
+-  const messageId = key.id || `msg_${Date.now()}`;
+-  
+-  // Verificar duplicata
+-  const { data: existing } = await supabase
++  // SALVAR MENSAGEM - IDEMPOTENTE (UPSERT)
++// =====================================================
++const messageId = key.id || `msg_${Date.now()}`;
++
++const messagePayload = {
++  organization_id: orgId,
++  store_id: storeId,
++  instance_id: instance.id,
++  conversation_id: conversation.id,
++  contact_id: contact?.id,
++  message_id: messageId,
++  direction: 'inbound',
++  from_number: phoneNumber,
++  message_type: messageType,
++  content: typeof content === 'string' ? { text: content } : content,
++  text_body: typeof content === 'string' ? content : null,
++  media_url: mediaUrl,
++  media_mime_type: mediaMimetype,
++  status: 'received',
++  timestamp: new Date().toISOString(),
++};
++
++// ✅ À prova de retry/concorrência: DO NOTHING em conflito (instance_id, message_id)
++const { data: upserted, error: msgError } = await supabase
++  .from('whatsapp_messages')
++  .upsert(messagePayload, {
++    onConflict: 'instance_id,message_id',
++    ignoreDuplicates: true,
++  })
++  .select('id')
++  .maybeSingle();
++
++if (msgError) {
++  console.error('[Webhook] ❌ Error saving message:', msgError);
++  return;
++}
++
++// Se foi duplicata (DO NOTHING), o PostgREST pode não retornar linha.
++// Buscamos o id só quando necessário (ex.: IA).
++let savedMessage = upserted;
++if (!savedMessage?.id) {
++  const { data: existingMsg } = await supabase
+     .from('whatsapp_messages')
+     .select('id')
++    .eq('instance_id', instance.id)
+     .eq('message_id', messageId)
+-    .eq('organization_id', orgId)
+-    .eq('instance_id', instance.id)
+-    .limit(1)
+-    .single();
+-    
+-  if (existing) {
+-    console.log('[Webhook] ⏭️ Message already exists:', messageId);
+-    return;
+-  }
+-  
+-  // Inserir mensagem
+-  const { data: savedMessage, error: msgError } = await supabase
+-    .from('whatsapp_messages')
+-    .insert({
+-      organization_id: orgId,
+-      store_id: storeId,
+-      instance_id: instance.id,
+-      conversation_id: conversation.id,
+-      contact_id: contact?.id,
+-      message_id: messageId,
+-      direction: 'inbound',
+-      from_number: phoneNumber,
+-      message_type: messageType,
+-      content: typeof content === 'string' ? { text: content } : content,
+-      text_body: typeof content === 'string' ? content : null,
+-      media_url: mediaUrl,
+-      media_mime_type: mediaMimetype,
+-      status: 'received',
+-      timestamp: new Date().toISOString(),
+-    })
+-    .select()
+-    .single();
+-    
+-  if (msgError) {
+-    console.error('[Webhook] ❌ Error saving message:', msgError);
+-    return;
+-  }
+-  
+-  console.log('[Webhook] ✅ Message saved:', savedMessage.id);
+-  
+-  // Atualizar conversa
++    .maybeSingle();
++
++  savedMessage = existingMsg || null;
++}
++
++console.log('[Webhook] ✅ Message processed:', messageId);
++
++// Atualizar conversa
+   await supabase
+     .from('whatsapp_conversations')
+     .update({
+@@ -278,7 +282,7 @@
+     .eq('id', conversation.id);
+ 
+   // Processar IA se habilitada
+-  if (conversation.ai_enabled && messageType === 'text' && content) {
++  if (conversation.ai_enabled && messageType === 'text' && content && savedMessage?.id) {
+     await triggerAIProcessing(conversation, savedMessage, content, orgId, instance.id);
+   }
+ }
+
+--- a/src/app/api/whatsapp/inbox/conversations/[id]/messages/route.ts
++++ b/src/app/api/whatsapp/inbox/conversations/[id]/messages/route.ts
+@@ -204,20 +204,37 @@
+       console.log('[Messages POST] ✅ Enviado com sucesso:', sendData?.key?.id)
+     }
+ 
+-    const { data: saved } = await supabase.from('whatsapp_messages').insert({
+-      organization_id: conversation.organization_id,
+-      store_id: conversation.store_id,
+-      instance_id: conversation.instance_id,
+-      conversation_id: conversationId, 
+-      message_id: sendData?.key?.id || `out-${Date.now()}`,
+-      direction: 'outbound', 
+-      message_type, 
+-      content: { text: content }, 
+-      text_body: content,
+-      to_number: phoneNumber,
+-      status: sendResponse.ok ? 'sent' : 'failed', 
+-      timestamp: new Date().toISOString(),
+-    }).select().single()
++    const payload = {
++  organization_id: conversation.organization_id,
++  store_id: conversation.store_id,
++  instance_id: conversation.instance_id,
++  conversation_id: conversationId,
++  message_id: sendData?.key?.id || `out-${Date.now()}`,
++  direction: 'outbound',
++  message_type,
++  content: { text: content },
++  text_body: content,
++  to_number: phoneNumber,
++  status: sendResponse.ok ? 'sent' : 'failed',
++  timestamp: new Date().toISOString(),
++};
++
++// ✅ Idempotente: se a Evolution fizer retry e vier o mesmo key.id, não quebra com 23505.
++const { data: savedUpsert, error: msgError } = await supabase
++  .from('whatsapp_messages')
++  .upsert(payload, {
++    onConflict: 'instance_id,message_id',
++    ignoreDuplicates: true,
++  })
++  .select('*')
++  .maybeSingle();
++
++if (msgError) {
++  console.error('[Messages POST] ❌ Error saving outbound message:', msgError);
++}
++
++const saved = savedUpsert || null;
++
+ 
+     await supabase.from('whatsapp_conversations').update({
+       last_message_at: new Date().toISOString(), 
+
+--- a/src/app/api/whatsapp/webhook/route.ts
++++ b/src/app/api/whatsapp/webhook/route.ts
+@@ -167,7 +167,7 @@
+           status: mappedStatus,
+           updated_at: new Date().toISOString()
+         })
+-        .eq('external_id', messageId);
++        .or(`message_id.eq.${messageId},external_id.eq.${messageId}`);
+         
+       console.log('[Webhook] ✅ Message status updated:', messageId, '->', mappedStatus);
+     }
+@@ -341,25 +341,36 @@
+   const messageTimestamp = data.messageTimestamp || Math.floor(Date.now() / 1000);
+   const messageDate = new Date(messageTimestamp * 1000).toISOString();
+ 
+-  const { error: msgError } = await supabase
+-    .from('whatsapp_messages')
+-    .insert({
+-      organization_id: orgId,
+-      store_id: storeId, // ✅ CRÍTICO
+-      conversation_id: conversationId,
+-      instance_id: instance.id,
+-      external_id: key.id,
+-      direction: 'inbound',
+-      sender_phone: phoneNumber,
+-      sender_name: pushName,
+-      content: content || null,
+-      message_type: messageType,
+-      status: 'received',
+-      raw_payload: body,
+-      created_at: messageDate,
+-    });
+-
+-  if (msgError) {
++  const messageId = key.id || `msg_${Date.now()}`;
++const messagePayload = {
++  organization_id: orgId,
++  store_id: storeId, // ✅ CRÍTICO
++  conversation_id: conversationId,
++  instance_id: instance.id,
++  // ✅ Normalização: message_id (padrão novo) + external_id (compat legado)
++  message_id: messageId,
++  external_id: messageId,
++  direction: 'inbound',
++  sender_phone: phoneNumber,
++  sender_name: pushName,
++  from_number: phoneNumber,
++  content: content || null,
++  text_body: typeof content === 'string' ? content : null,
++  message_type: messageType,
++  status: 'received',
++  raw_payload: body,
++  created_at: messageDate,
++  timestamp: messageDate,
++};
++
++const { error: msgError } = await supabase
++  .from('whatsapp_messages')
++  .upsert(messagePayload, {
++    onConflict: 'instance_id,message_id',
++    ignoreDuplicates: true,
++  });
++
++if (msgError) {
+     console.error('[Webhook] ❌ Error saving message:', msgError);
+   } else {
+     console.log('[Webhook] ✅ Message saved for store:', storeId);
