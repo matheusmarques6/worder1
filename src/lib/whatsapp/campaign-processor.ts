@@ -110,7 +110,7 @@ export class CampaignProcessor {
       // 1. Buscar campanha
       const { data: campaign, error: campaignError } = await supabase
         .from('whatsapp_campaigns')
-        .select('*, template:whatsapp_templates(*)')
+        .select('*')
         .eq('id', campaignId)
         .single()
 

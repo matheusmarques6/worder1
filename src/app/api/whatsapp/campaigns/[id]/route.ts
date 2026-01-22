@@ -11,7 +11,7 @@ export async function GET(
 
     const { data: campaign, error } = await supabase
       .from('whatsapp_campaigns')
-      .select(`*, template:whatsapp_templates(*)`)
+      .select(`*`)
       .eq('id', id)
       .single()
 
