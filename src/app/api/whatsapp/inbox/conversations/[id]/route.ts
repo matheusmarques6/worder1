@@ -9,29 +9,69 @@ export async function GET(
   try {
     const { id } = params
 
+    // Validar UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(id)) {
+      return NextResponse.json({ error: 'Invalid conversation ID format' }, { status: 400 })
+    }
+
+    // Buscar conversa SEM joins problemáticos
     const { data: conversation, error } = await supabase
       .from('whatsapp_conversations')
-      .select(`
-        *,
-        contact:whatsapp_contacts(*),
-        tags:whatsapp_conversation_tags(
-          tag:whatsapp_chat_tags(id, title, color)
-        )
-      `)
+      .select('*')
       .eq('id', id)
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('[Conversation GET] Error:', error)
+      if (error.code === 'PGRST116') {
+        return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+      }
+      throw error
+    }
 
     if (!conversation) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ conversation })
+    // Buscar contato separadamente (mais seguro)
+    let contact = null
+    if (conversation.contact_id) {
+      const { data: contactData } = await supabase
+        .from('whatsapp_contacts')
+        .select('*')
+        .eq('id', conversation.contact_id)
+        .single()
+      contact = contactData
+    }
 
-  } catch (error) {
-    console.error('Error fetching conversation:', error)
-    return NextResponse.json({ error: 'Failed to fetch conversation' }, { status: 500 })
+    // Buscar tags separadamente (não quebra se tabela não existir)
+    let tags: any[] = []
+    try {
+      const { data: tagsData } = await supabase
+        .from('whatsapp_conversation_tags')
+        .select('tag:whatsapp_chat_tags(id, title, color)')
+        .eq('conversation_id', id)
+      tags = tagsData || []
+    } catch (e) {
+      // Tabela de tags pode não existir - ignorar
+      console.log('[Conversation GET] Tags table not available')
+    }
+
+    return NextResponse.json({ 
+      conversation: {
+        ...conversation,
+        contact,
+        tags
+      }
+    })
+
+  } catch (error: any) {
+    console.error('[Conversation GET] Error:', error)
+    return NextResponse.json({ 
+      error: 'Failed to fetch conversation',
+      details: error.message 
+    }, { status: 500 })
   }
 }
 
