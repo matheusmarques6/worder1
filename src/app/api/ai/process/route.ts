@@ -218,7 +218,7 @@ Se não souber a resposta, diga que vai verificar com a equipe.`,
       .update({
         last_message_at: new Date().toISOString(),
         last_message_preview: aiResponse.substring(0, 100),
-        last_message_direction: 'outgoing',
+        last_message_direction: 'outbound',
       })
       .eq('id', conversation_id)
 

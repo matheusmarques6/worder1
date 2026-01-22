@@ -242,7 +242,7 @@ async function handleMessage(instance: any, body: any) {
       conversation_id: conversation.id,
       contact_id: contact?.id,
       message_id: messageId,
-      direction: 'incoming',
+      direction: 'inbound',
       from_number: phoneNumber,
       message_type: messageType,
       content: typeof content === 'string' ? { text: content } : content,
@@ -268,7 +268,7 @@ async function handleMessage(instance: any, body: any) {
     .update({
       last_message_at: new Date().toISOString(),
       last_message_preview: (typeof content === 'string' ? content : `[${messageType}]`).substring(0, 100),
-      last_message_direction: 'incoming',
+      last_message_direction: 'inbound',
       last_customer_message_at: new Date().toISOString(),
       unread_count: (conversation.unread_count || 0) + 1,
       status: 'open',

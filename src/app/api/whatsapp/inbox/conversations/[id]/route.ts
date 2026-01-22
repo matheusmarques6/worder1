@@ -63,7 +63,9 @@ export async function PUT(
       updates.assigned_at = new Date().toISOString()
     }
     if (isBotActive !== undefined) {
+      // CORREÇÃO: Atualizar AMBOS os campos para compatibilidade
       updates.is_bot_active = isBotActive
+      updates.ai_enabled = isBotActive  // <- AI Process verifica este campo!
       if (!isBotActive) {
         updates.bot_disabled_reason = botDisabledReason || null
       } else {
