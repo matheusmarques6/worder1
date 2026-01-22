@@ -1,204 +1,153 @@
 'use client';
 
-import { useState, DragEvent, useMemo } from 'react';
+import { useState, DragEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown,
-  ChevronRight,
   Search,
   Zap,
   ShoppingCart,
-  Users,
-  MessageSquare,
-  Calendar,
-  Send,
-  Mail,
-  Phone,
+  CreditCard,
+  ShoppingBag,
+  UserPlus,
   Tag,
   Briefcase,
-  Bell,
-  Globe,
-  GitBranch,
-  Target,
-  Filter,
+  ArrowRight,
+  Trophy,
+  XCircle,
+  Calendar,
+  Users,
+  Webhook,
+  MessageSquare,
   Clock,
+  Mail,
+  Phone,
+  Bell,
+  Edit,
+  GitBranch,
   Percent,
+  Filter,
+  Send,
+  UserMinus,
+  Target,
+  Globe,
   GripVertical,
   Sparkles,
-  X
+  X,
+  Bot,
+  MessageCircle,
+  Shuffle,
+  Code,
+  Timer,
+  CalendarClock,
+  CalendarDays,
+  LogOut,
+  type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NODE_SECTIONS, getNodeColor, NodeTypeDefinition, triggerTypes, actionTypes, conditionTypes, controlTypes } from './nodes/nodeTypes';
+import { getNodeColor, NodeTypeDefinition, triggerTypes, actionTypes, conditionTypes, controlTypes } from './nodes/nodeTypes';
 import { useFlowStore, FlowNode } from '@/stores/flowStore';
+import { CredentialSelector } from './panels/CredentialSelector';
 
 // ============================================
-// SUBCATEGORIAS ORGANIZADAS
+// TIPOS E INTERFACES
 // ============================================
 
-interface SubCategory {
-  id: string;
+interface NodeItemConfig {
+  type: string;
   label: string;
-  icon: any;
-  nodes: NodeTypeDefinition[];
-}
-
-interface CategoryConfig {
-  id: string;
-  label: string;
-  icon: any;
+  description: string;
+  icon: LucideIcon;
+  category: 'trigger' | 'action' | 'condition' | 'control';
   color: string;
-  colorClass: string;
-  bgClass: string;
-  subcategories: SubCategory[];
+  isPremium?: boolean;
+  hasAI?: boolean;
 }
 
-// Organização dos gatilhos em subcategorias
-const TRIGGER_SUBCATEGORIES: SubCategory[] = [
+interface SectionConfig {
+  id: string;
+  label: string;
+  items: NodeItemConfig[];
+  defaultExpanded?: boolean;
+}
+
+// ============================================
+// CONFIGURAÇÃO DA BIBLIOTECA DE NÓS
+// ============================================
+
+// Gatilho - Seleção única no topo
+const TRIGGER_OPTIONS: NodeItemConfig[] = [
+  { type: 'trigger_abandon', label: 'Carrinho abandonado criado', description: 'Dispara quando cliente abandona carrinho', icon: ShoppingBag, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_order', label: 'Pedido criado', description: 'Dispara quando um novo pedido é criado', icon: ShoppingCart, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_order_paid', label: 'Pedido pago', description: 'Dispara quando um pedido é pago', icon: CreditCard, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_signup', label: 'Novo cadastro', description: 'Dispara quando um novo contato é criado', icon: UserPlus, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_tag', label: 'Tag adicionada', description: 'Dispara quando uma tag é adicionada', icon: Tag, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_deal_created', label: 'Deal criado', description: 'Dispara quando um novo deal é criado', icon: Briefcase, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_deal_stage', label: 'Deal mudou estágio', description: 'Dispara quando deal muda de estágio', icon: ArrowRight, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_deal_won', label: 'Deal ganho', description: 'Dispara quando deal é marcado como ganho', icon: Trophy, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_deal_lost', label: 'Deal perdido', description: 'Dispara quando deal é marcado como perdido', icon: XCircle, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_whatsapp', label: 'Mensagem recebida', description: 'Dispara quando uma mensagem é recebida', icon: MessageSquare, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_webhook', label: 'Webhook', description: 'Dispara quando um webhook é recebido', icon: Webhook, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_date', label: 'Data especial', description: 'Dispara em data especial do contato', icon: Calendar, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_segment', label: 'Entrou no segmento', description: 'Dispara quando contato entra em um segmento', icon: Users, category: 'trigger', color: '#10b981' },
+];
+
+// Seções da biblioteca
+const LIBRARY_SECTIONS: SectionConfig[] = [
   {
-    id: 'ecommerce',
-    label: 'E-commerce',
-    icon: ShoppingCart,
-    nodes: triggerTypes.filter(t =>
-      ['trigger_order', 'trigger_order_paid', 'trigger_abandon'].includes(t.type)
-    ),
+    id: 'acoes',
+    label: 'Ação',
+    defaultExpanded: true,
+    items: [
+      { type: 'action_whatsapp', label: 'Enviar WhatsApp', description: 'Envia mensagem via WhatsApp', icon: MessageCircle, category: 'action', color: '#25D366' },
+      { type: 'action_email', label: 'Enviar E-mail', description: 'Envia email para o contato', icon: Mail, category: 'action', color: '#3b82f6' },
+      { type: 'action_sms', label: 'Enviar SMS', description: 'Envia SMS para o contato', icon: Phone, category: 'action', color: '#8b5cf6' },
+      { type: 'action_webhook', label: 'Enviar Webhook', description: 'Faz requisição HTTP externa', icon: Webhook, category: 'action', color: '#f59e0b', isPremium: true },
+    ],
+  },
+  {
+    id: 'logico',
+    label: 'Lógico',
+    defaultExpanded: true,
+    items: [
+      { type: 'condition_field', label: 'Condição', description: 'Verifica condição e divide caminho', icon: GitBranch, category: 'condition', color: '#f59e0b' },
+      { type: 'logic_filter', label: 'Condição múltipla', description: 'Múltiplas condições combinadas', icon: Filter, category: 'condition', color: '#f59e0b' },
+      { type: 'logic_split', label: 'Randomizador', description: 'Divide contatos aleatoriamente (A/B)', icon: Shuffle, category: 'condition', color: '#f59e0b' },
+      { type: 'action_javascript', label: 'Executar JavaScript', description: 'Executa código personalizado', icon: Code, category: 'action', color: '#f59e0b', isPremium: true },
+      { type: 'action_chatgpt', label: 'ChatGPT', description: 'Processa com inteligência artificial', icon: Bot, category: 'action', color: '#10b981', isPremium: true, hasAI: true },
+    ],
+  },
+  {
+    id: 'tempo',
+    label: 'Tempo',
+    defaultExpanded: true,
+    items: [
+      { type: 'control_delay', label: 'Aguardar', description: 'Aguarda tempo determinado', icon: Timer, category: 'control', color: '#a855f7' },
+      { type: 'control_delay_condition', label: 'Aguardar condição', description: 'Aguarda até condição ser verdadeira', icon: Clock, category: 'control', color: '#a855f7' },
+      { type: 'control_delay_date', label: 'Aguardar data e hora', description: 'Aguarda até data/hora específica', icon: CalendarClock, category: 'control', color: '#a855f7' },
+      { type: 'control_delay_weekday', label: 'Aguardar dia da semana', description: 'Aguarda até dia específico da semana', icon: CalendarDays, category: 'control', color: '#a855f7' },
+    ],
   },
   {
     id: 'crm',
-    label: 'CRM & Contatos',
-    icon: Users,
-    nodes: triggerTypes.filter(t =>
-      ['trigger_signup', 'trigger_tag', 'trigger_deal_created', 'trigger_deal_stage', 'trigger_deal_won', 'trigger_deal_lost', 'trigger_segment'].includes(t.type)
-    ),
-  },
-  {
-    id: 'communication',
-    label: 'Comunicação',
-    icon: MessageSquare,
-    nodes: triggerTypes.filter(t =>
-      ['trigger_whatsapp', 'trigger_webhook'].includes(t.type)
-    ),
-  },
-  {
-    id: 'time',
-    label: 'Tempo & Agenda',
-    icon: Calendar,
-    nodes: triggerTypes.filter(t =>
-      ['trigger_date'].includes(t.type)
-    ),
-  },
-];
-
-// Organização das ações em subcategorias
-const ACTION_SUBCATEGORIES: SubCategory[] = [
-  {
-    id: 'messaging',
-    label: 'Mensagens',
-    icon: Send,
-    nodes: actionTypes.filter(t =>
-      ['action_whatsapp', 'action_email', 'action_sms'].includes(t.type)
-    ),
-  },
-  {
-    id: 'crm_actions',
     label: 'CRM',
-    icon: Tag,
-    nodes: actionTypes.filter(t =>
-      ['action_tag', 'action_remove_tag', 'action_update'].includes(t.type)
-    ),
+    defaultExpanded: false,
+    items: [
+      { type: 'action_tag', label: 'Adicionar Tag', description: 'Adiciona tag ao contato', icon: Tag, category: 'action', color: '#3b82f6' },
+      { type: 'action_remove_tag', label: 'Remover Tag', description: 'Remove tag do contato', icon: UserMinus, category: 'action', color: '#3b82f6' },
+      { type: 'action_update', label: 'Atualizar Contato', description: 'Atualiza dados do contato', icon: Edit, category: 'action', color: '#3b82f6' },
+      { type: 'action_create_deal', label: 'Criar Deal', description: 'Cria um novo deal no CRM', icon: Briefcase, category: 'action', color: '#3b82f6' },
+      { type: 'action_move_deal', label: 'Mover Deal', description: 'Move deal para outro estágio', icon: ArrowRight, category: 'action', color: '#3b82f6' },
+    ],
   },
   {
-    id: 'deals',
-    label: 'Negócios',
-    icon: Briefcase,
-    nodes: actionTypes.filter(t =>
-      ['action_create_deal', 'action_move_deal'].includes(t.type)
-    ),
-  },
-  {
-    id: 'system',
-    label: 'Sistema',
-    icon: Globe,
-    nodes: actionTypes.filter(t =>
-      ['action_notify', 'action_webhook'].includes(t.type)
-    ),
-  },
-];
-
-// Organização das condições em subcategorias
-const CONDITION_SUBCATEGORIES: SubCategory[] = [
-  {
-    id: 'contact_cond',
-    label: 'Contato',
-    icon: Users,
-    nodes: conditionTypes.filter(t =>
-      ['condition_has_tag', 'condition_field'].includes(t.type)
-    ),
-  },
-  {
-    id: 'values',
-    label: 'Valores',
-    icon: Target,
-    nodes: conditionTypes.filter(t =>
-      ['condition_deal_value', 'condition_order_value'].includes(t.type)
-    ),
-  },
-  {
-    id: 'logic',
-    label: 'Lógica',
-    icon: GitBranch,
-    nodes: conditionTypes.filter(t =>
-      ['logic_split', 'logic_filter'].includes(t.type)
-    ),
-  },
-];
-
-// Organização dos controles
-const CONTROL_SUBCATEGORIES: SubCategory[] = [
-  {
-    id: 'timing',
-    label: 'Tempo',
-    icon: Clock,
-    nodes: controlTypes,
-  },
-];
-
-// Configuração completa das categorias
-const CATEGORIES: CategoryConfig[] = [
-  {
-    id: 'triggers',
-    label: 'Gatilhos',
-    icon: Zap,
-    color: '#10b981',
-    colorClass: 'text-emerald-400',
-    bgClass: 'bg-emerald-500/10',
-    subcategories: TRIGGER_SUBCATEGORIES,
-  },
-  {
-    id: 'actions',
-    label: 'Ações',
-    icon: Send,
-    color: '#3b82f6',
-    colorClass: 'text-blue-400',
-    bgClass: 'bg-blue-500/10',
-    subcategories: ACTION_SUBCATEGORIES,
-  },
-  {
-    id: 'conditions',
-    label: 'Condições',
-    icon: GitBranch,
-    color: '#f59e0b',
-    colorClass: 'text-amber-400',
-    bgClass: 'bg-amber-500/10',
-    subcategories: CONDITION_SUBCATEGORIES,
-  },
-  {
-    id: 'control',
-    label: 'Controle',
-    icon: Clock,
-    color: '#a855f7',
-    colorClass: 'text-purple-400',
-    bgClass: 'bg-purple-500/10',
-    subcategories: CONTROL_SUBCATEGORIES,
+    id: 'finalizar',
+    label: 'Finalizar',
+    defaultExpanded: false,
+    items: [
+      { type: 'control_exit', label: 'Sair do Fluxo', description: 'Encerra a automação para o contato', icon: LogOut, category: 'control', color: '#ef4444' },
+      { type: 'action_notify', label: 'Notificar Equipe', description: 'Envia notificação para equipe', icon: Bell, category: 'action', color: '#3b82f6' },
+    ],
   },
 ];
 
@@ -207,43 +156,41 @@ const CATEGORIES: CategoryConfig[] = [
 // ============================================
 
 export function Sidebar() {
-  const [selectedCategory, setSelectedCategory] = useState<string>('triggers');
-  const [expandedSubcategories, setExpandedSubcategories] = useState<string[]>(['ecommerce', 'messaging']);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const addNode = useFlowStore((state) => state.addNode);
-
-  // Categoria atual selecionada
-  const currentCategory = useMemo(() =>
-    CATEGORIES.find(c => c.id === selectedCategory) || CATEGORIES[0],
-    [selectedCategory]
+  const [selectedTrigger, setSelectedTrigger] = useState<string>('trigger_abandon');
+  const [isTriggerDropdownOpen, setIsTriggerDropdownOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<string[]>(
+    LIBRARY_SECTIONS.filter(s => s.defaultExpanded).map(s => s.id)
   );
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showConfig, setShowConfig] = useState(false);
+  const addNode = useFlowStore((state) => state.addNode);
+  const automationConfig = useFlowStore((state) => state.automationConfig);
+  const setAutomationConfig = useFlowStore((state) => state.setAutomationConfig);
 
-  // Filtrar nós por busca
-  const filteredSubcategories = useMemo(() => {
-    if (!searchQuery) return currentCategory.subcategories;
+  // Trigger selecionado
+  const currentTrigger = TRIGGER_OPTIONS.find(t => t.type === selectedTrigger) || TRIGGER_OPTIONS[0];
 
-    return currentCategory.subcategories
-      .map(sub => ({
-        ...sub,
-        nodes: sub.nodes.filter(
-          node =>
-            node.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            node.description.toLowerCase().includes(searchQuery.toLowerCase())
-        ),
-      }))
-      .filter(sub => sub.nodes.length > 0);
-  }, [currentCategory, searchQuery]);
-
-  // Toggle subcategoria
-  const toggleSubcategory = (id: string) => {
-    setExpandedSubcategories(prev =>
+  // Toggle seção
+  const toggleSection = (id: string) => {
+    setExpandedSections(prev =>
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
     );
   };
 
+  // Filtrar por busca
+  const filteredSections = searchQuery
+    ? LIBRARY_SECTIONS.map(section => ({
+        ...section,
+        items: section.items.filter(
+          item =>
+            item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.description.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+      })).filter(section => section.items.length > 0)
+    : LIBRARY_SECTIONS;
+
   // Handle drag start
-  const handleDragStart = (e: DragEvent, node: NodeTypeDefinition) => {
+  const handleDragStart = (e: DragEvent, node: NodeItemConfig) => {
     const dragData = {
       nodeType: node.type,
       label: node.label,
@@ -251,14 +198,14 @@ export function Sidebar() {
       category: node.category,
       icon: node.icon?.name || 'Zap',
       color: node.color,
-      defaultConfig: node.defaultConfig || {},
+      defaultConfig: {},
     };
     e.dataTransfer.setData('application/reactflow', JSON.stringify(dragData));
     e.dataTransfer.effectAllowed = 'move';
   };
 
   // Handle click to add
-  const handleAddNode = (nodeDef: NodeTypeDefinition) => {
+  const handleAddNode = (nodeDef: NodeItemConfig) => {
     const newNode: FlowNode = {
       id: `node-${Date.now()}`,
       type: nodeDef.type,
@@ -268,217 +215,298 @@ export function Sidebar() {
         description: nodeDef.description,
         category: nodeDef.category,
         nodeType: nodeDef.type,
-        config: nodeDef.defaultConfig || {},
+        config: {},
       },
     };
     addNode(newNode);
   };
 
   return (
-    <div className="fb-sidebar w-80 bg-[#0a0a0a] border-r border-white/10 flex flex-col h-full">
-      {/* Header com Dropdown de Categoria */}
-      <div className="p-4 border-b border-white/10 space-y-3">
-        {/* Título */}
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-blue-400" />
-          <span className="text-sm font-semibold text-white">Construtor de Fluxo</span>
-        </div>
+    <div className="fb-sidebar w-80 bg-white border-r border-gray-200 flex flex-col h-full">
+      {/* Header - Seletor de Gatilho */}
+      <div className="p-4 border-b border-gray-100">
+        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
+          Gatilho
+        </label>
 
-        {/* Dropdown de Categoria Principal */}
+        {/* Dropdown de Gatilho */}
         <div className="relative">
           <button
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            onClick={() => setIsTriggerDropdownOpen(!isTriggerDropdownOpen)}
             className={cn(
-              'w-full flex items-center justify-between px-4 py-3 rounded-xl',
-              'bg-[#111111] border border-white/10',
-              'hover:border-white/20 transition-all duration-200',
-              isDropdownOpen && 'border-white/30 ring-2 ring-white/5'
+              'w-full flex items-center justify-between px-3 py-2.5 rounded-lg',
+              'bg-gray-50 border border-gray-200',
+              'hover:border-gray-300 transition-all duration-200',
+              'text-left',
+              isTriggerDropdownOpen && 'border-blue-500 ring-2 ring-blue-500/20'
             )}
           >
-            <div className="flex items-center gap-3">
-              <div className={cn('p-2 rounded-lg', currentCategory.bgClass)}>
-                <currentCategory.icon className={cn('w-4 h-4', currentCategory.colorClass)} />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-medium text-white">{currentCategory.label}</p>
-                <p className="text-[10px] text-white/40">
-                  {currentCategory.subcategories.reduce((acc, sub) => acc + sub.nodes.length, 0)} disponíveis
-                </p>
-              </div>
-            </div>
+            <span className="text-sm text-gray-800 font-medium truncate">
+              {currentTrigger.label}
+            </span>
             <ChevronDown
               className={cn(
-                'w-4 h-4 text-white/40 transition-transform duration-200',
-                isDropdownOpen && 'rotate-180'
+                'w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ml-2',
+                isTriggerDropdownOpen && 'rotate-180'
               )}
             />
           </button>
 
           {/* Dropdown Menu */}
           <AnimatePresence>
-            {isDropdownOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className={cn(
-                  'absolute top-full left-0 right-0 mt-2 z-50',
-                  'bg-[#111111] border border-white/10 rounded-xl',
-                  'shadow-xl shadow-black/50 overflow-hidden'
-                )}
-              >
-                {CATEGORIES.map((category, index) => (
-                  <button
-                    key={category.id}
-                    onClick={() => {
-                      setSelectedCategory(category.id);
-                      setIsDropdownOpen(false);
-                      setSearchQuery('');
-                      // Expandir primeira subcategoria
-                      if (category.subcategories.length > 0) {
-                        setExpandedSubcategories([category.subcategories[0].id]);
-                      }
-                    }}
-                    className={cn(
-                      'w-full flex items-center gap-3 px-4 py-3',
-                      'hover:bg-white/5 transition-colors',
-                      selectedCategory === category.id && 'bg-white/10',
-                      index !== CATEGORIES.length - 1 && 'border-b border-white/5'
-                    )}
-                  >
-                    <div className={cn('p-2 rounded-lg', category.bgClass)}>
-                      <category.icon className={cn('w-4 h-4', category.colorClass)} />
-                    </div>
-                    <div className="text-left flex-1">
-                      <p className="text-sm font-medium text-white">{category.label}</p>
-                      <p className="text-[10px] text-white/40">
-                        {category.subcategories.reduce((acc, sub) => acc + sub.nodes.length, 0)} opções
-                      </p>
-                    </div>
-                    {selectedCategory === category.id && (
-                      <div className={cn('w-2 h-2 rounded-full', category.bgClass.replace('/10', ''))} />
-                    )}
-                  </button>
-                ))}
-              </motion.div>
+            {isTriggerDropdownOpen && (
+              <>
+                {/* Backdrop */}
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsTriggerDropdownOpen(false)}
+                />
+
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.15 }}
+                  className={cn(
+                    'absolute top-full left-0 right-0 mt-1 z-50',
+                    'bg-white border border-gray-200 rounded-lg',
+                    'shadow-lg max-h-64 overflow-y-auto'
+                  )}
+                >
+                  {TRIGGER_OPTIONS.map((trigger) => (
+                    <button
+                      key={trigger.type}
+                      onClick={() => {
+                        setSelectedTrigger(trigger.type);
+                        setIsTriggerDropdownOpen(false);
+                      }}
+                      className={cn(
+                        'w-full flex items-center gap-3 px-3 py-2.5 text-left',
+                        'hover:bg-gray-50 transition-colors',
+                        selectedTrigger === trigger.type && 'bg-blue-50'
+                      )}
+                    >
+                      <trigger.icon className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className={cn(
+                          'text-sm truncate',
+                          selectedTrigger === trigger.type ? 'text-blue-600 font-medium' : 'text-gray-700'
+                        )}>
+                          {trigger.label}
+                        </p>
+                      </div>
+                      {selectedTrigger === trigger.type && (
+                        <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </motion.div>
+              </>
             )}
           </AnimatePresence>
         </div>
 
-        {/* Barra de Busca */}
+        {/* Opções condicionais do gatilho */}
+        {selectedTrigger === 'trigger_abandon' && (
+          <div className="mt-3 space-y-2">
+            <ToggleOption label="Remover se houver carrinho novo" />
+            <ToggleOption label="Remover se houver pedido novo" />
+            <ToggleOption label="Remover se houver pedido pago" />
+          </div>
+        )}
+      </div>
+
+      {/* Configurações Globais da Automação */}
+      <div className="border-b border-gray-100">
+        <button
+          onClick={() => setShowConfig(!showConfig)}
+          className={cn(
+            'w-full flex items-center justify-between px-4 py-3',
+            'hover:bg-gray-50 transition-colors'
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <MessageCircle className="w-4 h-4 text-green-500" />
+            <span className="text-xs font-medium text-gray-700">
+              Configurações da Automação
+            </span>
+          </div>
+          <ChevronDown
+            className={cn(
+              'w-4 h-4 text-gray-400 transition-transform duration-200',
+              showConfig && 'rotate-180'
+            )}
+          />
+        </button>
+
+        <AnimatePresence>
+          {showConfig && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="px-4 pb-4 space-y-4">
+                {/* WhatsApp Padrão */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                    <MessageCircle className="w-3.5 h-3.5 text-green-500" />
+                    WhatsApp Padrão
+                  </label>
+                  <CredentialSelector
+                    connectionType="whatsapp"
+                    value={automationConfig?.whatsappCredentialId}
+                    onChange={(id) => setAutomationConfig({ whatsappCredentialId: id })}
+                    label=""
+                    lightMode
+                  />
+                  <p className="text-[10px] text-gray-400">
+                    Será usado em todas as ações de WhatsApp desta automação
+                  </p>
+                </div>
+
+                {/* Email Padrão */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-blue-500" />
+                    Email Padrão
+                  </label>
+                  <CredentialSelector
+                    connectionType="email"
+                    value={automationConfig?.emailCredentialId}
+                    onChange={(id) => setAutomationConfig({ emailCredentialId: id })}
+                    label=""
+                    lightMode
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Busca */}
+      <div className="px-4 py-3 border-b border-gray-100">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder={`Buscar em ${currentCategory.label.toLowerCase()}...`}
+            placeholder="Buscar blocos..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
-              'w-full pl-10 pr-10 py-2.5 rounded-xl',
-              'bg-[#111111] border border-white/10',
-              'text-sm text-white placeholder-white/30',
-              'focus:outline-none focus:border-white/20 focus:ring-2 focus:ring-white/5',
+              'w-full pl-9 pr-9 py-2 rounded-lg',
+              'bg-gray-50 border border-gray-200',
+              'text-sm text-gray-800 placeholder-gray-400',
+              'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20',
               'transition-all duration-200'
             )}
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-200 rounded"
             >
-              <X className="w-3 h-3 text-white/40" />
+              <X className="w-3 h-3 text-gray-400" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Conteúdo das Subcategorias */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {filteredSubcategories.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Search className="w-8 h-8 text-white/20 mb-3" />
-            <p className="text-sm text-white/40">Nenhum resultado para</p>
-            <p className="text-sm text-white/60 font-medium">"{searchQuery}"</p>
-          </div>
-        ) : (
-          filteredSubcategories.map((subcategory) => (
-            <SubcategorySection
-              key={subcategory.id}
-              subcategory={subcategory}
-              isExpanded={expandedSubcategories.includes(subcategory.id)}
-              onToggle={() => toggleSubcategory(subcategory.id)}
-              onDragStart={handleDragStart}
-              onAddNode={handleAddNode}
-              categoryColor={currentCategory.colorClass}
-              categoryBg={currentCategory.bgClass}
-            />
-          ))
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="p-4 border-t border-white/10 bg-[#0a0a0a]">
-        <div className="flex items-center gap-2 text-[11px] text-white/30">
-          <GripVertical className="w-3 h-3" />
-          <span>Arraste ou clique para adicionar ao fluxo</span>
-        </div>
+      {/* Biblioteca de Blocos */}
+      <div className="flex-1 overflow-y-auto">
+        {filteredSections.map((section) => (
+          <SectionComponent
+            key={section.id}
+            section={section}
+            isExpanded={expandedSections.includes(section.id)}
+            onToggle={() => toggleSection(section.id)}
+            onDragStart={handleDragStart}
+            onAddNode={handleAddNode}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
 // ============================================
-// SUBCATEGORY SECTION COMPONENT
+// TOGGLE OPTION COMPONENT
 // ============================================
 
-interface SubcategorySectionProps {
-  subcategory: SubCategory;
-  isExpanded: boolean;
-  onToggle: () => void;
-  onDragStart: (e: DragEvent, node: NodeTypeDefinition) => void;
-  onAddNode: (node: NodeTypeDefinition) => void;
-  categoryColor: string;
-  categoryBg: string;
-}
-
-function SubcategorySection({
-  subcategory,
-  isExpanded,
-  onToggle,
-  onDragStart,
-  onAddNode,
-  categoryColor,
-  categoryBg,
-}: SubcategorySectionProps) {
-  const Icon = subcategory.icon;
+function ToggleOption({ label }: { label: string }) {
+  const [enabled, setEnabled] = useState(false);
 
   return (
-    <div className="rounded-xl overflow-hidden bg-[#111111] border border-white/5">
-      {/* Header da Subcategoria */}
+    <button
+      onClick={() => setEnabled(!enabled)}
+      className="w-full flex items-center gap-2 text-left"
+    >
+      <div className={cn(
+        'w-8 h-5 rounded-full transition-colors relative',
+        enabled ? 'bg-blue-500' : 'bg-gray-200'
+      )}>
+        <div className={cn(
+          'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+          enabled ? 'translate-x-3.5' : 'translate-x-0.5'
+        )} />
+      </div>
+      <span className="text-xs text-gray-600 flex-1">{label}</span>
+      <button className="p-0.5 hover:bg-gray-100 rounded">
+        <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
+      </button>
+    </button>
+  );
+}
+
+// Ícone de ajuda simples
+function HelpCircle({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+      <path d="M12 17h.01"/>
+    </svg>
+  );
+}
+
+// ============================================
+// SECTION COMPONENT
+// ============================================
+
+interface SectionComponentProps {
+  section: SectionConfig;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onDragStart: (e: DragEvent, node: NodeItemConfig) => void;
+  onAddNode: (node: NodeItemConfig) => void;
+}
+
+function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNode }: SectionComponentProps) {
+  return (
+    <div className="border-b border-gray-100">
+      {/* Header da Seção */}
       <button
         onClick={onToggle}
         className={cn(
-          'w-full flex items-center justify-between px-3 py-2.5',
-          'hover:bg-white/5 transition-all duration-150'
+          'w-full flex items-center justify-between px-4 py-3',
+          'hover:bg-gray-50 transition-colors'
         )}
       >
-        <div className="flex items-center gap-2.5">
-          <Icon className="w-4 h-4 text-white/50" />
-          <span className="text-sm font-medium text-white/80">{subcategory.label}</span>
-          <span className="text-[10px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded-md">
-            {subcategory.nodes.length}
-          </span>
-        </div>
-        <ChevronRight
+        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+          {section.label}
+        </span>
+        <ChevronDown
           className={cn(
-            'w-4 h-4 text-white/30 transition-transform duration-200',
-            isExpanded && 'rotate-90'
+            'w-4 h-4 text-gray-400 transition-transform duration-200',
+            isExpanded && 'rotate-180'
           )}
         />
       </button>
 
-      {/* Conteúdo */}
+      {/* Conteúdo da Seção */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
@@ -488,13 +516,13 @@ function SubcategorySection({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-2 pb-2 space-y-1.5">
-              {subcategory.nodes.map((node) => (
-                <NodeItem
-                  key={node.type}
-                  node={node}
+            <div className="px-4 pb-3 grid grid-cols-2 gap-2">
+              {section.items.map((item) => (
+                <NodeButton
+                  key={item.type}
+                  node={item}
                   onDragStart={onDragStart}
-                  onClick={() => onAddNode(node)}
+                  onClick={() => onAddNode(item)}
                 />
               ))}
             </div>
@@ -506,19 +534,17 @@ function SubcategorySection({
 }
 
 // ============================================
-// NODE ITEM COMPONENT
+// NODE BUTTON COMPONENT (estilo Reportana)
 // ============================================
 
-interface NodeItemProps {
-  node: NodeTypeDefinition;
-  onDragStart: (e: DragEvent, node: NodeTypeDefinition) => void;
+interface NodeButtonProps {
+  node: NodeItemConfig;
+  onDragStart: (e: DragEvent, node: NodeItemConfig) => void;
   onClick: () => void;
 }
 
-function NodeItem({ node, onDragStart, onClick }: NodeItemProps) {
-  const colors = getNodeColor(node.color);
+function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
   const Icon = node.icon;
-  const isTrigger = node.category === 'trigger';
 
   return (
     <motion.button
@@ -526,42 +552,45 @@ function NodeItem({ node, onDragStart, onClick }: NodeItemProps) {
       onDragStart={(e) => onDragStart(e as unknown as DragEvent, node)}
       onClick={onClick}
       className={cn(
-        'w-full flex items-center gap-3 p-2.5 rounded-lg',
-        'bg-[#0a0a0a] border border-white/5',
+        'flex items-center gap-2 p-2.5 rounded-lg',
+        'bg-white border border-gray-200',
+        'hover:border-gray-300 hover:shadow-sm',
         'cursor-grab active:cursor-grabbing',
-        'hover:border-white/15 hover:bg-[#0f0f0f]',
-        'transition-all duration-150 group text-left',
-        'relative overflow-hidden'
+        'transition-all duration-150 text-left relative',
+        'group'
       )}
-      whileHover={{ scale: 1.01, x: 2 }}
+      whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
     >
-      {/* Barra indicadora de trigger */}
-      {isTrigger && (
-        <div className={cn('absolute left-0 top-0 bottom-0 w-1 rounded-l', colors.solid)} />
+      {/* Ícone */}
+      <div
+        className="p-1.5 rounded-md shrink-0"
+        style={{ backgroundColor: `${node.color}15` }}
+      >
+        <Icon
+          className="w-4 h-4"
+          style={{ color: node.color }}
+        />
+      </div>
+
+      {/* Label */}
+      <span className="text-xs text-gray-700 font-medium leading-tight line-clamp-2">
+        {node.label}
+      </span>
+
+      {/* Badge Premium */}
+      {node.isPremium && (
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center">
+          <Sparkles className="w-2.5 h-2.5 text-white" />
+        </div>
       )}
 
-      {/* Ícone */}
-      <div className={cn(
-        'p-2 rounded-lg shrink-0 transition-all duration-200',
-        colors.bg,
-        'group-hover:scale-110'
-      )}>
-        <Icon className={cn('w-4 h-4', colors.text)} />
-      </div>
-
-      {/* Texto */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-white/80 group-hover:text-white transition-colors truncate font-medium">
-          {node.label}
-        </p>
-        <p className="text-[10px] text-white/30 truncate leading-tight mt-0.5">
-          {node.description}
-        </p>
-      </div>
-
-      {/* Indicador de arrastar */}
-      <GripVertical className="w-3 h-3 text-white/10 group-hover:text-white/30 transition-colors shrink-0" />
+      {/* Badge IA */}
+      {node.hasAI && !node.isPremium && (
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+          <span className="text-[8px] text-white font-bold">IA</span>
+        </div>
+      )}
     </motion.button>
   );
 }

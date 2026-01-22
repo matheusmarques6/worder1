@@ -97,6 +97,13 @@ interface FlowStore {
   automationName: string;
   automationDescription: string;
   automationStatus: 'draft' | 'active' | 'paused' | 'error';
+
+  // Global automation config (credentials, settings)
+  automationConfig: {
+    whatsappCredentialId?: string;
+    emailCredentialId?: string;
+    smsCredentialId?: string;
+  };
   
   // History (undo/redo)
   past: HistoryEntry[];
@@ -157,6 +164,7 @@ interface FlowStore {
   setAutomationName: (name: string) => void;
   setAutomationDescription: (description: string) => void;
   setAutomationStatus: (status: 'draft' | 'active' | 'paused' | 'error') => void;
+  setAutomationConfig: (config: Partial<FlowStore['automationConfig']>) => void;
   
   // ============================================
   // ACTIONS - UI
@@ -190,6 +198,7 @@ interface FlowStore {
     status: 'draft' | 'active' | 'paused' | 'error';
     nodes: FlowNode[];
     edges: FlowEdge[];
+    config?: FlowStore['automationConfig'];
   }) => void;
   resetStore: () => void;
   
@@ -213,6 +222,7 @@ const initialState = {
   automationName: 'Nova Automação',
   automationDescription: '',
   automationStatus: 'draft' as const,
+  automationConfig: {} as FlowStore['automationConfig'],
   past: [] as HistoryEntry[],
   future: [] as HistoryEntry[],
   isSaving: false,
@@ -483,6 +493,10 @@ export const useFlowStore = create<FlowStore>()(
       setAutomationName: (name) => set({ automationName: name, isDirty: true }),
       setAutomationDescription: (description) => set({ automationDescription: description, isDirty: true }),
       setAutomationStatus: (status) => set({ automationStatus: status }),
+      setAutomationConfig: (config) => set((state) => ({
+        automationConfig: { ...state.automationConfig, ...config },
+        isDirty: true,
+      })),
 
       // ============================================
       // UI STATE
@@ -568,6 +582,7 @@ export const useFlowStore = create<FlowStore>()(
         automationName: data.name,
         automationDescription: data.description || '',
         automationStatus: data.status,
+        automationConfig: data.config || {},
         nodes: data.nodes,
         edges: data.edges,
         isDirty: false,
