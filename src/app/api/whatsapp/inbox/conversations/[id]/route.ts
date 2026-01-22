@@ -15,7 +15,7 @@ export async function GET(
         *,
         contact:whatsapp_contacts(*),
         tags:whatsapp_conversation_tags(
-          tag:whatsapp_tags(id, name, color)
+          tag:whatsapp_chat_tags(id, title, color)
         )
       `)
       .eq('id', id)

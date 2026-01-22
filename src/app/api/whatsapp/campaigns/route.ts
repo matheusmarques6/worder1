@@ -15,10 +15,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('whatsapp_campaigns')
-      .select(`
-        *,
-        template:whatsapp_templates(id, name, category, status, body_text, buttons)
-      `, { count: 'exact' })
+      .select(`*`, { count: 'exact' })
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
