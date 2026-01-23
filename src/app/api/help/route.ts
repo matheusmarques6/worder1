@@ -151,14 +151,15 @@ export async function POST(request: NextRequest) {
     // Get current count
     const { data: current } = await supabase
       .from(table)
-      .select(column)
+      .select('helpful_yes, helpful_no')
       .eq('id', id)
       .single();
 
     if (current) {
+      const currentValue = helpful ? (current.helpful_yes || 0) : (current.helpful_no || 0);
       await supabase
         .from(table)
-        .update({ [column]: (current[column] || 0) + 1 })
+        .update({ [column]: currentValue + 1 })
         .eq('id', id);
     }
 
