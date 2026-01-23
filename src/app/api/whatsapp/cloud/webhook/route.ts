@@ -9,7 +9,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { 
-export const dynamic = 'force-dynamic';
   verifyWebhookSignature, 
   extractMessageText, 
   getMessageType,
@@ -17,10 +16,10 @@ export const dynamic = 'force-dynamic';
   type WebhookMessage 
 } from '@/lib/whatsapp/cloud-api';
 import { 
-export const dynamic = 'force-dynamic';
   RuleEngine, 
   type EventData 
 } from '@/lib/services/automation/rule-engine';
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // GET - Verificação do Webhook (Meta)

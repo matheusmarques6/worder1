@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
 import { 
-export const dynamic = 'force-dynamic';
   normalizeWebhookPayload, 
   normalizeEmail, 
   normalizePhone,
   type PlatformType 
 } from '@/lib/integrations/normalizers'
+export const dynamic = 'force-dynamic';
 
 // POST - Receive webhook from integrations
 export async function POST(

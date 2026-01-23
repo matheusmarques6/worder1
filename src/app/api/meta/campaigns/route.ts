@@ -14,13 +14,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { 
-export const dynamic = 'force-dynamic';
   MetaApiClient, 
   MetaApiClientError,
   extractPurchaseMetrics, 
   formatBudget,
   MetaAccount 
 } from '@/lib/meta-api';
+export const dynamic = 'force-dynamic';
 
 // GET - Buscar campanhas com métricas
 export async function GET(request: NextRequest) {

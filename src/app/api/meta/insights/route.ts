@@ -14,12 +14,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { 
-export const dynamic = 'force-dynamic';
   MetaApiClient, 
   MetaApiClientError,
   extractPurchaseMetrics,
   MetaAccount 
 } from '@/lib/meta-api';
+export const dynamic = 'force-dynamic';
 
 interface KPIValue {
   value: number;

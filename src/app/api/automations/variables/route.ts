@@ -6,13 +6,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { 
-export const dynamic = 'force-dynamic';
   generateVariableCatalog, 
   createSampleContext,
   interpolateString,
   BASE_VARIABLES,
   TRIGGER_VARIABLES
 } from '@/lib/automation/variables';
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // GET - Obter catálogo de variáveis

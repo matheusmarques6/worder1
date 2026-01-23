@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
-export const dynamic = 'force-dynamic';
 
 let _supabase: SupabaseClient | null = null;
 function getDb(): SupabaseClient {
