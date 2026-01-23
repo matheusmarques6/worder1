@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { campaignQueue, webhookQueue } from '@/lib/whatsapp/queue'
 import { getRateLimiter } from '@/lib/whatsapp/rate-limiter'
 import { getCircuitBreaker } from '@/lib/whatsapp/circuit-breaker'
+export const dynamic = 'force-dynamic';
 
 // GET /api/whatsapp/queue/stats - Estatísticas das filas
 export async function GET(request: NextRequest) {

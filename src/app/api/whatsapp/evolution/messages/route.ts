@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createEvolutionClient } from '@/lib/whatsapp/evolution-api';
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // POST - Enviar mensagem

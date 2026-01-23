@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { encryptCredential, decryptCredential, maskSensitive } from '@/lib/automation/credential-encryption';
+export const dynamic = 'force-dynamic';
 
 // ============================================
 // GET - Obter credencial específica

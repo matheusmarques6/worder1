@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { EventBus, EventType } from '@/lib/events';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { createHmac, timingSafeEqual } from 'crypto';
+export const dynamic = 'force-dynamic';
 
 // ============================================
 // CONFIGURAÇÃO

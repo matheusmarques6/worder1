@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { EventBus, EventType } from '@/lib/events';
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // DEALS API - CORRIGIDA

@@ -2,6 +2,7 @@
 // CORRIGIDO: Usa coluna assigned_to correta
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic';
 
 // POST - Atribuir ou remover atribuição de conversa
 export async function POST(

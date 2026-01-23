@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+export const dynamic = 'force-dynamic';
 
 async function getOrgId(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser()

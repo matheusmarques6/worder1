@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import type {
+export const dynamic = 'force-dynamic';
   CampaignAnalyticsResponse,
   CampaignAnalyticsSummary,
   CampaignAnalyticsTrends,

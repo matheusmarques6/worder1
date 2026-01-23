@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
+export const dynamic = 'force-dynamic';
 
 // GET - List all available integrations (catalog)
 export async function GET(request: NextRequest) {

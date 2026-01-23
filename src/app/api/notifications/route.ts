@@ -1,6 +1,7 @@
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // NOTIFICATIONS API - CORRIGIDA

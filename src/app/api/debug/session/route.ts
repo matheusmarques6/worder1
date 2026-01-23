@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthClient } from '@/lib/api-utils';
+export const dynamic = 'force-dynamic';
 
 /**
  * Debug endpoint para verificar sessão

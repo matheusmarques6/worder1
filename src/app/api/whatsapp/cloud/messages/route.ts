@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient, normalizePhone } from '@/lib/whatsapp/cloud-api';
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // GET - Listar mensagens de uma conversa

@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError, validateStoreAccess, getSupabaseClient } from '@/lib/api-utils'
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   // ✅ SEGURO: Autenticação obrigatória

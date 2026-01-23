@@ -2,6 +2,7 @@
 // CORRIGIDO: Usa tabela CONTACTS unificada
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic';
 
 // POST - Adicionar ou remover tag
 export async function POST(

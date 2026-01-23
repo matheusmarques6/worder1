@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
+export const dynamic = 'force-dynamic';
 
 let _supabase: SupabaseClient | null = null;
 function getDb(): SupabaseClient {
@@ -17,6 +18,7 @@ const supabase = new Proxy({} as SupabaseClient, {
 
 // Importar executor de ações e tipo
 import { executeAction, ActionContext } from '@/lib/automation/actions';
+export const dynamic = 'force-dynamic';
 
 // =====================================================
 // TYPES

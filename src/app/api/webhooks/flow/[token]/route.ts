@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyWebhookSignature } from '@/lib/automation/credential-encryption';
+export const dynamic = 'force-dynamic';
 
 // ============================================
 // DYNAMIC WEBHOOK HANDLER

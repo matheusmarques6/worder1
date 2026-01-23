@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError, getSupabaseClient } from '@/lib/api-utils';
 import { ExecutionEngine } from '@/lib/automation/execution-engine';
 import { decryptCredential } from '@/lib/automation/credential-encryption';
+export const dynamic = 'force-dynamic';
 
 // ============================================
 // POST - Executar automação

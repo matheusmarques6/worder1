@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { EventProcessor } from '@/lib/automation/event-processor';
 import { verifyQStashSignature } from '@/lib/queue';
+export const dynamic = 'force-dynamic';
 
 // ============================================
 // VERIFICAÇÃO DE AUTORIZAÇÃO

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { encryptCredential, decryptCredential, maskSensitive } from '@/lib/automation/credential-encryption';
 import { SupabaseClient } from '@supabase/supabase-js';
+export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
 let _supabase: SupabaseClient | null = null;

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createEvolutionClient } from '@/lib/whatsapp/evolution-api';
 import { nanoid } from 'nanoid';
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // GET - Listar instâncias

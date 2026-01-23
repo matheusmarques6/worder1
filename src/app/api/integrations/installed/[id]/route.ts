@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
+export const dynamic = 'force-dynamic';
 
 // GET - Get single installed integration
 export async function GET(

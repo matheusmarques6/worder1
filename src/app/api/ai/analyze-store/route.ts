@@ -11,6 +11,7 @@ import { cookies } from 'next/headers';
 import { ShopifyAPIService } from '@/lib/shopify/api-service';
 import { runFullAnalysis } from '@/lib/ai/store-analyzer';
 import type { CollectedStoreData } from '@/types/store-analysis';
+export const dynamic = 'force-dynamic';
 
 // =====================================================
 // AUTH CLIENT

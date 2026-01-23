@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { validatePassword } from '@/lib/password-validation';
+export const dynamic = 'force-dynamic';
 
 // POST - Alterar senha do usuário
 export async function POST(request: NextRequest) {

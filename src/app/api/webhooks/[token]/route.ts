@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
 import { 
+export const dynamic = 'force-dynamic';
   normalizeWebhookPayload, 
   normalizeEmail, 
   normalizePhone,

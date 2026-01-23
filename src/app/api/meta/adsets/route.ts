@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { 
+export const dynamic = 'force-dynamic';
   MetaApiClient, 
   MetaApiClientError,
   extractPurchaseMetrics, 

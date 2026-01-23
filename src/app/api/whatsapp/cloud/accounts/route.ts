@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
 import { nanoid } from 'nanoid';
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // GET - Listar contas conectadas

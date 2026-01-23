@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
+export const dynamic = 'force-dynamic';
 
 const DEBUG_SECRET = process.env.DEBUG_ROUTE_SECRET;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';

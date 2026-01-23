@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, resumeExecution, Workflow } from '@/lib/automation/execution-engine';
 import { verifyQStashSignature } from '@/lib/queue';
+export const dynamic = 'force-dynamic';
 
 // ============================================
 // ENVIRONMENT

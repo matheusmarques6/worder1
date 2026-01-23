@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+export const dynamic = 'force-dynamic';
 
 const META_API_VERSION = 'v18.0'
 const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`

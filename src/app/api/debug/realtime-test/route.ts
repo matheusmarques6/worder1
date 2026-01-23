@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+export const dynamic = 'force-dynamic';
 
 // GET /api/debug/realtime-test - Lista organizações e conversas
 // GET /api/debug/realtime-test?organizationId=xxx - Lista conversas da org
