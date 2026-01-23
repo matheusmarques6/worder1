@@ -172,16 +172,17 @@ export function WhatsAppTemplateEditor({
   const [activeField, setActiveField] = useState<string>('');
   const [showPreview, setShowPreview] = useState(true);
 
-  // Default config
-  const currentConfig: WhatsAppConfig = {
+  // Merge config with defaults
+  const defaultConfig: WhatsAppConfig = {
     messageMode: 'free',
     templateCategory: 'marketing',
     headerType: 'none',
     language: 'pt_BR',
     buttons: [],
     templateVariables: [],
-    ...config,
   };
+
+  const currentConfig: WhatsAppConfig = { ...defaultConfig, ...config };
 
   const handleUpdate = useCallback((updates: Partial<WhatsAppConfig>) => {
     onConfigChange({ ...currentConfig, ...updates });
