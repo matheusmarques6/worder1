@@ -117,6 +117,7 @@ interface FlowStore {
   showHistoryPanel: boolean;
   showTestModal: boolean;
   showCredentialsModal: boolean;
+  isFullscreen: boolean;
   
   // Test execution
   testExecution: TestExecution;
@@ -176,6 +177,7 @@ interface FlowStore {
   toggleHistoryPanel: () => void;
   toggleTestModal: () => void;
   toggleCredentialsModal: () => void;
+  toggleFullscreen: () => void;
   openPropertiesPanel: () => void;
   closePropertiesPanel: () => void;
   
@@ -232,6 +234,7 @@ const initialState = {
   showHistoryPanel: false,
   showTestModal: false,
   showCredentialsModal: false,
+  isFullscreen: false,
   testExecution: {
     isRunning: false,
     steps: [],
@@ -509,6 +512,7 @@ export const useFlowStore = create<FlowStore>()(
       toggleHistoryPanel: () => set((state) => ({ showHistoryPanel: !state.showHistoryPanel })),
       toggleTestModal: () => set((state) => ({ showTestModal: !state.showTestModal })),
       toggleCredentialsModal: () => set((state) => ({ showCredentialsModal: !state.showCredentialsModal })),
+      toggleFullscreen: () => set((state) => ({ isFullscreen: !state.isFullscreen })),
       openPropertiesPanel: () => set({ showPropertiesPanel: true }),
       closePropertiesPanel: () => set({ showPropertiesPanel: false }),
 

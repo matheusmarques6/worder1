@@ -14,6 +14,8 @@ import {
   AlertCircle,
   Power,
   Zap,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useIsValidFlow } from '@/stores/flowStore';
@@ -40,7 +42,9 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   const setDirty = useFlowStore((state) => state.setDirty);
   const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
   const toggleTestModal = useFlowStore((state) => state.toggleTestModal);
-  
+  const isFullscreen = useFlowStore((state) => state.isFullscreen);
+  const toggleFullscreen = useFlowStore((state) => state.toggleFullscreen);
+
   const { valid, errors } = useIsValidFlow();
   
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -177,6 +181,23 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
             <span className="text-xs text-amber-400">{errors[0]}</span>
           </div>
         )}
+
+        {/* Fullscreen */}
+        <button
+          onClick={toggleFullscreen}
+          className={cn(
+            'p-2 rounded-lg',
+            'hover:bg-white/10 text-white/60 hover:text-white',
+            'transition-colors'
+          )}
+          title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+        >
+          {isFullscreen ? (
+            <Minimize2 className="w-4 h-4" />
+          ) : (
+            <Maximize2 className="w-4 h-4" />
+          )}
+        </button>
 
         {/* History */}
         <button

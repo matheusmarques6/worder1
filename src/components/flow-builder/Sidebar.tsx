@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, DragEvent } from 'react';
+import { useState, useEffect, DragEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown,
@@ -42,10 +42,10 @@ import {
   CalendarClock,
   CalendarDays,
   LogOut,
+  Settings,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getNodeColor, NodeTypeDefinition, triggerTypes, actionTypes, conditionTypes, controlTypes } from './nodes/nodeTypes';
 import { useFlowStore, FlowNode } from '@/stores/flowStore';
 import { CredentialSelector } from './panels/CredentialSelector';
 
@@ -120,7 +120,7 @@ const LIBRARY_SECTIONS: SectionConfig[] = [
   {
     id: 'tempo',
     label: 'Tempo',
-    defaultExpanded: true,
+    defaultExpanded: false,
     items: [
       { type: 'control_delay', label: 'Aguardar', description: 'Aguarda tempo determinado', icon: Timer, category: 'control', color: '#a855f7' },
       { type: 'control_delay_condition', label: 'Aguardar condição', description: 'Aguarda até condição ser verdadeira', icon: Clock, category: 'control', color: '#a855f7' },
@@ -155,7 +155,11 @@ const LIBRARY_SECTIONS: SectionConfig[] = [
 // SIDEBAR COMPONENT
 // ============================================
 
-export function Sidebar() {
+interface SidebarProps {
+  onTriggerSelect?: (trigger: NodeItemConfig) => void;
+}
+
+export function Sidebar({ onTriggerSelect }: SidebarProps) {
   const [selectedTrigger, setSelectedTrigger] = useState<string>('trigger_abandon');
   const [isTriggerDropdownOpen, setIsTriggerDropdownOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>(
@@ -164,11 +168,75 @@ export function Sidebar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showConfig, setShowConfig] = useState(false);
   const addNode = useFlowStore((state) => state.addNode);
+  const nodes = useFlowStore((state) => state.nodes);
   const automationConfig = useFlowStore((state) => state.automationConfig);
   const setAutomationConfig = useFlowStore((state) => state.setAutomationConfig);
 
   // Trigger selecionado
   const currentTrigger = TRIGGER_OPTIONS.find(t => t.type === selectedTrigger) || TRIGGER_OPTIONS[0];
+
+  // Adicionar trigger ao canvas quando selecionado
+  useEffect(() => {
+    // Verificar se já existe um trigger no canvas
+    const existingTrigger = nodes.find(n => n.data.category === 'trigger');
+
+    if (!existingTrigger && currentTrigger) {
+      // Adicionar o trigger automaticamente
+      const triggerNode: FlowNode = {
+        id: `trigger-${Date.now()}`,
+        type: currentTrigger.type,
+        position: { x: 100, y: 150 },
+        data: {
+          label: currentTrigger.label,
+          description: currentTrigger.description,
+          category: 'trigger',
+          nodeType: currentTrigger.type,
+          config: {},
+        },
+      };
+      addNode(triggerNode);
+      onTriggerSelect?.(currentTrigger);
+    }
+  }, []);
+
+  // Quando trocar o trigger, atualizar no canvas
+  const handleTriggerChange = (triggerType: string) => {
+    setSelectedTrigger(triggerType);
+    setIsTriggerDropdownOpen(false);
+
+    const newTrigger = TRIGGER_OPTIONS.find(t => t.type === triggerType);
+    if (!newTrigger) return;
+
+    // Remover trigger existente e adicionar novo
+    const existingTrigger = nodes.find(n => n.data.category === 'trigger');
+
+    if (existingTrigger) {
+      // Atualizar o trigger existente
+      useFlowStore.getState().updateNode(existingTrigger.id, {
+        label: newTrigger.label,
+        description: newTrigger.description,
+        nodeType: newTrigger.type,
+        config: {},
+      });
+    } else {
+      // Criar novo trigger
+      const triggerNode: FlowNode = {
+        id: `trigger-${Date.now()}`,
+        type: newTrigger.type,
+        position: { x: 100, y: 150 },
+        data: {
+          label: newTrigger.label,
+          description: newTrigger.description,
+          category: 'trigger',
+          nodeType: newTrigger.type,
+          config: {},
+        },
+      };
+      addNode(triggerNode);
+    }
+
+    onTriggerSelect?.(newTrigger);
+  };
 
   // Toggle seção
   const toggleSection = (id: string) => {
@@ -209,7 +277,7 @@ export function Sidebar() {
     const newNode: FlowNode = {
       id: `node-${Date.now()}`,
       type: nodeDef.type,
-      position: { x: 250 + Math.random() * 100, y: 100 + Math.random() * 100 },
+      position: { x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 },
       data: {
         label: nodeDef.label,
         description: nodeDef.description,
@@ -222,10 +290,10 @@ export function Sidebar() {
   };
 
   return (
-    <div className="fb-sidebar w-80 bg-white border-r border-gray-200 flex flex-col h-full">
+    <div className="fb-sidebar w-72 bg-[#0f0f0f] border-r border-white/10 flex flex-col h-full">
       {/* Header - Seletor de Gatilho */}
-      <div className="p-4 border-b border-gray-100">
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
+      <div className="p-3 border-b border-white/10">
+        <label className="text-[10px] font-medium text-white/40 uppercase tracking-wider mb-2 block">
           Gatilho
         </label>
 
@@ -234,19 +302,24 @@ export function Sidebar() {
           <button
             onClick={() => setIsTriggerDropdownOpen(!isTriggerDropdownOpen)}
             className={cn(
-              'w-full flex items-center justify-between px-3 py-2.5 rounded-lg',
-              'bg-gray-50 border border-gray-200',
-              'hover:border-gray-300 transition-all duration-200',
+              'w-full flex items-center justify-between px-3 py-2 rounded-lg',
+              'bg-[#1a1a1a] border border-white/10',
+              'hover:border-white/20 transition-all duration-200',
               'text-left',
-              isTriggerDropdownOpen && 'border-blue-500 ring-2 ring-blue-500/20'
+              isTriggerDropdownOpen && 'border-emerald-500/50 ring-1 ring-emerald-500/20'
             )}
           >
-            <span className="text-sm text-gray-800 font-medium truncate">
-              {currentTrigger.label}
-            </span>
+            <div className="flex items-center gap-2">
+              <div className="p-1 rounded bg-emerald-500/20">
+                <currentTrigger.icon className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
+              <span className="text-xs text-white/80 font-medium truncate">
+                {currentTrigger.label}
+              </span>
+            </div>
             <ChevronDown
               className={cn(
-                'w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ml-2',
+                'w-3.5 h-3.5 text-white/40 transition-transform duration-200 shrink-0 ml-2',
                 isTriggerDropdownOpen && 'rotate-180'
               )}
             />
@@ -256,12 +329,10 @@ export function Sidebar() {
           <AnimatePresence>
             {isTriggerDropdownOpen && (
               <>
-                {/* Backdrop */}
                 <div
                   className="fixed inset-0 z-40"
                   onClick={() => setIsTriggerDropdownOpen(false)}
                 />
-
                 <motion.div
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -269,34 +340,29 @@ export function Sidebar() {
                   transition={{ duration: 0.15 }}
                   className={cn(
                     'absolute top-full left-0 right-0 mt-1 z-50',
-                    'bg-white border border-gray-200 rounded-lg',
-                    'shadow-lg max-h-64 overflow-y-auto'
+                    'bg-[#1a1a1a] border border-white/10 rounded-lg',
+                    'shadow-xl shadow-black/50 max-h-56 overflow-y-auto'
                   )}
                 >
                   {TRIGGER_OPTIONS.map((trigger) => (
                     <button
                       key={trigger.type}
-                      onClick={() => {
-                        setSelectedTrigger(trigger.type);
-                        setIsTriggerDropdownOpen(false);
-                      }}
+                      onClick={() => handleTriggerChange(trigger.type)}
                       className={cn(
-                        'w-full flex items-center gap-3 px-3 py-2.5 text-left',
-                        'hover:bg-gray-50 transition-colors',
-                        selectedTrigger === trigger.type && 'bg-blue-50'
+                        'w-full flex items-center gap-2 px-3 py-2 text-left',
+                        'hover:bg-white/5 transition-colors',
+                        selectedTrigger === trigger.type && 'bg-emerald-500/10'
                       )}
                     >
-                      <trigger.icon className="w-4 h-4 text-emerald-500 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className={cn(
-                          'text-sm truncate',
-                          selectedTrigger === trigger.type ? 'text-blue-600 font-medium' : 'text-gray-700'
-                        )}>
-                          {trigger.label}
-                        </p>
-                      </div>
+                      <trigger.icon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span className={cn(
+                        'text-xs truncate',
+                        selectedTrigger === trigger.type ? 'text-emerald-400 font-medium' : 'text-white/70'
+                      )}>
+                        {trigger.label}
+                      </span>
                       {selectedTrigger === trigger.type && (
-                        <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 ml-auto" />
                       )}
                     </button>
                   ))}
@@ -308,7 +374,7 @@ export function Sidebar() {
 
         {/* Opções condicionais do gatilho */}
         {selectedTrigger === 'trigger_abandon' && (
-          <div className="mt-3 space-y-2">
+          <div className="mt-2 space-y-1.5">
             <ToggleOption label="Remover se houver carrinho novo" />
             <ToggleOption label="Remover se houver pedido novo" />
             <ToggleOption label="Remover se houver pedido pago" />
@@ -317,23 +383,23 @@ export function Sidebar() {
       </div>
 
       {/* Configurações Globais da Automação */}
-      <div className="border-b border-gray-100">
+      <div className="border-b border-white/10">
         <button
           onClick={() => setShowConfig(!showConfig)}
           className={cn(
-            'w-full flex items-center justify-between px-4 py-3',
-            'hover:bg-gray-50 transition-colors'
+            'w-full flex items-center justify-between px-3 py-2',
+            'hover:bg-white/5 transition-colors'
           )}
         >
           <div className="flex items-center gap-2">
-            <MessageCircle className="w-4 h-4 text-green-500" />
-            <span className="text-xs font-medium text-gray-700">
+            <Settings className="w-3.5 h-3.5 text-white/40" />
+            <span className="text-[10px] font-medium text-white/50 uppercase tracking-wider">
               Configurações da Automação
             </span>
           </div>
           <ChevronDown
             className={cn(
-              'w-4 h-4 text-gray-400 transition-transform duration-200',
+              'w-3.5 h-3.5 text-white/30 transition-transform duration-200',
               showConfig && 'rotate-180'
             )}
           />
@@ -348,11 +414,11 @@ export function Sidebar() {
               transition={{ duration: 0.2 }}
               className="overflow-hidden"
             >
-              <div className="px-4 pb-4 space-y-4">
+              <div className="px-3 pb-3 space-y-3">
                 {/* WhatsApp Padrão */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                    <MessageCircle className="w-3.5 h-3.5 text-green-500" />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-medium text-white/50 flex items-center gap-1">
+                    <MessageCircle className="w-3 h-3 text-green-400" />
                     WhatsApp Padrão
                   </label>
                   <CredentialSelector
@@ -360,17 +426,14 @@ export function Sidebar() {
                     value={automationConfig?.whatsappCredentialId}
                     onChange={(id) => setAutomationConfig({ whatsappCredentialId: id })}
                     label=""
-                    lightMode
+                    placeholder="Selecione..."
                   />
-                  <p className="text-[10px] text-gray-400">
-                    Será usado em todas as ações de WhatsApp desta automação
-                  </p>
                 </div>
 
                 {/* Email Padrão */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 text-blue-500" />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-medium text-white/50 flex items-center gap-1">
+                    <Mail className="w-3 h-3 text-blue-400" />
                     Email Padrão
                   </label>
                   <CredentialSelector
@@ -378,7 +441,7 @@ export function Sidebar() {
                     value={automationConfig?.emailCredentialId}
                     onChange={(id) => setAutomationConfig({ emailCredentialId: id })}
                     label=""
-                    lightMode
+                    placeholder="Selecione..."
                   />
                 </div>
               </div>
@@ -388,28 +451,28 @@ export function Sidebar() {
       </div>
 
       {/* Busca */}
-      <div className="px-4 py-3 border-b border-gray-100">
+      <div className="px-3 py-2 border-b border-white/10">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
           <input
             type="text"
             placeholder="Buscar blocos..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
-              'w-full pl-9 pr-9 py-2 rounded-lg',
-              'bg-gray-50 border border-gray-200',
-              'text-sm text-gray-800 placeholder-gray-400',
-              'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20',
+              'w-full pl-8 pr-8 py-1.5 rounded-md',
+              'bg-[#1a1a1a] border border-white/10',
+              'text-xs text-white placeholder-white/30',
+              'focus:outline-none focus:border-white/20',
               'transition-all duration-200'
             )}
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-200 rounded"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-white/10 rounded"
             >
-              <X className="w-3 h-3 text-gray-400" />
+              <X className="w-3 h-3 text-white/40" />
             </button>
           )}
         </div>
@@ -442,21 +505,19 @@ function ToggleOption({ label }: { label: string }) {
   return (
     <button
       onClick={() => setEnabled(!enabled)}
-      className="w-full flex items-center gap-2 text-left"
+      className="w-full flex items-center gap-2 text-left py-0.5"
     >
       <div className={cn(
-        'w-8 h-5 rounded-full transition-colors relative',
-        enabled ? 'bg-blue-500' : 'bg-gray-200'
+        'w-7 h-4 rounded-full transition-colors relative shrink-0',
+        enabled ? 'bg-emerald-500' : 'bg-white/10'
       )}>
         <div className={cn(
-          'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+          'absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform',
           enabled ? 'translate-x-3.5' : 'translate-x-0.5'
         )} />
       </div>
-      <span className="text-xs text-gray-600 flex-1">{label}</span>
-      <button className="p-0.5 hover:bg-gray-100 rounded">
-        <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
-      </button>
+      <span className="text-[10px] text-white/50 flex-1 leading-tight">{label}</span>
+      <HelpCircle className="w-3 h-3 text-white/20 shrink-0" />
     </button>
   );
 }
@@ -486,21 +547,21 @@ interface SectionComponentProps {
 
 function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNode }: SectionComponentProps) {
   return (
-    <div className="border-b border-gray-100">
+    <div className="border-b border-white/5">
       {/* Header da Seção */}
       <button
         onClick={onToggle}
         className={cn(
-          'w-full flex items-center justify-between px-4 py-3',
-          'hover:bg-gray-50 transition-colors'
+          'w-full flex items-center justify-between px-3 py-2',
+          'hover:bg-white/5 transition-colors'
         )}
       >
-        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+        <span className="text-[10px] font-medium text-white/40 uppercase tracking-wider">
           {section.label}
         </span>
         <ChevronDown
           className={cn(
-            'w-4 h-4 text-gray-400 transition-transform duration-200',
+            'w-3.5 h-3.5 text-white/30 transition-transform duration-200',
             isExpanded && 'rotate-180'
           )}
         />
@@ -516,7 +577,7 @@ function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNod
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-3 grid grid-cols-2 gap-2">
+            <div className="px-3 pb-2 grid grid-cols-2 gap-1.5">
               {section.items.map((item) => (
                 <NodeButton
                   key={item.type}
@@ -534,7 +595,7 @@ function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNod
 }
 
 // ============================================
-// NODE BUTTON COMPONENT (estilo Reportana)
+// NODE BUTTON COMPONENT
 // ============================================
 
 interface NodeButtonProps {
@@ -552,9 +613,9 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
       onDragStart={(e) => onDragStart(e as unknown as DragEvent, node)}
       onClick={onClick}
       className={cn(
-        'flex items-center gap-2 p-2.5 rounded-lg',
-        'bg-white border border-gray-200',
-        'hover:border-gray-300 hover:shadow-sm',
+        'flex items-center gap-1.5 p-2 rounded-md',
+        'bg-[#1a1a1a] border border-white/5',
+        'hover:border-white/15 hover:bg-[#222]',
         'cursor-grab active:cursor-grabbing',
         'transition-all duration-150 text-left relative',
         'group'
@@ -564,31 +625,31 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
     >
       {/* Ícone */}
       <div
-        className="p-1.5 rounded-md shrink-0"
-        style={{ backgroundColor: `${node.color}15` }}
+        className="p-1 rounded shrink-0"
+        style={{ backgroundColor: `${node.color}20` }}
       >
         <Icon
-          className="w-4 h-4"
+          className="w-3 h-3"
           style={{ color: node.color }}
         />
       </div>
 
       {/* Label */}
-      <span className="text-xs text-gray-700 font-medium leading-tight line-clamp-2">
+      <span className="text-[10px] text-white/60 font-medium leading-tight line-clamp-2 group-hover:text-white/80">
         {node.label}
       </span>
 
       {/* Badge Premium */}
       {node.isPremium && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center">
-          <Sparkles className="w-2.5 h-2.5 text-white" />
+        <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-amber-400 rounded-full flex items-center justify-center">
+          <Sparkles className="w-2 h-2 text-white" />
         </div>
       )}
 
       {/* Badge IA */}
       {node.hasAI && !node.isPremium && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
-          <span className="text-[8px] text-white font-bold">IA</span>
+        <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full flex items-center justify-center">
+          <span className="text-[6px] text-white font-bold">IA</span>
         </div>
       )}
     </motion.button>

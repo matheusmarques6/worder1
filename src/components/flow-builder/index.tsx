@@ -61,6 +61,7 @@ export function FlowBuilder({
   const toggleTestModal = useFlowStore((state) => state.toggleTestModal);
   const showHistoryPanel = useFlowStore((state) => state.showHistoryPanel);
   const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
+  const isFullscreen = useFlowStore((state) => state.isFullscreen);
 
   // Local state for saved automation ID
   const [savedAutomationId, setSavedAutomationId] = useState<string | undefined>(automationId);
@@ -164,16 +165,16 @@ export function FlowBuilder({
 
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar */}
-          <Sidebar />
+          {/* Sidebar - hidden in fullscreen */}
+          {!isFullscreen && <Sidebar />}
 
           {/* Canvas */}
           <div className="flex-1 relative">
             <Canvas />
           </div>
 
-          {/* Properties Panel */}
-          {showPropertiesPanel && (
+          {/* Properties Panel - hidden in fullscreen */}
+          {showPropertiesPanel && !isFullscreen && (
             <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} />
           )}
         </div>

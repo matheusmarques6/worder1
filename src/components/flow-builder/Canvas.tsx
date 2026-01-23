@@ -125,6 +125,13 @@ export function Canvas() {
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         fitView
+        fitViewOptions={{
+          padding: 0.5,
+          maxZoom: 0.8,
+        }}
+        minZoom={0.2}
+        maxZoom={1.5}
+        defaultViewport={{ x: 0, y: 0, zoom: 0.7 }}
         snapToGrid
         snapGrid={[16, 16]}
         defaultEdgeOptions={{
