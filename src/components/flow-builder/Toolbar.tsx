@@ -81,7 +81,6 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
       if (result) {
         setSaveStatus('saved');
         setDirty(false);
-        // Close after short delay
         setTimeout(() => {
           onBack();
         }, 500);
@@ -104,25 +103,18 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
     }
 
     setIsTogglingStatus(true);
-
-    // Determine new status
     const newStatus = isActive ? 'paused' : 'active';
-
-    // Update status in store
     setAutomationStatus(newStatus);
 
-    // Auto-save when toggling status
     try {
       setSaving(true);
       const result = await onSave();
       if (result) {
         setDirty(false);
       } else {
-        // Revert on failure
         setAutomationStatus(automationStatus);
       }
     } catch (e) {
-      // Revert on error
       setAutomationStatus(automationStatus);
     } finally {
       setSaving(false);
@@ -147,14 +139,14 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   };
 
   return (
-    <div className="fb-toolbar h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 shadow-sm">
+    <div className="fb-toolbar h-14 bg-dark-900 border-b border-dark-700 flex items-center justify-between px-4">
       {/* Left Section - Close Button */}
       <div className="flex items-center gap-4">
         <button
           onClick={handleClose}
           className={cn(
             'p-2 rounded-lg',
-            'hover:bg-gray-100 text-gray-500 hover:text-gray-700',
+            'hover:bg-dark-700 text-dark-400 hover:text-white',
             'transition-colors'
           )}
           title="Fechar"
@@ -175,25 +167,25 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
             autoFocus
             className={cn(
               'px-3 py-1.5 rounded-lg text-center',
-              'bg-gray-100 border border-gray-300',
-              'text-gray-900 text-lg font-semibold',
-              'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20',
+              'bg-dark-800 border border-dark-600',
+              'text-white text-lg font-semibold',
+              'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
               'min-w-[200px]'
             )}
           />
         ) : (
           <button
             onClick={() => setIsEditing(true)}
-            className="flex items-center gap-2 text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors group"
+            className="flex items-center gap-2 text-lg font-semibold text-white hover:text-primary-400 transition-colors group"
           >
             {automationName}
-            <Pencil className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
+            <Pencil className="w-4 h-4 text-dark-400 group-hover:text-primary-400 transition-colors" />
           </button>
         )}
 
         {/* Dirty indicator */}
         {isDirty && (
-          <span className="text-xs text-amber-600 bg-amber-100 px-2 py-1 rounded-full">
+          <span className="text-xs text-amber-400 bg-amber-500/20 px-2 py-1 rounded-full border border-amber-500/30">
             Não salvo
           </span>
         )}
@@ -203,9 +195,9 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
       <div className="flex items-center gap-3">
         {/* Validation indicator */}
         {!valid && errors.length > 0 && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
-            <AlertCircle className="w-4 h-4 text-amber-500" />
-            <span className="text-xs text-amber-700">{errors[0]}</span>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 border border-amber-500/30 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-amber-400" />
+            <span className="text-xs text-amber-400">{errors[0]}</span>
           </div>
         )}
 
@@ -214,7 +206,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onClick={toggleHistoryPanel}
           className={cn(
             'flex items-center gap-2 px-3 py-2 rounded-lg',
-            'hover:bg-gray-100 text-gray-600 hover:text-gray-900',
+            'hover:bg-dark-700 text-dark-400 hover:text-white',
             'transition-colors text-sm'
           )}
         >
@@ -228,8 +220,8 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           disabled={!valid}
           className={cn(
             'flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-gray-100 hover:bg-gray-200',
-            'text-gray-700 text-sm font-medium',
+            'bg-dark-700 hover:bg-dark-600',
+            'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
@@ -247,7 +239,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         />
 
         {/* Divider */}
-        <div className="w-px h-8 bg-gray-200" />
+        <div className="w-px h-8 bg-dark-700" />
 
         {/* Save */}
         <button
@@ -255,15 +247,15 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           disabled={isSaving}
           className={cn(
             'flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-gray-100 hover:bg-gray-200 border border-gray-300',
-            'text-gray-700 text-sm font-medium',
+            'bg-dark-700 hover:bg-dark-600 border border-dark-600',
+            'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         >
           {saveStatus === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
-          {saveStatus === 'saved' && <Check className="w-4 h-4 text-green-600" />}
-          {saveStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
+          {saveStatus === 'saved' && <Check className="w-4 h-4 text-green-400" />}
+          {saveStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
           {saveStatus === 'idle' && <Save className="w-4 h-4" />}
           <span>SALVAR</span>
         </button>
@@ -274,7 +266,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           disabled={isSaving}
           className={cn(
             'flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-blue-600 hover:bg-blue-700',
+            'bg-primary-500 hover:bg-primary-600',
             'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -313,14 +305,14 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
         'transition-all duration-300 border',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         isActive
-          ? 'bg-green-50 border-green-200 hover:bg-green-100'
-          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+          ? 'bg-green-500/20 border-green-500/40 hover:bg-green-500/30'
+          : 'bg-dark-700 border-dark-600 hover:bg-dark-600'
       )}
     >
       {/* Toggle Track */}
       <div className={cn(
         'relative w-10 h-5 rounded-full transition-colors duration-300',
-        isActive ? 'bg-green-500' : 'bg-gray-300'
+        isActive ? 'bg-green-500' : 'bg-dark-500'
       )}>
         {/* Toggle Thumb */}
         <motion.div
@@ -334,7 +326,7 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
           transition={{ type: 'spring', stiffness: 500, damping: 30 }}
         >
           {isLoading && (
-            <Loader2 className="w-2.5 h-2.5 text-gray-400 animate-spin" />
+            <Loader2 className="w-2.5 h-2.5 text-dark-500 animate-spin" />
           )}
         </motion.div>
       </div>
@@ -342,7 +334,7 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
       {/* Label */}
       <span className={cn(
         'text-sm font-medium',
-        isActive ? 'text-green-700' : 'text-gray-600'
+        isActive ? 'text-green-400' : 'text-dark-300'
       )}>
         {isLoading ? '...' : isActive ? 'Ativo' : 'Inativo'}
       </span>

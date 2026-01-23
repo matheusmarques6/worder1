@@ -309,10 +309,10 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
   };
 
   return (
-    <div className="fb-sidebar w-80 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
+    <div className="fb-sidebar w-80 bg-dark-900 border-r border-dark-700 flex flex-col h-full">
       {/* Header - Seletor de Gatilho */}
-      <div className="p-4 border-b border-gray-200">
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
+      <div className="p-4 border-b border-dark-700">
+        <label className="text-xs font-medium text-dark-400 uppercase tracking-wider mb-2 block">
           Gatilho
         </label>
 
@@ -322,23 +322,23 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
             onClick={() => setIsTriggerDropdownOpen(!isTriggerDropdownOpen)}
             className={cn(
               'w-full flex items-center justify-between px-3 py-2.5 rounded-lg',
-              'bg-white border border-gray-200',
-              'hover:border-gray-300 transition-all duration-200',
-              'text-left shadow-sm',
+              'bg-dark-800 border border-dark-600',
+              'hover:border-dark-500 transition-all duration-200',
+              'text-left',
               isTriggerDropdownOpen && 'border-emerald-500 ring-2 ring-emerald-500/20'
             )}
           >
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded bg-emerald-100">
-                <currentTrigger.icon className="w-4 h-4 text-emerald-600" />
+              <div className="p-1.5 rounded bg-emerald-500/20">
+                <currentTrigger.icon className="w-4 h-4 text-emerald-400" />
               </div>
-              <span className="text-sm text-gray-800 font-medium truncate">
+              <span className="text-sm text-white font-medium truncate">
                 {currentTrigger.label}
               </span>
             </div>
             <ChevronDown
               className={cn(
-                'w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ml-2',
+                'w-4 h-4 text-dark-400 transition-transform duration-200 shrink-0 ml-2',
                 isTriggerDropdownOpen && 'rotate-180'
               )}
             />
@@ -359,8 +359,8 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
                   transition={{ duration: 0.15 }}
                   className={cn(
                     'absolute top-full left-0 right-0 mt-1 z-50',
-                    'bg-white border border-gray-200 rounded-lg',
-                    'shadow-lg max-h-64 overflow-y-auto'
+                    'bg-dark-800 border border-dark-600 rounded-lg',
+                    'shadow-xl max-h-64 overflow-y-auto'
                   )}
                 >
                   {TRIGGER_OPTIONS.map((trigger) => (
@@ -369,19 +369,19 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
                       onClick={() => handleTriggerChange(trigger.type)}
                       className={cn(
                         'w-full flex items-center gap-2.5 px-3 py-2.5 text-left',
-                        'hover:bg-gray-50 transition-colors',
-                        selectedTrigger === trigger.type && 'bg-emerald-50'
+                        'hover:bg-dark-700 transition-colors',
+                        selectedTrigger === trigger.type && 'bg-emerald-500/10'
                       )}
                     >
-                      <trigger.icon className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <trigger.icon className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span className={cn(
                         'text-sm truncate',
-                        selectedTrigger === trigger.type ? 'text-emerald-700 font-medium' : 'text-gray-700'
+                        selectedTrigger === trigger.type ? 'text-emerald-400 font-medium' : 'text-dark-200'
                       )}>
                         {trigger.label}
                       </span>
                       {selectedTrigger === trigger.type && (
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 ml-auto" />
+                        <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-auto" />
                       )}
                     </button>
                   ))}
@@ -402,23 +402,23 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
       </div>
 
       {/* Configurações Globais da Automação */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-dark-700">
         <button
           onClick={() => setShowConfig(!showConfig)}
           className={cn(
             'w-full flex items-center justify-between px-4 py-3',
-            'hover:bg-gray-100 transition-colors'
+            'hover:bg-dark-800 transition-colors'
           )}
         >
           <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4 text-gray-400" />
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <Settings className="w-4 h-4 text-dark-400" />
+            <span className="text-xs font-medium text-dark-400 uppercase tracking-wider">
               Configurações da Automação
             </span>
           </div>
           <ChevronDown
             className={cn(
-              'w-4 h-4 text-gray-400 transition-transform duration-200',
+              'w-4 h-4 text-dark-400 transition-transform duration-200',
               showConfig && 'rotate-180'
             )}
           />
@@ -436,7 +436,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
               <div className="px-4 pb-4 space-y-4">
                 {/* WhatsApp Padrão */}
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-gray-500 flex items-center gap-1.5">
+                  <label className="text-xs font-medium text-dark-400 flex items-center gap-1.5">
                     <MessageCircle className="w-3.5 h-3.5 text-green-500" />
                     WhatsApp Padrão
                   </label>
@@ -451,7 +451,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
 
                 {/* Email Padrão */}
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-gray-500 flex items-center gap-1.5">
+                  <label className="text-xs font-medium text-dark-400 flex items-center gap-1.5">
                     <Mail className="w-3.5 h-3.5 text-blue-500" />
                     Email Padrão
                   </label>
@@ -470,9 +470,9 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
       </div>
 
       {/* Busca */}
-      <div className="px-4 py-3 border-b border-gray-200">
+      <div className="px-4 py-3 border-b border-dark-700">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
           <input
             type="text"
             placeholder="Buscar blocos..."
@@ -480,18 +480,18 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
               'w-full pl-10 pr-10 py-2 rounded-lg',
-              'bg-white border border-gray-200',
-              'text-sm text-gray-800 placeholder-gray-400',
-              'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20',
+              'bg-dark-800 border border-dark-600',
+              'text-sm text-white placeholder-dark-400',
+              'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
               'transition-all duration-200'
             )}
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-dark-700 rounded"
             >
-              <X className="w-3.5 h-3.5 text-gray-400" />
+              <X className="w-3.5 h-3.5 text-dark-400" />
             </button>
           )}
         </div>
@@ -528,15 +528,15 @@ function ToggleOption({ label }: { label: string }) {
     >
       <div className={cn(
         'w-8 h-5 rounded-full transition-colors relative shrink-0',
-        enabled ? 'bg-emerald-500' : 'bg-gray-300'
+        enabled ? 'bg-emerald-500' : 'bg-dark-600'
       )}>
         <div className={cn(
           'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
           enabled ? 'translate-x-3.5' : 'translate-x-0.5'
         )} />
       </div>
-      <span className="text-xs text-gray-600 flex-1 leading-tight">{label}</span>
-      <HelpCircle className="w-4 h-4 text-gray-400 shrink-0" />
+      <span className="text-xs text-dark-300 flex-1 leading-tight">{label}</span>
+      <HelpCircle className="w-4 h-4 text-dark-500 shrink-0" />
     </button>
   );
 }
@@ -566,21 +566,21 @@ interface SectionComponentProps {
 
 function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNode }: SectionComponentProps) {
   return (
-    <div className="border-b border-gray-200">
+    <div className="border-b border-dark-700">
       {/* Header da Seção */}
       <button
         onClick={onToggle}
         className={cn(
           'w-full flex items-center justify-between px-4 py-3',
-          'hover:bg-gray-100 transition-colors'
+          'hover:bg-dark-800 transition-colors'
         )}
       >
-        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+        <span className="text-xs font-medium text-dark-400 uppercase tracking-wider">
           {section.label}
         </span>
         <ChevronDown
           className={cn(
-            'w-4 h-4 text-gray-400 transition-transform duration-200',
+            'w-4 h-4 text-dark-400 transition-transform duration-200',
             isExpanded && 'rotate-180'
           )}
         />
@@ -633,8 +633,8 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
       onClick={onClick}
       className={cn(
         'flex items-center gap-2 p-2.5 rounded-lg',
-        'bg-white border border-gray-200',
-        'hover:border-gray-300 hover:bg-gray-50 hover:shadow-sm',
+        'bg-dark-800 border border-dark-600',
+        'hover:border-dark-500 hover:bg-dark-700',
         'cursor-grab active:cursor-grabbing',
         'transition-all duration-150 text-left relative',
         'group'
@@ -645,7 +645,7 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
       {/* Ícone */}
       <div
         className="p-1.5 rounded-md shrink-0"
-        style={{ backgroundColor: `${node.color}15` }}
+        style={{ backgroundColor: `${node.color}20` }}
       >
         <Icon
           className="w-4 h-4"
@@ -654,7 +654,7 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
       </div>
 
       {/* Label */}
-      <span className="text-xs text-gray-700 font-medium leading-tight line-clamp-2 group-hover:text-gray-900">
+      <span className="text-xs text-dark-200 font-medium leading-tight line-clamp-2 group-hover:text-white">
         {node.label}
       </span>
 
