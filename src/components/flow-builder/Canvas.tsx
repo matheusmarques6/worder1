@@ -139,22 +139,22 @@ export function Canvas() {
           animated: true,
         }}
         proOptions={{ hideAttribution: true }}
-        className="bg-[#0a0a0a]"
+        className="bg-gray-100"
       >
         {/* Background */}
         <Background
           variant={BackgroundVariant.Dots}
           gap={20}
           size={1}
-          color="#262626"
+          color="#d1d5db"
         />
 
         {/* Controls */}
         <Controls
           className={cn(
-            '[&>button]:bg-[#1a1a1a] [&>button]:border-white/10',
-            '[&>button]:text-white/60 [&>button:hover]:bg-white/10',
-            '[&>button:hover]:text-white'
+            '[&>button]:bg-white [&>button]:border-gray-200',
+            '[&>button]:text-gray-600 [&>button:hover]:bg-gray-50',
+            '[&>button:hover]:text-gray-900 [&>button]:shadow-sm'
           )}
         />
 
@@ -172,17 +172,17 @@ export function Canvas() {
               case 'control':
                 return '#a855f7';
               default:
-                return '#525252';
+                return '#9ca3af';
             }
           }}
-          maskColor="rgba(0, 0, 0, 0.8)"
-          className="!bg-[#1a1a1a] !border-white/10"
+          maskColor="rgba(255, 255, 255, 0.8)"
+          className="!bg-white !border-gray-200 shadow-md"
         />
 
         {/* Empty state */}
         {nodes.length === 0 && (
           <Panel position="top-center" className="mt-20">
-            <div className="text-center text-white/40 p-8">
+            <div className="text-center text-gray-500 p-8">
               <p className="text-lg mb-2">Arraste componentes da barra lateral</p>
               <p className="text-sm">ou clique duas vezes para adicionar</p>
             </div>

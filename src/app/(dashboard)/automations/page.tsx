@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
@@ -117,8 +118,15 @@ export default function AutomationsPage() {
   const [loading, setLoading] = useState(true);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   const organizationId = user?.organization_id;
+
+  // Track if mounted for portal
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   // Fetch dashboard stats
   useEffect(() => {
@@ -325,12 +333,20 @@ export default function AutomationsPage() {
   };
 
   // ============================================
-  // RENDER EDITOR
+  // RENDER FULLSCREEN EDITOR (Portal)
   // ============================================
 
-  if (editingAutomation) {
-    return (
-      <div className="h-[calc(100vh-64px)]">
+  const renderFullscreenEditor = () => {
+    if (!editingAutomation || !mounted) return null;
+
+    return createPortal(
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[9999] bg-[#0a0a0a]"
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+      >
         <FlowBuilder
           automationId={editingAutomation.id}
           automationName={editingAutomation.name}
@@ -341,9 +357,10 @@ export default function AutomationsPage() {
           onBack={handleBack}
           organizationId={organizationId}
         />
-      </div>
+      </motion.div>,
+      document.body
     );
-  }
+  };
 
   // ============================================
   // RENDER LIST
@@ -351,6 +368,10 @@ export default function AutomationsPage() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* Fullscreen Editor Portal */}
+      <AnimatePresence>
+        {editingAutomation && renderFullscreenEditor()}
+      </AnimatePresence>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
