@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Copy, Settings, ChevronDown, Sparkles } from 'lucide-react';
+import { X, Trash2, Copy, Settings, ChevronDown, Sparkles, MessageCircle, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useSelectedNode } from '@/stores/flowStore';
 import { getNodeDefinition, getNodeColor } from '../nodes/nodeTypes';
 import { WebhookConfig } from './WebhookConfig';
 import { CredentialSelector } from './CredentialSelector';
 import { MessageEditor, VariableButton } from '../variables';
+import { WhatsAppTemplateEditor } from '../whatsapp';
 
 // ============================================
 // TYPES
@@ -676,138 +677,11 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
 
             {/* WHATSAPP ACTION */}
             {selectedNode.data.nodeType === 'action_whatsapp' && (
-              <>
-                <CredentialSelector
-                  connectionType="whatsapp"
-                  value={selectedNode.data.config?.credentialId}
-                  onChange={(id) => handleUpdate('credentialId', id)}
-                  label="Conexão WhatsApp"
-                />
-                <div className="space-y-2">
-                  <label className="text-xs text-white/60">Tipo de Mensagem</label>
-                  <SelectField
-                    value={selectedNode.data.config?.messageType || 'template'}
-                    onChange={(v) => handleUpdate('messageType', v)}
-                    options={[
-                      { value: 'template', label: 'Template Aprovado' },
-                      { value: 'text', label: 'Texto Livre' },
-                    ]}
-                  />
-                </div>
-                {selectedNode.data.config?.messageType === 'text' ? (
-                  <MessageEditor
-                    value={selectedNode.data.config?.message || ''}
-                    onChange={(v) => handleUpdate('message', v)}
-                    triggerType={triggerType}
-                    label="Mensagem"
-                    placeholder="Olá {{ contact.first_name }}! Como podemos ajudar?"
-                    rows={4}
-                  />
-                ) : (
-                  <>
-                    <div className="space-y-2">
-                      <label className="text-xs text-white/60">Nome do Template</label>
-                      <input
-                        type="text"
-                        value={selectedNode.data.config?.templateId || ''}
-                        onChange={(e) => handleUpdate('templateId', e.target.value)}
-                        placeholder="Ex: carrinho_abandonado_v1"
-                        className={cn(
-                          'w-full px-3 py-2 rounded-lg',
-                          'bg-[#0a0a0a] border border-white/10',
-                          'text-sm text-white placeholder-white/30',
-                          'focus:outline-none focus:border-blue-500/50'
-                        )}
-                      />
-                      <p className="text-[10px] text-white/40">
-                        Nome exato do template aprovado no WhatsApp Business
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs text-white/60">Idioma do Template</label>
-                      <SelectField
-                        value={selectedNode.data.config?.language || 'pt_BR'}
-                        onChange={(v) => handleUpdate('language', v)}
-                        options={[
-                          { value: 'pt_BR', label: 'Português (BR)' },
-                          { value: 'en_US', label: 'English (US)' },
-                          { value: 'es', label: 'Español' },
-                        ]}
-                      />
-                    </div>
-
-                    {/* Template Variables */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs text-white/60">Variáveis do Template</label>
-                        <VariableButton
-                          triggerType={triggerType}
-                          onSelect={(v) => {
-                            const current = selectedNode.data.config?.templateVariables || [];
-                            handleUpdate('templateVariables', [...current, v]);
-                          }}
-                        />
-                      </div>
-
-                      {/* Variable inputs */}
-                      {(selectedNode.data.config?.templateVariables || []).length > 0 ? (
-                        <div className="space-y-2">
-                          {(selectedNode.data.config?.templateVariables || []).map((v: string, i: number) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <span className="text-[10px] text-white/40 w-6">{`{{${i + 1}}}`}</span>
-                              <input
-                                type="text"
-                                value={v}
-                                onChange={(e) => {
-                                  const vars = [...(selectedNode.data.config?.templateVariables || [])];
-                                  vars[i] = e.target.value;
-                                  handleUpdate('templateVariables', vars);
-                                }}
-                                className={cn(
-                                  'flex-1 px-2 py-1.5 rounded-lg text-xs',
-                                  'bg-[#0a0a0a] border border-white/10',
-                                  'text-white placeholder-white/30',
-                                  'focus:outline-none focus:border-blue-500/50'
-                                )}
-                              />
-                              <button
-                                onClick={() => {
-                                  const vars = (selectedNode.data.config?.templateVariables || []).filter((_: string, idx: number) => idx !== i);
-                                  handleUpdate('templateVariables', vars);
-                                }}
-                                className="text-red-400 hover:text-red-300 text-xs"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleUpdate('templateVariables', ['{{ contact.first_name }}'])}
-                          className={cn(
-                            'w-full py-2 rounded-lg text-xs',
-                            'border border-dashed border-white/20',
-                            'text-white/60 hover:text-white hover:border-white/40',
-                            'transition-colors'
-                          )}
-                        >
-                          + Adicionar variável
-                        </button>
-                      )}
-                      <p className="text-[10px] text-white/40">
-                        Adicione as variáveis na ordem em que aparecem no template
-                      </p>
-                    </div>
-                  </>
-                )}
-
-                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-                  <p className="text-[11px] text-green-300">
-                    💬 WhatsApp será enviado para o número do contato
-                  </p>
-                </div>
-              </>
+              <WhatsAppActionConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                triggerType={triggerType}
+              />
             )}
 
             {/* DEAL NODES */}
@@ -1964,6 +1838,119 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
         </p>
       </div>
     </div>
+  );
+}
+
+// ============================================
+// WHATSAPP ACTION CONFIG
+// ============================================
+
+interface WhatsAppActionConfigProps {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+  triggerType: string;
+}
+
+function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionConfigProps) {
+  const [showEditor, setShowEditor] = useState(false);
+
+  const hasMessage = config.message || config.bodyText;
+  const messageMode = config.messageMode || 'free';
+  const templateName = config.templateName;
+
+  const handleConfigChange = (newConfig: any) => {
+    // Update all config keys
+    Object.entries(newConfig).forEach(([key, value]) => {
+      onUpdate(key, value);
+    });
+  };
+
+  return (
+    <>
+      <CredentialSelector
+        connectionType="whatsapp"
+        value={config.credentialId}
+        onChange={(id) => onUpdate('credentialId', id)}
+        label="Conexão WhatsApp"
+      />
+
+      {/* Message Preview / Editor Button */}
+      <div className="space-y-2">
+        <label className="text-xs text-white/60">Mensagem WhatsApp</label>
+
+        {hasMessage ? (
+          <div
+            onClick={() => setShowEditor(true)}
+            className={cn(
+              'p-3 rounded-lg cursor-pointer transition-all',
+              'bg-[#0a0a0a] border border-white/10 hover:border-green-500/50',
+              'group'
+            )}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-green-400" />
+                <span className="text-xs font-medium text-green-400">
+                  {messageMode === 'template' ? 'Template' : 'Texto Livre'}
+                </span>
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-white/40 group-hover:text-green-400 transition-colors" />
+            </div>
+
+            {templateName && (
+              <div className="text-[10px] text-white/50 mb-1">
+                Template: {templateName}
+              </div>
+            )}
+
+            <p className="text-xs text-white/70 line-clamp-3">
+              {(config.message || config.bodyText || '').substring(0, 150)}
+              {(config.message || config.bodyText || '').length > 150 ? '...' : ''}
+            </p>
+
+            <div className="mt-2 text-[10px] text-white/40">
+              Clique para editar
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowEditor(true)}
+            className={cn(
+              'w-full p-4 rounded-lg',
+              'border-2 border-dashed border-white/20 hover:border-green-500/50',
+              'flex flex-col items-center gap-2',
+              'text-white/60 hover:text-green-400',
+              'transition-all group'
+            )}
+          >
+            <MessageCircle className="w-6 h-6 group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-medium">Configurar Mensagem</span>
+            <span className="text-[10px] text-white/40">
+              Clique para abrir o editor avançado
+            </span>
+          </button>
+        )}
+      </div>
+
+      <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+        <p className="text-[11px] text-green-300">
+          💬 WhatsApp será enviado para o número do contato
+        </p>
+      </div>
+
+      {/* Editor Modal */}
+      <AnimatePresence>
+        {showEditor && (
+          <WhatsAppTemplateEditor
+            config={config as any}
+            onConfigChange={handleConfigChange}
+            triggerType={triggerType}
+            onClose={() => setShowEditor(false)}
+            isModal={true}
+          />
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

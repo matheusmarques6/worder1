@@ -622,7 +622,7 @@ function BaseNodeComponent(props: BaseNodeProps) {
         opacity: disabled ? 0.5 : 1,
       }}
       className={cn(
-        'relative min-w-[220px] max-w-[300px]',
+        'relative min-w-[280px] max-w-[360px]',
         'rounded-xl border backdrop-blur-sm',
         'bg-gradient-to-br',
         catConfig.gradient,

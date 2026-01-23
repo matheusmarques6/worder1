@@ -309,7 +309,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
   };
 
   return (
-    <div className="fb-sidebar w-80 bg-dark-900 border-r border-dark-700 flex flex-col h-full">
+    <div className="fb-sidebar w-96 bg-dark-900 border-r border-dark-700 flex flex-col h-full">
       {/* Header - Seletor de Gatilho */}
       <div className="p-4 border-b border-dark-700">
         <label className="text-xs font-medium text-dark-400 uppercase tracking-wider mb-2 block">
@@ -632,7 +632,7 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
       onDragStart={(e) => onDragStart(e as unknown as DragEvent, node)}
       onClick={onClick}
       className={cn(
-        'flex items-center gap-2 p-2.5 rounded-lg',
+        'flex items-center gap-2.5 p-3 rounded-lg',
         'bg-dark-800 border border-dark-600',
         'hover:border-dark-500 hover:bg-dark-700',
         'cursor-grab active:cursor-grabbing',
