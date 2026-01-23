@@ -1,8 +1,8 @@
 /**
  * API: /api/meta/ads
- * 
+ *
  * GET - Busca anúncios de um ad set com métricas em tempo real
- * 
+ *
  * Query params:
  * - store_id: UUID (obrigatório)
  * - adset_id: string (obrigatório) - ID do ad set no Meta
@@ -12,6 +12,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
+
+export const dynamic = 'force-dynamic';
 import { 
   MetaApiClient, 
   MetaApiClientError,
