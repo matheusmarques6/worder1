@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Copy, Settings, ChevronDown } from 'lucide-react';
+import { X, Trash2, Copy, Settings, ChevronDown, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useSelectedNode } from '@/stores/flowStore';
 import { getNodeDefinition, getNodeColor } from '../nodes/nodeTypes';
 import { WebhookConfig } from './WebhookConfig';
 import { CredentialSelector } from './CredentialSelector';
+import { MessageEditor, VariableButton } from '../variables';
 
 // ============================================
 // TYPES
@@ -29,9 +30,16 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
   const updateNode = useFlowStore((state) => state.updateNode);
   const removeNode = useFlowStore((state) => state.removeNode);
   const showPanel = useFlowStore((state) => state.showPropertiesPanel);
+  const nodes = useFlowStore((state) => state.nodes);
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loadingPipelines, setLoadingPipelines] = useState(false);
+
+  // Get trigger type from flow nodes
+  const triggerType = useMemo(() => {
+    const triggerNode = nodes.find(n => n.data?.category === 'trigger');
+    return triggerNode?.data?.nodeType || triggerNode?.type || 'trigger_abandon';
+  }, [nodes]);
 
   // Fetch pipelines when needed
   useEffect(() => {
@@ -611,12 +619,19 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   label="Conta de Email"
                 />
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Assunto</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-white/60">Assunto</label>
+                    <VariableButton
+                      triggerType={triggerType}
+                      onSelect={(v) => handleUpdate('subject', (selectedNode.data.config?.subject || '') + v)}
+                      className="scale-90"
+                    />
+                  </div>
                   <input
                     type="text"
                     value={selectedNode.data.config?.subject || ''}
                     onChange={(e) => handleUpdate('subject', e.target.value)}
-                    placeholder="Assunto do email"
+                    placeholder="Ex: {{ contact.first_name }}, seu pedido foi confirmado!"
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-white/10',
@@ -625,28 +640,21 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     )}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-white/60">Corpo do Email (HTML)</label>
-                  <textarea
-                    value={selectedNode.data.config?.html || ''}
-                    onChange={(e) => handleUpdate('html', e.target.value)}
-                    placeholder="<p>Olá {{contact.name}}!</p>"
-                    rows={4}
-                    className={cn(
-                      'w-full px-3 py-2 rounded-lg resize-none font-mono text-xs',
-                      'bg-[#0a0a0a] border border-white/10',
-                      'text-white placeholder-white/30',
-                      'focus:outline-none focus:border-blue-500/50'
-                    )}
-                  />
-                </div>
+                <MessageEditor
+                  value={selectedNode.data.config?.html || ''}
+                  onChange={(v) => handleUpdate('html', v)}
+                  triggerType={triggerType}
+                  label="Corpo do Email (HTML)"
+                  placeholder="<p>Olá {{ contact.first_name }}!</p>&#10;<p>Seu pedido #{{ event.order_id }} foi confirmado.</p>"
+                  rows={6}
+                />
                 <div className="space-y-2">
                   <label className="text-xs text-white/60">Template ID (opcional)</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.templateId || ''}
                     onChange={(e) => handleUpdate('templateId', e.target.value)}
-                    placeholder="ID do template"
+                    placeholder="ID do template externo"
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-white/10',
@@ -654,6 +662,14 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
+                  <p className="text-[10px] text-white/40">
+                    Se preenchido, usará o template externo ao invés do HTML acima
+                  </p>
+                </div>
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <p className="text-[11px] text-blue-300">
+                    ✉️ Email será enviado para o endereço do contato
+                  </p>
                 </div>
               </>
             )}
@@ -673,36 +689,29 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     value={selectedNode.data.config?.messageType || 'template'}
                     onChange={(v) => handleUpdate('messageType', v)}
                     options={[
-                      { value: 'template', label: 'Template' },
+                      { value: 'template', label: 'Template Aprovado' },
                       { value: 'text', label: 'Texto Livre' },
                     ]}
                   />
                 </div>
                 {selectedNode.data.config?.messageType === 'text' ? (
-                  <div className="space-y-2">
-                    <label className="text-xs text-white/60">Mensagem</label>
-                    <textarea
-                      value={selectedNode.data.config?.message || ''}
-                      onChange={(e) => handleUpdate('message', e.target.value)}
-                      placeholder="Olá {{contact.name}}!"
-                      rows={3}
-                      className={cn(
-                        'w-full px-3 py-2 rounded-lg resize-none',
-                        'bg-[#0a0a0a] border border-white/10',
-                        'text-sm text-white placeholder-white/30',
-                        'focus:outline-none focus:border-blue-500/50'
-                      )}
-                    />
-                  </div>
+                  <MessageEditor
+                    value={selectedNode.data.config?.message || ''}
+                    onChange={(v) => handleUpdate('message', v)}
+                    triggerType={triggerType}
+                    label="Mensagem"
+                    placeholder="Olá {{ contact.first_name }}! Como podemos ajudar?"
+                    rows={4}
+                  />
                 ) : (
                   <>
                     <div className="space-y-2">
-                      <label className="text-xs text-white/60">Template</label>
+                      <label className="text-xs text-white/60">Nome do Template</label>
                       <input
                         type="text"
                         value={selectedNode.data.config?.templateId || ''}
                         onChange={(e) => handleUpdate('templateId', e.target.value)}
-                        placeholder="Nome do template WhatsApp"
+                        placeholder="Ex: carrinho_abandonado_v1"
                         className={cn(
                           'w-full px-3 py-2 rounded-lg',
                           'bg-[#0a0a0a] border border-white/10',
@@ -710,9 +719,12 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                           'focus:outline-none focus:border-blue-500/50'
                         )}
                       />
+                      <p className="text-[10px] text-white/40">
+                        Nome exato do template aprovado no WhatsApp Business
+                      </p>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs text-white/60">Idioma</label>
+                      <label className="text-xs text-white/60">Idioma do Template</label>
                       <SelectField
                         value={selectedNode.data.config?.language || 'pt_BR'}
                         onChange={(v) => handleUpdate('language', v)}
@@ -723,8 +735,78 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                         ]}
                       />
                     </div>
+
+                    {/* Template Variables */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-white/60">Variáveis do Template</label>
+                        <VariableButton
+                          triggerType={triggerType}
+                          onSelect={(v) => {
+                            const current = selectedNode.data.config?.templateVariables || [];
+                            handleUpdate('templateVariables', [...current, v]);
+                          }}
+                        />
+                      </div>
+
+                      {/* Variable inputs */}
+                      {(selectedNode.data.config?.templateVariables || []).length > 0 ? (
+                        <div className="space-y-2">
+                          {(selectedNode.data.config?.templateVariables || []).map((v: string, i: number) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <span className="text-[10px] text-white/40 w-6">{`{{${i + 1}}}`}</span>
+                              <input
+                                type="text"
+                                value={v}
+                                onChange={(e) => {
+                                  const vars = [...(selectedNode.data.config?.templateVariables || [])];
+                                  vars[i] = e.target.value;
+                                  handleUpdate('templateVariables', vars);
+                                }}
+                                className={cn(
+                                  'flex-1 px-2 py-1.5 rounded-lg text-xs',
+                                  'bg-[#0a0a0a] border border-white/10',
+                                  'text-white placeholder-white/30',
+                                  'focus:outline-none focus:border-blue-500/50'
+                                )}
+                              />
+                              <button
+                                onClick={() => {
+                                  const vars = (selectedNode.data.config?.templateVariables || []).filter((_: string, idx: number) => idx !== i);
+                                  handleUpdate('templateVariables', vars);
+                                }}
+                                className="text-red-400 hover:text-red-300 text-xs"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleUpdate('templateVariables', ['{{ contact.first_name }}'])}
+                          className={cn(
+                            'w-full py-2 rounded-lg text-xs',
+                            'border border-dashed border-white/20',
+                            'text-white/60 hover:text-white hover:border-white/40',
+                            'transition-colors'
+                          )}
+                        >
+                          + Adicionar variável
+                        </button>
+                      )}
+                      <p className="text-[10px] text-white/40">
+                        Adicione as variáveis na ordem em que aparecem no template
+                      </p>
+                    </div>
                   </>
                 )}
+
+                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <p className="text-[11px] text-green-300">
+                    💬 WhatsApp será enviado para o número do contato
+                  </p>
+                </div>
               </>
             )}
 
@@ -1057,26 +1139,25 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   onChange={(id) => handleUpdate('credentialId', id)}
                   label="Provedor SMS (Twilio)"
                 />
-                <div className="space-y-2">
-                  <label className="text-xs text-white/60">Mensagem</label>
-                  <textarea
-                    value={selectedNode.data.config?.message || ''}
-                    onChange={(e) => handleUpdate('message', e.target.value)}
-                    placeholder="Olá {{contact.name}}! Sua mensagem aqui..."
-                    rows={3}
-                    className={cn(
-                      'w-full px-3 py-2 rounded-lg resize-none',
-                      'bg-[#0a0a0a] border border-white/10',
-                      'text-sm text-white placeholder-white/30',
-                      'focus:outline-none focus:border-blue-500/50'
-                    )}
-                  />
-                  <p className="text-[10px] text-white/40">
-                    Máximo 160 caracteres por segmento SMS
-                  </p>
+                <MessageEditor
+                  value={selectedNode.data.config?.message || ''}
+                  onChange={(v) => handleUpdate('message', v)}
+                  triggerType={triggerType}
+                  label="Mensagem SMS"
+                  placeholder="Olá {{ contact.first_name }}! Não esqueça do seu carrinho: {{ event.cart_url }}"
+                  rows={3}
+                  maxLength={320}
+                />
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-white/40">
+                    {(selectedNode.data.config?.message || '').length}/320 caracteres
+                  </span>
+                  <span className="text-white/40">
+                    ~{Math.ceil((selectedNode.data.config?.message || '').length / 160)} segmento(s)
+                  </span>
                 </div>
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                  <p className="text-[11px] text-amber-300">
+                <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                  <p className="text-[11px] text-purple-300">
                     📱 SMS será enviado para o telefone do contato
                   </p>
                 </div>
@@ -1085,10 +1166,18 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
           </section>
 
           {/* Variables hint */}
-          <section className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <p className="text-[11px] text-blue-300">
-              💡 Use variáveis como <code className="bg-blue-500/20 px-1 rounded">{'{{contact.name}}'}</code> para personalizar
-            </p>
+          <section className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+            <div className="flex items-start gap-2">
+              <Sparkles className="w-4 h-4 text-primary-400 mt-0.5 flex-shrink-0" />
+              <div className="space-y-1">
+                <p className="text-[11px] text-primary-300 font-medium">
+                  Personalização com Variáveis
+                </p>
+                <p className="text-[10px] text-primary-300/70">
+                  Clique em <span className="bg-primary-500/20 px-1 rounded">Personalizar</span> para inserir dados dinâmicos como nome do contato, dados do pedido, etc.
+                </p>
+              </div>
+            </div>
           </section>
         </div>
 

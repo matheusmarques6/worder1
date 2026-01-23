@@ -449,8 +449,8 @@ const EmailPreview = ({ config }: { config: Record<string, any> }) => {
 // ============================================
 
 const DelayPreview = ({ config }: { config: Record<string, any> }) => {
-  const time = config?.time || config?.delay || config?.duration || 1;
-  const unit = config?.unit || config?.timeUnit || 'hours';
+  const time = config?.value || config?.time || config?.delay || config?.duration || 1;
+  const unit = config?.unit || config?.timeUnit || 'minutes';
 
   const getTimeText = () => {
     const unitLabels: Record<string, { singular: string; plural: string }> = {

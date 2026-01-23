@@ -139,13 +139,13 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   };
 
   return (
-    <div className="fb-toolbar h-14 bg-dark-900 border-b border-dark-700 flex items-center justify-between px-4">
-      {/* Left Section - Close Button */}
-      <div className="flex items-center gap-4">
+    <div className="fb-toolbar h-14 bg-dark-900 border-b border-dark-700 flex items-center px-2 sm:px-4 gap-2 sm:gap-4">
+      {/* Left Section - Close Button + Name */}
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink-0">
         <button
           onClick={handleClose}
           className={cn(
-            'p-2 rounded-lg',
+            'p-2 rounded-lg flex-shrink-0',
             'hover:bg-dark-700 text-dark-400 hover:text-white',
             'transition-colors'
           )}
@@ -153,51 +153,55 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         >
           <X className="w-5 h-5" />
         </button>
+
+        {/* Name - Left aligned */}
+        <div className="flex items-center gap-2 min-w-0">
+          {isEditing ? (
+            <input
+              type="text"
+              value={automationName}
+              onChange={(e) => setAutomationName(e.target.value)}
+              onBlur={() => setIsEditing(false)}
+              onKeyDown={(e) => e.key === 'Enter' && setIsEditing(false)}
+              autoFocus
+              className={cn(
+                'px-3 py-1.5 rounded-lg',
+                'bg-dark-800 border border-dark-600',
+                'text-white text-base sm:text-lg font-semibold',
+                'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
+                'w-[150px] sm:w-[200px]'
+              )}
+            />
+          ) : (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="flex items-center gap-2 text-base sm:text-lg font-semibold text-white hover:text-primary-400 transition-colors group truncate max-w-[150px] sm:max-w-[250px]"
+              title={automationName}
+            >
+              <span className="truncate">{automationName}</span>
+              <Pencil className="w-4 h-4 text-dark-400 group-hover:text-primary-400 transition-colors flex-shrink-0" />
+            </button>
+          )}
+
+          {/* Dirty indicator */}
+          {isDirty && (
+            <span className="text-[10px] sm:text-xs text-amber-400 bg-amber-500/20 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-amber-500/30 flex-shrink-0 whitespace-nowrap">
+              Não salvo
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Center Section - Name */}
-      <div className="flex-1 flex items-center justify-center gap-3">
-        {isEditing ? (
-          <input
-            type="text"
-            value={automationName}
-            onChange={(e) => setAutomationName(e.target.value)}
-            onBlur={() => setIsEditing(false)}
-            onKeyDown={(e) => e.key === 'Enter' && setIsEditing(false)}
-            autoFocus
-            className={cn(
-              'px-3 py-1.5 rounded-lg text-center',
-              'bg-dark-800 border border-dark-600',
-              'text-white text-lg font-semibold',
-              'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
-              'min-w-[200px]'
-            )}
-          />
-        ) : (
-          <button
-            onClick={() => setIsEditing(true)}
-            className="flex items-center gap-2 text-lg font-semibold text-white hover:text-primary-400 transition-colors group"
-          >
-            {automationName}
-            <Pencil className="w-4 h-4 text-dark-400 group-hover:text-primary-400 transition-colors" />
-          </button>
-        )}
-
-        {/* Dirty indicator */}
-        {isDirty && (
-          <span className="text-xs text-amber-400 bg-amber-500/20 px-2 py-1 rounded-full border border-amber-500/30">
-            Não salvo
-          </span>
-        )}
-      </div>
+      {/* Center spacer */}
+      <div className="flex-1" />
 
       {/* Right Section - Actions */}
-      <div className="flex items-center gap-3">
-        {/* Validation indicator */}
+      <div className="flex items-center gap-1 sm:gap-2 lg:gap-3 flex-shrink-0">
+        {/* Validation indicator - hidden on small screens */}
         {!valid && errors.length > 0 && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 border border-amber-500/30 rounded-lg">
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 border border-amber-500/30 rounded-lg">
             <AlertCircle className="w-4 h-4 text-amber-400" />
-            <span className="text-xs text-amber-400">{errors[0]}</span>
+            <span className="text-xs text-amber-400 max-w-[200px] truncate">{errors[0]}</span>
           </div>
         )}
 
@@ -205,13 +209,14 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         <button
           onClick={toggleHistoryPanel}
           className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg',
+            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
             'hover:bg-dark-700 text-dark-400 hover:text-white',
             'transition-colors text-sm'
           )}
+          title="Histórico"
         >
           <History className="w-4 h-4" />
-          <span className="hidden sm:inline">Histórico</span>
+          <span className="hidden lg:inline">Histórico</span>
         </button>
 
         {/* Test */}
@@ -219,15 +224,16 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onClick={handleTest}
           disabled={!valid}
           className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg',
+            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
             'bg-dark-700 hover:bg-dark-600',
             'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
+          title="Testar"
         >
           <PlayCircle className="w-4 h-4" />
-          Testar
+          <span className="hidden sm:inline">Testar</span>
         </button>
 
         {/* Activation Toggle */}
@@ -238,26 +244,27 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onToggle={handleToggleStatus}
         />
 
-        {/* Divider */}
-        <div className="w-px h-8 bg-dark-700" />
+        {/* Divider - hidden on small screens */}
+        <div className="hidden sm:block w-px h-8 bg-dark-700" />
 
         {/* Save */}
         <button
           onClick={handleSave}
           disabled={isSaving}
           className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg',
+            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
             'bg-dark-700 hover:bg-dark-600 border border-dark-600',
             'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
+          title="Salvar"
         >
           {saveStatus === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
           {saveStatus === 'saved' && <Check className="w-4 h-4 text-green-400" />}
           {saveStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
           {saveStatus === 'idle' && <Save className="w-4 h-4" />}
-          <span>SALVAR</span>
+          <span className="hidden sm:inline">SALVAR</span>
         </button>
 
         {/* Save and Close */}
@@ -265,19 +272,20 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onClick={handleSaveAndClose}
           disabled={isSaving}
           className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg',
+            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
             'bg-primary-500 hover:bg-primary-600',
             'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
+          title="Salvar e Fechar"
         >
           {saveStatus === 'saving' ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
             <Check className="w-4 h-4" />
           )}
-          <span>SALVAR E FECHAR</span>
+          <span className="hidden md:inline">SALVAR E FECHAR</span>
         </button>
       </div>
     </div>
