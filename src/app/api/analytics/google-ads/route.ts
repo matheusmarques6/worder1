@@ -8,7 +8,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { supabase, organizationId } = auth;
+    const { supabase, user } = auth;
+    const organizationId = user.organization_id;
     const { searchParams } = new URL(request.url);
     const dateRange = searchParams.get('dateRange') || '7d';
     const accountId = searchParams.get('accountId');
