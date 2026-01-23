@@ -190,11 +190,11 @@ const IntegrationAlert = ({
 )
 
 // Metric Card Component
-const MetricCard = ({ 
-  title, 
-  value, 
-  change, 
-  icon: Icon, 
+const MetricCard = ({
+  title,
+  value,
+  change,
+  icon: Icon,
   highlight = false,
   loading = false,
 }: {
@@ -209,9 +209,9 @@ const MetricCard = ({
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     className={`
-      relative rounded-xl p-5 transition-all duration-300
-      ${highlight 
-        ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/20' 
+      relative rounded-xl p-3 sm:p-5 transition-all duration-300
+      ${highlight
+        ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/20'
         : 'bg-dark-800/60 border border-dark-700/50 hover:border-dark-600'
       }
     `}
@@ -221,19 +221,19 @@ const MetricCard = ({
         <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
       </div>
     ) : (
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`p-2.5 rounded-xl ${highlight ? 'bg-white/20' : 'bg-dark-700/50'}`}>
-            <Icon className={`w-5 h-5 ${highlight ? 'text-white' : 'text-primary-400'}`} />
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl ${highlight ? 'bg-white/20' : 'bg-dark-700/50'}`}>
+            <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${highlight ? 'text-white' : 'text-primary-400'}`} />
           </div>
-          <div>
-            <p className={`text-sm font-medium ${highlight ? 'text-white/80' : 'text-dark-400'}`}>{title}</p>
-            <p className="text-2xl font-bold mt-0.5 text-white">{value}</p>
+          <div className="min-w-0">
+            <p className={`text-xs sm:text-sm font-medium ${highlight ? 'text-white/80' : 'text-dark-400'}`}>{title}</p>
+            <p className="text-lg sm:text-2xl font-bold mt-0.5 text-white truncate">{value}</p>
           </div>
         </div>
         {change !== undefined && (
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
-            highlight 
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium self-start ${
+            highlight
               ? change >= 0 ? 'bg-white/20 text-white' : 'bg-red-500/30 text-red-200'
               : change >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
           }`}>
@@ -453,20 +453,20 @@ export default function DashboardPage() {
           <p className="text-dark-400 mt-1">Visão geral das suas métricas financeiras</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Filter Button */}
-          <button className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Filter Button - Hidden on mobile */}
+          <button className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all">
             <Filter className="w-4 h-4" />
             Filtrar
           </button>
 
-          {/* Date Range Selector */}
-          <div className="flex items-center bg-dark-800/50 border border-dark-700/50 rounded-xl p-1">
+          {/* Date Range Selector - Scrollable on mobile */}
+          <div className="flex items-center bg-dark-800/50 border border-dark-700/50 rounded-xl p-1 overflow-x-auto max-w-full">
             {dateRanges.map((range) => (
               <button
                 key={range.id}
                 onClick={() => handleRangeChange(range.id)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
+                className={`px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
                   (selectedRange === range.id && !customDateRange) || (range.id === 'custom' && customDateRange)
                     ? 'bg-dark-700 text-white'
                     : 'text-dark-400 hover:text-white'
@@ -538,7 +538,7 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* Main KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
             <MetricCard
               title="Receita Líquida"
               value={metrics ? formatCurrency(metrics.receita) : 'R$ 0,00'}
@@ -585,21 +585,21 @@ export default function DashboardPage() {
               animate={{ opacity: 1, y: 0 }}
               className="lg:col-span-2 p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
             >
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div>
                   <h3 className="text-lg font-semibold text-white">Resumo Financeiro</h3>
                   <p className="text-sm text-dark-400">Receita vs Custos</p>
                 </div>
                 <div className="flex items-center gap-4 text-sm">
-                  <div className="text-right">
-                    <p className="text-dark-400">Receita Bruta</p>
-                    <p className="text-xl font-bold text-white">
+                  <div className="text-left sm:text-right">
+                    <p className="text-dark-400 text-xs sm:text-sm">Receita Bruta</p>
+                    <p className="text-lg sm:text-xl font-bold text-white">
                       {metrics ? formatCurrency(metrics.receita * 1.15) : 'R$ 0,00'}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-dark-400">Receita total pela data de aprovação</p>
-                    <p className="text-xl font-bold text-white">
+                  <div className="text-left sm:text-right">
+                    <p className="text-dark-400 text-xs sm:text-sm">Receita Líquida</p>
+                    <p className="text-lg sm:text-xl font-bold text-white">
                       {metrics ? formatCurrency(metrics.receita) : 'R$ 0,00'}
                     </p>
                   </div>
@@ -710,22 +710,69 @@ export default function DashboardPage() {
             </motion.div>
           </div>
 
-          {/* Stores Table */}
+          {/* Stores Table/Cards */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+            className="p-4 sm:p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
           >
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
               <div className="flex items-center gap-3">
-                <h3 className="text-lg font-semibold text-white">TODAS AS LOJAS</h3>
-                <span className="px-2 py-0.5 bg-dark-700 text-dark-300 text-sm rounded-full">
+                <h3 className="text-base sm:text-lg font-semibold text-white">TODAS AS LOJAS</h3>
+                <span className="px-2 py-0.5 bg-dark-700 text-dark-300 text-xs sm:text-sm rounded-full">
                   {stores.length}
                 </span>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile: Cards Layout */}
+            <div className="lg:hidden space-y-4">
+              {stores.map((store) => {
+                const storeData = storesMetrics.find(s => s.id === store.id)
+                return (
+                  <div key={store.id} className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
+                        <Store className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-white truncate">{store.name}</p>
+                        <p className="text-xs text-dark-400 truncate">{store.domain}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-dark-400 text-xs">Pedidos</p>
+                        <p className="text-white font-medium">{storeData ? formatNumber(storeData.pedidos) : '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-dark-400 text-xs">Receita</p>
+                        <p className="text-white font-medium">{storeData ? formatCurrency(storeData.receita) : '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-dark-400 text-xs">Custo Total</p>
+                        <p className="text-white font-medium">{storeData ? formatCurrency(storeData.custos) : '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-dark-400 text-xs">Lucro</p>
+                        <p className={`font-medium ${storeData && storeData.lucro >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {storeData ? formatCurrency(storeData.lucro) : '-'}
+                        </p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-dark-400 text-xs">Margem de Lucro</p>
+                        <p className={`font-medium ${storeData && storeData.margem >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {storeData ? formatPercent(storeData.margem) : '-'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Desktop: Table Layout */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-sm text-dark-400 border-b border-dark-700/50">
@@ -781,7 +828,7 @@ export default function DashboardPage() {
           </motion.div>
 
           {/* Additional Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <MetricCard
               title="Pedidos"
               value={metrics ? formatNumber(metrics.pedidos) : '0'}

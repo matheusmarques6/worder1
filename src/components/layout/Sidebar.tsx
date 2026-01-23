@@ -29,6 +29,8 @@ import {
   CheckCheck,
   Plus,
   ShoppingBag,
+  ShoppingCart,
+  Package,
   Bot,
   Key,
   Trash2,
@@ -43,6 +45,7 @@ import {
   CreditCard,
   Menu,
   X,
+  Percent,
 } from 'lucide-react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
@@ -85,6 +88,8 @@ interface Notification {
 
 const mainNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'Pedidos', href: '/orders', icon: ShoppingCart },
+  { title: 'Produtos', href: '/products', icon: Package },
   { title: 'CRM', href: '/crm', icon: Users },
   { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
   { title: 'Automações', href: '/automations', icon: Zap },
@@ -102,6 +107,7 @@ const analyticsNavItems: NavItem[] = [
 
 const settingsNavItems: NavItem[] = [
   { title: 'Configurações', href: '/settings', icon: Settings },
+  { title: 'Taxas e Custos', href: '/settings/taxes', icon: Percent },
   { title: 'API Keys', href: '/settings?tab=api', icon: Key },
   { title: 'Ajuda', href: '/help', icon: HelpCircle },
 ]

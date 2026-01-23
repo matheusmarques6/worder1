@@ -62,8 +62,12 @@ const CURRENCIES = [
 ]
 
 const formatCurrency = (value: number, currency = 'BRL') => {
-  const curr = CURRENCIES.find(c => c.code === currency) || CURRENCIES[0]
-  return `${curr.symbol} ${value.toFixed(2)}`
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
 }
 
 const CostEditor = ({
