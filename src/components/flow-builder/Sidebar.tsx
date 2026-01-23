@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, DragEvent } from 'react';
+import { useState, useEffect, DragEvent, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown,
@@ -167,6 +167,8 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [showConfig, setShowConfig] = useState(false);
+  const triggerAddedRef = useRef(false);
+
   const addNode = useFlowStore((state) => state.addNode);
   const nodes = useFlowStore((state) => state.nodes);
   const automationConfig = useFlowStore((state) => state.automationConfig);
@@ -175,29 +177,46 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
   // Trigger selecionado
   const currentTrigger = TRIGGER_OPTIONS.find(t => t.type === selectedTrigger) || TRIGGER_OPTIONS[0];
 
-  // Adicionar trigger ao canvas quando selecionado
+  // Adicionar trigger ao canvas quando a sidebar monta
   useEffect(() => {
-    // Verificar se já existe um trigger no canvas
-    const existingTrigger = nodes.find(n => n.data.category === 'trigger');
+    // Prevenir múltiplas adições
+    if (triggerAddedRef.current) return;
 
-    if (!existingTrigger && currentTrigger) {
-      // Adicionar o trigger automaticamente
-      const triggerNode: FlowNode = {
-        id: `trigger-${Date.now()}`,
-        type: currentTrigger.type,
-        position: { x: 100, y: 150 },
-        data: {
-          label: currentTrigger.label,
-          description: currentTrigger.description,
-          category: 'trigger',
-          nodeType: currentTrigger.type,
-          config: {},
-        },
-      };
-      addNode(triggerNode);
-      onTriggerSelect?.(currentTrigger);
-    }
-  }, []);
+    // Aguardar um tick para garantir que o store está pronto
+    const timer = setTimeout(() => {
+      const currentNodes = useFlowStore.getState().nodes;
+      const existingTrigger = currentNodes.find(n => n.data.category === 'trigger');
+
+      if (!existingTrigger) {
+        triggerAddedRef.current = true;
+        const trigger = TRIGGER_OPTIONS[0]; // Carrinho abandonado como padrão
+
+        const triggerNode: FlowNode = {
+          id: `trigger-${Date.now()}`,
+          type: trigger.type,
+          position: { x: 400, y: 200 },
+          data: {
+            label: trigger.label,
+            description: trigger.description,
+            category: 'trigger',
+            nodeType: trigger.type,
+            config: {},
+          },
+        };
+
+        useFlowStore.getState().addNode(triggerNode);
+        onTriggerSelect?.(trigger);
+      } else {
+        // Se já existe um trigger, sincronizar o estado local
+        const triggerType = existingTrigger.data.nodeType || existingTrigger.type;
+        if (triggerType && TRIGGER_OPTIONS.some(t => t.type === triggerType)) {
+          setSelectedTrigger(triggerType);
+        }
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [onTriggerSelect]);
 
   // Quando trocar o trigger, atualizar no canvas
   const handleTriggerChange = (triggerType: string) => {
@@ -207,8 +226,8 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
     const newTrigger = TRIGGER_OPTIONS.find(t => t.type === triggerType);
     if (!newTrigger) return;
 
-    // Remover trigger existente e adicionar novo
-    const existingTrigger = nodes.find(n => n.data.category === 'trigger');
+    const currentNodes = useFlowStore.getState().nodes;
+    const existingTrigger = currentNodes.find(n => n.data.category === 'trigger');
 
     if (existingTrigger) {
       // Atualizar o trigger existente
@@ -223,7 +242,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
       const triggerNode: FlowNode = {
         id: `trigger-${Date.now()}`,
         type: newTrigger.type,
-        position: { x: 100, y: 150 },
+        position: { x: 400, y: 200 },
         data: {
           label: newTrigger.label,
           description: newTrigger.description,
@@ -277,7 +296,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
     const newNode: FlowNode = {
       id: `node-${Date.now()}`,
       type: nodeDef.type,
-      position: { x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 },
+      position: { x: 500 + Math.random() * 100, y: 250 + Math.random() * 100 },
       data: {
         label: nodeDef.label,
         description: nodeDef.description,
@@ -290,10 +309,10 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
   };
 
   return (
-    <div className="fb-sidebar w-72 bg-[#0f0f0f] border-r border-white/10 flex flex-col h-full">
+    <div className="fb-sidebar w-80 bg-[#0f0f0f] border-r border-white/10 flex flex-col h-full">
       {/* Header - Seletor de Gatilho */}
-      <div className="p-3 border-b border-white/10">
-        <label className="text-[10px] font-medium text-white/40 uppercase tracking-wider mb-2 block">
+      <div className="p-4 border-b border-white/10">
+        <label className="text-xs font-medium text-white/50 uppercase tracking-wider mb-2 block">
           Gatilho
         </label>
 
@@ -302,24 +321,24 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
           <button
             onClick={() => setIsTriggerDropdownOpen(!isTriggerDropdownOpen)}
             className={cn(
-              'w-full flex items-center justify-between px-3 py-2 rounded-lg',
+              'w-full flex items-center justify-between px-3 py-2.5 rounded-lg',
               'bg-[#1a1a1a] border border-white/10',
               'hover:border-white/20 transition-all duration-200',
               'text-left',
               isTriggerDropdownOpen && 'border-emerald-500/50 ring-1 ring-emerald-500/20'
             )}
           >
-            <div className="flex items-center gap-2">
-              <div className="p-1 rounded bg-emerald-500/20">
-                <currentTrigger.icon className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded bg-emerald-500/20">
+                <currentTrigger.icon className="w-4 h-4 text-emerald-400" />
               </div>
-              <span className="text-xs text-white/80 font-medium truncate">
+              <span className="text-sm text-white/90 font-medium truncate">
                 {currentTrigger.label}
               </span>
             </div>
             <ChevronDown
               className={cn(
-                'w-3.5 h-3.5 text-white/40 transition-transform duration-200 shrink-0 ml-2',
+                'w-4 h-4 text-white/40 transition-transform duration-200 shrink-0 ml-2',
                 isTriggerDropdownOpen && 'rotate-180'
               )}
             />
@@ -341,7 +360,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
                   className={cn(
                     'absolute top-full left-0 right-0 mt-1 z-50',
                     'bg-[#1a1a1a] border border-white/10 rounded-lg',
-                    'shadow-xl shadow-black/50 max-h-56 overflow-y-auto'
+                    'shadow-xl shadow-black/50 max-h-64 overflow-y-auto'
                   )}
                 >
                   {TRIGGER_OPTIONS.map((trigger) => (
@@ -349,20 +368,20 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
                       key={trigger.type}
                       onClick={() => handleTriggerChange(trigger.type)}
                       className={cn(
-                        'w-full flex items-center gap-2 px-3 py-2 text-left',
+                        'w-full flex items-center gap-2.5 px-3 py-2.5 text-left',
                         'hover:bg-white/5 transition-colors',
                         selectedTrigger === trigger.type && 'bg-emerald-500/10'
                       )}
                     >
-                      <trigger.icon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <trigger.icon className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span className={cn(
-                        'text-xs truncate',
+                        'text-sm truncate',
                         selectedTrigger === trigger.type ? 'text-emerald-400 font-medium' : 'text-white/70'
                       )}>
                         {trigger.label}
                       </span>
                       {selectedTrigger === trigger.type && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 ml-auto" />
+                        <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-auto" />
                       )}
                     </button>
                   ))}
@@ -374,7 +393,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
 
         {/* Opções condicionais do gatilho */}
         {selectedTrigger === 'trigger_abandon' && (
-          <div className="mt-2 space-y-1.5">
+          <div className="mt-3 space-y-2">
             <ToggleOption label="Remover se houver carrinho novo" />
             <ToggleOption label="Remover se houver pedido novo" />
             <ToggleOption label="Remover se houver pedido pago" />
@@ -387,19 +406,19 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
         <button
           onClick={() => setShowConfig(!showConfig)}
           className={cn(
-            'w-full flex items-center justify-between px-3 py-2',
+            'w-full flex items-center justify-between px-4 py-3',
             'hover:bg-white/5 transition-colors'
           )}
         >
           <div className="flex items-center gap-2">
-            <Settings className="w-3.5 h-3.5 text-white/40" />
-            <span className="text-[10px] font-medium text-white/50 uppercase tracking-wider">
+            <Settings className="w-4 h-4 text-white/40" />
+            <span className="text-xs font-medium text-white/50 uppercase tracking-wider">
               Configurações da Automação
             </span>
           </div>
           <ChevronDown
             className={cn(
-              'w-3.5 h-3.5 text-white/30 transition-transform duration-200',
+              'w-4 h-4 text-white/30 transition-transform duration-200',
               showConfig && 'rotate-180'
             )}
           />
@@ -414,11 +433,11 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
               transition={{ duration: 0.2 }}
               className="overflow-hidden"
             >
-              <div className="px-3 pb-3 space-y-3">
+              <div className="px-4 pb-4 space-y-4">
                 {/* WhatsApp Padrão */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-medium text-white/50 flex items-center gap-1">
-                    <MessageCircle className="w-3 h-3 text-green-400" />
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-white/50 flex items-center gap-1.5">
+                    <MessageCircle className="w-3.5 h-3.5 text-green-400" />
                     WhatsApp Padrão
                   </label>
                   <CredentialSelector
@@ -431,9 +450,9 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
                 </div>
 
                 {/* Email Padrão */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-medium text-white/50 flex items-center gap-1">
-                    <Mail className="w-3 h-3 text-blue-400" />
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-white/50 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-blue-400" />
                     Email Padrão
                   </label>
                   <CredentialSelector
@@ -451,18 +470,18 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
       </div>
 
       {/* Busca */}
-      <div className="px-3 py-2 border-b border-white/10">
+      <div className="px-4 py-3 border-b border-white/10">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
           <input
             type="text"
             placeholder="Buscar blocos..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
-              'w-full pl-8 pr-8 py-1.5 rounded-md',
+              'w-full pl-10 pr-10 py-2 rounded-lg',
               'bg-[#1a1a1a] border border-white/10',
-              'text-xs text-white placeholder-white/30',
+              'text-sm text-white placeholder-white/30',
               'focus:outline-none focus:border-white/20',
               'transition-all duration-200'
             )}
@@ -470,9 +489,9 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-white/10 rounded"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-white/10 rounded"
             >
-              <X className="w-3 h-3 text-white/40" />
+              <X className="w-3.5 h-3.5 text-white/40" />
             </button>
           )}
         </div>
@@ -505,19 +524,19 @@ function ToggleOption({ label }: { label: string }) {
   return (
     <button
       onClick={() => setEnabled(!enabled)}
-      className="w-full flex items-center gap-2 text-left py-0.5"
+      className="w-full flex items-center gap-2.5 text-left py-1"
     >
       <div className={cn(
-        'w-7 h-4 rounded-full transition-colors relative shrink-0',
+        'w-8 h-5 rounded-full transition-colors relative shrink-0',
         enabled ? 'bg-emerald-500' : 'bg-white/10'
       )}>
         <div className={cn(
-          'absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform',
+          'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
           enabled ? 'translate-x-3.5' : 'translate-x-0.5'
         )} />
       </div>
-      <span className="text-[10px] text-white/50 flex-1 leading-tight">{label}</span>
-      <HelpCircle className="w-3 h-3 text-white/20 shrink-0" />
+      <span className="text-xs text-white/60 flex-1 leading-tight">{label}</span>
+      <HelpCircle className="w-4 h-4 text-white/20 shrink-0" />
     </button>
   );
 }
@@ -552,16 +571,16 @@ function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNod
       <button
         onClick={onToggle}
         className={cn(
-          'w-full flex items-center justify-between px-3 py-2',
+          'w-full flex items-center justify-between px-4 py-3',
           'hover:bg-white/5 transition-colors'
         )}
       >
-        <span className="text-[10px] font-medium text-white/40 uppercase tracking-wider">
+        <span className="text-xs font-medium text-white/50 uppercase tracking-wider">
           {section.label}
         </span>
         <ChevronDown
           className={cn(
-            'w-3.5 h-3.5 text-white/30 transition-transform duration-200',
+            'w-4 h-4 text-white/30 transition-transform duration-200',
             isExpanded && 'rotate-180'
           )}
         />
@@ -577,7 +596,7 @@ function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNod
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-2 grid grid-cols-2 gap-1.5">
+            <div className="px-4 pb-3 grid grid-cols-2 gap-2">
               {section.items.map((item) => (
                 <NodeButton
                   key={item.type}
@@ -613,7 +632,7 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
       onDragStart={(e) => onDragStart(e as unknown as DragEvent, node)}
       onClick={onClick}
       className={cn(
-        'flex items-center gap-1.5 p-2 rounded-md',
+        'flex items-center gap-2 p-2.5 rounded-lg',
         'bg-[#1a1a1a] border border-white/5',
         'hover:border-white/15 hover:bg-[#222]',
         'cursor-grab active:cursor-grabbing',
@@ -625,31 +644,31 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
     >
       {/* Ícone */}
       <div
-        className="p-1 rounded shrink-0"
+        className="p-1.5 rounded-md shrink-0"
         style={{ backgroundColor: `${node.color}20` }}
       >
         <Icon
-          className="w-3 h-3"
+          className="w-4 h-4"
           style={{ color: node.color }}
         />
       </div>
 
       {/* Label */}
-      <span className="text-[10px] text-white/60 font-medium leading-tight line-clamp-2 group-hover:text-white/80">
+      <span className="text-xs text-white/70 font-medium leading-tight line-clamp-2 group-hover:text-white/90">
         {node.label}
       </span>
 
       {/* Badge Premium */}
       {node.isPremium && (
-        <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-amber-400 rounded-full flex items-center justify-center">
-          <Sparkles className="w-2 h-2 text-white" />
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center">
+          <Sparkles className="w-2.5 h-2.5 text-white" />
         </div>
       )}
 
       {/* Badge IA */}
       {node.hasAI && !node.isPremium && (
-        <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full flex items-center justify-center">
-          <span className="text-[6px] text-white font-bold">IA</span>
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+          <span className="text-[8px] text-white font-bold">IA</span>
         </div>
       )}
     </motion.button>
