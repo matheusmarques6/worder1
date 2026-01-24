@@ -487,9 +487,59 @@ export async function GET(request: NextRequest) {
     let totalFrete = 0;
     let totalProductCosts = 0;
     let totalFees = 0;
+    let totalUnits = 0;
+
+    // Payment methods breakdown
+    const paymentMethods: Record<string, { count: number; value: number }> = {
+      credit_card: { count: 0, value: 0 },
+      pix: { count: 0, value: 0 },
+      boleto: { count: 0, value: 0 },
+      other: { count: 0, value: 0 },
+    };
+
+    // Product profit ranking
+    const productProfits = new Map<string, {
+      productId: string;
+      title: string;
+      image: string | null;
+      quantity: number;
+      revenue: number;
+      cost: number;
+      profit: number;
+    }>();
+
+    // Pending orders tracking
+    let pendingOrdersCount = 0;
+    let pendingOrdersValue = 0;
 
     // Global costs map (all stores)
     const globalCostsMap = await getProductCosts(supabase, organizationId);
+
+    // Process ALL orders (including pending) for some stats
+    for (const store of stores) {
+      if (!store.shop_domain || !store.access_token) continue;
+
+      try {
+        const orders = await fetchAllOrders(
+          store.shop_domain,
+          store.access_token,
+          startISO,
+          endISO
+        );
+
+        const validOrders = orders.filter((o: any) => !o.test && !o.cancelled_at);
+
+        for (const o of validOrders) {
+          // Track pending orders
+          if (o.financial_status === 'pending' || o.financial_status === 'authorized') {
+            pendingOrdersCount++;
+            pendingOrdersValue += toNum(o.total_price);
+          }
+        }
+      } catch (err) {
+        console.error(`[metrics] Error processing orders from ${store.shop_domain}:`, err);
+      }
+    }
 
     for (const o of allOrders) {
       totalReceita += toNum(o.total_price);
@@ -507,7 +557,82 @@ export async function GET(request: NextRequest) {
       const orderCosts = calculateOrderCost(o, costsMap, taxSettings, customFees);
       totalProductCosts += orderCosts.productCost;
       totalFees += orderCosts.fees;
+
+      // Count units sold
+      if (Array.isArray(o.line_items)) {
+        for (const item of o.line_items) {
+          totalUnits += item.quantity || 1;
+        }
+      }
+
+      // Track payment methods
+      const gateway = (o.gateway || o.payment_gateway_names?.[0] || '').toLowerCase();
+      const orderValue = toNum(o.total_price);
+
+      if (gateway.includes('pix')) {
+        paymentMethods.pix.count++;
+        paymentMethods.pix.value += orderValue;
+      } else if (gateway.includes('boleto') || gateway.includes('bank_slip')) {
+        paymentMethods.boleto.count++;
+        paymentMethods.boleto.value += orderValue;
+      } else if (gateway.includes('credit') || gateway.includes('card') || gateway.includes('cartao') || gateway.includes('cielo') || gateway.includes('stripe') || gateway.includes('pagarme') || gateway.includes('mercadopago')) {
+        paymentMethods.credit_card.count++;
+        paymentMethods.credit_card.value += orderValue;
+      } else {
+        paymentMethods.other.count++;
+        paymentMethods.other.value += orderValue;
+      }
+
+      // Track product profits
+      if (Array.isArray(o.line_items)) {
+        for (const item of o.line_items) {
+          const productId = item.product_id?.toString();
+          if (!productId) continue;
+
+          const quantity = item.quantity || 1;
+          const itemPrice = toNum(item.price) * quantity;
+          const variantId = item.variant_id?.toString();
+
+          // Calculate item cost
+          let itemCost = 0;
+          if (variantId && costsMap.has(`${productId}:${variantId}`)) {
+            itemCost = costsMap.get(`${productId}:${variantId}`)! * quantity;
+          } else if (costsMap.has(productId)) {
+            itemCost = costsMap.get(productId)! * quantity;
+          } else {
+            itemCost = itemPrice * (taxSettings.default_cost_percentage / 100);
+          }
+
+          const existing = productProfits.get(productId) || {
+            productId,
+            title: item.title || item.name || 'Produto',
+            image: null,
+            quantity: 0,
+            revenue: 0,
+            cost: 0,
+            profit: 0,
+          };
+
+          productProfits.set(productId, {
+            ...existing,
+            quantity: existing.quantity + quantity,
+            revenue: existing.revenue + itemPrice,
+            cost: existing.cost + itemCost,
+            profit: existing.profit + (itemPrice - itemCost),
+          });
+        }
+      }
     }
+
+    // Sort products by profit and get top 10
+    const topProducts = Array.from(productProfits.values())
+      .sort((a, b) => b.profit - a.profit)
+      .slice(0, 10)
+      .map((p, index) => ({
+        ...p,
+        rank: index + 1,
+        margin: p.revenue > 0 ? (p.profit / p.revenue) * 100 : 0,
+      }));
 
     const totalCustos = totalProductCosts + totalFees;
     const totalLucro = totalReceita - totalCustos - totalImpostos;
@@ -584,6 +709,13 @@ export async function GET(request: NextRequest) {
       .limit(1)
       .maybeSingle();
 
+    // Calculate CAC (Cost per Acquisition) - placeholder, needs marketing spend
+    const marketingSpend = 0; // TODO: integrate with ad platforms
+    const cac = allOrders.length > 0 ? marketingSpend / allOrders.length : 0;
+
+    // Calculate ROI
+    const roi = marketingSpend > 0 ? ((totalReceita - marketingSpend) / marketingSpend) * 100 : 0;
+
     return NextResponse.json({
       metrics: {
         receita: totalReceita,
@@ -592,7 +724,7 @@ export async function GET(request: NextRequest) {
         custosChange: 0,
         productCosts: totalProductCosts,
         fees: totalFees,
-        marketing: 0,
+        marketing: marketingSpend,
         marketingChange: 0,
         impostos: totalImpostos,
         impostosChange: 0,
@@ -607,14 +739,28 @@ export async function GET(request: NextRequest) {
         ticketMedioChange: 0,
         descontos: totalDescontos,
         frete: totalFrete,
+        unidadesVendidas: totalUnits,
+        cac,
+        roi,
+        pedidosPendentes: pendingOrdersCount,
+        valorPendente: pendingOrdersValue,
       },
       totals: {
         pedidos: allOrders.length,
         pedidosPagos: allOrders.length,
         receita: totalReceita,
+        pendentes: pendingOrdersCount,
+        valorPendente: pendingOrdersValue,
       },
       chartData,
       stores: storesData,
+      topProducts,
+      paymentMethods: {
+        credit_card: paymentMethods.credit_card,
+        pix: paymentMethods.pix,
+        boleto: paymentMethods.boleto,
+        other: paymentMethods.other,
+      },
       integrations: {
         shopify: hasStores,
         klaviyo: !!klaviyoAccount,
