@@ -103,11 +103,48 @@ const dateRanges = [
 ]
 
 // Format helpers
-const formatCurrency = (value: number) => {
+const formatCurrency = (value: number, compact = false) => {
+  if (compact && Math.abs(value) >= 1000) {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(value)
+  }
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
     minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
+// Format for card display - compact for large numbers
+const formatCardCurrency = (value: number) => {
+  if (Math.abs(value) >= 100000) {
+    // Show as 100k, 1M, etc
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(value)
+  }
+  if (Math.abs(value) >= 10000) {
+    // Show without cents for values >= 10k
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value)
+  }
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value)
 }
 
@@ -209,7 +246,7 @@ const MetricCard = ({
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     className={`
-      relative rounded-xl p-3 sm:p-5 transition-all duration-300
+      relative rounded-xl p-3 sm:p-4 transition-all duration-300 overflow-hidden
       ${highlight
         ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/20'
         : 'bg-dark-800/60 border border-dark-700/50 hover:border-dark-600'
@@ -221,26 +258,28 @@ const MetricCard = ({
         <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
       </div>
     ) : (
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl ${highlight ? 'bg-white/20' : 'bg-dark-700/50'}`}>
-            <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${highlight ? 'text-white' : 'text-primary-400'}`} />
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={`p-1.5 sm:p-2 rounded-lg ${highlight ? 'bg-white/20' : 'bg-dark-700/50'}`}>
+              <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${highlight ? 'text-white' : 'text-primary-400'}`} />
+            </div>
+            <p className={`text-[10px] sm:text-xs font-medium truncate ${highlight ? 'text-white/80' : 'text-dark-400'}`}>
+              {title}
+            </p>
           </div>
-          <div className="min-w-0">
-            <p className={`text-xs sm:text-sm font-medium ${highlight ? 'text-white/80' : 'text-dark-400'}`}>{title}</p>
-            <p className="text-lg sm:text-2xl font-bold mt-0.5 text-white truncate">{value}</p>
-          </div>
+          {change !== undefined && (
+            <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
+              highlight
+                ? change >= 0 ? 'bg-white/20 text-white' : 'bg-red-500/30 text-red-200'
+                : change >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+            }`}>
+              {change >= 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+              {Math.abs(change).toFixed(1)}%
+            </div>
+          )}
         </div>
-        {change !== undefined && (
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium self-start ${
-            highlight
-              ? change >= 0 ? 'bg-white/20 text-white' : 'bg-red-500/30 text-red-200'
-              : change >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-          }`}>
-            {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-            {Math.abs(change).toFixed(1)}%
-          </div>
-        )}
+        <p className="text-base sm:text-xl font-bold text-white truncate pl-0.5">{value}</p>
       </div>
     )}
   </motion.div>
@@ -316,7 +355,7 @@ const DatePickerModal = ({
 }
 
 export default function DashboardPage() {
-  const [selectedRange, setSelectedRange] = useState('all')
+  const [selectedRange, setSelectedRange] = useState('today')
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
@@ -538,32 +577,32 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* Main KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
             <MetricCard
-              title="Receita Líquida"
-              value={metrics ? formatCurrency(metrics.receita) : 'R$ 0,00'}
+              title="Receita"
+              value={metrics ? formatCardCurrency(metrics.receita) : 'R$ 0,00'}
               change={metrics?.receitaChange}
               icon={DollarSign}
               highlight
               loading={isLoading}
             />
             <MetricCard
-              title="Custo dos Produtos"
-              value={metrics ? formatCurrency(metrics.custos) : 'R$ 0,00'}
+              title="Custos"
+              value={metrics ? formatCardCurrency(metrics.custos) : 'R$ 0,00'}
               change={metrics?.custosChange}
               icon={Package}
               loading={isLoading}
             />
             <MetricCard
               title="Marketing"
-              value={metrics ? formatCurrency(metrics.marketing) : 'R$ 0,00'}
+              value={metrics ? formatCardCurrency(metrics.marketing) : 'R$ 0,00'}
               change={metrics?.marketingChange}
               icon={Target}
               loading={isLoading}
             />
             <MetricCard
-              title="Taxas e Impostos"
-              value={metrics ? formatCurrency(metrics.impostos) : 'R$ 0,00'}
+              title="Taxas"
+              value={metrics ? formatCardCurrency(metrics.impostos) : 'R$ 0,00'}
               change={metrics?.impostosChange}
               icon={CreditCard}
               loading={isLoading}
@@ -828,7 +867,7 @@ export default function DashboardPage() {
           </motion.div>
 
           {/* Additional Metrics */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
             <MetricCard
               title="Pedidos"
               value={metrics ? formatNumber(metrics.pedidos) : '0'}
@@ -838,7 +877,7 @@ export default function DashboardPage() {
             />
             <MetricCard
               title="Ticket Médio"
-              value={metrics ? formatCurrency(metrics.ticketMedio) : 'R$ 0,00'}
+              value={metrics ? formatCardCurrency(metrics.ticketMedio) : 'R$ 0,00'}
               change={metrics?.ticketMedioChange}
               icon={CreditCard}
               loading={isLoading}
@@ -850,7 +889,7 @@ export default function DashboardPage() {
               loading={isLoading}
             />
             <MetricCard
-              title="Unidades Vendidas"
+              title="Unidades"
               value="0"
               icon={Activity}
               loading={isLoading}
