@@ -334,6 +334,105 @@ function calculateOrderCost(
   };
 }
 
+// Fetch product images from Shopify
+async function fetchProductImages(
+  shopDomain: string,
+  accessToken: string,
+  productIds: string[]
+): Promise<Map<string, string>> {
+  const imagesMap = new Map<string, string>();
+
+  if (productIds.length === 0) return imagesMap;
+
+  // Fetch up to 50 products at a time
+  const idsToFetch = productIds.slice(0, 50);
+
+  try {
+    const idsParam = idsToFetch.join(',');
+    const { body } = await shopifyFetch(
+      shopDomain,
+      accessToken,
+      `/products.json?ids=${idsParam}&fields=id,image`
+    );
+
+    if (body.products) {
+      for (const product of body.products) {
+        if (product.image?.src) {
+          imagesMap.set(product.id.toString(), product.image.src);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[metrics] Error fetching product images:', err);
+  }
+
+  return imagesMap;
+}
+
+// Detect payment method from order
+function detectPaymentMethod(order: any): 'credit_card' | 'pix' | 'boleto' | 'debit' | 'other' {
+  // Check payment_gateway_names array first (more reliable)
+  const gateways = order.payment_gateway_names || [];
+  const gateway = (order.gateway || '').toLowerCase();
+  const allGateways = [...gateways.map((g: string) => g.toLowerCase()), gateway].join(' ');
+
+  // Check for processing method in transactions
+  const transactions = order.transactions || [];
+  for (const tx of transactions) {
+    const paymentMethod = (tx.payment_method || '').toLowerCase();
+    const kind = (tx.kind || '').toLowerCase();
+
+    if (paymentMethod.includes('pix') || tx.gateway?.toLowerCase().includes('pix')) {
+      return 'pix';
+    }
+    if (paymentMethod.includes('boleto') || paymentMethod.includes('bank_slip')) {
+      return 'boleto';
+    }
+    if (paymentMethod.includes('debit') || paymentMethod.includes('debito')) {
+      return 'debit';
+    }
+  }
+
+  // Check gateway names
+  if (allGateways.includes('pix')) {
+    return 'pix';
+  }
+
+  if (allGateways.includes('boleto') || allGateways.includes('bank_slip') || allGateways.includes('bankslip')) {
+    return 'boleto';
+  }
+
+  if (allGateways.includes('debit') || allGateways.includes('debito')) {
+    return 'debit';
+  }
+
+  // Credit card detection - check various payment processors
+  if (
+    allGateways.includes('credit') ||
+    allGateways.includes('card') ||
+    allGateways.includes('cartao') ||
+    allGateways.includes('cielo') ||
+    allGateways.includes('rede') ||
+    allGateways.includes('stone') ||
+    allGateways.includes('getnet') ||
+    allGateways.includes('pagseguro') ||
+    allGateways.includes('mercadopago') ||
+    allGateways.includes('stripe') ||
+    allGateways.includes('pagarme') ||
+    allGateways.includes('iugu') ||
+    allGateways.includes('juno') ||
+    allGateways.includes('wirecard') ||
+    allGateways.includes('paypal') ||
+    allGateways.includes('adyen') ||
+    allGateways.includes('braintree') ||
+    allGateways.includes('shopify_payments')
+  ) {
+    return 'credit_card';
+  }
+
+  return 'other';
+}
+
 export async function GET(request: NextRequest) {
   const range = request.nextUrl.searchParams.get('range') || '7d';
   const storeId = request.nextUrl.searchParams.get('storeId');
@@ -488,10 +587,12 @@ export async function GET(request: NextRequest) {
     let totalProductCosts = 0;
     let totalFees = 0;
     let totalUnits = 0;
+    let totalSubtotal = 0;
 
     // Payment methods breakdown
     const paymentMethods: Record<string, { count: number; value: number }> = {
       credit_card: { count: 0, value: 0 },
+      debit: { count: 0, value: 0 },
       pix: { count: 0, value: 0 },
       boleto: { count: 0, value: 0 },
       other: { count: 0, value: 0 },
@@ -507,6 +608,9 @@ export async function GET(request: NextRequest) {
       cost: number;
       profit: number;
     }>();
+
+    // Customer tracking for recurring rate
+    const customerOrders = new Map<string, number>();
 
     // Pending orders tracking
     let pendingOrdersCount = 0;
@@ -545,11 +649,18 @@ export async function GET(request: NextRequest) {
       totalReceita += toNum(o.total_price);
       totalImpostos += toNum(o.total_tax);
       totalDescontos += toNum(o.total_discounts);
+      totalSubtotal += toNum(o.subtotal_price);
 
       if (Array.isArray(o.shipping_lines)) {
         for (const sl of o.shipping_lines) {
           totalFrete += toNum(sl.price);
         }
+      }
+
+      // Track customer orders for recurring rate
+      const customerId = o.customer?.id?.toString() || o.customer?.email;
+      if (customerId) {
+        customerOrders.set(customerId, (customerOrders.get(customerId) || 0) + 1);
       }
 
       // Calculate real costs for this order
@@ -565,23 +676,12 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Track payment methods
-      const gateway = (o.gateway || o.payment_gateway_names?.[0] || '').toLowerCase();
+      // Track payment methods using improved detection
+      const paymentMethod = detectPaymentMethod(o);
       const orderValue = toNum(o.total_price);
 
-      if (gateway.includes('pix')) {
-        paymentMethods.pix.count++;
-        paymentMethods.pix.value += orderValue;
-      } else if (gateway.includes('boleto') || gateway.includes('bank_slip')) {
-        paymentMethods.boleto.count++;
-        paymentMethods.boleto.value += orderValue;
-      } else if (gateway.includes('credit') || gateway.includes('card') || gateway.includes('cartao') || gateway.includes('cielo') || gateway.includes('stripe') || gateway.includes('pagarme') || gateway.includes('mercadopago')) {
-        paymentMethods.credit_card.count++;
-        paymentMethods.credit_card.value += orderValue;
-      } else {
-        paymentMethods.other.count++;
-        paymentMethods.other.value += orderValue;
-      }
+      paymentMethods[paymentMethod].count++;
+      paymentMethods[paymentMethod].value += orderValue;
 
       // Track product profits
       if (Array.isArray(o.line_items)) {
@@ -624,15 +724,43 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Sort products by profit and get top 10
-    const topProducts = Array.from(productProfits.values())
+    // Calculate recurring customers rate
+    const totalCustomers = customerOrders.size;
+    const recurringCustomers = Array.from(customerOrders.values()).filter(count => count > 1).length;
+    const recurringRate = totalCustomers > 0 ? (recurringCustomers / totalCustomers) * 100 : 0;
+
+    // Fetch product images for top products
+    const topProductsList = Array.from(productProfits.values())
       .sort((a, b) => b.profit - a.profit)
-      .slice(0, 10)
-      .map((p, index) => ({
-        ...p,
-        rank: index + 1,
-        margin: p.revenue > 0 ? (p.profit / p.revenue) * 100 : 0,
-      }));
+      .slice(0, 10);
+
+    // Get images from first active store
+    let productImages = new Map<string, string>();
+    const firstStore = stores.find((s: any) => s.shop_domain && s.access_token);
+    if (firstStore && topProductsList.length > 0) {
+      productImages = await fetchProductImages(
+        firstStore.shop_domain,
+        firstStore.access_token,
+        topProductsList.map(p => p.productId)
+      );
+    }
+
+    // Build top products with images
+    const topProducts = topProductsList.map((p, index) => ({
+      ...p,
+      image: productImages.get(p.productId) || null,
+      rank: index + 1,
+      margin: p.revenue > 0 ? (p.profit / p.revenue) * 100 : 0,
+    }));
+
+    // Sales breakdown
+    const salesBreakdown = {
+      subtotal: totalSubtotal,
+      shipping: totalFrete,
+      taxes: totalImpostos,
+      discounts: totalDescontos,
+      total: totalReceita,
+    };
 
     const totalCustos = totalProductCosts + totalFees;
     const totalLucro = totalReceita - totalCustos - totalImpostos;
@@ -744,6 +872,9 @@ export async function GET(request: NextRequest) {
         roi,
         pedidosPendentes: pendingOrdersCount,
         valorPendente: pendingOrdersValue,
+        recurringRate,
+        totalCustomers,
+        recurringCustomers,
       },
       totals: {
         pedidos: allOrders.length,
@@ -757,10 +888,12 @@ export async function GET(request: NextRequest) {
       topProducts,
       paymentMethods: {
         credit_card: paymentMethods.credit_card,
+        debit: paymentMethods.debit,
         pix: paymentMethods.pix,
         boleto: paymentMethods.boleto,
         other: paymentMethods.other,
       },
+      salesBreakdown,
       integrations: {
         shopify: hasStores,
         klaviyo: !!klaviyoAccount,
