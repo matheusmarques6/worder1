@@ -279,7 +279,6 @@ export default function EmbedFormPage() {
                     borderColor: '#e5e7eb',
                     borderRadius: theme.borderRadius,
                     color: theme.textColor,
-                    focusRingColor: theme.primaryColor,
                   }}
                 />
               ) : field.field_type === 'select' ? (
