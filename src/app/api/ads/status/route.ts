@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { MetaApiClient, MetaApiClientError } from '@/lib/meta-api';
+export const dynamic = 'force-dynamic';
 
 export async function PATCH(request: NextRequest) {
   const auth = await getAuthClient();

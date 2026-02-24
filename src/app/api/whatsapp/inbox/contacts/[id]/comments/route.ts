@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+export const dynamic = 'force-dynamic';
 
 // =====================================================
 // COMMENTS API - COM RLS

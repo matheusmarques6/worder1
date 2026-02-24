@@ -6,6 +6,7 @@ import {
   normalizePhone,
   type PlatformType 
 } from '@/lib/integrations/normalizers'
+export const dynamic = 'force-dynamic';
 
 // POST - Receive webhook from integrations
 export async function POST(

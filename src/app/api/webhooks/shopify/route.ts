@@ -18,6 +18,7 @@ import { trackActivity, trackPurchase, enrichContactFromOrder } from '@/lib/serv
 import { executeAutomationRules, mapShopifyEventToTrigger } from '@/lib/services/automation/automation-executor';
 import type { ShopifyStoreConfig, ShopifyCustomer } from '@/lib/services/shopify/types';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+export const dynamic = 'force-dynamic';
 
 // ============================================
 // CONFIGURAÇÃO

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { decryptCredential } from '@/lib/automation/credential-encryption';
+export const dynamic = 'force-dynamic';
 
 // ============================================
 // CREDENTIAL TEST HANDLERS

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HelpCircle,
@@ -25,490 +25,411 @@ import {
   Phone,
   Clock,
   CheckCircle,
+  Loader2,
+  Plug,
+  Rocket,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
-import { Card, Button, Input, Badge } from '@/components/ui';
 
-// FAQ Data
-const faqCategories = [
-  {
-    id: 'getting-started',
-    name: 'Getting Started',
-    icon: Zap,
-    faqs: [
-      {
-        question: 'How do I connect my Shopify store?',
-        answer: 'Go to Settings > Integrations > Shopify and click "Connect". You\'ll be redirected to Shopify to authorize the connection. Once approved, your store data will start syncing automatically within a few minutes.',
-      },
-      {
-        question: 'What data is imported from Klaviyo?',
-        answer: 'We import your campaigns, flows, segments, and subscriber data. This includes email metrics like opens, clicks, and conversions. Historical data for the past 12 months is imported initially.',
-      },
-      {
-        question: 'How long does the initial data sync take?',
-        answer: 'The initial sync typically takes 5-15 minutes depending on your store size. You\'ll see a progress indicator during the sync, and we\'ll notify you when it\'s complete.',
-      },
-    ],
-  },
-  {
-    id: 'email-marketing',
-    name: 'Email Marketing',
-    icon: Mail,
-    faqs: [
-      {
-        question: 'How is revenue attributed to emails?',
-        answer: 'We use a 5-day attribution window by default. If a customer clicks an email and makes a purchase within 5 days, the revenue is attributed to that email. You can adjust this window in Settings.',
-      },
-      {
-        question: 'Can I see individual campaign performance?',
-        answer: 'Yes! Navigate to Analytics > Email to see detailed metrics for each campaign including sends, opens, clicks, conversions, and revenue generated.',
-      },
-      {
-        question: 'What\'s the difference between flows and campaigns?',
-        answer: 'Campaigns are one-time emails sent to a segment. Flows are automated email sequences triggered by customer actions (like abandoning a cart or making a purchase).',
-      },
-    ],
-  },
-  {
-    id: 'crm',
-    name: 'CRM & Pipelines',
-    icon: Users,
-    faqs: [
-      {
-        question: 'How do I create a custom pipeline?',
-        answer: 'Click the pipeline selector dropdown and choose "Create Pipeline". Name your pipeline and add custom stages. You can drag and drop to reorder stages at any time.',
-      },
-      {
-        question: 'Can I import contacts from a CSV?',
-        answer: 'Yes! Go to CRM and click the import button. Upload your CSV file and map the columns to our fields. We support importing names, emails, phone numbers, and custom fields.',
-      },
-      {
-        question: 'How do I assign deals to team members?',
-        answer: 'Open any deal card and click on the assignee field. You can search for team members and assign multiple people to a single deal.',
-      },
-    ],
-  },
-  {
-    id: 'automations',
-    name: 'Automations',
-    icon: Workflow,
-    faqs: [
-      {
-        question: 'What triggers are available for automations?',
-        answer: 'We support various triggers including: new order, abandoned cart, customer signup, tag added, specific date, segment entry, and custom webhooks.',
-      },
-      {
-        question: 'Can I A/B test my automations?',
-        answer: 'Yes! Add an A/B Split node to your automation to test different paths. You can set the split percentage and track which variation performs better.',
-      },
-      {
-        question: 'How do I add delays between actions?',
-        answer: 'Drag a Delay node from the Logic section in the node palette. You can set delays in minutes, hours, or days. The automation will pause at that point for the specified time.',
-      },
-    ],
-  },
-  {
-    id: 'whatsapp',
-    name: 'WhatsApp',
-    icon: MessageSquare,
-    faqs: [
-      {
-        question: 'How do I connect WhatsApp Business?',
-        answer: 'Go to Settings > Integrations > WhatsApp and follow the setup wizard. You\'ll need a WhatsApp Business account and Facebook Business Manager access.',
-      },
-      {
-        question: 'Are there message limits on WhatsApp?',
-        answer: 'WhatsApp has tiered messaging limits based on your phone number quality rating. New numbers start with 1,000 business-initiated conversations per day.',
-      },
-      {
-        question: 'Can I use message templates?',
-        answer: 'Yes! You can create and manage message templates that need to be approved by WhatsApp. Once approved, you can use them in automations and manual conversations.',
-      },
-    ],
-  },
-  {
-    id: 'billing',
-    name: 'Billing & Plans',
-    icon: CreditCard,
-    faqs: [
-      {
-        question: 'How does pricing work?',
-        answer: 'Pricing is based on the number of active contacts in your database. We offer Starter, Growth, and Enterprise plans with increasing feature access and contact limits.',
-      },
-      {
-        question: 'Can I upgrade or downgrade my plan?',
-        answer: 'Yes, you can change your plan at any time. Upgrades take effect immediately, and downgrades apply at the end of your billing cycle.',
-      },
-      {
-        question: 'What payment methods do you accept?',
-        answer: 'We accept all major credit cards (Visa, Mastercard, American Express), PIX, and bank transfer for Enterprise plans.',
-      },
-    ],
-  },
-];
+// Icon map for dynamic icons
+const iconMap: Record<string, any> = {
+  Rocket,
+  Users,
+  MessageCircle,
+  Mail,
+  Zap,
+  Plug,
+  BarChart3,
+  Settings,
+  Workflow,
+  MessageSquare,
+  CreditCard,
+  Shield,
+  ShoppingCart,
+  Book,
+  HelpCircle,
+};
 
-const helpArticles = [
-  {
-    title: 'Complete Setup Guide',
-    description: 'Step-by-step guide to getting your account configured',
-    category: 'Getting Started',
-    readTime: '10 min',
-  },
-  {
-    title: 'Understanding Attribution',
-    description: 'Learn how revenue is attributed to your marketing efforts',
-    category: 'Analytics',
-    readTime: '5 min',
-  },
-  {
-    title: 'Building Your First Automation',
-    description: 'Create powerful automated workflows from scratch',
-    category: 'Automations',
-    readTime: '8 min',
-  },
-  {
-    title: 'WhatsApp Best Practices',
-    description: 'Tips for effective WhatsApp marketing',
-    category: 'WhatsApp',
-    readTime: '6 min',
-  },
-];
-
-const videoTutorials = [
-  {
-    title: 'Platform Overview',
-    duration: '5:30',
-    thumbnail: '/video-thumb-1.jpg',
-  },
-  {
-    title: 'Creating Automations',
-    duration: '12:45',
-    thumbnail: '/video-thumb-2.jpg',
-  },
-  {
-    title: 'CRM Deep Dive',
-    duration: '8:20',
-    thumbnail: '/video-thumb-3.jpg',
-  },
-];
-
-interface FAQItemProps {
+interface FAQItem {
+  id: string;
   question: string;
   answer: string;
-  isOpen: boolean;
-  onToggle: () => void;
+  is_featured: boolean;
+  category?: {
+    id: string;
+    name: string;
+    slug: string;
+    icon: string;
+    color: string;
+  };
 }
 
-function FAQItem({ question, answer, isOpen, onToggle }: FAQItemProps) {
-  return (
-    <div className="border-b border-slate-800 last:border-0">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between py-4 text-left group"
-      >
-        <span className="font-medium text-white group-hover:text-violet-400 transition-colors">
-          {question}
-        </span>
-        <ChevronDown
-          className={`w-5 h-5 text-slate-400 transition-transform ${
-            isOpen ? 'rotate-180' : ''
-          }`}
-        />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <p className="pb-4 text-slate-400 leading-relaxed">{answer}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
+interface HelpCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  icon: string;
+  color: string;
+  faqs: FAQItem[];
 }
 
 export default function HelpPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState('getting-started');
-  const [openFAQs, setOpenFAQs] = useState<string[]>([]);
+  const [expandedFaq, setExpandedFaq] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState<HelpCategory[]>([]);
+  const [featuredFaqs, setFeaturedFaqs] = useState<FAQItem[]>([]);
+  const [allFaqs, setAllFaqs] = useState<FAQItem[]>([]);
 
-  const toggleFAQ = (id: string) => {
-    setOpenFAQs((prev) =>
-      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
-    );
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/help');
+      const data = await res.json();
+
+      if (data.error) {
+        console.error('Error:', data.error);
+        return;
+      }
+
+      setCategories(data.faqsByCategory || []);
+      setFeaturedFaqs(data.featuredFaqs || []);
+      setAllFaqs(data.allFaqs || []);
+
+    } catch (error) {
+      console.error('Error fetching help data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleFeedback = async (faqId: string, helpful: boolean) => {
+    try {
+      await fetch('/api/help', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'faq', id: faqId, helpful }),
+      });
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+    }
   };
 
-  const activeData = faqCategories.find((c) => c.id === activeCategory);
+  const toggleFaq = (id: string) => {
+    setExpandedFaq(expandedFaq === id ? null : id);
+  };
 
-  // Filter FAQs based on search
-  const filteredFAQs = searchQuery
-    ? faqCategories.flatMap((cat) =>
-        cat.faqs.filter(
-          (faq) =>
-            faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
-        ).map((faq) => ({ ...faq, category: cat.name }))
-      )
-    : null;
+  // Filter FAQs based on search and category
+  const filteredFaqs = allFaqs.filter(faq => {
+    const matchesSearch = !searchQuery ||
+      faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      faq.answer.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesCategory = !activeCategory || faq.category?.slug === activeCategory;
+
+    return matchesSearch && matchesCategory;
+  });
+
+  // Group filtered FAQs by category
+  const groupedFaqs = categories.map(cat => ({
+    ...cat,
+    faqs: filteredFaqs.filter(f => f.category?.slug === cat.slug),
+  })).filter(cat => cat.faqs.length > 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+          <p className="text-dark-400">Carregando central de ajuda...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="text-center max-w-2xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-500/20 to-cyan-500/20 border border-violet-500/30 flex items-center justify-center">
-            <HelpCircle className="w-8 h-8 text-violet-400" />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            How can we help you?
-          </h1>
-          <p className="text-slate-400">
-            Search our help center or browse categories below
-          </p>
-        </motion.div>
-
-        {/* Search */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mt-6 relative"
-        >
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search for help..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-800/50 border border-slate-700 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 text-white placeholder-slate-500 transition-all text-lg"
-          />
-        </motion.div>
-      </div>
-
-      {/* Search Results */}
-      {filteredFAQs && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-card rounded-xl p-6"
-        >
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Search Results ({filteredFAQs.length})
-          </h2>
-          {filteredFAQs.length > 0 ? (
-            <div className="space-y-4">
-              {filteredFAQs.map((faq, index) => (
-                <div key={index} className="p-4 bg-slate-800/30 rounded-xl">
-                  <Badge className="mb-2">{faq.category}</Badge>
-                  <h3 className="font-medium text-white mb-2">{faq.question}</h3>
-                  <p className="text-sm text-slate-400">{faq.answer}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-slate-400 text-center py-8">
-              No results found. Try different keywords or contact support.
-            </p>
-          )}
-        </motion.div>
-      )}
-
-      {/* Quick Links */}
-      {!searchQuery && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-3 gap-4"
-        >
-          <div className="glass-card rounded-xl p-6 hover:border-violet-500/30 transition-all group cursor-pointer">
-            <div className="p-3 w-fit rounded-xl bg-violet-500/20 border border-violet-500/30 mb-4">
-              <Book className="w-6 h-6 text-violet-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-white group-hover:text-violet-400 transition-colors">
-              Documentation
-            </h3>
-            <p className="text-sm text-slate-400 mt-1">
-              Comprehensive guides and API references
-            </p>
-            <div className="flex items-center gap-1 mt-3 text-sm text-violet-400">
-              Browse docs <ArrowRight className="w-4 h-4" />
-            </div>
-          </div>
-
-          <div className="glass-card rounded-xl p-6 hover:border-cyan-500/30 transition-all group cursor-pointer">
-            <div className="p-3 w-fit rounded-xl bg-cyan-500/20 border border-cyan-500/30 mb-4">
-              <Video className="w-6 h-6 text-cyan-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-white group-hover:text-cyan-400 transition-colors">
-              Video Tutorials
-            </h3>
-            <p className="text-sm text-slate-400 mt-1">
-              Step-by-step video walkthroughs
-            </p>
-            <div className="flex items-center gap-1 mt-3 text-sm text-cyan-400">
-              Watch videos <ArrowRight className="w-4 h-4" />
-            </div>
-          </div>
-
-          <div className="glass-card rounded-xl p-6 hover:border-emerald-500/30 transition-all group cursor-pointer">
-            <div className="p-3 w-fit rounded-xl bg-emerald-500/20 border border-emerald-500/30 mb-4">
-              <MessageCircle className="w-6 h-6 text-emerald-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-white group-hover:text-emerald-400 transition-colors">
-              Live Chat
-            </h3>
-            <p className="text-sm text-slate-400 mt-1">
-              Get help from our support team
-            </p>
-            <div className="flex items-center gap-1 mt-3 text-sm text-emerald-400">
-              Start chat <ArrowRight className="w-4 h-4" />
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* FAQ Section */}
-      {!searchQuery && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="grid grid-cols-1 lg:grid-cols-4 gap-6"
-        >
-          {/* Categories */}
-          <div className="glass-card rounded-xl p-4 h-fit">
-            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-              Categories
-            </h3>
-            <nav className="space-y-1">
-              {faqCategories.map((category) => (
-                <button
-                  key={category.id}
-                  onClick={() => setActiveCategory(category.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all ${
-                    activeCategory === category.id
-                      ? 'bg-violet-500/20 text-violet-400'
-                      : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                  }`}
-                >
-                  <category.icon className="w-4 h-4" />
-                  <span className="text-sm font-medium">{category.name}</span>
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          {/* FAQs */}
-          <div className="lg:col-span-3 glass-card rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-              {activeData && (
-                <>
-                  <div className="p-2 rounded-lg bg-violet-500/20">
-                    <activeData.icon className="w-5 h-5 text-violet-400" />
-                  </div>
-                  <h2 className="text-xl font-semibold text-white">
-                    {activeData.name}
-                  </h2>
-                </>
-              )}
+      {/* Hero Section */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-600/20 via-dark-800 to-accent-600/20 p-8 md:p-12">
+        <div className="absolute inset-0 bg-grid-white/5" />
+        <div className="relative">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="p-3 rounded-2xl bg-primary-500/20 backdrop-blur-sm">
+              <HelpCircle className="w-8 h-8 text-primary-400" />
             </div>
             <div>
-              {activeData?.faqs.map((faq, index) => (
-                <FAQItem
-                  key={index}
-                  question={faq.question}
-                  answer={faq.answer}
-                  isOpen={openFAQs.includes(`${activeCategory}-${index}`)}
-                  onToggle={() => toggleFAQ(`${activeCategory}-${index}`)}
-                />
-              ))}
+              <h1 className="text-3xl font-bold text-white">Central de Ajuda</h1>
+              <p className="text-dark-300">Encontre respostas e aprenda a usar a plataforma</p>
             </div>
           </div>
-        </motion.div>
+
+          {/* Search Bar */}
+          <div className="relative max-w-2xl">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
+            <input
+              type="text"
+              placeholder="Pesquise por perguntas, artigos ou tutoriais..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-4 rounded-xl bg-dark-800/80 backdrop-blur-sm border border-dark-700 text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20"
+            />
+          </div>
+
+          {/* Quick Links */}
+          <div className="flex flex-wrap gap-3 mt-6">
+            <a
+              href="https://wa.me/5511999999999"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-all"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Falar com Suporte
+            </a>
+            <a
+              href="mailto:suporte@worder.com"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-all"
+            >
+              <Mail className="w-4 h-4" />
+              Enviar Email
+            </a>
+            <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-all">
+              <Video className="w-4 h-4" />
+              Tutoriais em Vídeo
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Category Filters */}
+      {categories.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setActiveCategory(null)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              !activeCategory
+                ? 'bg-primary-500 text-white'
+                : 'bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700'
+            }`}
+          >
+            Todas
+          </button>
+          {categories.map((cat) => {
+            const Icon = iconMap[cat.icon] || HelpCircle;
+            return (
+              <button
+                key={cat.slug}
+                onClick={() => setActiveCategory(activeCategory === cat.slug ? null : cat.slug)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  activeCategory === cat.slug
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {cat.name}
+              </button>
+            );
+          })}
+        </div>
       )}
 
-      {/* Popular Articles */}
-      {!searchQuery && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="glass-card rounded-xl p-6"
-        >
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Popular Articles
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {helpArticles.map((article, index) => (
-              <div
-                key={index}
-                className="p-4 rounded-xl bg-slate-800/30 hover:bg-slate-800/50 transition-colors cursor-pointer group"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <Badge variant="default" className="mb-2">
-                      {article.category}
-                    </Badge>
-                    <h3 className="font-medium text-white group-hover:text-violet-400 transition-colors">
-                      {article.title}
-                    </h3>
-                    <p className="text-sm text-slate-400 mt-1">
-                      {article.description}
-                    </p>
-                  </div>
-                  <span className="text-xs text-slate-500 flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {article.readTime}
-                  </span>
+      {/* Featured FAQs */}
+      {!searchQuery && !activeCategory && featuredFaqs.length > 0 && (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {featuredFaqs.slice(0, 3).map((faq, idx) => (
+            <motion.div
+              key={faq.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+              className="bg-dark-800/50 border border-dark-700 rounded-xl p-5 hover:border-primary-500/50 cursor-pointer transition-all group"
+              onClick={() => toggleFaq(faq.id)}
+            >
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-primary-500/20 flex-shrink-0">
+                  <Zap className="w-4 h-4 text-primary-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-white group-hover:text-primary-400 transition-colors">
+                    {faq.question}
+                  </h3>
+                  <p className="text-sm text-dark-400 mt-1 line-clamp-2">{faq.answer}</p>
                 </div>
               </div>
-            ))}
-          </div>
-        </motion.div>
+            </motion.div>
+          ))}
+        </div>
       )}
 
-      {/* Contact Support */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="glass-card rounded-xl p-8 text-center"
-      >
-        <h2 className="text-xl font-semibold text-white mb-2">
-          Still need help?
-        </h2>
-        <p className="text-slate-400 mb-6">
-          Our support team is available Monday to Friday, 9am to 6pm BRT
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button variant="secondary" className="min-w-[200px]">
-            <Mail className="w-4 h-4 mr-2" />
-            Email Support
-          </Button>
-          <Button className="min-w-[200px]">
-            <MessageCircle className="w-4 h-4 mr-2" />
-            Start Live Chat
-          </Button>
-        </div>
-        <div className="flex items-center justify-center gap-6 mt-6 text-sm text-slate-400">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-emerald-400" />
-            Average response: 2 hours
+      {/* FAQ Sections */}
+      <div className="space-y-6">
+        {groupedFaqs.length === 0 ? (
+          <div className="text-center py-12 bg-dark-800/50 border border-dark-700 rounded-xl">
+            <HelpCircle className="w-12 h-12 text-dark-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-white mb-2">Nenhum resultado encontrado</h3>
+            <p className="text-dark-400">
+              Tente buscar por outros termos ou entre em contato com nosso suporte.
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-violet-400" />
-            Priority for Pro plans
+        ) : (
+          groupedFaqs.map((category) => {
+            const Icon = iconMap[category.icon] || HelpCircle;
+            return (
+              <div key={category.slug} className="bg-dark-800/50 border border-dark-700 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-3 p-5 border-b border-dark-700">
+                  <div
+                    className="p-2 rounded-lg"
+                    style={{ backgroundColor: `${category.color}20` }}
+                  >
+                    <Icon className="w-5 h-5" style={{ color: category.color }} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">{category.name}</h2>
+                    {category.description && (
+                      <p className="text-sm text-dark-400">{category.description}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="divide-y divide-dark-700">
+                  {category.faqs.map((faq) => (
+                    <div key={faq.id} className="group">
+                      <button
+                        onClick={() => toggleFaq(faq.id)}
+                        className="w-full flex items-center justify-between p-5 text-left hover:bg-dark-700/30 transition-all"
+                      >
+                        <span className="font-medium text-white group-hover:text-primary-400 transition-colors pr-4">
+                          {faq.question}
+                        </span>
+                        <ChevronDown
+                          className={`w-5 h-5 text-dark-400 transition-transform flex-shrink-0 ${
+                            expandedFaq === faq.id ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+                      <AnimatePresence>
+                        {expandedFaq === faq.id && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="px-5 pb-5">
+                              <p className="text-dark-300 leading-relaxed whitespace-pre-line">
+                                {faq.answer}
+                              </p>
+
+                              {/* Feedback */}
+                              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-dark-700">
+                                <span className="text-sm text-dark-500">Esta resposta foi útil?</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleFeedback(faq.id, true);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dark-700 hover:bg-green-500/20 text-dark-400 hover:text-green-400 transition-all"
+                                >
+                                  <ThumbsUp className="w-4 h-4" />
+                                  Sim
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleFeedback(faq.id, false);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dark-700 hover:bg-red-500/20 text-dark-400 hover:text-red-400 transition-all"
+                                >
+                                  <ThumbsDown className="w-4 h-4" />
+                                  Não
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Contact Support Section */}
+      <div className="grid md:grid-cols-3 gap-6">
+        <div className="bg-dark-800/50 border border-dark-700 rounded-xl p-6">
+          <div className="p-3 rounded-xl bg-green-500/20 w-fit mb-4">
+            <MessageCircle className="w-6 h-6 text-green-400" />
           </div>
+          <h3 className="text-lg font-semibold text-white mb-2">Chat ao Vivo</h3>
+          <p className="text-dark-400 text-sm mb-4">
+            Fale com nossa equipe em tempo real via WhatsApp.
+          </p>
+          <div className="flex items-center gap-2 text-sm text-dark-500 mb-4">
+            <Clock className="w-4 h-4" />
+            <span>Seg-Sex, 9h às 18h</span>
+          </div>
+          <a
+            href="https://wa.me/5511999999999"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-all"
+          >
+            <MessageCircle className="w-4 h-4" />
+            Iniciar Chat
+          </a>
         </div>
-      </motion.div>
+
+        <div className="bg-dark-800/50 border border-dark-700 rounded-xl p-6">
+          <div className="p-3 rounded-xl bg-blue-500/20 w-fit mb-4">
+            <Mail className="w-6 h-6 text-blue-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-white mb-2">Email</h3>
+          <p className="text-dark-400 text-sm mb-4">
+            Envie sua dúvida detalhada por email.
+          </p>
+          <div className="flex items-center gap-2 text-sm text-dark-500 mb-4">
+            <Clock className="w-4 h-4" />
+            <span>Resposta em até 24h</span>
+          </div>
+          <a
+            href="mailto:suporte@worder.com"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium transition-all"
+          >
+            <Mail className="w-4 h-4" />
+            Enviar Email
+          </a>
+        </div>
+
+        <div className="bg-dark-800/50 border border-dark-700 rounded-xl p-6">
+          <div className="p-3 rounded-xl bg-purple-500/20 w-fit mb-4">
+            <Video className="w-6 h-6 text-purple-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-white mb-2">Tutoriais</h3>
+          <p className="text-dark-400 text-sm mb-4">
+            Assista vídeos explicativos sobre todas as funcionalidades.
+          </p>
+          <div className="flex items-center gap-2 text-sm text-dark-500 mb-4">
+            <CheckCircle className="w-4 h-4" />
+            <span>+50 vídeos disponíveis</span>
+          </div>
+          <button className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-purple-500 hover:bg-purple-600 text-white font-medium transition-all">
+            <Video className="w-4 h-4" />
+            Ver Tutoriais
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

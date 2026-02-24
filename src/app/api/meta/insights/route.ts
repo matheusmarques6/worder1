@@ -19,6 +19,7 @@ import {
   extractPurchaseMetrics,
   MetaAccount 
 } from '@/lib/meta-api';
+export const dynamic = 'force-dynamic';
 
 interface KPIValue {
   value: number;

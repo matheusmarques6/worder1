@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { createClient } from '@supabase/supabase-js'
+export const dynamic = 'force-dynamic';
 
 // GET - Buscar tarefas do contato
 export async function GET(

@@ -10,6 +10,7 @@ import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+export const dynamic = 'force-dynamic';
 
 let _supabase: SupabaseClient | null = null;
 function getDb(): SupabaseClient {

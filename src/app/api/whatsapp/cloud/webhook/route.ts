@@ -19,6 +19,7 @@ import {
   RuleEngine, 
   type EventData 
 } from '@/lib/services/automation/rule-engine';
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // GET - Verificação do Webhook (Meta)

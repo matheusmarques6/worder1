@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { campaignProcessor } from '@/lib/whatsapp/campaign-processor'
+export const dynamic = 'force-dynamic';
 
 // POST /api/whatsapp/campaigns/[id]/send - Iniciar envio (NOVA VERSÃO COM QUEUE)
 export async function POST(

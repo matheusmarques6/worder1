@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { getSupabaseClient } from '@/lib/api-utils';
+export const dynamic = 'force-dynamic';
 
 // Helper para obter organization_id do usuário
 async function getOrgIdFromSession(supabase: any) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { consumeOAuthState, logOAuthAttempt } from '@/lib/oauth-security';
+export const dynamic = 'force-dynamic';
 
 const META_API_VERSION = 'v19.0';
 const META_API_URL = `https://graph.facebook.com/${META_API_VERSION}`;

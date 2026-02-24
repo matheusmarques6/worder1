@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getTemplateManager, buildTemplateComponents } from '@/lib/whatsapp/template-manager'
+export const dynamic = 'force-dynamic';
 
 // POST - Validar template e variáveis
 export async function POST(request: NextRequest) {

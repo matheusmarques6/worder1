@@ -16,6 +16,7 @@ import type {
   BestHours,
   DateRange,
 } from '@/types/whatsapp-analytics';
+export const dynamic = 'force-dynamic';
 
 // GET - Buscar analytics de campanhas
 export async function GET(request: NextRequest) {

@@ -201,23 +201,14 @@ async function extractTextFromFile(base64Content: string, mimeType: string): Pro
 // =====================================================
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  // Implementação simplificada - em produção usar pdf-parse ou similar
-  // Por enquanto, retornar erro indicando que precisa de biblioteca
-  
-  try {
-    // Tentar usar pdf-parse se disponível
-    const pdfParse = require('pdf-parse')
-    const data = await pdfParse(buffer)
-    return data.text
-  } catch (e) {
-    // Se pdf-parse não estiver instalado, usar extração básica
-    console.warn('pdf-parse not available, using basic extraction')
-    
-    // Extração muito básica de texto de PDF (não funciona bem para PDFs complexos)
-    const text = buffer.toString('utf-8')
-    const extracted = text.match(/\(([^)]+)\)/g) || []
-    return extracted.map(s => s.slice(1, -1)).join(' ')
-  }
+  // Extração básica de texto de PDF sem dependências externas
+  // Para suporte completo a PDF, instale: npm install pdf-parse
+  console.warn('PDF extraction: using basic fallback. For better results, install pdf-parse')
+
+  // Extração muito básica de texto de PDF (não funciona bem para PDFs complexos)
+  const text = buffer.toString('utf-8')
+  const extracted = text.match(/\(([^)]+)\)/g) || []
+  return extracted.map(s => s.slice(1, -1)).join(' ')
 }
 
 // =====================================================
@@ -225,25 +216,23 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
 // =====================================================
 
 async function extractTextFromDOCX(buffer: Buffer): Promise<string> {
+  // Extração básica de DOCX sem dependências externas
+  // Para suporte completo a DOCX, instale: npm install mammoth adm-zip
+  console.warn('DOCX extraction: using basic fallback. For better results, install mammoth')
+
+  // DOCX é um arquivo ZIP - tentar extrair via descompressão básica
+  // Isso é uma aproximação muito simples que pode não funcionar em todos os casos
   try {
-    // Tentar usar mammoth se disponível
-    const mammoth = require('mammoth')
-    const result = await mammoth.extractRawText({ buffer })
-    return result.value
-  } catch (e) {
-    console.warn('mammoth not available, using basic extraction')
-    
-    // DOCX é um ZIP, tentar extrair document.xml
-    try {
-      const AdmZip = require('adm-zip')
-      const zip = new AdmZip(buffer)
-      const docXml = zip.readAsText('word/document.xml')
-      
-      // Extrair texto removendo XML tags
-      return docXml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-    } catch (zipError) {
-      throw new Error('Não foi possível extrair texto do DOCX')
+    const text = buffer.toString('utf-8')
+    // Tentar extrair texto entre tags <w:t>
+    const matches = text.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || []
+    const extracted = matches.map(m => m.replace(/<[^>]+>/g, '')).join(' ')
+    if (extracted.trim()) {
+      return extracted.trim()
     }
+    throw new Error('Não foi possível extrair texto')
+  } catch (e) {
+    throw new Error('Não foi possível extrair texto do DOCX. Considere converter para .txt ou instalar as dependências mammoth e adm-zip.')
   }
 }
 

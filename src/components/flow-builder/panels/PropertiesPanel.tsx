@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Copy, Settings, ChevronDown } from 'lucide-react';
+import { X, Trash2, Copy, Settings, ChevronDown, Sparkles, MessageCircle, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useSelectedNode } from '@/stores/flowStore';
 import { getNodeDefinition, getNodeColor } from '../nodes/nodeTypes';
 import { WebhookConfig } from './WebhookConfig';
 import { CredentialSelector } from './CredentialSelector';
+import { MessageEditor, VariableButton } from '../variables';
+import { WhatsAppTemplateEditor } from '../whatsapp';
 
 // ============================================
 // TYPES
@@ -29,9 +31,16 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
   const updateNode = useFlowStore((state) => state.updateNode);
   const removeNode = useFlowStore((state) => state.removeNode);
   const showPanel = useFlowStore((state) => state.showPropertiesPanel);
+  const nodes = useFlowStore((state) => state.nodes);
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loadingPipelines, setLoadingPipelines] = useState(false);
+
+  // Get trigger type from flow nodes
+  const triggerType = useMemo(() => {
+    const triggerNode = nodes.find(n => n.data?.category === 'trigger');
+    return triggerNode?.data?.nodeType || triggerNode?.type || 'trigger_abandon';
+  }, [nodes]);
 
   // Fetch pipelines when needed
   useEffect(() => {
@@ -611,12 +620,19 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   label="Conta de Email"
                 />
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Assunto</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-white/60">Assunto</label>
+                    <VariableButton
+                      triggerType={triggerType}
+                      onSelect={(v) => handleUpdate('subject', (selectedNode.data.config?.subject || '') + v)}
+                      className="scale-90"
+                    />
+                  </div>
                   <input
                     type="text"
                     value={selectedNode.data.config?.subject || ''}
                     onChange={(e) => handleUpdate('subject', e.target.value)}
-                    placeholder="Assunto do email"
+                    placeholder="Ex: {{ contact.first_name }}, seu pedido foi confirmado!"
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-white/10',
@@ -625,28 +641,21 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     )}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-white/60">Corpo do Email (HTML)</label>
-                  <textarea
-                    value={selectedNode.data.config?.html || ''}
-                    onChange={(e) => handleUpdate('html', e.target.value)}
-                    placeholder="<p>Olá {{contact.name}}!</p>"
-                    rows={4}
-                    className={cn(
-                      'w-full px-3 py-2 rounded-lg resize-none font-mono text-xs',
-                      'bg-[#0a0a0a] border border-white/10',
-                      'text-white placeholder-white/30',
-                      'focus:outline-none focus:border-blue-500/50'
-                    )}
-                  />
-                </div>
+                <MessageEditor
+                  value={selectedNode.data.config?.html || ''}
+                  onChange={(v) => handleUpdate('html', v)}
+                  triggerType={triggerType}
+                  label="Corpo do Email (HTML)"
+                  placeholder="<p>Olá {{ contact.first_name }}!</p>&#10;<p>Seu pedido #{{ event.order_id }} foi confirmado.</p>"
+                  rows={6}
+                />
                 <div className="space-y-2">
                   <label className="text-xs text-white/60">Template ID (opcional)</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.templateId || ''}
                     onChange={(e) => handleUpdate('templateId', e.target.value)}
-                    placeholder="ID do template"
+                    placeholder="ID do template externo"
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-white/10',
@@ -654,78 +663,25 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
+                  <p className="text-[10px] text-white/40">
+                    Se preenchido, usará o template externo ao invés do HTML acima
+                  </p>
+                </div>
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <p className="text-[11px] text-blue-300">
+                    ✉️ Email será enviado para o endereço do contato
+                  </p>
                 </div>
               </>
             )}
 
             {/* WHATSAPP ACTION */}
             {selectedNode.data.nodeType === 'action_whatsapp' && (
-              <>
-                <CredentialSelector
-                  connectionType="whatsapp"
-                  value={selectedNode.data.config?.credentialId}
-                  onChange={(id) => handleUpdate('credentialId', id)}
-                  label="Conexão WhatsApp"
-                />
-                <div className="space-y-2">
-                  <label className="text-xs text-white/60">Tipo de Mensagem</label>
-                  <SelectField
-                    value={selectedNode.data.config?.messageType || 'template'}
-                    onChange={(v) => handleUpdate('messageType', v)}
-                    options={[
-                      { value: 'template', label: 'Template' },
-                      { value: 'text', label: 'Texto Livre' },
-                    ]}
-                  />
-                </div>
-                {selectedNode.data.config?.messageType === 'text' ? (
-                  <div className="space-y-2">
-                    <label className="text-xs text-white/60">Mensagem</label>
-                    <textarea
-                      value={selectedNode.data.config?.message || ''}
-                      onChange={(e) => handleUpdate('message', e.target.value)}
-                      placeholder="Olá {{contact.name}}!"
-                      rows={3}
-                      className={cn(
-                        'w-full px-3 py-2 rounded-lg resize-none',
-                        'bg-[#0a0a0a] border border-white/10',
-                        'text-sm text-white placeholder-white/30',
-                        'focus:outline-none focus:border-blue-500/50'
-                      )}
-                    />
-                  </div>
-                ) : (
-                  <>
-                    <div className="space-y-2">
-                      <label className="text-xs text-white/60">Template</label>
-                      <input
-                        type="text"
-                        value={selectedNode.data.config?.templateId || ''}
-                        onChange={(e) => handleUpdate('templateId', e.target.value)}
-                        placeholder="Nome do template WhatsApp"
-                        className={cn(
-                          'w-full px-3 py-2 rounded-lg',
-                          'bg-[#0a0a0a] border border-white/10',
-                          'text-sm text-white placeholder-white/30',
-                          'focus:outline-none focus:border-blue-500/50'
-                        )}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs text-white/60">Idioma</label>
-                      <SelectField
-                        value={selectedNode.data.config?.language || 'pt_BR'}
-                        onChange={(v) => handleUpdate('language', v)}
-                        options={[
-                          { value: 'pt_BR', label: 'Português (BR)' },
-                          { value: 'en_US', label: 'English (US)' },
-                          { value: 'es', label: 'Español' },
-                        ]}
-                      />
-                    </div>
-                  </>
-                )}
-              </>
+              <WhatsAppActionConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                triggerType={triggerType}
+              />
             )}
 
             {/* DEAL NODES */}
@@ -1057,26 +1013,25 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   onChange={(id) => handleUpdate('credentialId', id)}
                   label="Provedor SMS (Twilio)"
                 />
-                <div className="space-y-2">
-                  <label className="text-xs text-white/60">Mensagem</label>
-                  <textarea
-                    value={selectedNode.data.config?.message || ''}
-                    onChange={(e) => handleUpdate('message', e.target.value)}
-                    placeholder="Olá {{contact.name}}! Sua mensagem aqui..."
-                    rows={3}
-                    className={cn(
-                      'w-full px-3 py-2 rounded-lg resize-none',
-                      'bg-[#0a0a0a] border border-white/10',
-                      'text-sm text-white placeholder-white/30',
-                      'focus:outline-none focus:border-blue-500/50'
-                    )}
-                  />
-                  <p className="text-[10px] text-white/40">
-                    Máximo 160 caracteres por segmento SMS
-                  </p>
+                <MessageEditor
+                  value={selectedNode.data.config?.message || ''}
+                  onChange={(v) => handleUpdate('message', v)}
+                  triggerType={triggerType}
+                  label="Mensagem SMS"
+                  placeholder="Olá {{ contact.first_name }}! Não esqueça do seu carrinho: {{ event.cart_url }}"
+                  rows={3}
+                  maxLength={320}
+                />
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-white/40">
+                    {(selectedNode.data.config?.message || '').length}/320 caracteres
+                  </span>
+                  <span className="text-white/40">
+                    ~{Math.ceil((selectedNode.data.config?.message || '').length / 160)} segmento(s)
+                  </span>
                 </div>
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                  <p className="text-[11px] text-amber-300">
+                <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                  <p className="text-[11px] text-purple-300">
                     📱 SMS será enviado para o telefone do contato
                   </p>
                 </div>
@@ -1085,10 +1040,18 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
           </section>
 
           {/* Variables hint */}
-          <section className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <p className="text-[11px] text-blue-300">
-              💡 Use variáveis como <code className="bg-blue-500/20 px-1 rounded">{'{{contact.name}}'}</code> para personalizar
-            </p>
+          <section className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+            <div className="flex items-start gap-2">
+              <Sparkles className="w-4 h-4 text-primary-400 mt-0.5 flex-shrink-0" />
+              <div className="space-y-1">
+                <p className="text-[11px] text-primary-300 font-medium">
+                  Personalização com Variáveis
+                </p>
+                <p className="text-[10px] text-primary-300/70">
+                  Clique em <span className="bg-primary-500/20 px-1 rounded">Personalizar</span> para inserir dados dinâmicos como nome do contato, dados do pedido, etc.
+                </p>
+              </div>
+            </div>
           </section>
         </div>
 
@@ -1875,6 +1838,119 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
         </p>
       </div>
     </div>
+  );
+}
+
+// ============================================
+// WHATSAPP ACTION CONFIG
+// ============================================
+
+interface WhatsAppActionConfigProps {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+  triggerType: string;
+}
+
+function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionConfigProps) {
+  const [showEditor, setShowEditor] = useState(false);
+
+  const hasMessage = config.message || config.bodyText;
+  const messageMode = config.messageMode || 'free';
+  const templateName = config.templateName;
+
+  const handleConfigChange = (newConfig: any) => {
+    // Update all config keys
+    Object.entries(newConfig).forEach(([key, value]) => {
+      onUpdate(key, value);
+    });
+  };
+
+  return (
+    <>
+      <CredentialSelector
+        connectionType="whatsapp"
+        value={config.credentialId}
+        onChange={(id) => onUpdate('credentialId', id)}
+        label="Conexão WhatsApp"
+      />
+
+      {/* Message Preview / Editor Button */}
+      <div className="space-y-2">
+        <label className="text-xs text-white/60">Mensagem WhatsApp</label>
+
+        {hasMessage ? (
+          <div
+            onClick={() => setShowEditor(true)}
+            className={cn(
+              'p-3 rounded-lg cursor-pointer transition-all',
+              'bg-[#0a0a0a] border border-white/10 hover:border-green-500/50',
+              'group'
+            )}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-green-400" />
+                <span className="text-xs font-medium text-green-400">
+                  {messageMode === 'template' ? 'Template' : 'Texto Livre'}
+                </span>
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-white/40 group-hover:text-green-400 transition-colors" />
+            </div>
+
+            {templateName && (
+              <div className="text-[10px] text-white/50 mb-1">
+                Template: {templateName}
+              </div>
+            )}
+
+            <p className="text-xs text-white/70 line-clamp-3">
+              {(config.message || config.bodyText || '').substring(0, 150)}
+              {(config.message || config.bodyText || '').length > 150 ? '...' : ''}
+            </p>
+
+            <div className="mt-2 text-[10px] text-white/40">
+              Clique para editar
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowEditor(true)}
+            className={cn(
+              'w-full p-4 rounded-lg',
+              'border-2 border-dashed border-white/20 hover:border-green-500/50',
+              'flex flex-col items-center gap-2',
+              'text-white/60 hover:text-green-400',
+              'transition-all group'
+            )}
+          >
+            <MessageCircle className="w-6 h-6 group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-medium">Configurar Mensagem</span>
+            <span className="text-[10px] text-white/40">
+              Clique para abrir o editor avançado
+            </span>
+          </button>
+        )}
+      </div>
+
+      <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+        <p className="text-[11px] text-green-300">
+          💬 WhatsApp será enviado para o número do contato
+        </p>
+      </div>
+
+      {/* Editor Modal */}
+      <AnimatePresence>
+        {showEditor && (
+          <WhatsAppTemplateEditor
+            config={config as any}
+            onConfigChange={handleConfigChange}
+            triggerType={triggerType}
+            onClose={() => setShowEditor(false)}
+            isModal={true}
+          />
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

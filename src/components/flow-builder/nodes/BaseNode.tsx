@@ -35,6 +35,11 @@ import {
   CheckCircle,
   Loader2,
   SkipForward,
+  Link2,
+  Mic,
+  Paperclip,
+  Image,
+  FileText,
   LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -126,49 +131,49 @@ const categoryConfig = {
 // ============================================
 
 const statusConfig = {
-  idle: { 
-    icon: null, 
-    color: '', 
+  idle: {
+    icon: null,
+    color: '',
     bgColor: '',
     borderColor: '',
     animate: false,
     pulse: false,
   },
-  running: { 
-    icon: Loader2, 
-    color: 'text-blue-400', 
+  running: {
+    icon: Loader2,
+    color: 'text-blue-400',
     bgColor: 'bg-blue-500/20',
     borderColor: 'border-blue-500/50',
     animate: true,
     pulse: true,
   },
-  success: { 
-    icon: CheckCircle, 
-    color: 'text-green-400', 
+  success: {
+    icon: CheckCircle,
+    color: 'text-green-400',
     bgColor: 'bg-green-500/20',
     borderColor: 'border-green-500/50',
     animate: false,
     pulse: false,
   },
-  error: { 
-    icon: XCircle, 
-    color: 'text-red-400', 
+  error: {
+    icon: XCircle,
+    color: 'text-red-400',
     bgColor: 'bg-red-500/20',
     borderColor: 'border-red-500/50',
     animate: false,
     pulse: false,
   },
-  warning: { 
-    icon: AlertCircle, 
-    color: 'text-amber-400', 
+  warning: {
+    icon: AlertCircle,
+    color: 'text-amber-400',
     bgColor: 'bg-amber-500/20',
     borderColor: 'border-amber-500/50',
     animate: false,
     pulse: false,
   },
-  skipped: { 
-    icon: SkipForward, 
-    color: 'text-slate-400', 
+  skipped: {
+    icon: SkipForward,
+    color: 'text-slate-400',
     bgColor: 'bg-slate-500/20',
     borderColor: 'border-slate-500/50',
     animate: false,
@@ -180,8 +185,8 @@ const statusConfig = {
 // EXECUTION STATUS OVERLAY
 // ============================================
 
-const ExecutionOverlay = ({ status, executionTime, statusMessage }: { 
-  status?: string; 
+const ExecutionOverlay = ({ status, executionTime, statusMessage }: {
+  status?: string;
   executionTime?: number;
   statusMessage?: string;
 }) => {
@@ -219,12 +224,11 @@ const ExecutionOverlay = ({ status, executionTime, statusMessage }: {
         )}
       </motion.div>
 
-      {/* Status message tooltip */}
       {statusMessage && status === 'error' && (
         <motion.div
           initial={{ opacity: 0, y: -5 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute -bottom-8 left-1/2 -translate-x-1/2 z-10 
+          className="absolute -bottom-8 left-1/2 -translate-x-1/2 z-10
                      px-2 py-1 rounded bg-red-500/90 text-white text-[10px]
                      whitespace-nowrap max-w-[200px] truncate"
         >
@@ -264,13 +268,314 @@ const PulseRing = ({ status, category }: { status?: string; category: string }) 
 };
 
 // ============================================
+// WHATSAPP PREVIEW COMPONENT
+// ============================================
+
+const WhatsAppPreview = ({ config }: { config: Record<string, any> }) => {
+  const message = config?.message || config?.text || config?.content || '';
+  const hasAudio = config?.audioUrl || config?.hasAudio;
+  const hasMedia = config?.mediaUrl || config?.imageUrl || config?.hasMedia;
+  const hasAttachment = config?.attachmentUrl || config?.fileUrl || config?.hasAttachment;
+  const templateName = config?.templateName || config?.template;
+
+  const truncatedMessage = message.length > 80 ? message.substring(0, 80) + '...' : message;
+
+  const highlightVariables = (text: string) => {
+    return text.split(/(\{\{[^}]+\}\})/).map((part, i) => {
+      if (part.match(/\{\{[^}]+\}\}/)) {
+        return (
+          <span key={i} className="bg-green-400/30 text-green-300 px-1 rounded text-[10px]">
+            {part.replace(/\{\{|\}\}/g, '')}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
+  if (!message && !hasAudio && !hasMedia && !hasAttachment && !templateName) {
+    return (
+      <div className="mt-2 pt-2 border-t border-white/10">
+        <div className="text-[10px] text-white/40 italic">
+          Clique para configurar a mensagem
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 pt-2 border-t border-white/10">
+      {templateName && (
+        <div className="text-[10px] text-white/50 mb-1 flex items-center gap-1">
+          <FileText className="w-3 h-3" />
+          {templateName}
+        </div>
+      )}
+
+      <div className="bg-[#005c4b] rounded-lg p-2 max-w-full relative">
+        {message && (
+          <p className="text-[11px] text-white/90 leading-relaxed break-words">
+            {highlightVariables(truncatedMessage)}
+          </p>
+        )}
+
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          {hasAudio && (
+            <div className="flex items-center gap-1 text-[10px] text-white/60">
+              <Mic className="w-3 h-3" />
+              <span>Áudio</span>
+            </div>
+          )}
+          {hasMedia && (
+            <div className="flex items-center gap-1 text-[10px] text-white/60">
+              <Image className="w-3 h-3" />
+              <span>Imagem</span>
+            </div>
+          )}
+          {hasAttachment && (
+            <div className="flex items-center gap-1 text-[10px] text-white/60">
+              <Paperclip className="w-3 h-3" />
+              <span>Anexo</span>
+            </div>
+          )}
+        </div>
+
+        {message && message.includes('http') && (
+          <div className="flex items-center gap-1 mt-1 text-[10px] text-blue-300">
+            <Link2 className="w-3 h-3" />
+            <span>Contém link</span>
+          </div>
+        )}
+
+        <div className="absolute -left-1.5 top-2 w-3 h-3 bg-[#005c4b] transform rotate-45" />
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// SMS PREVIEW COMPONENT
+// ============================================
+
+const SMSPreview = ({ config }: { config: Record<string, any> }) => {
+  const message = config?.message || config?.text || config?.content || '';
+  const truncatedMessage = message.length > 60 ? message.substring(0, 60) + '...' : message;
+
+  const highlightVariables = (text: string) => {
+    return text.split(/(\{\{[^}]+\}\})/).map((part, i) => {
+      if (part.match(/\{\{[^}]+\}\}/)) {
+        return (
+          <span key={i} className="bg-purple-400/30 text-purple-300 px-1 rounded text-[10px]">
+            {part.replace(/\{\{|\}\}/g, '')}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
+  if (!message) {
+    return (
+      <div className="mt-2 pt-2 border-t border-white/10">
+        <div className="text-[10px] text-white/40 italic">
+          Clique para configurar o SMS
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 pt-2 border-t border-white/10">
+      <div className="bg-purple-600/30 border border-purple-500/30 rounded-lg p-2 max-w-full relative">
+        <div className="flex items-center gap-1 mb-1 text-[9px] text-purple-300 uppercase tracking-wider">
+          <Phone className="w-3 h-3" />
+          SMS
+        </div>
+        <p className="text-[11px] text-white/90 leading-relaxed break-words">
+          {highlightVariables(truncatedMessage)}
+        </p>
+        <div className="text-right mt-1">
+          <span className={cn(
+            "text-[9px]",
+            message.length > 160 ? "text-amber-400" : "text-white/40"
+          )}>
+            {message.length}/160
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// EMAIL PREVIEW COMPONENT
+// ============================================
+
+const EmailPreview = ({ config }: { config: Record<string, any> }) => {
+  const subject = config?.subject || '';
+  const body = config?.body || config?.content || '';
+
+  if (!subject && !body) {
+    return (
+      <div className="mt-2 pt-2 border-t border-white/10">
+        <div className="text-[10px] text-white/40 italic">
+          Clique para configurar o email
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 pt-2 border-t border-white/10">
+      <div className="bg-blue-600/20 border border-blue-500/30 rounded-lg p-2">
+        {subject && (
+          <div className="flex items-center gap-1 mb-1">
+            <Mail className="w-3 h-3 text-blue-400" />
+            <span className="text-[10px] text-white/70 font-medium truncate">{subject}</span>
+          </div>
+        )}
+        {body && (
+          <p className="text-[10px] text-white/50 line-clamp-2">
+            {body.length > 80 ? body.substring(0, 80) + '...' : body}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// DELAY PREVIEW COMPONENT
+// ============================================
+
+const DelayPreview = ({ config }: { config: Record<string, any> }) => {
+  const time = config?.value || config?.time || config?.delay || config?.duration || 1;
+  const unit = config?.unit || config?.timeUnit || 'minutes';
+
+  const getTimeText = () => {
+    const unitLabels: Record<string, { singular: string; plural: string }> = {
+      minutes: { singular: 'minuto', plural: 'minutos' },
+      hours: { singular: 'hora', plural: 'horas' },
+      days: { singular: 'dia', plural: 'dias' },
+      weeks: { singular: 'semana', plural: 'semanas' },
+    };
+
+    const label = unitLabels[unit] || { singular: unit, plural: unit };
+    return `${time} ${time === 1 ? label.singular : label.plural}`;
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-white/10">
+      <div className="bg-purple-600/30 border border-purple-500/40 rounded-lg px-3 py-2 flex items-center justify-center gap-2">
+        <Clock className="w-4 h-4 text-purple-400" />
+        <span className="text-sm font-medium text-purple-300">
+          {getTimeText()}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// TAG PREVIEW COMPONENT
+// ============================================
+
+const TagPreview = ({ config, isRemove }: { config: Record<string, any>; isRemove?: boolean }) => {
+  const tagName = config?.tag || config?.tagName || config?.tagId || '';
+
+  if (!tagName) {
+    return (
+      <div className="mt-2 pt-2 border-t border-white/10">
+        <div className="text-[10px] text-white/40 italic">
+          Clique para selecionar tag
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 pt-2 border-t border-white/10">
+      <div className={cn(
+        "inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs",
+        isRemove
+          ? "bg-red-500/20 border border-red-500/30 text-red-300"
+          : "bg-blue-500/20 border border-blue-500/30 text-blue-300"
+      )}>
+        <Tag className="w-3 h-3" />
+        <span>{tagName}</span>
+        {isRemove && <XCircle className="w-3 h-3" />}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// CONDITION PREVIEW COMPONENT
+// ============================================
+
+const ConditionPreview = ({ config, nodeType }: { config: Record<string, any>; nodeType: string }) => {
+  const field = config?.field || config?.fieldName || '';
+  const operator = config?.operator || '=';
+  const value = config?.value || '';
+
+  if (nodeType === 'logic_split') {
+    const percentA = config?.percentA || config?.splitPercent || 50;
+    return (
+      <div className="mt-2 pt-2 border-t border-white/10">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 bg-green-500/20 rounded px-2 py-1 text-center">
+            <span className="text-[10px] text-green-400 font-medium">{percentA}% A</span>
+          </div>
+          <div className="flex-1 bg-amber-500/20 rounded px-2 py-1 text-center">
+            <span className="text-[10px] text-amber-400 font-medium">{100 - percentA}% B</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!field) {
+    return (
+      <div className="mt-2 pt-2 border-t border-white/10">
+        <div className="text-[10px] text-white/40 italic">
+          Clique para configurar condição
+        </div>
+      </div>
+    );
+  }
+
+  const operatorLabels: Record<string, string> = {
+    '=': '=',
+    '!=': '≠',
+    '>': '>',
+    '<': '<',
+    '>=': '≥',
+    '<=': '≤',
+    'contains': 'contém',
+    'not_contains': 'não contém',
+    'starts_with': 'começa com',
+    'ends_with': 'termina com',
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-white/10">
+      <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-2 py-1.5 text-center">
+        <span className="text-[10px] text-white/70">
+          {field} <span className="text-amber-400 font-medium">{operatorLabels[operator] || operator}</span> {value}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
 // BASE NODE COMPONENT
 // ============================================
 
 function BaseNodeComponent(props: BaseNodeProps) {
   const { id, data, selected } = props;
-  const { category, label, description, icon, status, executionTime, statusMessage, disabled } = data;
-  const config = categoryConfig[category] || categoryConfig.action;
+  const { category, label, description, icon, status, executionTime, statusMessage, disabled, nodeType, config: nodeConfig } = data;
+  const catConfig = categoryConfig[category] || categoryConfig.action;
   const statusCfg = statusConfig[status as keyof typeof statusConfig] || statusConfig.idle;
   const IconComponent = icon ? iconMap[icon] : Zap;
   const selectNode = useFlowStore((s) => s.selectNode);
@@ -278,23 +583,51 @@ function BaseNodeComponent(props: BaseNodeProps) {
   const isExecuting = status === 'running';
   const hasResult = status === 'success' || status === 'error' || status === 'skipped';
 
+  const renderPreview = () => {
+    const cfg = nodeConfig || {};
+
+    switch (nodeType) {
+      case 'action_whatsapp':
+        return <WhatsAppPreview config={cfg} />;
+      case 'action_sms':
+        return <SMSPreview config={cfg} />;
+      case 'action_email':
+        return <EmailPreview config={cfg} />;
+      case 'control_delay':
+      case 'control_delay_until':
+      case 'logic_delay':
+      case 'control_delay_condition':
+      case 'control_delay_date':
+      case 'control_delay_weekday':
+        return <DelayPreview config={cfg} />;
+      case 'action_tag':
+        return <TagPreview config={cfg} />;
+      case 'action_remove_tag':
+        return <TagPreview config={cfg} isRemove />;
+      case 'condition_field':
+      case 'condition_has_tag':
+      case 'logic_split':
+      case 'logic_filter':
+        return <ConditionPreview config={cfg} nodeType={nodeType} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <motion.div
       initial={{ scale: 0.8, opacity: 0 }}
-      animate={{ 
-        scale: 1, 
+      animate={{
+        scale: 1,
         opacity: disabled ? 0.5 : 1,
       }}
       className={cn(
-        'relative min-w-[200px] max-w-[280px]',
+        'relative min-w-[280px] max-w-[360px]',
         'rounded-xl border backdrop-blur-sm',
         'bg-gradient-to-br',
-        config.gradient,
-        // Status-based border
-        hasResult ? statusCfg.borderColor : config.border,
-        // Selection state
-        selected && `ring-2 ring-white/30 ${config.glow} shadow-lg`,
-        // Execution glow
+        catConfig.gradient,
+        hasResult ? statusCfg.borderColor : catConfig.border,
+        selected && `ring-2 ring-white/30 ${catConfig.glow} shadow-lg`,
         isExecuting && 'shadow-xl shadow-blue-500/30',
         hasResult && status === 'success' && 'shadow-lg shadow-green-500/20',
         hasResult && status === 'error' && 'shadow-lg shadow-red-500/20',
@@ -303,17 +636,14 @@ function BaseNodeComponent(props: BaseNodeProps) {
       )}
       onClick={() => selectNode(id)}
     >
-      {/* Pulse animation for running state */}
       <PulseRing status={status} category={category} />
 
-      {/* Status overlay badge */}
-      <ExecutionOverlay 
-        status={status} 
+      <ExecutionOverlay
+        status={status}
         executionTime={executionTime}
         statusMessage={statusMessage}
       />
 
-      {/* Input Handle */}
       {category !== 'trigger' && (
         <Handle
           type="target"
@@ -326,21 +656,20 @@ function BaseNodeComponent(props: BaseNodeProps) {
         />
       )}
 
-      {/* Content */}
-      <div className="p-4">
+      <div className="p-3">
         <div className="flex items-start gap-3">
-          <motion.div 
+          <motion.div
             className={cn(
               'p-2 rounded-lg bg-white/5 border border-white/10',
-              isExecuting ? 'text-blue-400' : config.icon,
+              isExecuting ? 'text-blue-400' : catConfig.icon,
               hasResult && status === 'success' && 'text-green-400 border-green-500/30',
               hasResult && status === 'error' && 'text-red-400 border-red-500/30',
             )}
-            animate={isExecuting ? { 
+            animate={isExecuting ? {
               scale: [1, 1.1, 1],
             } : {}}
-            transition={{ 
-              duration: 0.5, 
+            transition={{
+              duration: 0.5,
               repeat: isExecuting ? Infinity : 0,
             }}
           >
@@ -349,17 +678,18 @@ function BaseNodeComponent(props: BaseNodeProps) {
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-medium text-white truncate">{label}</h3>
             {description && (
-              <p className="text-xs text-white/50 mt-0.5 line-clamp-2">{description}</p>
+              <p className="text-[10px] text-white/50 mt-0.5 line-clamp-1">{description}</p>
             )}
           </div>
         </div>
 
-        {/* Execution result preview */}
+        {renderPreview()}
+
         {hasResult && executionTime !== undefined && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
-            className="mt-3 pt-3 border-t border-white/10"
+            className="mt-2 pt-2 border-t border-white/10"
           >
             <div className="flex items-center justify-between">
               <span className={cn(
@@ -380,7 +710,6 @@ function BaseNodeComponent(props: BaseNodeProps) {
         )}
       </div>
 
-      {/* Output Handle(s) */}
       {category === 'condition' ? (
         <>
           <Handle

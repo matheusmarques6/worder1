@@ -359,21 +359,6 @@ export function Step3Knowledge({
         </button>
       )}
 
-      {/* Future: Knowledge Sources */}
-      <div className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-lg">
-        <h3 className="text-sm font-medium text-zinc-400 mb-2">Em breve</h3>
-        <div className="flex gap-4 text-xs text-zinc-500">
-          <div className="flex items-center gap-1">
-            <FileText className="w-4 h-4" />
-            Upload de arquivos
-          </div>
-          <div className="flex items-center gap-1">
-            <Link className="w-4 h-4" />
-            Importar de URL
-          </div>
-        </div>
-      </div>
-
       {/* Navigation */}
       <div className="flex gap-3 pt-4">
         <button

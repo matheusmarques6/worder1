@@ -10,6 +10,7 @@ import {
   getCacheStats,
   CACHE_PREFIX 
 } from '@/lib/redis'
+export const dynamic = 'force-dynamic';
 
 // =====================================================
 // GET - Status e instruções

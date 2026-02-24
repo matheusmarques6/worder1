@@ -7,8 +7,6 @@ import {
   Settings,
   User,
   Building2,
-  CreditCard,
-  Bell,
   Shield,
   Plug,
   Check,
@@ -100,9 +98,6 @@ const settingsTabs = [
   { id: 'integrations', label: 'Integrações', icon: Plug },
   { id: 'profile', label: 'Perfil', icon: User },
   { id: 'store', label: 'Loja', icon: Store },
-  { id: 'billing', label: 'Faturamento', icon: CreditCard },
-  { id: 'notifications', label: 'Notificações', icon: Bell },
-  { id: 'security', label: 'Segurança', icon: Shield },
   { id: 'api', label: 'API Keys', icon: Key },
 ];
 
@@ -1303,21 +1298,6 @@ export default function SettingsPage() {
             </AnimatePresence>
 
             {/* Other tabs - simplified */}
-            {['billing', 'notifications', 'security'].includes(activeTab) && (
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-6 bg-dark-800/50 rounded-xl border border-dark-700/50"
-              >
-                <div className="text-center py-12">
-                  <AlertCircle className="w-12 h-12 text-dark-500 mx-auto mb-3" />
-                  <h3 className="text-lg font-semibold text-white mb-2">Em breve</h3>
-                  <p className="text-dark-400">Esta seção está em desenvolvimento</p>
-                </div>
-              </motion.div>
-            )}
           </AnimatePresence>
         </div>
       </div>

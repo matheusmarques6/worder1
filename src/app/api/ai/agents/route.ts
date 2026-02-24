@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { AIAgent, DEFAULT_PERSONA, DEFAULT_SETTINGS } from '@/lib/ai/types'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+export const dynamic = 'force-dynamic';
 
 // =====================================================
 // SUPABASE CLIENT

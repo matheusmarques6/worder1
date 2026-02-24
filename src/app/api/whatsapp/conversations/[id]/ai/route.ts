@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+export const dynamic = 'force-dynamic';
 
 // GET - Status atual da IA
 export async function GET(

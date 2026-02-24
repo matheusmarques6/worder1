@@ -3,17 +3,15 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft,
+  X,
   Save,
-  Play,
-  Pause,
   PlayCircle,
   History,
   Loader2,
   Check,
   AlertCircle,
-  Power,
   Zap,
+  Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useIsValidFlow } from '@/stores/flowStore';
@@ -39,10 +37,9 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   const isDirty = useFlowStore((state) => state.isDirty);
   const setDirty = useFlowStore((state) => state.setDirty);
   const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
-  const toggleTestModal = useFlowStore((state) => state.toggleTestModal);
-  
+
   const { valid, errors } = useIsValidFlow();
-  
+
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isEditing, setIsEditing] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
@@ -51,16 +48,42 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
 
   const handleSave = async () => {
     if (isSaving) return;
-    
+
     setSaving(true);
     setSaveStatus('saving');
-    
+
     try {
       const result = await onSave();
       if (result) {
         setSaveStatus('saved');
         setDirty(false);
         setTimeout(() => setSaveStatus('idle'), 2000);
+      } else {
+        setSaveStatus('error');
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      }
+    } catch (e) {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveAndClose = async () => {
+    if (isSaving) return;
+
+    setSaving(true);
+    setSaveStatus('saving');
+
+    try {
+      const result = await onSave();
+      if (result) {
+        setSaveStatus('saved');
+        setDirty(false);
+        setTimeout(() => {
+          onBack();
+        }, 500);
       } else {
         setSaveStatus('error');
         setTimeout(() => setSaveStatus('idle'), 3000);
@@ -80,25 +103,18 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
     }
 
     setIsTogglingStatus(true);
-    
-    // Determine new status
     const newStatus = isActive ? 'paused' : 'active';
-    
-    // Update status in store
     setAutomationStatus(newStatus);
-    
-    // Auto-save when toggling status
+
     try {
       setSaving(true);
       const result = await onSave();
       if (result) {
         setDirty(false);
       } else {
-        // Revert on failure
         setAutomationStatus(automationStatus);
       }
     } catch (e) {
-      // Revert on error
       setAutomationStatus(automationStatus);
     } finally {
       setSaving(false);
@@ -114,24 +130,32 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
     onTest();
   };
 
+  const handleClose = () => {
+    if (isDirty) {
+      const confirm = window.confirm('Você tem alterações não salvas. Deseja sair mesmo assim?');
+      if (!confirm) return;
+    }
+    onBack();
+  };
+
   return (
-    <div className="fb-toolbar h-14 bg-[#111111] border-b border-white/10 flex items-center justify-between px-4">
-      {/* Left Section */}
-      <div className="flex items-center gap-4">
-        {/* Back Button */}
+    <div className="fb-toolbar h-14 bg-dark-900 border-b border-dark-700 flex items-center px-2 sm:px-4 gap-2 sm:gap-4">
+      {/* Left Section - Close Button + Name */}
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink-0">
         <button
-          onClick={onBack}
+          onClick={handleClose}
           className={cn(
-            'p-2 rounded-lg',
-            'hover:bg-white/10 text-white/60 hover:text-white',
+            'p-2 rounded-lg flex-shrink-0',
+            'hover:bg-dark-700 text-dark-400 hover:text-white',
             'transition-colors'
           )}
+          title="Fechar"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <X className="w-5 h-5" />
         </button>
 
-        {/* Name */}
-        <div className="flex items-center gap-2">
+        {/* Name - Left aligned */}
+        <div className="flex items-center gap-2 min-w-0">
           {isEditing ? (
             <input
               type="text"
@@ -141,40 +165,43 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
               onKeyDown={(e) => e.key === 'Enter' && setIsEditing(false)}
               autoFocus
               className={cn(
-                'px-2 py-1 rounded-lg',
-                'bg-white/10 border border-white/20',
-                'text-white text-lg font-semibold',
-                'focus:outline-none focus:border-blue-500'
+                'px-3 py-1.5 rounded-lg',
+                'bg-dark-800 border border-dark-600',
+                'text-white text-base sm:text-lg font-semibold',
+                'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
+                'w-[150px] sm:w-[200px]'
               )}
             />
           ) : (
             <button
               onClick={() => setIsEditing(true)}
-              className="text-lg font-semibold text-white hover:text-blue-400 transition-colors"
+              className="flex items-center gap-2 text-base sm:text-lg font-semibold text-white hover:text-primary-400 transition-colors group truncate max-w-[150px] sm:max-w-[250px]"
+              title={automationName}
             >
-              {automationName}
+              <span className="truncate">{automationName}</span>
+              <Pencil className="w-4 h-4 text-dark-400 group-hover:text-primary-400 transition-colors flex-shrink-0" />
             </button>
           )}
-          
-          {/* Status Badge */}
-          <StatusBadge status={automationStatus} />
-          
+
           {/* Dirty indicator */}
           {isDirty && (
-            <span className="text-[10px] text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded">
+            <span className="text-[10px] sm:text-xs text-amber-400 bg-amber-500/20 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-amber-500/30 flex-shrink-0 whitespace-nowrap">
               Não salvo
             </span>
           )}
         </div>
       </div>
 
-      {/* Right Section */}
-      <div className="flex items-center gap-2">
-        {/* Validation indicator */}
+      {/* Center spacer */}
+      <div className="flex-1" />
+
+      {/* Right Section - Actions */}
+      <div className="flex items-center gap-1 sm:gap-2 lg:gap-3 flex-shrink-0">
+        {/* Validation indicator - hidden on small screens */}
         {!valid && errors.length > 0 && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 rounded-lg">
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 border border-amber-500/30 rounded-lg">
             <AlertCircle className="w-4 h-4 text-amber-400" />
-            <span className="text-xs text-amber-400">{errors[0]}</span>
+            <span className="text-xs text-amber-400 max-w-[200px] truncate">{errors[0]}</span>
           </div>
         )}
 
@@ -182,94 +209,86 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         <button
           onClick={toggleHistoryPanel}
           className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg',
-            'hover:bg-white/10 text-white/60 hover:text-white',
-            'transition-colors'
+            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
+            'hover:bg-dark-700 text-dark-400 hover:text-white',
+            'transition-colors text-sm'
           )}
+          title="Histórico"
         >
           <History className="w-4 h-4" />
-          <span className="text-sm hidden sm:inline">Histórico</span>
+          <span className="hidden lg:inline">Histórico</span>
         </button>
-
-        {/* Divider */}
-        <div className="w-px h-6 bg-white/10 mx-1" />
 
         {/* Test */}
         <button
           onClick={handleTest}
           disabled={!valid}
           className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-white/10 hover:bg-white/20',
+            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
+            'bg-dark-700 hover:bg-dark-600',
             'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
+          title="Testar"
         >
           <PlayCircle className="w-4 h-4" />
-          Testar
+          <span className="hidden sm:inline">Testar</span>
         </button>
 
-        {/* Save */}
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-blue-600 hover:bg-blue-500',
-            'text-white text-sm font-medium',
-            'transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-        >
-          {saveStatus === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
-          {saveStatus === 'saved' && <Check className="w-4 h-4" />}
-          {saveStatus === 'error' && <AlertCircle className="w-4 h-4" />}
-          {saveStatus === 'idle' && <Save className="w-4 h-4" />}
-          <span>
-            {saveStatus === 'saving' && 'Salvando...'}
-            {saveStatus === 'saved' && 'Salvo!'}
-            {saveStatus === 'error' && 'Erro'}
-            {saveStatus === 'idle' && 'Salvar'}
-          </span>
-        </button>
-
-        {/* Divider */}
-        <div className="w-px h-6 bg-white/10 mx-1" />
-
-        {/* Activate / Pause Toggle */}
+        {/* Activation Toggle */}
         <ActivationToggle
           isActive={isActive}
           isLoading={isTogglingStatus}
           disabled={!valid && !isActive}
           onToggle={handleToggleStatus}
         />
+
+        {/* Divider - hidden on small screens */}
+        <div className="hidden sm:block w-px h-8 bg-dark-700" />
+
+        {/* Save */}
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className={cn(
+            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
+            'bg-dark-700 hover:bg-dark-600 border border-dark-600',
+            'text-white text-sm font-medium',
+            'transition-colors',
+            'disabled:opacity-50 disabled:cursor-not-allowed'
+          )}
+          title="Salvar"
+        >
+          {saveStatus === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
+          {saveStatus === 'saved' && <Check className="w-4 h-4 text-green-400" />}
+          {saveStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
+          {saveStatus === 'idle' && <Save className="w-4 h-4" />}
+          <span className="hidden sm:inline">SALVAR</span>
+        </button>
+
+        {/* Save and Close */}
+        <button
+          onClick={handleSaveAndClose}
+          disabled={isSaving}
+          className={cn(
+            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
+            'bg-primary-500 hover:bg-primary-600',
+            'text-white text-sm font-medium',
+            'transition-colors',
+            'disabled:opacity-50 disabled:cursor-not-allowed'
+          )}
+          title="Salvar e Fechar"
+        >
+          {saveStatus === 'saving' ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Check className="w-4 h-4" />
+          )}
+          <span className="hidden md:inline">SALVAR E FECHAR</span>
+        </button>
       </div>
     </div>
-  );
-}
-
-// ============================================
-// STATUS BADGE COMPONENT
-// ============================================
-
-function StatusBadge({ status }: { status: 'draft' | 'active' | 'paused' | 'error' }) {
-  const config = {
-    draft: { label: 'Rascunho', color: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
-    active: { label: 'Ativa', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-    paused: { label: 'Pausada', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
-    error: { label: 'Erro', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
-  };
-
-  const { label, color } = config[status];
-
-  return (
-    <span className={cn(
-      'px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider border',
-      color
-    )}>
-      {label}
-    </span>
   );
 }
 
@@ -290,64 +309,56 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
       onClick={onToggle}
       disabled={disabled || isLoading}
       className={cn(
-        'relative flex items-center gap-3 px-4 py-2 rounded-xl',
-        'transition-all duration-300',
+        'relative flex items-center gap-2 px-3 py-2 rounded-lg',
+        'transition-all duration-300 border',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         isActive
-          ? 'bg-green-500/20 border border-green-500/40 hover:bg-green-500/30'
-          : 'bg-white/5 border border-white/10 hover:bg-white/10'
+          ? 'bg-green-500/20 border-green-500/40 hover:bg-green-500/30'
+          : 'bg-dark-700 border-dark-600 hover:bg-dark-600'
       )}
     >
       {/* Toggle Track */}
       <div className={cn(
-        'relative w-11 h-6 rounded-full transition-colors duration-300',
-        isActive ? 'bg-green-500' : 'bg-white/20'
+        'relative w-10 h-5 rounded-full transition-colors duration-300',
+        isActive ? 'bg-green-500' : 'bg-dark-500'
       )}>
         {/* Toggle Thumb */}
         <motion.div
           className={cn(
-            'absolute top-1 w-4 h-4 rounded-full',
-            'flex items-center justify-center',
-            isActive ? 'bg-white' : 'bg-white/60'
+            'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm',
+            'flex items-center justify-center'
           )}
           animate={{
-            left: isActive ? 24 : 4,
+            left: isActive ? 20 : 2,
           }}
           transition={{ type: 'spring', stiffness: 500, damping: 30 }}
         >
-          {isLoading ? (
-            <Loader2 className="w-2.5 h-2.5 text-green-600 animate-spin" />
-          ) : isActive ? (
-            <Zap className="w-2.5 h-2.5 text-green-600" />
-          ) : null}
+          {isLoading && (
+            <Loader2 className="w-2.5 h-2.5 text-dark-500 animate-spin" />
+          )}
         </motion.div>
       </div>
 
       {/* Label */}
-      <div className="flex flex-col items-start">
-        <span className={cn(
-          'text-sm font-medium leading-tight',
-          isActive ? 'text-green-400' : 'text-white/70'
-        )}>
-          {isLoading ? 'Salvando...' : isActive ? 'Ativa' : 'Inativa'}
-        </span>
-        <span className="text-[10px] text-white/40 leading-tight">
-          {isActive ? 'Automação rodando' : 'Clique para ativar'}
-        </span>
-      </div>
+      <span className={cn(
+        'text-sm font-medium',
+        isActive ? 'text-green-400' : 'text-dark-300'
+      )}>
+        {isLoading ? '...' : isActive ? 'Ativo' : 'Inativo'}
+      </span>
 
-      {/* Active Glow Effect */}
+      {/* Active Indicator */}
       <AnimatePresence>
         {isActive && !isLoading && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, scale: 0 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
+            exit={{ opacity: 0, scale: 0 }}
             className="absolute -top-1 -right-1"
           >
-            <span className="relative flex h-3 w-3">
+            <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
             </span>
           </motion.div>
         )}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
 let _supabase: SupabaseClient | null = null;

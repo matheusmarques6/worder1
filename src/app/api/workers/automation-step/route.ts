@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { verifyQStashSignature, enqueueAutomationStep, calculateDelaySeconds } from '@/lib/queue';
+export const dynamic = 'force-dynamic';
 
 function getSupabase() {
   return getSupabaseAdmin();

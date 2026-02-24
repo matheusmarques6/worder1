@@ -125,6 +125,13 @@ export function Canvas() {
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         fitView
+        fitViewOptions={{
+          padding: 0.5,
+          maxZoom: 0.8,
+        }}
+        minZoom={0.2}
+        maxZoom={1.5}
+        defaultViewport={{ x: 0, y: 0, zoom: 0.7 }}
         snapToGrid
         snapGrid={[16, 16]}
         defaultEdgeOptions={{
@@ -132,22 +139,22 @@ export function Canvas() {
           animated: true,
         }}
         proOptions={{ hideAttribution: true }}
-        className="bg-[#0a0a0a]"
+        className="bg-dark-800"
       >
         {/* Background */}
         <Background
           variant={BackgroundVariant.Dots}
           gap={20}
           size={1}
-          color="#262626"
+          color="#374151"
         />
 
         {/* Controls */}
         <Controls
           className={cn(
-            '[&>button]:bg-[#1a1a1a] [&>button]:border-white/10',
-            '[&>button]:text-white/60 [&>button:hover]:bg-white/10',
-            '[&>button:hover]:text-white'
+            '[&>button]:bg-dark-700 [&>button]:border-dark-600',
+            '[&>button]:text-dark-300 [&>button:hover]:bg-dark-600',
+            '[&>button:hover]:text-white [&>button]:shadow-sm'
           )}
         />
 
@@ -165,17 +172,17 @@ export function Canvas() {
               case 'control':
                 return '#a855f7';
               default:
-                return '#525252';
+                return '#9ca3af';
             }
           }}
-          maskColor="rgba(0, 0, 0, 0.8)"
-          className="!bg-[#1a1a1a] !border-white/10"
+          maskColor="rgba(17, 24, 39, 0.8)"
+          className="!bg-dark-900 !border-dark-700 shadow-md"
         />
 
         {/* Empty state */}
         {nodes.length === 0 && (
           <Panel position="top-center" className="mt-20">
-            <div className="text-center text-white/40 p-8">
+            <div className="text-center text-dark-400 p-8">
               <p className="text-lg mb-2">Arraste componentes da barra lateral</p>
               <p className="text-sm">ou clique duas vezes para adicionar</p>
             </div>

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { callAI, generateWhatsAppResponse, suggestResponse, AI_MODELS } from '@/lib/whatsapp/ai-providers';
+export const dynamic = 'force-dynamic';
 
 // GET - Listar configurações de AI e modelos disponíveis
 export async function GET(request: NextRequest) {

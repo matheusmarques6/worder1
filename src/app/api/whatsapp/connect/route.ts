@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+export const dynamic = 'force-dynamic';
 
 // GET - Buscar status da conexão WhatsApp
 export async function GET(request: NextRequest) {

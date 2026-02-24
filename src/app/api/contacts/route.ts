@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
 import { EventBus, EventType } from '@/lib/events';
+export const dynamic = 'force-dynamic';
 
 // GET - List contacts or get single contact
 export async function GET(request: NextRequest) {

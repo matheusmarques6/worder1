@@ -312,197 +312,191 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function WhatsAppAnalyticsPage() {
   const { user } = useAuthStore()
-  const organizationId = user?.organization_id || 'default'
+  const organizationId = user?.organization_id || ''
   const [activeTab, setActiveTab] = useState<'campaigns' | 'ai' | 'quality'>('campaigns')
   const [dateRange, setDateRange] = useState('7d')
-  const [loading, setLoading] = useState(false)
-  
-  // Mock data - Replace with real API calls
-  const [campaignMetrics, setCampaignMetrics] = useState<CampaignMetrics>({
-    enviadas: 15420,
-    enviadasChange: 12.5,
-    entregues: 14850,
-    entreguesChange: 10.2,
-    lidas: 11200,
-    lidasChange: 8.7,
-    respondidas: 3450,
-    respondidasChange: 15.3,
-    falhas: 570,
-    falhasChange: -5.2,
-    taxaEntrega: 96.3,
-    taxaLeitura: 75.4,
-    taxaResposta: 22.4,
-  })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const [aiMetrics, setAIMetrics] = useState<AIMetrics>({
-    totalInteracoes: 8540,
-    interacoesChange: 18.2,
-    tokensUsados: 2450000,
-    tokensChange: 22.5,
-    custoTotal: 245.80,
-    custoChange: 15.3,
-    latenciaMedia: 1250,
-    latenciaChange: -8.5,
-    taxaSucesso: 94.5,
-    sucessoChange: 2.3,
-    taxaResolucao: 78.2,
-    resolucaoChange: 5.1,
-  })
+  // State for real API data
+  const [campaignMetrics, setCampaignMetrics] = useState<CampaignMetrics | null>(null)
+  const [aiMetrics, setAIMetrics] = useState<AIMetrics | null>(null)
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [campaignChartData, setCampaignChartData] = useState<any[]>([])
+  const [aiChartData, setAiChartData] = useState<any[]>([])
+  const [providerData, setProviderData] = useState<any[]>([])
 
-  const [agents, setAgents] = useState<Agent[]>([
-    {
-      id: '1',
-      name: 'Atendente Principal',
-      provider: 'OpenAI',
-      model: 'gpt-4o-mini',
-      interactions: 5420,
-      successRate: 95.2,
-      avgLatency: 1150,
-      cost: 125.40,
-      isActive: true,
-    },
-    {
-      id: '2',
-      name: 'Suporte Técnico',
-      provider: 'Anthropic',
-      model: 'claude-3-haiku',
-      interactions: 2340,
-      successRate: 93.8,
-      avgLatency: 980,
-      cost: 85.20,
-      isActive: true,
-    },
-    {
-      id: '3',
-      name: 'Vendas',
-      provider: 'OpenAI',
-      model: 'gpt-4o',
-      interactions: 780,
-      successRate: 96.5,
-      avgLatency: 1450,
-      cost: 35.20,
-      isActive: false,
-    },
-  ])
+  // Fetch campaign analytics
+  const fetchCampaignAnalytics = async () => {
+    if (!organizationId) return
 
-  // Campaigns data - ordered by performance (taxa de resposta)
-  const [campaigns, setCampaigns] = useState<Campaign[]>([
-    {
-      id: '1',
-      name: 'Black Friday 2024',
-      status: 'completed',
-      sentAt: '2024-11-29T10:00:00',
-      enviadas: 5420,
-      entregues: 5280,
-      lidas: 4350,
-      respondidas: 1520,
-      falhas: 140,
-      taxaEntrega: 97.4,
-      taxaLeitura: 82.4,
-      taxaResposta: 28.0,
-    },
-    {
-      id: '2',
-      name: 'Cyber Monday',
-      status: 'completed',
-      sentAt: '2024-12-02T09:00:00',
-      enviadas: 3850,
-      entregues: 3720,
-      lidas: 2980,
-      respondidas: 890,
-      falhas: 130,
-      taxaEntrega: 96.6,
-      taxaLeitura: 80.1,
-      taxaResposta: 23.1,
-    },
-    {
-      id: '3',
-      name: 'Promoção Natal',
-      status: 'active',
-      sentAt: '2024-12-15T08:00:00',
-      enviadas: 2850,
-      entregues: 2780,
-      lidas: 2100,
-      respondidas: 620,
-      falhas: 70,
-      taxaEntrega: 97.5,
-      taxaLeitura: 75.5,
-      taxaResposta: 21.8,
-    },
-    {
-      id: '4',
-      name: 'Recuperação Carrinho',
-      status: 'active',
-      sentAt: '2024-12-10T14:00:00',
-      enviadas: 1580,
-      entregues: 1520,
-      lidas: 1180,
-      respondidas: 320,
-      falhas: 60,
-      taxaEntrega: 96.2,
-      taxaLeitura: 77.6,
-      taxaResposta: 20.3,
-    },
-    {
-      id: '5',
-      name: 'Boas Vindas',
-      status: 'active',
-      sentAt: '2024-12-01T00:00:00',
-      enviadas: 1720,
-      entregues: 1680,
-      lidas: 1250,
-      respondidas: 280,
-      falhas: 40,
-      taxaEntrega: 97.7,
-      taxaLeitura: 74.4,
-      taxaResposta: 16.3,
-    },
-    {
-      id: '6',
-      name: 'Pós-Venda',
-      status: 'completed',
-      sentAt: '2024-12-05T11:00:00',
-      enviadas: 980,
-      entregues: 920,
-      lidas: 680,
-      respondidas: 145,
-      falhas: 60,
-      taxaEntrega: 93.9,
-      taxaLeitura: 73.9,
-      taxaResposta: 14.8,
-    },
-  ])
+    try {
+      const res = await fetch(`/api/whatsapp/analytics?organization_id=${organizationId}&period=${dateRange}`)
+      const data = await res.json()
 
-  // Chart data
-  const campaignChartData = [
-    { date: 'Seg', enviadas: 2100, entregues: 2020, lidas: 1520, respondidas: 420 },
-    { date: 'Ter', enviadas: 2350, entregues: 2280, lidas: 1750, respondidas: 510 },
-    { date: 'Qua', enviadas: 1980, entregues: 1900, lidas: 1420, respondidas: 380 },
-    { date: 'Qui', enviadas: 2450, entregues: 2350, lidas: 1850, respondidas: 620 },
-    { date: 'Sex', enviadas: 2680, entregues: 2580, lidas: 2100, respondidas: 720 },
-    { date: 'Sáb', enviadas: 1850, entregues: 1780, lidas: 1320, respondidas: 410 },
-    { date: 'Dom', enviadas: 2010, entregues: 1940, lidas: 1240, respondidas: 390 },
-  ]
+      if (!res.ok) throw new Error(data.error || 'Erro ao buscar analytics')
 
-  const aiChartData = [
-    { date: 'Seg', interacoes: 1150, tokens: 320000, custo: 32 },
-    { date: 'Ter', interacoes: 1380, tokens: 390000, custo: 39 },
-    { date: 'Qua', interacoes: 1020, tokens: 280000, custo: 28 },
-    { date: 'Qui', interacoes: 1520, tokens: 420000, custo: 42 },
-    { date: 'Sex', interacoes: 1680, tokens: 480000, custo: 48 },
-    { date: 'Sáb', interacoes: 890, tokens: 250000, custo: 25 },
-    { date: 'Dom', interacoes: 900, tokens: 260000, custo: 26 },
-  ]
+      // Map API response to component state
+      setCampaignMetrics({
+        enviadas: data.summary?.total_sent || 0,
+        enviadasChange: data.trends?.sent_change || 0,
+        entregues: data.summary?.total_delivered || 0,
+        entreguesChange: data.trends?.delivered_change || 0,
+        lidas: data.summary?.total_read || 0,
+        lidasChange: data.trends?.read_change || 0,
+        respondidas: data.summary?.total_replied || 0,
+        respondidasChange: data.trends?.replied_change || 0,
+        falhas: data.summary?.total_failed || 0,
+        falhasChange: 0,
+        taxaEntrega: data.summary?.delivery_rate || 0,
+        taxaLeitura: data.summary?.read_rate || 0,
+        taxaResposta: data.summary?.reply_rate || 0,
+      })
 
-  const providerData = [
-    { name: 'OpenAI', value: 65, color: '#10b981' },
-    { name: 'Anthropic', value: 28, color: '#a855f7' },
-    { name: 'Google', value: 7, color: '#3b82f6' },
-  ]
+      // Map campaigns
+      const mappedCampaigns = (data.campaigns || []).map((c: any) => ({
+        id: c.id,
+        name: c.title,
+        status: c.status === 'completed' ? 'completed' : c.status === 'running' ? 'active' : c.status,
+        sentAt: c.started_at || c.created_at,
+        enviadas: c.sent || 0,
+        entregues: c.delivered || 0,
+        lidas: c.read || 0,
+        respondidas: c.replied || 0,
+        falhas: c.failed || 0,
+        taxaEntrega: c.delivery_rate || 0,
+        taxaLeitura: c.read_rate || 0,
+        taxaResposta: c.reply_rate || 0,
+      }))
+      setCampaigns(mappedCampaigns)
 
-  const handleRefresh = () => {
+      // Map chart data
+      const chartData = (data.chart_data || []).map((d: any) => ({
+        date: new Date(d.date).toLocaleDateString('pt-BR', { weekday: 'short' }),
+        enviadas: d.sent || 0,
+        entregues: d.delivered || 0,
+        lidas: d.read || 0,
+        respondidas: d.replied || 0,
+      }))
+      setCampaignChartData(chartData)
+
+    } catch (err: any) {
+      console.error('Error fetching campaign analytics:', err)
+    }
+  }
+
+  // Fetch AI analytics
+  const fetchAIAnalytics = async () => {
+    if (!organizationId) return
+
+    try {
+      const res = await fetch(`/api/whatsapp/ai/analytics?organization_id=${organizationId}&period=${dateRange}`)
+      const data = await res.json()
+
+      if (!res.ok) throw new Error(data.error || 'Erro ao buscar analytics de IA')
+
+      // Map AI metrics
+      setAIMetrics({
+        totalInteracoes: data.summary?.total_interactions || 0,
+        interacoesChange: data.trends?.interactions_change || 0,
+        tokensUsados: data.summary?.total_tokens || 0,
+        tokensChange: data.trends?.tokens_change || 0,
+        custoTotal: data.summary?.estimated_cost_usd || 0,
+        custoChange: data.trends?.cost_change || 0,
+        latenciaMedia: data.summary?.avg_response_time_ms || 0,
+        latenciaChange: data.trends?.latency_change || 0,
+        taxaSucesso: data.summary?.success_rate || 0,
+        sucessoChange: data.trends?.success_rate_change || 0,
+        taxaResolucao: data.summary?.resolution_rate || 0,
+        resolucaoChange: data.trends?.resolution_rate_change || 0,
+      })
+
+      // Map agents
+      const mappedAgents = (data.agents || []).map((a: any) => ({
+        id: a.id,
+        name: a.name || `Agente ${a.id.slice(0, 8)}`,
+        provider: a.provider || 'OpenAI',
+        model: a.model || 'gpt-4o-mini',
+        interactions: a.total_interactions || 0,
+        successRate: 0,
+        avgLatency: 0,
+        cost: a.total_cost_usd || 0,
+        isActive: a.is_active,
+      }))
+      setAgents(mappedAgents)
+
+      // Map chart data
+      const chartData = (data.chart_data || []).map((d: any) => ({
+        date: new Date(d.date).toLocaleDateString('pt-BR', { weekday: 'short' }),
+        interacoes: d.interactions || 0,
+        tokens: d.tokens || 0,
+        custo: d.cost_usd || 0,
+      }))
+      setAiChartData(chartData)
+
+      // Map provider data
+      const providers = data.by_provider || {}
+      const providerList = Object.entries(providers).map(([name, p]: [string, any]) => ({
+        name,
+        value: p.percent || 0,
+        color: name === 'OpenAI' ? '#10b981' : name === 'Anthropic' ? '#a855f7' : '#3b82f6',
+      }))
+      setProviderData(providerList.length > 0 ? providerList : [])
+
+    } catch (err: any) {
+      console.error('Error fetching AI analytics:', err)
+    }
+  }
+
+  // Initial data fetch
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!organizationId) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setError(null)
+
+      try {
+        await Promise.all([
+          fetchCampaignAnalytics(),
+          fetchAIAnalytics(),
+        ])
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [organizationId, dateRange])
+
+  const handleRefresh = async () => {
     setLoading(true)
-    setTimeout(() => setLoading(false), 1000)
+    try {
+      await Promise.all([
+        fetchCampaignAnalytics(),
+        fetchAIAnalytics(),
+      ])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Show empty state if no organization
+  if (!organizationId) {
+    return (
+      <div className="min-h-screen p-6 lg:p-8">
+        <EmptyState
+          title="Organização não encontrada"
+          description="Selecione uma organização para ver os analytics de WhatsApp."
+        />
+      </div>
+    )
   }
 
   return (
@@ -590,52 +584,61 @@ export default function WhatsAppAnalyticsPage() {
           animate={{ opacity: 1 }}
           className="space-y-6"
         >
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <MetricCard
-              title="Enviadas"
-              value={formatNumber(campaignMetrics.enviadas)}
-              change={campaignMetrics.enviadasChange}
+          {/* Empty state if no data */}
+          {!loading && !campaignMetrics && campaigns.length === 0 ? (
+            <EmptyState
+              title="Nenhuma campanha encontrada"
+              description="Você ainda não enviou nenhuma campanha de WhatsApp. Crie sua primeira campanha para ver os analytics aqui."
               icon={Send}
-              highlight
-              loading={loading}
             />
-            <MetricCard
-              title="Entregues"
-              value={formatNumber(campaignMetrics.entregues)}
-              change={campaignMetrics.entreguesChange}
-              icon={CheckCheck}
-              loading={loading}
-            />
-            <MetricCard
-              title="Lidas"
-              value={formatNumber(campaignMetrics.lidas)}
-              change={campaignMetrics.lidasChange}
-              icon={Eye}
-              loading={loading}
-            />
-            <MetricCard
-              title="Respondidas"
-              value={formatNumber(campaignMetrics.respondidas)}
-              change={campaignMetrics.respondidasChange}
-              icon={MessageSquare}
-              loading={loading}
-            />
-            <MetricCard
-              title="Falhas"
-              value={formatNumber(campaignMetrics.falhas)}
-              change={campaignMetrics.falhasChange}
-              icon={AlertTriangle}
-              loading={loading}
-            />
-          </div>
+          ) : (
+            <>
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <MetricCard
+                  title="Enviadas"
+                  value={formatNumber(campaignMetrics?.enviadas || 0)}
+                  change={campaignMetrics?.enviadasChange}
+                  icon={Send}
+                  highlight
+                  loading={loading}
+                />
+                <MetricCard
+                  title="Entregues"
+                  value={formatNumber(campaignMetrics?.entregues || 0)}
+                  change={campaignMetrics?.entreguesChange}
+                  icon={CheckCheck}
+                  loading={loading}
+                />
+                <MetricCard
+                  title="Lidas"
+                  value={formatNumber(campaignMetrics?.lidas || 0)}
+                  change={campaignMetrics?.lidasChange}
+                  icon={Eye}
+                  loading={loading}
+                />
+                <MetricCard
+                  title="Respondidas"
+                  value={formatNumber(campaignMetrics?.respondidas || 0)}
+                  change={campaignMetrics?.respondidasChange}
+                  icon={MessageSquare}
+                  loading={loading}
+                />
+                <MetricCard
+                  title="Falhas"
+                  value={formatNumber(campaignMetrics?.falhas || 0)}
+                  change={campaignMetrics?.falhasChange}
+                  icon={AlertTriangle}
+                  loading={loading}
+                />
+              </div>
 
-          {/* Rates */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <RateCard title="Taxa de Entrega" value={campaignMetrics.taxaEntrega} color="bg-green-500" />
-            <RateCard title="Taxa de Leitura" value={campaignMetrics.taxaLeitura} color="bg-blue-500" />
-            <RateCard title="Taxa de Resposta" value={campaignMetrics.taxaResposta} color="bg-purple-500" />
-          </div>
+              {/* Rates */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <RateCard title="Taxa de Entrega" value={campaignMetrics?.taxaEntrega || 0} color="bg-green-500" />
+                <RateCard title="Taxa de Leitura" value={campaignMetrics?.taxaLeitura || 0} color="bg-blue-500" />
+                <RateCard title="Taxa de Resposta" value={campaignMetrics?.taxaResposta || 0} color="bg-purple-500" />
+              </div>
 
           {/* Chart */}
           <motion.div
@@ -818,6 +821,8 @@ export default function WhatsAppAnalyticsPage() {
               </div>
             </div>
           </motion.div>
+            </>
+          )}
         </motion.div>
       )}
 
@@ -828,52 +833,61 @@ export default function WhatsAppAnalyticsPage() {
           animate={{ opacity: 1 }}
           className="space-y-6"
         >
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            <MetricCard
-              title="Interações"
-              value={formatNumber(aiMetrics.totalInteracoes)}
-              change={aiMetrics.interacoesChange}
-              icon={MessageSquare}
-              highlight
-              loading={loading}
+          {/* Empty state if no data */}
+          {!loading && !aiMetrics && agents.length === 0 ? (
+            <EmptyState
+              title="Nenhum agente de IA configurado"
+              description="Configure um agente de IA para WhatsApp para ver métricas de interação, tokens e custos."
+              icon={Bot}
             />
-            <MetricCard
-              title="Tokens Usados"
-              value={formatNumber(aiMetrics.tokensUsados)}
-              change={aiMetrics.tokensChange}
-              icon={Zap}
-              loading={loading}
-            />
-            <MetricCard
-              title="Custo Total"
-              value={formatCurrency(aiMetrics.custoTotal)}
-              change={aiMetrics.custoChange}
-              icon={DollarSign}
-              loading={loading}
-            />
-            <MetricCard
-              title="Latência Média"
-              value={formatLatency(aiMetrics.latenciaMedia)}
-              change={aiMetrics.latenciaChange}
-              icon={Clock}
-              loading={loading}
-            />
-            <MetricCard
-              title="Taxa Sucesso"
-              value={formatPercent(aiMetrics.taxaSucesso)}
-              change={aiMetrics.sucessoChange}
-              icon={Target}
-              loading={loading}
-            />
-            <MetricCard
-              title="Taxa Resolução"
-              value={formatPercent(aiMetrics.taxaResolucao)}
-              change={aiMetrics.resolucaoChange}
-              icon={Activity}
-              loading={loading}
-            />
-          </div>
+          ) : (
+            <>
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                <MetricCard
+                  title="Interações"
+                  value={formatNumber(aiMetrics?.totalInteracoes || 0)}
+                  change={aiMetrics?.interacoesChange}
+                  icon={MessageSquare}
+                  highlight
+                  loading={loading}
+                />
+                <MetricCard
+                  title="Tokens Usados"
+                  value={formatNumber(aiMetrics?.tokensUsados || 0)}
+                  change={aiMetrics?.tokensChange}
+                  icon={Zap}
+                  loading={loading}
+                />
+                <MetricCard
+                  title="Custo Total"
+                  value={formatCurrency(aiMetrics?.custoTotal || 0)}
+                  change={aiMetrics?.custoChange}
+                  icon={DollarSign}
+                  loading={loading}
+                />
+                <MetricCard
+                  title="Latência Média"
+                  value={formatLatency(aiMetrics?.latenciaMedia || 0)}
+                  change={aiMetrics?.latenciaChange}
+                  icon={Clock}
+                  loading={loading}
+                />
+                <MetricCard
+                  title="Taxa Sucesso"
+                  value={formatPercent(aiMetrics?.taxaSucesso || 0)}
+                  change={aiMetrics?.sucessoChange}
+                  icon={Target}
+                  loading={loading}
+                />
+                <MetricCard
+                  title="Taxa Resolução"
+                  value={formatPercent(aiMetrics?.taxaResolucao || 0)}
+                  change={aiMetrics?.resolucaoChange}
+                  icon={Activity}
+                  loading={loading}
+                />
+              </div>
 
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -907,49 +921,65 @@ export default function WhatsAppAnalyticsPage() {
               className="bg-dark-800/60 border border-dark-700/50 rounded-xl p-6"
             >
               <h3 className="text-lg font-semibold text-white mb-6">Por Provider</h3>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={providerData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={70}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {providerData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="space-y-2 mt-4">
-                {providerData.map((provider) => (
-                  <div key={provider.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: provider.color }} />
-                      <span className="text-sm text-dark-300">{provider.name}</span>
-                    </div>
-                    <span className="text-sm font-medium text-white">{provider.value}%</span>
+              {providerData.length === 0 ? (
+                <div className="flex items-center justify-center h-48 text-dark-400">
+                  Sem dados de providers
+                </div>
+              ) : (
+                <>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={providerData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={70}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {providerData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
-              </div>
+                  <div className="space-y-2 mt-4">
+                    {providerData.map((provider) => (
+                      <div key={provider.name} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: provider.color }} />
+                          <span className="text-sm text-dark-300">{provider.name}</span>
+                        </div>
+                        <span className="text-sm font-medium text-white">{provider.value}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </motion.div>
           </div>
 
           {/* Agents Grid */}
           <div>
             <h3 className="text-lg font-semibold text-white mb-4">Agentes Configurados</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {agents.map((agent) => (
-                <AgentCard key={agent.id} agent={agent} />
-              ))}
-            </div>
+            {agents.length === 0 ? (
+              <div className="text-center py-8 text-dark-400">
+                Nenhum agente configurado ainda
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {agents.map((agent) => (
+                  <AgentCard key={agent.id} agent={agent} />
+                ))}
+              </div>
+            )}
           </div>
+            </>
+          )}
         </motion.div>
       )}
 

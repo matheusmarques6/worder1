@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bell, AtSign, UserPlus, Clock, AlertTriangle, CheckCircle, MessageCircle, Briefcase, ArrowRight, MessageSquare, Moon, Mail, Smartphone, Loader2, Save } from 'lucide-react'
+import { Bell, AtSign, UserPlus, Clock, AlertTriangle, CheckCircle, MessageCircle, Briefcase, ArrowRight, MessageSquare, Moon, Loader2, Save } from 'lucide-react'
 import { useNotifications } from '@/hooks/useNotifications'
 import { cn } from '@/lib/utils'
 import { NOTIFICATION_CONFIG, type NotificationType } from '@/types/notifications'
@@ -50,8 +50,6 @@ export function NotificationSettingsPage({ organizationId, userId }: { organizat
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Canais de Notificação</h2>
         <div className="space-y-4">
           <ToggleItem icon={Bell} label="Notificações no App" description="Receba notificações dentro do Worder" checked={localPrefs.in_app_enabled ?? true} onChange={(v) => updateLocal('in_app_enabled', v)} />
-          <ToggleItem icon={Mail} label="Notificações por Email" description="Receba um resumo por email (em breve)" checked={localPrefs.email_enabled ?? false} onChange={(v) => updateLocal('email_enabled', v)} disabled />
-          <ToggleItem icon={Smartphone} label="Notificações Push" description="Receba push no celular (em breve)" checked={localPrefs.push_enabled ?? false} onChange={(v) => updateLocal('push_enabled', v)} disabled />
         </div>
       </section>
       

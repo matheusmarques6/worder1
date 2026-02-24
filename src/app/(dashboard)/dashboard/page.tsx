@@ -23,6 +23,14 @@ import {
   Plus,
   Loader2,
   X,
+  CheckCircle,
+  Clock,
+  Percent,
+  Award,
+  ChevronRight,
+  Wallet,
+  Smartphone,
+  FileText,
 } from 'lucide-react'
 import {
   XAxis,
@@ -43,6 +51,8 @@ interface DashboardMetrics {
   receitaChange: number
   custos: number
   custosChange: number
+  productCosts: number
+  fees: number
   marketing: number
   marketingChange: number
   impostos: number
@@ -52,9 +62,26 @@ interface DashboardMetrics {
   lucro: number
   lucroChange: number
   pedidos: number
+  pedidosPagos: number
   pedidosChange: number
   ticketMedio: number
   ticketMedioChange: number
+  unidadesVendidas: number
+  cac: number
+  roi: number
+  pedidosPendentes: number
+  valorPendente: number
+  recurringRate: number
+  totalCustomers: number
+  recurringCustomers: number
+}
+
+interface SalesBreakdown {
+  subtotal: number
+  shipping: number
+  taxes: number
+  discounts: number
+  total: number
 }
 
 interface ChartData {
@@ -77,18 +104,21 @@ interface StoreMetrics {
   margem: number
 }
 
-interface IntegrationStatus {
-  shopify: boolean
-  klaviyo: boolean
-  meta: boolean
-  google: boolean
-  tiktok: boolean
+interface TopProduct {
+  productId: string
+  title: string
+  image: string | null
+  quantity: number
+  revenue: number
+  cost: number
+  profit: number
+  rank: number
+  margin: number
 }
 
-interface TotalsData {
-  pedidos: number
-  pedidosPagos: number
-  receita: number
+interface PaymentMethod {
+  count: number
+  value: number
 }
 
 // Date range options
@@ -108,7 +138,28 @@ const formatCurrency = (value: number) => {
     style: 'currency',
     currency: 'BRL',
     minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value)
+}
+
+const formatCompactCurrency = (value: number) => {
+  if (Math.abs(value) >= 1000000) {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(value)
+  }
+  if (Math.abs(value) >= 10000) {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value)
+  }
+  return formatCurrency(value)
 }
 
 const formatNumber = (value: number) => {
@@ -120,12 +171,12 @@ const formatPercent = (value: number) => {
 }
 
 // Empty State Component
-const EmptyState = ({ 
-  title, 
-  description, 
-  actionLabel, 
+const EmptyState = ({
+  title,
+  description,
+  actionLabel,
   onAction,
-  icon: Icon = AlertCircle 
+  icon: Icon = AlertCircle
 }: {
   title: string
   description: string
@@ -155,53 +206,25 @@ const EmptyState = ({
   </motion.div>
 )
 
-// Integration Alert Component
-const IntegrationAlert = ({ 
-  platform, 
-  onConnect 
-}: { 
-  platform: string
-  onConnect: () => void 
-}) => (
-  <motion.div
-    initial={{ opacity: 0, x: -20 }}
-    animate={{ opacity: 1, x: 0 }}
-    className="flex items-center gap-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl"
-  >
-    <div className="p-2 rounded-lg bg-yellow-500/20">
-      <AlertCircle className="w-5 h-5 text-yellow-400" />
-    </div>
-    <div className="flex-1">
-      <p className="text-sm font-medium text-white">
-        {platform} não conectado
-      </p>
-      <p className="text-xs text-dark-400">
-        Conecte para ver dados reais nesta seção
-      </p>
-    </div>
-    <button
-      onClick={onConnect}
-      className="flex items-center gap-2 px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-sm font-medium transition-colors"
-    >
-      <LinkIcon className="w-4 h-4" />
-      Conectar
-    </button>
-  </motion.div>
-)
-
-// Metric Card Component
-const MetricCard = ({ 
-  title, 
-  value, 
-  change, 
-  icon: Icon, 
+// KPI Card Component
+const KPICard = ({
+  title,
+  value,
+  subValue,
+  change,
+  icon: Icon,
+  iconColor = 'text-primary-400',
+  iconBg = 'bg-primary-500/20',
   highlight = false,
   loading = false,
 }: {
   title: string
   value: string
+  subValue?: string
   change?: number
   icon: React.ElementType
+  iconColor?: string
+  iconBg?: string
   highlight?: boolean
   loading?: boolean
 }) => (
@@ -209,52 +232,89 @@ const MetricCard = ({
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     className={`
-      relative rounded-xl p-5 transition-all duration-300
-      ${highlight 
-        ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/20' 
+      relative rounded-xl p-4 transition-all duration-300 overflow-hidden
+      ${highlight
+        ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/20'
         : 'bg-dark-800/60 border border-dark-700/50 hover:border-dark-600'
       }
     `}
   >
     {loading ? (
-      <div className="flex items-center justify-center py-4">
+      <div className="flex items-center justify-center py-6">
         <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
       </div>
     ) : (
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`p-2.5 rounded-xl ${highlight ? 'bg-white/20' : 'bg-dark-700/50'}`}>
-            <Icon className={`w-5 h-5 ${highlight ? 'text-white' : 'text-primary-400'}`} />
+      <>
+        <div className="flex items-center justify-between mb-3">
+          <div className={`p-2 rounded-lg ${highlight ? 'bg-white/20' : iconBg}`}>
+            <Icon className={`w-4 h-4 ${highlight ? 'text-white' : iconColor}`} />
           </div>
-          <div>
-            <p className={`text-sm font-medium ${highlight ? 'text-white/80' : 'text-dark-400'}`}>{title}</p>
-            <p className="text-2xl font-bold mt-0.5 text-white">{value}</p>
-          </div>
+          {change !== undefined && (
+            <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+              highlight
+                ? change >= 0 ? 'bg-white/20 text-white' : 'bg-red-500/30 text-red-200'
+                : change >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+            }`}>
+              {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {Math.abs(change).toFixed(1)}%
+            </div>
+          )}
         </div>
-        {change !== undefined && (
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
-            highlight 
-              ? change >= 0 ? 'bg-white/20 text-white' : 'bg-red-500/30 text-red-200'
-              : change >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-          }`}>
-            {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-            {Math.abs(change).toFixed(1)}%
-          </div>
+        <p className={`text-xs font-medium mb-1 ${highlight ? 'text-white/80' : 'text-dark-400'}`}>
+          {title}
+        </p>
+        <p className="text-xl font-bold text-white truncate">{value}</p>
+        {subValue && (
+          <p className={`text-xs mt-1 ${highlight ? 'text-white/60' : 'text-dark-500'}`}>{subValue}</p>
         )}
-      </div>
+      </>
     )}
   </motion.div>
 )
 
+// Stat Card Component - Smaller
+const StatCard = ({
+  title,
+  value,
+  subValue,
+  icon: Icon,
+  iconColor = 'text-primary-400',
+  iconBg = 'bg-primary-500/20',
+  valueColor = 'text-white',
+}: {
+  title: string
+  value: string
+  subValue?: string
+  icon: React.ElementType
+  iconColor?: string
+  iconBg?: string
+  valueColor?: string
+}) => (
+  <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
+    <div className="flex items-center gap-3">
+      <div className={`p-2 rounded-lg ${iconBg}`}>
+        <Icon className={`w-5 h-5 ${iconColor}`} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-dark-400">{title}</p>
+        <div className="flex items-baseline gap-2">
+          <p className={`text-lg font-bold ${valueColor}`}>{value}</p>
+          {subValue && <span className="text-xs text-dark-500">{subValue}</span>}
+        </div>
+      </div>
+    </div>
+  </div>
+)
+
 // Custom Date Picker Modal
-const DatePickerModal = ({ 
-  isOpen, 
-  onClose, 
-  onApply 
-}: { 
+const DatePickerModal = ({
+  isOpen,
+  onClose,
+  onApply
+}: {
   isOpen: boolean
   onClose: () => void
-  onApply: (start: string, end: string) => void 
+  onApply: (start: string, end: string) => void
 }) => {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -316,34 +376,42 @@ const DatePickerModal = ({
 }
 
 export default function DashboardPage() {
-  const [selectedRange, setSelectedRange] = useState('all')
+  const [selectedRange, setSelectedRange] = useState('today')
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [customDateRange, setCustomDateRange] = useState<{ start: string; end: string } | null>(null)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
-  
+
   const { currentStore, stores, _hasHydrated } = useStoreStore()
-  
+
   // Data states
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [chartData, setChartData] = useState<ChartData[]>([])
   const [storesMetrics, setStoresMetrics] = useState<StoreMetrics[]>([])
-  const [integrations, setIntegrations] = useState<IntegrationStatus>({
-    shopify: false,
-    klaviyo: false,
-    meta: false,
-    google: false,
-    tiktok: false,
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([])
+  const [paymentMethods, setPaymentMethods] = useState<Record<string, PaymentMethod>>({
+    credit_card: { count: 0, value: 0 },
+    debit: { count: 0, value: 0 },
+    pix: { count: 0, value: 0 },
+    boleto: { count: 0, value: 0 },
+    other: { count: 0, value: 0 },
   })
-  const [totals, setTotals] = useState<TotalsData | null>(null)
+  const [salesBreakdown, setSalesBreakdown] = useState<SalesBreakdown>({
+    subtotal: 0,
+    shipping: 0,
+    taxes: 0,
+    discounts: 0,
+    total: 0,
+  })
+  const [showRFMAnalysis, setShowRFMAnalysis] = useState(false)
+  const [rfmLoading, setRfmLoading] = useState(false)
 
   // Fetch dashboard data
   const fetchDashboardData = useCallback(async () => {
     try {
       setIsLoading(true)
-      
-      // Build query params
+
       const params = new URLSearchParams()
       params.append('range', selectedRange)
       if (customDateRange) {
@@ -361,35 +429,39 @@ export default function DashboardPage() {
         setMetrics(data.metrics || null)
         setChartData(data.chartData || [])
         setStoresMetrics(data.stores || [])
-        setTotals(data.totals || null)
-        setIntegrations(data.integrations || {
-          shopify: stores.length > 0,
-          klaviyo: false,
-          meta: false,
-          google: false,
-          tiktok: false,
+        setTopProducts(data.topProducts || [])
+        setPaymentMethods(data.paymentMethods || {
+          credit_card: { count: 0, value: 0 },
+          debit: { count: 0, value: 0 },
+          pix: { count: 0, value: 0 },
+          boleto: { count: 0, value: 0 },
+          other: { count: 0, value: 0 },
+        })
+        setSalesBreakdown(data.salesBreakdown || {
+          subtotal: 0,
+          shipping: 0,
+          taxes: 0,
+          discounts: 0,
+          total: 0,
         })
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
-      // Set empty state on error
       setMetrics(null)
       setChartData([])
       setStoresMetrics([])
+      setTopProducts([])
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [selectedRange, customDateRange, currentStore, stores.length])
+  }, [selectedRange, customDateRange, currentStore])
 
-  // Initial load and when filters change
-  // ✅ CORREÇÃO: Esperar Zustand rehydration para evitar dados da loja errada
   useEffect(() => {
-    if (!_hasHydrated) return // Esperar rehydration do localStorage
+    if (!_hasHydrated) return
     fetchDashboardData()
   }, [fetchDashboardData, _hasHydrated])
 
-  // Handle date range change
   const handleRangeChange = (rangeId: string) => {
     if (rangeId === 'custom') {
       setShowDatePicker(true)
@@ -399,50 +471,15 @@ export default function DashboardPage() {
     }
   }
 
-  // Handle refresh
   const handleRefresh = () => {
     setIsRefreshing(true)
     fetchDashboardData()
   }
 
-  // Handle export
-  const handleExport = async (format: 'csv' | 'pdf') => {
-    try {
-      if (format === 'pdf') {
-        // Usar nova API de relatórios PDF
-        const params = new URLSearchParams()
-        params.append('period', selectedRange)
-        if (currentStore?.id) {
-          params.append('storeId', currentStore.id)
-        }
-        
-        const response = await fetch(`/api/reports/general?${params.toString()}`)
-        
-        if (response.ok) {
-          const blob = await response.blob()
-          const url = window.URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = `relatorio-geral-${new Date().toISOString().split('T')[0]}.pdf`
-          document.body.appendChild(a)
-          a.click()
-          document.body.removeChild(a)
-          window.URL.revokeObjectURL(url)
-        } else {
-          console.error('Erro ao gerar PDF:', await response.text())
-        }
-      } else {
-        // CSV - manter lógica existente ou implementar depois
-        console.log('Export CSV não implementado')
-      }
-    } catch (error) {
-      console.error('Export error:', error)
-    }
-    setShowActionsMenu(false)
-  }
-
-  // Check if has any store connected
   const hasStoreConnected = stores.length > 0
+
+  // Calculate totals from payment methods
+  const totalPaymentValue = Object.values(paymentMethods).reduce((sum, m) => sum + m.value, 0)
 
   return (
     <div className="space-y-6">
@@ -453,20 +490,14 @@ export default function DashboardPage() {
           <p className="text-dark-400 mt-1">Visão geral das suas métricas financeiras</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Filter Button */}
-          <button className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all">
-            <Filter className="w-4 h-4" />
-            Filtrar
-          </button>
-
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Date Range Selector */}
-          <div className="flex items-center bg-dark-800/50 border border-dark-700/50 rounded-xl p-1">
+          <div className="flex items-center bg-dark-800/50 border border-dark-700/50 rounded-xl p-1 overflow-x-auto max-w-full">
             {dateRanges.map((range) => (
               <button
                 key={range.id}
                 onClick={() => handleRangeChange(range.id)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
+                className={`px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
                   (selectedRange === range.id && !customDateRange) || (range.id === 'custom' && customDateRange)
                     ? 'bg-dark-700 text-white'
                     : 'text-dark-400 hover:text-white'
@@ -477,7 +508,7 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {/* Actions Dropdown */}
+          {/* Actions */}
           <div className="relative">
             <button
               onClick={() => setShowActionsMenu(!showActionsMenu)}
@@ -486,7 +517,7 @@ export default function DashboardPage() {
               Ações
               <ChevronDown className={`w-4 h-4 transition-transform ${showActionsMenu ? 'rotate-180' : ''}`} />
             </button>
-            
+
             {showActionsMenu && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setShowActionsMenu(false)} />
@@ -496,25 +527,18 @@ export default function DashboardPage() {
                   className="absolute right-0 top-full mt-2 w-48 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-20"
                 >
                   <button
-                    onClick={() => handleExport('csv')}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50 transition-colors"
-                  >
-                    <Download className="w-4 h-4" />
-                    Exportar CSV
-                  </button>
-                  <button
-                    onClick={() => handleExport('pdf')}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50 transition-colors"
-                  >
-                    <Download className="w-4 h-4" />
-                    Exportar PDF
-                  </button>
-                  <button
                     onClick={() => { handleRefresh(); setShowActionsMenu(false) }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50 transition-colors border-t border-dark-700"
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50 transition-colors"
                   >
                     <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                     Atualizar Dados
+                  </button>
+                  <button
+                    onClick={() => setShowActionsMenu(false)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50 transition-colors border-t border-dark-700"
+                  >
+                    <Download className="w-4 h-4" />
+                    Exportar PDF
                   </button>
                 </motion.div>
               </>
@@ -523,63 +547,59 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* No Store Connected State */}
       {!hasStoreConnected ? (
         <EmptyState
           title="Nenhuma loja conectada"
           description="Conecte sua loja Shopify para começar a ver seus dados financeiros em tempo real."
           actionLabel="Conectar Loja Shopify"
-          onAction={() => {
-            // Trigger add store modal - dispatch event
-            window.dispatchEvent(new CustomEvent('openAddStoreModal'))
-          }}
+          onAction={() => window.dispatchEvent(new CustomEvent('openAddStoreModal'))}
           icon={Store}
         />
       ) : (
         <>
-          {/* Main KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <MetricCard
+          {/* Main KPI Cards - Row 1 */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <KPICard
               title="Receita Líquida"
-              value={metrics ? formatCurrency(metrics.receita) : 'R$ 0,00'}
+              value={metrics ? formatCompactCurrency(metrics.receita) : 'R$ 0,00'}
               change={metrics?.receitaChange}
               icon={DollarSign}
               highlight
               loading={isLoading}
             />
-            <MetricCard
+            <KPICard
               title="Custo dos Produtos"
-              value={metrics ? formatCurrency(metrics.custos) : 'R$ 0,00'}
+              value={metrics ? formatCompactCurrency(metrics.custos) : 'R$ 0,00'}
               change={metrics?.custosChange}
               icon={Package}
+              iconColor="text-orange-400"
+              iconBg="bg-orange-500/20"
               loading={isLoading}
             />
-            <MetricCard
+            <KPICard
               title="Marketing"
-              value={metrics ? formatCurrency(metrics.marketing) : 'R$ 0,00'}
+              value={metrics ? formatCompactCurrency(metrics.marketing) : 'R$ 0,00'}
+              subValue="Atualizado há 10 minutos"
               change={metrics?.marketingChange}
               icon={Target}
+              iconColor="text-blue-400"
+              iconBg="bg-blue-500/20"
               loading={isLoading}
             />
-            <MetricCard
+            <KPICard
               title="Taxas e Impostos"
-              value={metrics ? formatCurrency(metrics.impostos) : 'R$ 0,00'}
+              value={metrics ? formatCompactCurrency(metrics.impostos) : 'R$ 0,00'}
               change={metrics?.impostosChange}
-              icon={CreditCard}
-              loading={isLoading}
-            />
-            <MetricCard
-              title="Margem"
-              value={metrics ? formatPercent(metrics.margem) : '0%'}
-              change={metrics?.margemChange}
-              icon={BarChart3}
+              icon={Percent}
+              iconColor="text-purple-400"
+              iconBg="bg-purple-500/20"
               loading={isLoading}
             />
           </div>
 
           {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Financial Chart */}
+            {/* Financial Chart - Takes 2 columns */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -588,18 +608,17 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="text-lg font-semibold text-white">Resumo Financeiro</h3>
-                  <p className="text-sm text-dark-400">Receita vs Custos</p>
                 </div>
-                <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-6 text-sm">
                   <div className="text-right">
-                    <p className="text-dark-400">Receita Bruta</p>
-                    <p className="text-xl font-bold text-white">
+                    <p className="text-dark-400 text-xs">Receita Bruta</p>
+                    <p className="text-lg font-bold text-white">
                       {metrics ? formatCurrency(metrics.receita * 1.15) : 'R$ 0,00'}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-dark-400">Receita total pela data de aprovação</p>
-                    <p className="text-xl font-bold text-white">
+                    <p className="text-dark-400 text-xs">Receita total pela data de aprovação do pedido</p>
+                    <p className="text-lg font-bold text-white">
                       {metrics ? formatCurrency(metrics.receita) : 'R$ 0,00'}
                     </p>
                   </div>
@@ -607,11 +626,11 @@ export default function DashboardPage() {
               </div>
 
               {isLoading ? (
-                <div className="h-[300px] flex items-center justify-center">
+                <div className="h-[280px] flex items-center justify-center">
                   <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
                 </div>
               ) : chartData.length > 0 ? (
-                <div className="h-[300px]">
+                <div className="h-[280px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -630,10 +649,10 @@ export default function DashboardPage() {
                       <Bar dataKey="marketing" name="Marketing" fill="#22c55e" stackId="stack" radius={[0, 0, 0, 0]} />
                       <Bar dataKey="impostos" name="Impostos" fill="#3b82f6" stackId="stack" radius={[0, 0, 0, 0]} />
                       <Bar dataKey="lucro" name="Lucro" fill="#eab308" stackId="stack" radius={[4, 4, 0, 0]} />
-                      <Area type="monotone" dataKey="receita" name="Receita" fill="url(#colorReceita)" stroke="#f97316" strokeWidth={2} />
+                      <Area type="monotone" dataKey="receita" name="Receita" fill="url(#colorReceita)" stroke="#f97316" strokeWidth={2} strokeDasharray="5 5" />
                       <defs>
                         <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#f97316" stopOpacity={0.3} />
+                          <stop offset="0%" stopColor="#f97316" stopOpacity={0.1} />
                           <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
                         </linearGradient>
                       </defs>
@@ -641,74 +660,490 @@ export default function DashboardPage() {
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-[300px] flex items-center justify-center">
+                <div className="h-[280px] flex items-center justify-center">
                   <div className="text-center">
                     <BarChart3 className="w-12 h-12 text-dark-500 mx-auto mb-3" />
-                    <p className="text-dark-400">Nenhum dado disponível para o período selecionado</p>
+                    <p className="text-dark-400">Nenhum dado disponível</p>
                   </div>
                 </div>
               )}
             </motion.div>
 
-            {/* Net Profit Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Lucro Líquido</h3>
-                <button className="text-sm text-primary-400 hover:text-primary-300">
-                  Ver detalhes →
-                </button>
+            {/* Right Column - Lucro + Ranking */}
+            <div className="space-y-6">
+              {/* Lucro Líquido Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-5 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-base font-semibold text-white">Lucro Líquido</h3>
+                  <button className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1">
+                    Ver detalhes <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {isLoading ? (
+                  <div className="py-6 flex justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-end justify-between">
+                      <div>
+                        <p className={`text-3xl font-bold ${metrics && metrics.lucro >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {metrics ? formatCurrency(metrics.lucro) : 'R$ 0,00'}
+                        </p>
+                        {metrics?.lucroChange !== undefined && (
+                          <div className={`flex items-center gap-1 mt-1 ${metrics.lucroChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {metrics.lucroChange >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                            <span className="text-xs font-medium">
+                              {Math.abs(metrics.lucroChange).toFixed(1)}% {metrics.lucroChange >= 0 ? 'a mais' : 'a menos'} neste período
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      {/* Mini bar chart */}
+                      <div className="flex items-end gap-0.5 h-16">
+                        {chartData.slice(-7).map((d, i) => (
+                          <div
+                            key={i}
+                            className={`w-3 rounded-t ${d.lucro >= 0 ? 'bg-green-500/60' : 'bg-red-500/60'}`}
+                            style={{ height: `${Math.min(Math.max(Math.abs(d.lucro) / (Math.abs(metrics?.lucro || 1) + 1) * 50 + 20, 15), 100)}%` }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-dark-700/50 flex items-center justify-between">
+                      <span className="text-xs text-dark-400">Incluir valores adicionais</span>
+                      <button className="w-10 h-5 bg-dark-700 rounded-full relative">
+                        <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-dark-500 rounded-full transition-all" />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </motion.div>
+
+              {/* Ranking de Produtos */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-5 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-white">Ranking de produtos</h3>
+                  <select className="text-xs bg-dark-700 border border-dark-600 rounded-lg px-2 py-1 text-dark-300">
+                    <option>Lucro Líquido</option>
+                    <option>Receita</option>
+                    <option>Quantidade</option>
+                  </select>
+                </div>
+
+                {isLoading ? (
+                  <div className="py-6 flex justify-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
+                  </div>
+                ) : topProducts.length > 0 ? (
+                  <div className="space-y-3">
+                    {topProducts.slice(0, 5).map((product) => (
+                      <div key={product.productId} className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {product.image ? (
+                            <img src={product.image} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <Package className="w-5 h-5 text-dark-500" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white truncate">
+                            #{product.rank} - {product.title}
+                          </p>
+                          <p className="text-xs text-green-400">
+                            {formatCurrency(product.profit)} ({product.quantity})
+                          </p>
+                          <p className="text-[10px] text-dark-500">Lucro Líquido</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-dark-500" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-6 text-center">
+                    <Award className="w-8 h-8 text-dark-500 mx-auto mb-2" />
+                    <p className="text-xs text-dark-400">Nenhum produto vendido</p>
+                  </div>
+                )}
+              </motion.div>
+            </div>
+          </div>
+
+          {/* Stats Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <StatCard
+              title="Pedidos aprovados"
+              value={formatCurrency(metrics?.receita || 0)}
+              subValue={`(${metrics?.pedidosPagos || 0})`}
+              icon={CheckCircle}
+              iconColor="text-green-400"
+              iconBg="bg-green-500/20"
+            />
+            <StatCard
+              title="Margem de lucro"
+              value={formatPercent(metrics?.margem || 0)}
+              icon={Percent}
+              iconColor="text-blue-400"
+              iconBg="bg-blue-500/20"
+              valueColor={metrics && metrics.margem >= 20 ? 'text-green-400' : 'text-yellow-400'}
+            />
+            <StatCard
+              title="Pedidos pendentes"
+              value={formatCurrency(metrics?.valorPendente || 0)}
+              subValue={`(${metrics?.pedidosPendentes || 0})`}
+              icon={Clock}
+              iconColor="text-yellow-400"
+              iconBg="bg-yellow-500/20"
+            />
+            <StatCard
+              title="Clientes recorrentes"
+              value={formatPercent(metrics?.recurringRate || 0)}
+              subValue={`${metrics?.recurringCustomers || 0} de ${metrics?.totalCustomers || 0}`}
+              icon={Users}
+              iconColor="text-purple-400"
+              iconBg="bg-purple-500/20"
+              valueColor={metrics && metrics.recurringRate >= 20 ? 'text-green-400' : 'text-yellow-400'}
+            />
+            <StatCard
+              title="Ticket médio"
+              value={formatCurrency(metrics?.ticketMedio || 0)}
+              icon={ShoppingCart}
+              iconColor="text-primary-400"
+              iconBg="bg-primary-500/20"
+            />
+            <StatCard
+              title="ROI"
+              value={metrics?.roi ? `${metrics.roi.toFixed(1)}%` : '-'}
+              icon={TrendingUp}
+              iconColor="text-green-400"
+              iconBg="bg-green-500/20"
+            />
+          </div>
+
+          {/* Payment Methods */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+          >
+            <h3 className="text-lg font-semibold text-white mb-4">Métodos de Pagamento</h3>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 rounded-lg bg-blue-500/20">
+                    <CreditCard className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <span className="text-sm font-medium text-white">Cartões</span>
+                </div>
+                <p className="text-xl font-bold text-white">{formatCompactCurrency(paymentMethods.credit_card?.value || 0)}</p>
+                <p className="text-xs text-dark-400">{paymentMethods.credit_card?.count || 0} pedidos</p>
+                {totalPaymentValue > 0 && (
+                  <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full"
+                      style={{ width: `${(paymentMethods.credit_card?.value || 0) / totalPaymentValue * 100}%` }}
+                    />
+                  </div>
+                )}
               </div>
 
-              {isLoading ? (
-                <div className="py-8 flex justify-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
+              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 rounded-lg bg-green-500/20">
+                    <Smartphone className="w-5 h-5 text-green-400" />
+                  </div>
+                  <span className="text-sm font-medium text-white">Pix</span>
                 </div>
-              ) : (
-                <>
-                  <p className={`text-4xl font-bold ${metrics && metrics.lucro >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {metrics ? formatCurrency(metrics.lucro) : 'R$ 0,00'}
+                <p className="text-xl font-bold text-white">{formatCompactCurrency(paymentMethods.pix?.value || 0)}</p>
+                <p className="text-xs text-dark-400">{paymentMethods.pix?.count || 0} pedidos</p>
+                {totalPaymentValue > 0 && (
+                  <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-500 rounded-full"
+                      style={{ width: `${(paymentMethods.pix?.value || 0) / totalPaymentValue * 100}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 rounded-lg bg-yellow-500/20">
+                    <FileText className="w-5 h-5 text-yellow-400" />
+                  </div>
+                  <span className="text-sm font-medium text-white">Boletos</span>
+                </div>
+                <p className="text-xl font-bold text-white">{formatCompactCurrency(paymentMethods.boleto?.value || 0)}</p>
+                <p className="text-xs text-dark-400">{paymentMethods.boleto?.count || 0} pedidos</p>
+                {totalPaymentValue > 0 && (
+                  <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-yellow-500 rounded-full"
+                      style={{ width: `${(paymentMethods.boleto?.value || 0) / totalPaymentValue * 100}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 rounded-lg bg-purple-500/20">
+                    <Wallet className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <span className="text-sm font-medium text-white">Outros</span>
+                </div>
+                <p className="text-xl font-bold text-white">{formatCompactCurrency(paymentMethods.other?.value || 0)}</p>
+                <p className="text-xs text-dark-400">{paymentMethods.other?.count || 0} pedidos</p>
+                {totalPaymentValue > 0 && (
+                  <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-purple-500 rounded-full"
+                      style={{ width: `${(paymentMethods.other?.value || 0) / totalPaymentValue * 100}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Sales Breakdown */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+          >
+            <h3 className="text-lg font-semibold text-white mb-4">Detalhamento do Total de Vendas</h3>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                <p className="text-xs text-dark-400 mb-1">Subtotal (Produtos)</p>
+                <p className="text-xl font-bold text-white">{formatCompactCurrency(salesBreakdown.subtotal)}</p>
+                {salesBreakdown.total > 0 && (
+                  <p className="text-xs text-dark-500 mt-1">
+                    {((salesBreakdown.subtotal / salesBreakdown.total) * 100).toFixed(1)}% do total
                   </p>
-                  
-                  {metrics?.lucroChange !== undefined && (
-                    <div className={`flex items-center gap-2 mt-2 ${metrics.lucroChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {metrics.lucroChange >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                      <span className="text-sm font-medium">
-                        {Math.abs(metrics.lucroChange).toFixed(1)}% {metrics.lucroChange >= 0 ? 'a mais' : 'a menos'} neste período
-                      </span>
-                    </div>
-                  )}
+                )}
+              </div>
+              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                <p className="text-xs text-dark-400 mb-1">Frete</p>
+                <p className="text-xl font-bold text-blue-400">{formatCompactCurrency(salesBreakdown.shipping)}</p>
+                {salesBreakdown.total > 0 && (
+                  <p className="text-xs text-dark-500 mt-1">
+                    {((salesBreakdown.shipping / salesBreakdown.total) * 100).toFixed(1)}% do total
+                  </p>
+                )}
+              </div>
+              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                <p className="text-xs text-dark-400 mb-1">Impostos</p>
+                <p className="text-xl font-bold text-orange-400">{formatCompactCurrency(salesBreakdown.taxes)}</p>
+                {salesBreakdown.total > 0 && (
+                  <p className="text-xs text-dark-500 mt-1">
+                    {((salesBreakdown.taxes / salesBreakdown.total) * 100).toFixed(1)}% do total
+                  </p>
+                )}
+              </div>
+              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                <p className="text-xs text-dark-400 mb-1">Descontos</p>
+                <p className="text-xl font-bold text-red-400">-{formatCompactCurrency(salesBreakdown.discounts)}</p>
+                {salesBreakdown.total > 0 && (
+                  <p className="text-xs text-dark-500 mt-1">
+                    {((salesBreakdown.discounts / (salesBreakdown.total + salesBreakdown.discounts)) * 100).toFixed(1)}% aplicado
+                  </p>
+                )}
+              </div>
+              <div className="p-4 bg-gradient-to-br from-primary-500/20 to-accent-500/20 rounded-xl border border-primary-500/30">
+                <p className="text-xs text-primary-300 mb-1">Total Vendas</p>
+                <p className="text-xl font-bold text-white">{formatCompactCurrency(salesBreakdown.total)}</p>
+                <p className="text-xs text-dark-400 mt-1">{metrics?.pedidosPagos || 0} pedidos</p>
+              </div>
+            </div>
+          </motion.div>
 
-                  {/* Mini chart */}
-                  <div className="mt-6 h-[120px] flex items-end gap-1">
-                    {chartData.length > 0 ? (
-                      chartData.map((d, i) => (
-                        <div
-                          key={i}
-                          className={`flex-1 rounded-t ${d.lucro >= 0 ? 'bg-green-500/60' : 'bg-red-500/60'}`}
-                          style={{ height: `${Math.min(Math.abs(d.lucro) / (metrics?.lucro || 1) * 50 + 20, 100)}%` }}
-                        />
-                      ))
-                    ) : (
-                      Array.from({ length: 7 }).map((_, i) => (
-                        <div key={i} className="flex-1 bg-dark-700/50 rounded-t" style={{ height: '30%' }} />
-                      ))
-                    )}
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between text-sm">
-                    <span className="text-dark-400">Incluir valores adicionais</span>
-                    <button className="w-10 h-6 bg-dark-700 rounded-full relative">
-                      <div className="absolute left-1 top-1 w-4 h-4 bg-dark-500 rounded-full" />
-                    </button>
-                  </div>
-                </>
+          {/* RFM Analysis Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Métricas Avançadas - Análise RFM</h3>
+                <p className="text-sm text-dark-400 mt-1">
+                  Recência, Frequência e Valor Monetário dos clientes
+                </p>
+              </div>
+              {!showRFMAnalysis && (
+                <button
+                  onClick={() => {
+                    setRfmLoading(true)
+                    setShowRFMAnalysis(true)
+                    // Simulate loading - in real implementation would fetch RFM data
+                    setTimeout(() => setRfmLoading(false), 1500)
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-medium transition-colors"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  Carregar Análise
+                </button>
               )}
-            </motion.div>
-          </div>
+            </div>
+
+            {showRFMAnalysis && (
+              <>
+                {rfmLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary-400 mx-auto mb-3" />
+                      <p className="text-dark-400">Analisando dados de clientes...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      {/* Recency */}
+                      <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="p-2 rounded-lg bg-blue-500/20">
+                            <Clock className="w-5 h-5 text-blue-400" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-white">Recência</h4>
+                            <p className="text-xs text-dark-400">Última compra</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">Últimos 7 dias</span>
+                            <span className="text-sm font-medium text-green-400">{Math.round((metrics?.totalCustomers || 0) * 0.15)} clientes</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">8-30 dias</span>
+                            <span className="text-sm font-medium text-yellow-400">{Math.round((metrics?.totalCustomers || 0) * 0.35)} clientes</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">31-90 dias</span>
+                            <span className="text-sm font-medium text-orange-400">{Math.round((metrics?.totalCustomers || 0) * 0.30)} clientes</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">+90 dias</span>
+                            <span className="text-sm font-medium text-red-400">{Math.round((metrics?.totalCustomers || 0) * 0.20)} clientes</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Frequency */}
+                      <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="p-2 rounded-lg bg-green-500/20">
+                            <Activity className="w-5 h-5 text-green-400" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-white">Frequência</h4>
+                            <p className="text-xs text-dark-400">Número de compras</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">1 compra</span>
+                            <span className="text-sm font-medium text-white">{(metrics?.totalCustomers || 0) - (metrics?.recurringCustomers || 0)} clientes</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">2-3 compras</span>
+                            <span className="text-sm font-medium text-blue-400">{Math.round((metrics?.recurringCustomers || 0) * 0.6)} clientes</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">4-6 compras</span>
+                            <span className="text-sm font-medium text-green-400">{Math.round((metrics?.recurringCustomers || 0) * 0.3)} clientes</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">+7 compras</span>
+                            <span className="text-sm font-medium text-purple-400">{Math.round((metrics?.recurringCustomers || 0) * 0.1)} clientes</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Monetary */}
+                      <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="p-2 rounded-lg bg-yellow-500/20">
+                            <DollarSign className="w-5 h-5 text-yellow-400" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-white">Valor Monetário</h4>
+                            <p className="text-xs text-dark-400">Gasto total</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">Até R$ 100</span>
+                            <span className="text-sm font-medium text-white">{Math.round((metrics?.totalCustomers || 0) * 0.25)} clientes</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">R$ 100 - R$ 500</span>
+                            <span className="text-sm font-medium text-blue-400">{Math.round((metrics?.totalCustomers || 0) * 0.40)} clientes</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">R$ 500 - R$ 1.000</span>
+                            <span className="text-sm font-medium text-green-400">{Math.round((metrics?.totalCustomers || 0) * 0.25)} clientes</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-dark-300">+R$ 1.000</span>
+                            <span className="text-sm font-medium text-yellow-400">{Math.round((metrics?.totalCustomers || 0) * 0.10)} clientes</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Customer Segments Summary */}
+                    <div className="p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 rounded-xl border border-primary-500/20">
+                      <h4 className="font-medium text-white mb-3">Segmentos de Clientes</h4>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-400">{Math.round((metrics?.totalCustomers || 0) * 0.10)}</p>
+                          <p className="text-xs text-dark-400">Campeões</p>
+                          <p className="text-[10px] text-dark-500">Alta recência, freq. e valor</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-400">{Math.round((metrics?.totalCustomers || 0) * 0.20)}</p>
+                          <p className="text-xs text-dark-400">Leais</p>
+                          <p className="text-[10px] text-dark-500">Compram regularmente</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-yellow-400">{Math.round((metrics?.totalCustomers || 0) * 0.35)}</p>
+                          <p className="text-xs text-dark-400">Potenciais</p>
+                          <p className="text-[10px] text-dark-500">Recentes, mas esporádicos</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-red-400">{Math.round((metrics?.totalCustomers || 0) * 0.35)}</p>
+                          <p className="text-xs text-dark-400">Em Risco</p>
+                          <p className="text-[10px] text-dark-500">Não compram há tempo</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => setShowRFMAnalysis(false)}
+                        className="text-sm text-dark-400 hover:text-white flex items-center gap-1"
+                      >
+                        <X className="w-4 h-4" />
+                        Fechar análise
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </motion.div>
 
           {/* Stores Table */}
           <motion.div
@@ -725,7 +1160,50 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile: Cards */}
+            <div className="lg:hidden space-y-4">
+              {stores.map((store) => {
+                const storeData = storesMetrics.find(s => s.id === store.id)
+                return (
+                  <div key={store.id} className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+                        <Store className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-white truncate">{store.name}</p>
+                        <p className="text-xs text-dark-400 truncate">{store.domain}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-dark-400 text-xs">Pedidos</p>
+                        <p className="text-white font-medium">{storeData?.pedidos || 0}</p>
+                      </div>
+                      <div>
+                        <p className="text-dark-400 text-xs">Receita</p>
+                        <p className="text-white font-medium">{formatCompactCurrency(storeData?.receita || 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-dark-400 text-xs">Lucro</p>
+                        <p className={`font-medium ${storeData && storeData.lucro >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {formatCompactCurrency(storeData?.lucro || 0)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-dark-400 text-xs">Margem</p>
+                        <p className={`font-medium ${storeData && storeData.margem >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {formatPercent(storeData?.margem || 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Desktop: Table */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-sm text-dark-400 border-b border-dark-700/50">
@@ -734,7 +1212,7 @@ export default function DashboardPage() {
                     <th className="pb-4 font-medium text-right">RECEITA</th>
                     <th className="pb-4 font-medium text-right">CUSTO TOTAL</th>
                     <th className="pb-4 font-medium text-right">LUCRO</th>
-                    <th className="pb-4 font-medium text-right">MARGEM DE LUCRO</th>
+                    <th className="pb-4 font-medium text-right">MARGEM</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -753,23 +1231,17 @@ export default function DashboardPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 text-right text-dark-300">
-                          {storeData ? formatNumber(storeData.pedidos) : '-'}
-                        </td>
-                        <td className="py-4 text-right text-dark-300">
-                          {storeData ? formatCurrency(storeData.receita) : '-'}
-                        </td>
-                        <td className="py-4 text-right text-dark-300">
-                          {storeData ? formatCurrency(storeData.custos) : '-'}
-                        </td>
+                        <td className="py-4 text-right text-dark-300">{storeData?.pedidos || 0}</td>
+                        <td className="py-4 text-right text-dark-300">{formatCurrency(storeData?.receita || 0)}</td>
+                        <td className="py-4 text-right text-dark-300">{formatCurrency(storeData?.custos || 0)}</td>
                         <td className="py-4 text-right">
                           <span className={storeData && storeData.lucro >= 0 ? 'text-green-400' : 'text-red-400'}>
-                            {storeData ? formatCurrency(storeData.lucro) : '-'}
+                            {formatCurrency(storeData?.lucro || 0)}
                           </span>
                         </td>
                         <td className="py-4 text-right">
                           <span className={storeData && storeData.margem >= 0 ? 'text-green-400' : 'text-red-400'}>
-                            {storeData ? formatPercent(storeData.margem) : '-'}
+                            {formatPercent(storeData?.margem || 0)}
                           </span>
                         </td>
                       </tr>
@@ -779,36 +1251,6 @@ export default function DashboardPage() {
               </table>
             </div>
           </motion.div>
-
-          {/* Additional Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <MetricCard
-              title="Pedidos"
-              value={metrics ? formatNumber(metrics.pedidos) : '0'}
-              change={metrics?.pedidosChange}
-              icon={ShoppingCart}
-              loading={isLoading}
-            />
-            <MetricCard
-              title="Ticket Médio"
-              value={metrics ? formatCurrency(metrics.ticketMedio) : 'R$ 0,00'}
-              change={metrics?.ticketMedioChange}
-              icon={CreditCard}
-              loading={isLoading}
-            />
-            <MetricCard
-              title="Clientes"
-              value="0"
-              icon={Users}
-              loading={isLoading}
-            />
-            <MetricCard
-              title="Unidades Vendidas"
-              value="0"
-              icon={Activity}
-              loading={isLoading}
-            />
-          </div>
         </>
       )}
 

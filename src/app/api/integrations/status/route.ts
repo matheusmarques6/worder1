@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
+export const dynamic = 'force-dynamic';
 
 // Interfaces para tipos
 interface ShopifyStoreRow {

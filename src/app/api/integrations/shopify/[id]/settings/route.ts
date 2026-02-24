@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
+export const dynamic = 'force-dynamic';
 
 // GET - Get store settings
 export async function GET(

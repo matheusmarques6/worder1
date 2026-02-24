@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import ExcelJS from 'exceljs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();

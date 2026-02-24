@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { MetaApiClient, MetaApiClientError, META_API_URL } from '@/lib/meta-api';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthClient();

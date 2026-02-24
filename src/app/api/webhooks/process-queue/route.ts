@@ -17,6 +17,7 @@ const supabase = new Proxy({} as SupabaseClient, {
 
 // Importar executor de ações e tipo
 import { executeAction, ActionContext } from '@/lib/automation/actions';
+export const dynamic = 'force-dynamic';
 
 // =====================================================
 // TYPES

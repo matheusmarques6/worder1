@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
+export const dynamic = 'force-dynamic';
 
 const WEBHOOK_URL_BASE = process.env.NEXT_PUBLIC_APP_URL || ''
 

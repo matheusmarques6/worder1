@@ -2,6 +2,7 @@
 // CORRIGIDO: Usa tabela CONTACTS unificada
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+export const dynamic = 'force-dynamic';
 
 // Helper para buscar contato unificado
 async function getContact(contactId: string) {

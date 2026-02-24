@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/queue';
 import { processWebhookWithAI } from '@/lib/ai/webhook-processor';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+export const dynamic = 'force-dynamic';
 
 // Config para Vercel
 export const runtime = 'nodejs';

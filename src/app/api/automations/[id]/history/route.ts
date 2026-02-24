@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
+export const dynamic = 'force-dynamic';
 
 // ============================================
 // GET - Histórico de execuções de uma automação

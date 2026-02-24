@@ -20,6 +20,7 @@ import {
   formatBudget,
   MetaAccount 
 } from '@/lib/meta-api';
+export const dynamic = 'force-dynamic';
 
 // GET - Buscar campanhas com métricas
 export async function GET(request: NextRequest) {

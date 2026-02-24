@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { getTemplates } from '@/lib/whatsapp/meta-api'
+export const dynamic = 'force-dynamic';
 
 // GET /api/whatsapp/templates
 export async function GET(request: NextRequest) {

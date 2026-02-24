@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+export const dynamic = 'force-dynamic';
 
 // Cliente admin
 let supabaseAdmin: SupabaseClient | null = null;

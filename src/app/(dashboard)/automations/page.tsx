@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
@@ -117,8 +118,15 @@ export default function AutomationsPage() {
   const [loading, setLoading] = useState(true);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   const organizationId = user?.organization_id;
+
+  // Track if mounted for portal
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   // Fetch dashboard stats
   useEffect(() => {
@@ -325,25 +333,39 @@ export default function AutomationsPage() {
   };
 
   // ============================================
-  // RENDER EDITOR
+  // RENDER FULLSCREEN EDITOR (Portal)
   // ============================================
 
-  if (editingAutomation) {
-    return (
-      <div className="h-[calc(100vh-64px)]">
-        <FlowBuilder
-          automationId={editingAutomation.id}
-          automationName={editingAutomation.name}
-          automationStatus={editingAutomation.status}
-          initialNodes={editingAutomation.nodes || []}
-          initialEdges={editingAutomation.edges || []}
-          onSave={handleSave}
-          onBack={handleBack}
-          organizationId={organizationId}
-        />
-      </div>
+  const renderFullscreenEditor = () => {
+    if (!mounted) return null;
+
+    return createPortal(
+      <AnimatePresence>
+        {editingAutomation && (
+          <motion.div
+            key="flow-builder-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] bg-dark-900"
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+          >
+            <FlowBuilder
+              automationId={editingAutomation.id}
+              automationName={editingAutomation.name}
+              automationStatus={editingAutomation.status}
+              initialNodes={editingAutomation.nodes || []}
+              initialEdges={editingAutomation.edges || []}
+              onSave={handleSave}
+              onBack={handleBack}
+              organizationId={organizationId}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>,
+      document.body
     );
-  }
+  };
 
   // ============================================
   // RENDER LIST
@@ -351,6 +373,8 @@ export default function AutomationsPage() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* Fullscreen Editor Portal */}
+      {renderFullscreenEditor()}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

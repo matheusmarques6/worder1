@@ -12,6 +12,7 @@ import {
   BASE_VARIABLES,
   TRIGGER_VARIABLES
 } from '@/lib/automation/variables';
+export const dynamic = 'force-dynamic';
 
 // =============================================
 // GET - Obter catálogo de variáveis

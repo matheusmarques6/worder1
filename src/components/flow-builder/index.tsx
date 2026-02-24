@@ -61,6 +61,7 @@ export function FlowBuilder({
   const toggleTestModal = useFlowStore((state) => state.toggleTestModal);
   const showHistoryPanel = useFlowStore((state) => state.showHistoryPanel);
   const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
+  const isFullscreen = useFlowStore((state) => state.isFullscreen);
 
   // Local state for saved automation ID
   const [savedAutomationId, setSavedAutomationId] = useState<string | undefined>(automationId);
@@ -153,7 +154,7 @@ export function FlowBuilder({
 
   return (
     <ReactFlowProvider>
-      <div className="h-full w-full flex flex-col bg-[#0a0a0a]">
+      <div className="h-screen w-screen flex flex-col bg-dark-900 overflow-hidden">
         {/* Toolbar */}
         <Toolbar
           onSave={handleSave}
@@ -164,16 +165,16 @@ export function FlowBuilder({
 
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar */}
-          <Sidebar />
+          {/* Sidebar - hidden in fullscreen */}
+          {!isFullscreen && <Sidebar />}
 
           {/* Canvas */}
-          <div className="flex-1 relative">
+          <div className="flex-1 relative bg-dark-800">
             <Canvas />
           </div>
 
-          {/* Properties Panel */}
-          {showPropertiesPanel && (
+          {/* Properties Panel - hidden in fullscreen */}
+          {showPropertiesPanel && !isFullscreen && (
             <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} />
           )}
         </div>
@@ -190,17 +191,17 @@ export function FlowBuilder({
         {/* Execution Panel - Fallback for unsaved automations */}
         {showTestModal && (!savedAutomationId || savedAutomationId === 'new' || !organizationId) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-[#111111] border border-white/10 rounded-xl p-6 max-w-md">
+            <div className="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-md shadow-xl">
               <h3 className="text-lg font-semibold text-white mb-2">
                 Salve a automação primeiro
               </h3>
-              <p className="text-white/60 text-sm mb-4">
+              <p className="text-dark-300 text-sm mb-4">
                 Para testar a automação, você precisa salvá-la primeiro.
               </p>
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={handleCloseTestModal}
-                  className="px-4 py-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                  className="px-4 py-2 rounded-lg text-dark-300 hover:text-white hover:bg-dark-700 transition-colors"
                 >
                   Fechar
                 </button>
@@ -209,7 +210,7 @@ export function FlowBuilder({
                     handleCloseTestModal();
                     await handleSave();
                   }}
-                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                  className="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors"
                 >
                   Salvar Agora
                 </button>
@@ -230,17 +231,17 @@ export function FlowBuilder({
         {/* History Panel - Fallback for unsaved automations */}
         {showHistoryPanel && (!savedAutomationId || savedAutomationId === 'new' || !organizationId) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-[#111111] border border-white/10 rounded-xl p-6 max-w-md">
+            <div className="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-md shadow-xl">
               <h3 className="text-lg font-semibold text-white mb-2">
                 Automação não salva
               </h3>
-              <p className="text-white/60 text-sm mb-4">
+              <p className="text-dark-300 text-sm mb-4">
                 O histórico de execuções só está disponível após salvar a automação.
               </p>
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={handleCloseHistoryPanel}
-                  className="px-4 py-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                  className="px-4 py-2 rounded-lg text-dark-300 hover:text-white hover:bg-dark-700 transition-colors"
                 >
                   Fechar
                 </button>
@@ -249,7 +250,7 @@ export function FlowBuilder({
                     handleCloseHistoryPanel();
                     await handleSave();
                   }}
-                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                  className="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors"
                 >
                   Salvar Agora
                 </button>
