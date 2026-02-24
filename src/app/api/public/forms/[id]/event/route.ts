@@ -1,0 +1,155 @@
+// =============================================
+// PUBLIC FORM EVENT API - Fire events (thank you page, stage change)
+// =============================================
+import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseClient } from '@/lib/api-utils'
+
+export const dynamic = 'force-dynamic'
+
+// POST - Fire an event (e.g., page view on thank you page, meeting scheduled)
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+    }
+
+    const formId = params.id
+    const body = await request.json()
+    const { submission_id, event_type } = body
+
+    if (!submission_id || !event_type) {
+      return NextResponse.json(
+        { error: 'submission_id e event_type são obrigatórios' },
+        { status: 400 }
+      )
+    }
+
+    // Buscar submission
+    const { data: submission } = await supabase
+      .from('crm_form_submissions')
+      .select('*, form:crm_forms(*)')
+      .eq('id', submission_id)
+      .eq('form_id', formId)
+      .single()
+
+    if (!submission) {
+      return NextResponse.json({ error: 'Submission não encontrada' }, { status: 404 })
+    }
+
+    // Buscar eventos que correspondam ao trigger
+    const { data: events } = await supabase
+      .from('crm_form_events')
+      .select('*')
+      .eq('form_id', formId)
+      .eq('is_active', true)
+      .eq('trigger_type', event_type === 'page_view' ? 'on_page_view' : 'on_stage_change')
+
+    if (!events || events.length === 0) {
+      return NextResponse.json({ events_fired: [] })
+    }
+
+    const eventsFired: any[] = []
+    const form = submission.form
+
+    for (const event of events) {
+      // Fire Facebook event
+      if (event.send_to_facebook && form.facebook_pixel_id) {
+        const { data: metaAccount } = await supabase
+          .from('meta_accounts')
+          .select('access_token')
+          .eq('organization_id', form.organization_id)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle()
+
+        if (metaAccount?.access_token) {
+          const fbEvent = {
+            event_name: event.event_name,
+            event_time: Math.floor(Date.now() / 1000),
+            event_id: `${submission_id}-${event.id}`,
+            action_source: 'website',
+            event_source_url: request.headers.get('referer') || '',
+            user_data: {
+              client_ip_address: request.headers.get('x-forwarded-for') || '',
+              client_user_agent: request.headers.get('user-agent') || '',
+            },
+            custom_data: event.event_value ? {
+              value: event.event_value,
+              currency: event.event_currency || 'BRL',
+            } : undefined,
+          }
+
+          try {
+            const response = await fetch(
+              `https://graph.facebook.com/v19.0/${form.facebook_pixel_id}/events`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  data: [fbEvent],
+                  access_token: metaAccount.access_token,
+                }),
+              }
+            )
+            const result = await response.json()
+
+            await supabase
+              .from('crm_form_event_logs')
+              .insert({
+                event_id: event.id,
+                submission_id: submission_id,
+                form_id: formId,
+                organization_id: form.organization_id,
+                platform: 'facebook',
+                event_name: event.event_name,
+                event_data: fbEvent,
+                status: result.error ? 'failed' : 'sent',
+                error_message: result.error ? JSON.stringify(result.error) : null,
+                response_data: result,
+              })
+
+            eventsFired.push({
+              event: event.event_name,
+              platform: 'facebook',
+              success: !result.error,
+            })
+          } catch (err: any) {
+            eventsFired.push({
+              event: event.event_name,
+              platform: 'facebook',
+              success: false,
+              error: err.message,
+            })
+          }
+        }
+      }
+
+      if (event.send_to_google) {
+        eventsFired.push({
+          event: event.event_name,
+          platform: 'google',
+          success: true,
+        })
+      }
+    }
+
+    const response = NextResponse.json({ events_fired: eventsFired })
+    response.headers.set('Access-Control-Allow-Origin', '*')
+    return response
+  } catch (error: any) {
+    console.error('[Form Event] Error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+export async function OPTIONS() {
+  const response = new NextResponse(null, { status: 204 })
+  response.headers.set('Access-Control-Allow-Origin', '*')
+  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+  return response
+}

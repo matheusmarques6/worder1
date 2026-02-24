@@ -38,6 +38,7 @@ import {
   AlertTriangle,
   Info,
   ExternalLink,
+  FileText,
   Loader2,
   TrendingUp,
   User,
@@ -91,8 +92,9 @@ const mainNavItems: NavItem[] = [
   { title: 'Pedidos', href: '/orders', icon: ShoppingCart },
   { title: 'Produtos', href: '/products', icon: Package },
   { title: 'CRM', href: '/crm', icon: Users },
+  { title: 'Formularios', href: '/forms', icon: FileText },
   { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
-  { title: 'Automações', href: '/automations', icon: Zap },
+  { title: 'Automacoes', href: '/automations', icon: Zap },
 ]
 
 const analyticsNavItems: NavItem[] = [
