@@ -30,7 +30,7 @@ interface IntegrationsTabProps {
 
 interface AvailableIntegration {
   id: string
-  type: 'shopify' | 'woocommerce' | 'nuvemshop'
+  type: 'shopify'
   name: string
   store_url?: string
   is_connected: boolean
@@ -43,20 +43,6 @@ const integrationTypeConfig = {
     color: 'text-green-400',
     bg: 'bg-green-500/20',
     description: 'Produtos, pedidos e clientes',
-  },
-  woocommerce: {
-    name: 'WooCommerce',
-    icon: '/integrations/woocommerce.svg',
-    color: 'text-purple-400',
-    bg: 'bg-purple-500/20',
-    description: 'Produtos e pedidos',
-  },
-  nuvemshop: {
-    name: 'Nuvemshop',
-    icon: '/integrations/nuvemshop.svg',
-    color: 'text-blue-400',
-    bg: 'bg-blue-500/20',
-    description: 'Produtos e pedidos',
   },
 }
 

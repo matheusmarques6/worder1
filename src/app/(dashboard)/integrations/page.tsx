@@ -302,12 +302,20 @@ export default function IntegrationsPage() {
     }
   }
 
+  // Slugs de integrações que realmente funcionam no sistema
+  const implementedSlugs = ['shopify', 'whatsapp']
+
   // Filter integrations
   const filteredIntegrations = integrations.filter((int) => {
-    // Excluir WhatsApp da lista (já tem card nativo na seção Mensagens)
-    // Cobrir variações do slug: whatsapp, whatsapp-business, whatsappbusiness
     const slug = int.slug?.toLowerCase() || '';
     const name = int.name?.toLowerCase() || '';
+
+    // Excluir integrações que não têm implementação real
+    if (!implementedSlugs.includes(slug)) {
+      return false
+    }
+
+    // Excluir WhatsApp da lista (já tem card nativo na seção Mensagens)
     if (slug.includes('whatsapp') || name.includes('whatsapp')) {
       return false
     }

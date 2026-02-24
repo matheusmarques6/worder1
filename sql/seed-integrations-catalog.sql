@@ -131,7 +131,8 @@ BEGIN
     short_description = EXCLUDED.short_description,
     is_featured = EXCLUDED.is_featured;
 
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  -- NOTA: Hotmart ainda não tem implementação real no sistema
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'hotmart',
     'Hotmart',
@@ -142,9 +143,11 @@ BEGIN
     '#F04E23',
     'webhook',
     false,
+    false,
     ARRAY['purchase_complete', 'purchase_refund', 'subscription_cancellation']
   ) ON CONFLICT (slug) DO UPDATE SET
-    short_description = EXCLUDED.short_description;
+    short_description = EXCLUDED.short_description,
+    is_active = false;
 
   -- =====================
   -- COMUNICAÇÃO
@@ -171,7 +174,8 @@ BEGIN
   -- FORMULÁRIOS
   -- =====================
   
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  -- NOTA: Google Forms, Typeform e Webform ainda não têm implementação real no sistema
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'google-forms',
     'Google Forms',
@@ -181,13 +185,14 @@ BEGIN
     '/integrations/google-forms.svg',
     '#7248B9',
     'oauth2',
-    true,
+    false,
+    false,
     ARRAY['form_response']
   ) ON CONFLICT (slug) DO UPDATE SET
     short_description = EXCLUDED.short_description,
-    is_featured = EXCLUDED.is_featured;
+    is_active = false;
 
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'typeform',
     'Typeform',
@@ -197,12 +202,14 @@ BEGIN
     '/integrations/typeform.svg',
     '#262627',
     'webhook',
-    true,
+    false,
+    false,
     ARRAY['form_response']
   ) ON CONFLICT (slug) DO UPDATE SET
-    short_description = EXCLUDED.short_description;
+    short_description = EXCLUDED.short_description,
+    is_active = false;
 
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_builtin, supported_webhooks)
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_builtin, is_active, supported_webhooks)
   VALUES (
     'webform',
     'Formulário Web',
@@ -213,16 +220,19 @@ BEGIN
     '#6366F1',
     'none',
     false,
-    true,
+    false,
+    false,
     ARRAY['form_submission']
   ) ON CONFLICT (slug) DO UPDATE SET
-    short_description = EXCLUDED.short_description;
+    short_description = EXCLUDED.short_description,
+    is_active = false;
 
   -- =====================
   -- PLANILHAS
   -- =====================
   
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  -- NOTA: Google Sheets ainda não tem implementação real no sistema
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'google-sheets',
     'Google Sheets',
@@ -232,17 +242,19 @@ BEGIN
     '/integrations/google-sheets.svg',
     '#0F9D58',
     'oauth2',
-    true,
+    false,
+    false,
     ARRAY[]::TEXT[]
   ) ON CONFLICT (slug) DO UPDATE SET
     short_description = EXCLUDED.short_description,
-    is_featured = EXCLUDED.is_featured;
+    is_active = false;
 
   -- =====================
   -- MARKETING
   -- =====================
   
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  -- NOTA: Mailchimp, RD Station e Facebook Lead Ads ainda não têm implementação real no sistema
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'mailchimp',
     'Mailchimp',
@@ -253,11 +265,13 @@ BEGIN
     '#FFE01B',
     'oauth2',
     false,
+    false,
     ARRAY['subscribe', 'unsubscribe']
   ) ON CONFLICT (slug) DO UPDATE SET
-    short_description = EXCLUDED.short_description;
+    short_description = EXCLUDED.short_description,
+    is_active = false;
 
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'rdstation',
     'RD Station',
@@ -268,11 +282,13 @@ BEGIN
     '#00A6FB',
     'oauth2',
     false,
+    false,
     ARRAY['conversion', 'opportunity']
   ) ON CONFLICT (slug) DO UPDATE SET
-    short_description = EXCLUDED.short_description;
+    short_description = EXCLUDED.short_description,
+    is_active = false;
 
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'facebook-leads',
     'Facebook Lead Ads',
@@ -282,16 +298,19 @@ BEGIN
     '/integrations/facebook.svg',
     '#1877F2',
     'oauth2',
-    true,
+    false,
+    false,
     ARRAY['leadgen']
   ) ON CONFLICT (slug) DO UPDATE SET
-    short_description = EXCLUDED.short_description;
+    short_description = EXCLUDED.short_description,
+    is_active = false;
 
   -- =====================
   -- PAGAMENTOS
   -- =====================
   
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  -- NOTA: Stripe e Mercado Pago ainda não têm implementação real no sistema
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'stripe',
     'Stripe',
@@ -302,11 +321,13 @@ BEGIN
     '#635BFF',
     'api_key',
     false,
+    false,
     ARRAY['customer.created', 'payment_intent.succeeded', 'invoice.paid']
   ) ON CONFLICT (slug) DO UPDATE SET
-    short_description = EXCLUDED.short_description;
+    short_description = EXCLUDED.short_description,
+    is_active = false;
 
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'mercadopago',
     'Mercado Pago',
@@ -317,15 +338,18 @@ BEGIN
     '#00B1EA',
     'api_key',
     false,
+    false,
     ARRAY['payment', 'merchant_order']
   ) ON CONFLICT (slug) DO UPDATE SET
-    short_description = EXCLUDED.short_description;
+    short_description = EXCLUDED.short_description,
+    is_active = false;
 
   -- =====================
   -- PRODUTIVIDADE
   -- =====================
   
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  -- NOTA: Calendly e HubSpot ainda não têm implementação real no sistema
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'calendly',
     'Calendly',
@@ -335,12 +359,14 @@ BEGIN
     '/integrations/calendly.svg',
     '#006BFF',
     'webhook',
-    true,
+    false,
+    false,
     ARRAY['invitee.created', 'invitee.canceled']
   ) ON CONFLICT (slug) DO UPDATE SET
-    short_description = EXCLUDED.short_description;
+    short_description = EXCLUDED.short_description,
+    is_active = false;
 
-  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, supported_webhooks)
+  INSERT INTO integrations (slug, name, short_description, description, category_id, icon_url, color, auth_type, is_featured, is_active, supported_webhooks)
   VALUES (
     'hubspot',
     'HubSpot',
@@ -351,9 +377,11 @@ BEGIN
     '#FF7A59',
     'oauth2',
     false,
+    false,
     ARRAY['contact.creation', 'contact.propertyChange', 'deal.creation']
   ) ON CONFLICT (slug) DO UPDATE SET
-    short_description = EXCLUDED.short_description;
+    short_description = EXCLUDED.short_description,
+    is_active = false;
 
 END $$;
 
