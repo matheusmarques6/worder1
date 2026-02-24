@@ -273,7 +273,7 @@ function formatTime(seconds: number): string {
 
 export default function TikTokAdsPage() {
   const [dateRange, setDateRange] = useState('7d')
-  const [selectedTab, setSelectedTab] = useState<'campaigns' | 'creatives' | 'audience'>('campaigns')
+  const [selectedTab, setSelectedTab] = useState<'campaigns'>('campaigns')
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
   
   // Get organization from auth store
@@ -598,23 +598,7 @@ export default function TikTokAdsPage() {
       <div className="p-6 rounded-2xl bg-dark-800/50 border border-dark-700/50">
         {/* Tab Headers */}
         <div className="flex items-center gap-4 mb-6 border-b border-dark-700/50 pb-4">
-          {[
-            { id: 'campaigns', label: 'Campanhas' },
-            { id: 'creatives', label: 'Criativos' },
-            { id: 'audience', label: 'Audiência' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setSelectedTab(tab.id as typeof selectedTab)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                selectedTab === tab.id
-                  ? 'bg-gradient-to-r from-pink-500/20 to-cyan-500/20 text-white'
-                  : 'text-dark-400 hover:text-white'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          <h3 className="text-lg font-semibold text-white">Campanhas</h3>
         </div>
 
         {/* Tab Content */}
@@ -758,35 +742,6 @@ export default function TikTokAdsPage() {
             </motion.div>
           )}
 
-          {selectedTab === 'creatives' && (
-            <motion.div
-              key="creatives"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-            >
-              <EmptyState
-                icon={Video}
-                title="Criativos em breve"
-                description="A análise de criativos estará disponível em uma próxima atualização."
-              />
-            </motion.div>
-          )}
-
-          {selectedTab === 'audience' && (
-            <motion.div
-              key="audience"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-            >
-              <EmptyState
-                icon={Users}
-                title="Audiência em breve"
-                description="Os insights de audiência estarão disponíveis em uma próxima atualização."
-              />
-            </motion.div>
-          )}
         </AnimatePresence>
       </div>
 

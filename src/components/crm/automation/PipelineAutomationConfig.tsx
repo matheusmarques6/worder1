@@ -558,7 +558,7 @@ export function PipelineAutomationConfig({
                 <ArrowRight className="w-12 h-12 text-dark-600 mx-auto mb-3" />
                 <p className="text-dark-400">Transições automáticas</p>
                 <p className="text-dark-500 text-sm mt-1">
-                  Em breve: mova deals entre estágios automaticamente
+                  Nenhuma transição automática configurada
                 </p>
               </div>
             )}

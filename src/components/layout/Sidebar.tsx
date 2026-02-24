@@ -104,7 +104,6 @@ const analyticsNavItems: NavItem[] = [
   { title: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
   { title: 'Facebook Ads', href: '/analytics/facebook', icon: BarChart3 },
   { title: 'Google Ads', href: '/analytics/google', icon: BarChart3 },
-  { title: 'TikTok Ads', href: '/analytics/tiktok', icon: BarChart3 },
 ]
 
 const settingsNavItems: NavItem[] = [

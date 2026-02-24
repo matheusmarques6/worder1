@@ -708,7 +708,7 @@ export function EditAgentModal({
                 </div>
               </div>
 
-              {/* Timeline placeholder */}
+              {/* Timeline - empty state */}
               <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4">
                 <h3 className="font-medium text-white mb-4 flex items-center gap-2">
                   <Activity className="w-4 h-4" />
@@ -716,7 +716,7 @@ export function EditAgentModal({
                 </h3>
                 <div className="text-center py-8 text-dark-500">
                   <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Histórico de atividade em breve</p>
+                  <p className="text-sm">Nenhuma atividade registrada</p>
                 </div>
               </div>
             </div>
