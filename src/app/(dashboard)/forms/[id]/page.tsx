@@ -438,6 +438,9 @@ export default function FormBuilderPage() {
   const previewInputHeight = t.inputHeight || 44
   const previewPlaceholderColor = t.placeholderColor || '#9ca3af'
   const previewInputTextColor = t.inputTextColor || '#1f2937'
+  const previewContainerPadding = t.containerPadding ?? 24
+  const previewContainerMargin = t.containerMargin ?? 0
+  const previewMaxWidth = t.maxWidth || '512'
 
   return (
     <div className="space-y-6">
@@ -672,6 +675,57 @@ export default function FormBuilderPage() {
                   <span>32px</span><span>44px</span><span>56px</span>
                 </div>
               </div>
+              <div>
+                <label className="block text-xs text-dark-400 mb-1">Padding interno: {form.theme?.containerPadding ?? 24}px</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="48"
+                  step="4"
+                  value={form.theme?.containerPadding ?? 24}
+                  onChange={(e) => updateTheme({ containerPadding: parseInt(e.target.value) })}
+                  onMouseUp={saveTheme}
+                  onTouchEnd={saveTheme}
+                  className="w-full accent-primary-500"
+                />
+                <div className="flex justify-between text-[10px] text-dark-500 mt-0.5">
+                  <span>0px</span><span>24px</span><span>48px</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-dark-400 mb-1">Margem externa: {form.theme?.containerMargin ?? 0}px</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="48"
+                  step="4"
+                  value={form.theme?.containerMargin ?? 0}
+                  onChange={(e) => updateTheme({ containerMargin: parseInt(e.target.value) })}
+                  onMouseUp={saveTheme}
+                  onTouchEnd={saveTheme}
+                  className="w-full accent-primary-500"
+                />
+                <div className="flex justify-between text-[10px] text-dark-500 mt-0.5">
+                  <span>0px</span><span>24px</span><span>48px</span>
+                </div>
+                <p className="text-[10px] text-dark-500 mt-1">
+                  Use 0px para embed sem espacamento
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-dark-400 mb-1">Largura maxima</label>
+                <select
+                  value={form.theme?.maxWidth || '512'}
+                  onChange={(e) => updateAndSaveTheme({ maxWidth: e.target.value })}
+                  className="w-full px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                >
+                  <option value="100%">100% (sem limite)</option>
+                  <option value="400">400px (Compacto)</option>
+                  <option value="512">512px (Padrao)</option>
+                  <option value="640">640px (Medio)</option>
+                  <option value="768">768px (Grande)</option>
+                </select>
+              </div>
             </div>
 
             {/* Colors */}
@@ -777,8 +831,16 @@ export default function FormBuilderPage() {
                 </div>
                 <div className={`max-h-[calc(100vh-240px)] overflow-y-auto ${!previewBg ? 'bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#fff_0%_50%)] bg-[length:16px_16px]' : ''}`}>
                   <div
-                    className="p-6"
-                    style={{ backgroundColor: previewBg || 'transparent', fontFamily: previewFont, fontSize: previewFontSize }}
+                    style={{
+                      backgroundColor: previewBg || 'transparent',
+                      fontFamily: previewFont,
+                      fontSize: previewFontSize,
+                      padding: previewContainerPadding,
+                      margin: previewContainerMargin,
+                      maxWidth: previewMaxWidth === '100%' ? '100%' : `${previewMaxWidth}px`,
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
+                    }}
                   >
                     {/* CSS for placeholder and select colors */}
                     <style>{`

@@ -39,6 +39,9 @@ interface FormData {
     buttonText?: string
     placeholderColor?: string
     inputTextColor?: string
+    containerPadding?: number
+    containerMargin?: number
+    maxWidth?: string
   }
   logo_url: string | null
   success_message: string
@@ -242,6 +245,9 @@ export default function EmbedFormPage() {
   const placeholderColor = theme.placeholderColor || '#9ca3af'
   const inputTextColor = theme.inputTextColor || '#1f2937'
   const bgIsTransparent = !theme.backgroundColor
+  const containerPadding = theme.containerPadding ?? 24
+  const containerMargin = theme.containerMargin ?? 0
+  const maxWidth = theme.maxWidth || '512'
 
   if (isLoading) {
     return (
@@ -275,7 +281,16 @@ export default function EmbedFormPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8" style={{ backgroundColor: theme.backgroundColor || 'transparent', fontFamily: theme.fontFamily, fontSize }}>
+    <div
+      className="min-h-screen flex items-center justify-center"
+      style={{
+        backgroundColor: theme.backgroundColor || 'transparent',
+        fontFamily: theme.fontFamily,
+        fontSize,
+        padding: containerPadding,
+        margin: containerMargin,
+      }}
+    >
       {/* CSS for placeholder and select colors */}
       <style>{`
         .embed-input-${form.id}::placeholder { color: ${placeholderColor} !important; opacity: 1; }
@@ -284,7 +299,7 @@ export default function EmbedFormPage() {
         .embed-select-${form.id} option { color: ${inputTextColor}; background: ${inputBg || '#fff'}; }
         .embed-select-${form.id} option[value=""] { color: ${placeholderColor}; }
       `}</style>
-      <div className="w-full max-w-lg">
+      <div className="w-full" style={{ maxWidth: maxWidth === '100%' ? '100%' : `${maxWidth}px` }}>
         {/* Logo */}
         {form.logo_url && (
           <div className="mb-6 text-center">
