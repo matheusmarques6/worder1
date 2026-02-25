@@ -17,7 +17,9 @@ function extractContactData(answers: Record<string, any>, fields: any[]) {
 
     // 1. Use explicit mapping if defined
     if (field.map_to_contact_field) {
-      contactData[field.map_to_contact_field] = value
+      // Map 'name' to 'first_name' for compatibility
+      const mappedField = field.map_to_contact_field === 'name' ? 'first_name' : field.map_to_contact_field
+      contactData[mappedField] = value
       continue
     }
 
@@ -30,8 +32,13 @@ function extractContactData(answers: Record<string, any>, fields: any[]) {
 
     // 3. Auto-detect by label (common patterns)
     const label = (field.label || '').toLowerCase()
-    if (!contactData.name && (label.includes('nome') || label.includes('name'))) {
-      contactData.name = value
+    if (!contactData.first_name && (label.includes('nome') || label.includes('name'))) {
+      // If it's a full name, try to split
+      const parts = String(value).trim().split(' ')
+      contactData.first_name = parts[0] || value
+      if (parts.length > 1) {
+        contactData.last_name = parts.slice(1).join(' ')
+      }
     }
     if (!contactData.email && (label.includes('email') || label.includes('e-mail'))) {
       contactData.email = value
@@ -190,7 +197,7 @@ export async function POST(
 
     // 4. Criar ou encontrar contato (sempre criar se tiver algum dado)
     let contactId: string | null = null
-    const hasContactData = contactData.email || contactData.phone || contactData.name
+    const hasContactData = contactData.email || contactData.phone || contactData.first_name
 
     console.log('[Form Submit] Contact data extracted:', contactData)
     console.log('[Form Submit] Pipeline ID:', form.pipeline_id)
@@ -211,7 +218,8 @@ export async function POST(
           await supabase
             .from('contacts')
             .update({
-              name: contactData.name || undefined,
+              first_name: contactData.first_name || undefined,
+              last_name: contactData.last_name || undefined,
               phone: contactData.phone || undefined,
               company: contactData.company || undefined,
               updated_at: new Date().toISOString(),
@@ -228,7 +236,8 @@ export async function POST(
           .insert({
             organization_id: form.organization_id,
             store_id: form.store_id || null,
-            name: contactData.name || contactData.email || contactData.phone || 'Lead do formulário',
+            first_name: contactData.first_name || contactData.email || contactData.phone || 'Lead',
+            last_name: contactData.last_name || null,
             email: contactData.email || null,
             phone: contactData.phone || null,
             company: contactData.company || null,
@@ -252,7 +261,7 @@ export async function POST(
         .insert({
           organization_id: form.organization_id,
           store_id: form.store_id || null,
-          name: 'Lead do formulário',
+          first_name: 'Lead do formulário',
           source: 'form',
           status: 'lead',
         })
@@ -295,7 +304,7 @@ export async function POST(
             pipeline_id: form.pipeline_id,
             stage_id: targetStageId,
             contact_id: contactId,
-            title: contactData.name || contactData.email || 'Novo Lead',
+            title: contactData.first_name ? `${contactData.first_name}${contactData.last_name ? ' ' + contactData.last_name : ''}` : (contactData.email || 'Novo Lead'),
             value: 0,
             source: 'form',
             status: 'open',
