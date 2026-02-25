@@ -132,10 +132,13 @@ export default function FormBuilderPage() {
     }
   }, [formId])
 
-  // Fetch pipelines
-  const fetchPipelines = useCallback(async () => {
+  // Fetch pipelines (filtered by store_id if available)
+  const fetchPipelines = useCallback(async (storeId?: string | null) => {
     try {
-      const res = await fetch('/api/crm/pipelines')
+      const url = storeId
+        ? `/api/crm/pipelines?store_id=${storeId}`
+        : '/api/crm/pipelines'
+      const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
         setPipelines(data.pipelines || [])
@@ -147,8 +150,14 @@ export default function FormBuilderPage() {
 
   useEffect(() => {
     fetchForm()
-    fetchPipelines()
-  }, [fetchForm, fetchPipelines])
+  }, [fetchForm])
+
+  // Fetch pipelines when form is loaded (with store_id filter)
+  useEffect(() => {
+    if (form) {
+      fetchPipelines((form as any).store_id)
+    }
+  }, [form, fetchPipelines])
 
   // Save fields
   const saveFields = async () => {

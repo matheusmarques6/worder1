@@ -12,8 +12,35 @@ function extractContactData(answers: Record<string, any>, fields: any[]) {
   const contactData: Record<string, any> = {}
 
   for (const field of fields) {
-    if (field.map_to_contact_field && answers[field.id] !== undefined) {
-      contactData[field.map_to_contact_field] = answers[field.id]
+    const value = answers[field.id]
+    if (value === undefined || value === '') continue
+
+    // 1. Use explicit mapping if defined
+    if (field.map_to_contact_field) {
+      contactData[field.map_to_contact_field] = value
+      continue
+    }
+
+    // 2. Auto-detect by field type
+    if (field.field_type === 'email' && !contactData.email) {
+      contactData.email = value
+    } else if (field.field_type === 'phone' && !contactData.phone) {
+      contactData.phone = value
+    }
+
+    // 3. Auto-detect by label (common patterns)
+    const label = (field.label || '').toLowerCase()
+    if (!contactData.name && (label.includes('nome') || label.includes('name'))) {
+      contactData.name = value
+    }
+    if (!contactData.email && (label.includes('email') || label.includes('e-mail'))) {
+      contactData.email = value
+    }
+    if (!contactData.phone && (label.includes('telefone') || label.includes('phone') || label.includes('whatsapp') || label.includes('celular'))) {
+      contactData.phone = value
+    }
+    if (!contactData.company && (label.includes('empresa') || label.includes('company'))) {
+      contactData.company = value
     }
   }
 
@@ -161,41 +188,47 @@ export async function POST(
     // 3. Extrair dados de contato
     const contactData = extractContactData(answers, form.fields || [])
 
-    // 4. Criar ou encontrar contato
+    // 4. Criar ou encontrar contato (sempre criar se tiver algum dado)
     let contactId: string | null = null
-    if (contactData.email || contactData.phone) {
-      // Tentar encontrar contato existente
-      let contactQuery = supabase
-        .from('contacts')
-        .select('id')
-        .eq('organization_id', form.organization_id)
+    const hasContactData = contactData.email || contactData.phone || contactData.name
 
+    console.log('[Form Submit] Contact data extracted:', contactData)
+    console.log('[Form Submit] Pipeline ID:', form.pipeline_id)
+
+    if (hasContactData) {
+      // Tentar encontrar contato existente por email
       if (contactData.email) {
-        contactQuery = contactQuery.eq('email', contactData.email)
+        const { data: existingContact } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('organization_id', form.organization_id)
+          .eq('email', contactData.email)
+          .maybeSingle()
+
+        if (existingContact) {
+          contactId = existingContact.id
+          // Atualizar contato com novos dados
+          await supabase
+            .from('contacts')
+            .update({
+              name: contactData.name || undefined,
+              phone: contactData.phone || undefined,
+              company: contactData.company || undefined,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', contactId)
+          console.log('[Form Submit] Updated existing contact:', contactId)
+        }
       }
 
-      const { data: existingContact } = await contactQuery.maybeSingle()
-
-      if (existingContact) {
-        contactId = existingContact.id
-        // Atualizar contato com novos dados
-        await supabase
-          .from('contacts')
-          .update({
-            name: contactData.name || undefined,
-            phone: contactData.phone || undefined,
-            company: contactData.company || undefined,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', contactId)
-      } else {
-        // Criar novo contato
-        const { data: newContact } = await supabase
+      // Se não encontrou, criar novo
+      if (!contactId) {
+        const { data: newContact, error: contactError } = await supabase
           .from('contacts')
           .insert({
             organization_id: form.organization_id,
             store_id: form.store_id || null,
-            name: contactData.name || contactData.email || 'Lead sem nome',
+            name: contactData.name || contactData.email || contactData.phone || 'Lead do formulário',
             email: contactData.email || null,
             phone: contactData.phone || null,
             company: contactData.company || null,
@@ -205,7 +238,32 @@ export async function POST(
           .select('id')
           .single()
 
+        if (contactError) {
+          console.error('[Form Submit] Error creating contact:', contactError)
+        } else {
+          contactId = newContact?.id || null
+          console.log('[Form Submit] Created new contact:', contactId)
+        }
+      }
+    } else {
+      // Sem dados de contato extraídos - criar contato genérico para não perder o lead
+      const { data: newContact, error: contactError } = await supabase
+        .from('contacts')
+        .insert({
+          organization_id: form.organization_id,
+          store_id: form.store_id || null,
+          name: 'Lead do formulário',
+          source: 'form',
+          status: 'lead',
+        })
+        .select('id')
+        .single()
+
+      if (contactError) {
+        console.error('[Form Submit] Error creating generic contact:', contactError)
+      } else {
         contactId = newContact?.id || null
+        console.log('[Form Submit] Created generic contact:', contactId)
       }
     }
 
