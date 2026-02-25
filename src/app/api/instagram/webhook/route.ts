@@ -379,7 +379,7 @@ async function processAutomation(
       'instagram',
       'message_received',
       {
-        contact_id: crmContactId,
+        contact_id: crmContactId || undefined,
         contact_name: igContact?.name || igContact?.username,
         message_text: messageText,
         message_type: messageType,
