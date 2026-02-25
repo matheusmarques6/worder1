@@ -27,8 +27,9 @@ export default function InboxPage() {
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore() // ✅ NOVO: Pegar loja atual
   
-  const organizationId = user?.organization_id || 'default-org'
-  const storeId = currentStore?.id || null // ✅ CRÍTICO: ID da loja atual
+  // ✅ CORREÇÃO: Usar organization_id da loja se usuário não tiver
+  const organizationId = user?.organization_id || currentStore?.organization_id || null
+  const storeId = currentStore?.id || null
   
   // ✅ CORREÇÃO: Passar storeId para filtrar instâncias por loja
   const { instances, selectedInstance, loading: instancesLoading, selectInstance, fetchInstances } = useWhatsAppConnection(organizationId, storeId)
@@ -232,14 +233,20 @@ export default function InboxPage() {
   // RENDER
   // =============================================
   
-  // ✅ NOVO: Mensagem se não tiver loja selecionada
-  if (!storeId) {
+  // ✅ CORREÇÃO: Verificar loja E organização
+  if (!storeId || !organizationId) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-white mb-2">Selecione uma loja</h2>
-          <p className="text-dark-400">Escolha uma loja no menu para ver as conversas do WhatsApp.</p>
+          <h2 className="text-xl font-semibold text-white mb-2">
+            {!storeId ? 'Selecione uma loja' : 'Erro de autenticação'}
+          </h2>
+          <p className="text-dark-400">
+            {!storeId
+              ? 'Escolha uma loja no menu para ver as conversas do WhatsApp.'
+              : 'Não foi possível identificar sua organização. Faça login novamente.'}
+          </p>
         </div>
       </div>
     )

@@ -93,8 +93,8 @@ interface ConnectionStatusResult {
 // HOOK
 // =============================================
 
-// ✅ CORREÇÃO: Recebe storeId como parâmetro
-export function useWhatsAppConnection(organizationId: string, storeId?: string | null): UseWhatsAppConnectionReturn {
+// ✅ CORREÇÃO: Recebe storeId e organizationId (ambos podem ser null)
+export function useWhatsAppConnection(organizationId: string | null, storeId?: string | null): UseWhatsAppConnectionReturn {
   const [instances, setInstances] = useState<WhatsAppInstance[]>([])
   const [selectedInstance, setSelectedInstance] = useState<WhatsAppInstance | null>(null)
   const [loading, setLoading] = useState(true)

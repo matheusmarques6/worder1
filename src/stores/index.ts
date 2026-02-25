@@ -23,6 +23,7 @@ export interface ShopifyStore {
   totalOrders?: number
   totalRevenue?: number
   lastSyncAt?: string
+  organization_id?: string
 }
 
 interface StoreState {

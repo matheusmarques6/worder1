@@ -26,8 +26,8 @@ interface UseInboxConversationsReturn {
   refresh: () => Promise<void>
 }
 
-// ✅ CORREÇÃO: Recebe storeId além de organizationId
-export function useInboxConversations(organizationId: string, storeId?: string | null): UseInboxConversationsReturn {
+// ✅ CORREÇÃO: Recebe storeId e organizationId (ambos podem ser null)
+export function useInboxConversations(organizationId: string | null, storeId?: string | null): UseInboxConversationsReturn {
   const [conversations, setConversations] = useState<InboxConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<InboxConversation | null>(null)
   const [isLoading, setIsLoading] = useState(false)      // ✅ Primeira carga
