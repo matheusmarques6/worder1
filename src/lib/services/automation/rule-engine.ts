@@ -47,7 +47,7 @@ export interface EventData {
   contact_email?: string;
   contact_phone?: string;
   contact_name?: string;
-  
+
   // Shopify
   order_id?: string;
   order_number?: string;
@@ -55,12 +55,20 @@ export interface EventData {
   customer_tags?: string[];
   product_ids?: string[];
   checkout_id?: string;
-  
+
   // WhatsApp
   conversation_id?: string;
   message_text?: string;
   message_timestamp?: string;
-  
+
+  // Instagram
+  instagram_user_id?: string;
+  instagram_username?: string;
+  message_type?: string;
+  is_story_mention?: boolean;
+  is_story_reply?: boolean;
+  story_id?: string;
+
   // Genérico
   source_id?: string;
   [key: string]: any;

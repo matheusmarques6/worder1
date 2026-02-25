@@ -83,7 +83,7 @@ const mainNavItems: NavItem[] = [
   { title: 'Pedidos', href: '/orders', icon: ShoppingCart },
   { title: 'Produtos', href: '/products', icon: Package },
   { title: 'CRM', href: '/crm', icon: Users },
-  { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
+  { title: 'Chat', href: '/chat', icon: MessageSquare, badge: 3 },
 ]
 
 const toolsNavItems: NavItem[] = [
