@@ -242,7 +242,6 @@ export async function POST(
             phone: contactData.phone || null,
             company: contactData.company || null,
             source: 'form',
-            status: 'lead',
           })
           .select('id')
           .single()
@@ -263,7 +262,6 @@ export async function POST(
           store_id: form.store_id || null,
           first_name: 'Lead do formulário',
           source: 'form',
-          status: 'lead',
         })
         .select('id')
         .single()
