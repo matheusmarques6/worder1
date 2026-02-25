@@ -164,9 +164,58 @@ export default function FormBuilderPage() {
         setFields(data.fields)
         setSaveSuccess(true)
         setTimeout(() => setSaveSuccess(false), 2000)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        console.error('Error saving fields:', data.error || res.statusText)
+        alert('Erro ao salvar campos: ' + (data.error || res.statusText))
       }
     } catch (error) {
       console.error('Error saving fields:', error)
+      alert('Erro de conexao ao salvar campos.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Save everything (fields + settings)
+  const saveAll = async () => {
+    setIsSaving(true)
+    try {
+      // Save fields
+      const fieldsRes = await fetch(`/api/forms/${formId}/fields`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields }),
+      })
+      if (fieldsRes.ok) {
+        const data = await fieldsRes.json()
+        setFields(data.fields)
+      } else {
+        const data = await fieldsRes.json().catch(() => ({}))
+        alert('Erro ao salvar campos: ' + (data.error || fieldsRes.statusText))
+        setIsSaving(false)
+        return
+      }
+
+      // Save form settings (theme included)
+      const current = formRef.current
+      if (current) {
+        const settingsRes = await fetch(`/api/forms/${formId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ theme: current.theme }),
+        })
+        if (settingsRes.ok) {
+          const data = await settingsRes.json()
+          setForm(prev => prev ? { ...prev, ...data.form } : null)
+        }
+      }
+
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 2000)
+    } catch (error) {
+      console.error('Error saving:', error)
+      alert('Erro de conexao ao salvar.')
     } finally {
       setIsSaving(false)
     }
@@ -357,6 +406,7 @@ export default function FormBuilderPage() {
   const previewFontSize = t.fontSize || 14
   const previewHideLabels = t.hideLabels || false
   const previewHideTitle = t.hideTitle || false
+  const previewInputHeight = t.inputHeight || 44
 
   return (
     <div className="space-y-6">
@@ -419,7 +469,7 @@ export default function FormBuilderPage() {
           )}
 
           <button
-            onClick={saveFields}
+            onClick={saveAll}
             disabled={isSaving}
             className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 text-white rounded-xl font-medium transition-colors"
           >
@@ -574,6 +624,23 @@ export default function FormBuilderPage() {
                   className="w-full accent-primary-500"
                 />
               </div>
+              <div>
+                <label className="block text-xs text-dark-400 mb-1">Altura dos campos: {previewInputHeight}px</label>
+                <input
+                  type="range"
+                  min="32"
+                  max="56"
+                  step="2"
+                  value={previewInputHeight}
+                  onChange={(e) => updateTheme({ inputHeight: parseInt(e.target.value) })}
+                  onMouseUp={saveTheme}
+                  onTouchEnd={saveTheme}
+                  className="w-full accent-primary-500"
+                />
+                <div className="flex justify-between text-[10px] text-dark-500 mt-0.5">
+                  <span>32px</span><span>44px</span><span>56px</span>
+                </div>
+              </div>
             </div>
 
             {/* Colors */}
@@ -695,16 +762,16 @@ export default function FormBuilderPage() {
                           {field.field_type === 'textarea' ? (
                             <textarea
                               placeholder={previewHideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
-                              className="w-full px-3 py-2 border"
-                              rows={2}
+                              className="w-full px-3 border"
+                              rows={3}
                               readOnly
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 2 }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 2, paddingTop: (previewInputHeight - previewFontSize) / 2, paddingBottom: (previewInputHeight - previewFontSize) / 2 }}
                             />
                           ) : field.field_type === 'select' ? (
                             <select
-                              className="w-full px-3 py-2 border"
+                              className="w-full px-3 border"
                               disabled
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 2 }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 2, height: previewInputHeight }}
                             >
                               <option>{previewHideLabels ? field.label : (field.placeholder || 'Selecione...')}</option>
                             </select>
@@ -718,8 +785,8 @@ export default function FormBuilderPage() {
                               {(field.options || []).map((opt: any, i: number) => (
                                 <label
                                   key={i}
-                                  className="flex items-center gap-2 p-2 border cursor-pointer"
-                                  style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg, color: previewText, fontSize: previewFontSize - 2 }}
+                                  className="flex items-center gap-2 border cursor-pointer"
+                                  style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg, color: previewText, fontSize: previewFontSize - 2, height: previewInputHeight, paddingLeft: 8, paddingRight: 8 }}
                                 >
                                   <input type={field.field_type} disabled className="w-3 h-3" style={{ accentColor: previewPrimary }} />
                                   {opt.label}
@@ -730,9 +797,9 @@ export default function FormBuilderPage() {
                             <input
                               type="text"
                               placeholder={previewHideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
-                              className="w-full px-3 py-2 border"
+                              className="w-full px-3 border"
                               readOnly
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 2 }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 2, height: previewInputHeight }}
                             />
                           )}
                         </div>
@@ -741,8 +808,8 @@ export default function FormBuilderPage() {
 
                     {/* Button */}
                     <button
-                      className="w-full py-2.5 text-white font-semibold mt-4"
-                      style={{ backgroundColor: previewPrimary, borderRadius: previewRadius, fontSize: previewFontSize }}
+                      className="w-full text-white font-semibold mt-4"
+                      style={{ backgroundColor: previewPrimary, borderRadius: previewRadius, fontSize: previewFontSize, height: previewInputHeight + 4 }}
                     >
                       {form.theme?.buttonText || 'Enviar'}
                     </button>
@@ -1328,19 +1395,19 @@ export default function FormBuilderPage() {
                           {field.field_type === 'textarea' ? (
                             <textarea
                               placeholder={previewHideLabels ? field.label : (field.placeholder || '')}
-                              className="w-full px-2.5 py-1.5 border"
+                              className="w-full px-2.5 border"
                               rows={2}
                               readOnly
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 3 }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 3, paddingTop: (previewInputHeight * 0.8 - previewFontSize) / 2, paddingBottom: (previewInputHeight * 0.8 - previewFontSize) / 2 }}
                             />
                           ) : field.field_type === 'select' ? (
-                            <select className="w-full px-2.5 py-1.5 border" disabled style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 3 }}>
+                            <select className="w-full px-2.5 border" disabled style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 3, height: previewInputHeight * 0.8 }}>
                               <option>{previewHideLabels ? field.label : (field.placeholder || 'Selecione...')}</option>
                             </select>
                           ) : field.field_type === 'radio' || field.field_type === 'checkbox' ? (
                             <div className="space-y-1">
                               {(field.options || []).map((opt: any, i: number) => (
-                                <label key={i} className="flex items-center gap-1.5 p-1.5 border" style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg, color: previewText, fontSize: previewFontSize - 3 }}>
+                                <label key={i} className="flex items-center gap-1.5 px-2 border" style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg, color: previewText, fontSize: previewFontSize - 3, height: previewInputHeight * 0.8 }}>
                                   <input type={field.field_type} disabled className="w-3 h-3" style={{ accentColor: previewPrimary }} />
                                   {opt.label}
                                 </label>
@@ -1350,14 +1417,14 @@ export default function FormBuilderPage() {
                             <input
                               type="text"
                               placeholder={previewHideLabels ? field.label : (field.placeholder || '')}
-                              className="w-full px-2.5 py-1.5 border"
+                              className="w-full px-2.5 border"
                               readOnly
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 3 }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 3, height: previewInputHeight * 0.8 }}
                             />
                           )}
                         </div>
                       ))}
-                      <button className="w-full py-2 text-white font-medium" style={{ backgroundColor: previewPrimary, borderRadius: previewRadius, fontSize: previewFontSize - 2 }}>
+                      <button className="w-full text-white font-medium" style={{ backgroundColor: previewPrimary, borderRadius: previewRadius, fontSize: previewFontSize - 2, height: previewInputHeight * 0.8 + 2 }}>
                         {form.theme?.buttonText || 'Enviar'}
                       </button>
                     </div>

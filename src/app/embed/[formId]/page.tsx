@@ -32,6 +32,7 @@ interface FormData {
     hideTitle?: boolean
     inputBackgroundColor?: string
     inputBorderColor?: string
+    inputHeight?: number
     headline?: string
     subheadline?: string
     buttonText?: string
@@ -231,6 +232,7 @@ export default function EmbedFormPage() {
   const hideLabels = theme.hideLabels || false
   const hideTitle = theme.hideTitle || false
   const fontSize = theme.fontSize || 14
+  const inputHeight = theme.inputHeight || 44
   const headline = theme.headline || form?.name || ''
   const subheadline = theme.subheadline || form?.description || ''
   const buttonText = theme.buttonText || 'Enviar'
@@ -307,13 +309,15 @@ export default function EmbedFormPage() {
                   placeholder={hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
                   required={field.required}
                   rows={4}
-                  className="w-full px-4 py-3 border focus:outline-none focus:ring-2"
+                  className="w-full px-4 border focus:outline-none focus:ring-2"
                   style={{
                     borderColor: inputBorder,
                     borderRadius: theme.borderRadius,
                     color: theme.textColor,
                     backgroundColor: inputBg,
                     fontSize: fontSize - 1,
+                    paddingTop: (inputHeight - fontSize) / 2,
+                    paddingBottom: (inputHeight - fontSize) / 2,
                   }}
                 />
               ) : field.field_type === 'select' ? (
@@ -321,8 +325,8 @@ export default function EmbedFormPage() {
                   value={answers[field.id] || ''}
                   onChange={(e) => setAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
                   required={field.required}
-                  className="w-full px-4 py-3 border focus:outline-none focus:ring-2"
-                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg, fontSize: fontSize - 1 }}
+                  className="w-full px-4 border focus:outline-none focus:ring-2"
+                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg, fontSize: fontSize - 1, height: inputHeight }}
                 >
                   <option value="">{hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || 'Selecione...')}</option>
                   {(field.options || []).map((opt, i) => (
@@ -335,7 +339,7 @@ export default function EmbedFormPage() {
                     <p style={{ color: theme.textColor, fontSize: fontSize - 1 }}>{field.label}{field.required && <span style={{ color: '#ef4444' }}> *</span>}</p>
                   )}
                   {(field.options || []).map((opt, i) => (
-                    <label key={i} className="flex items-center gap-3 p-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg }}>
+                    <label key={i} className="flex items-center gap-3 px-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg, height: inputHeight }}>
                       <input
                         type="radio"
                         name={field.id}
@@ -355,7 +359,7 @@ export default function EmbedFormPage() {
                     <p style={{ color: theme.textColor, fontSize: fontSize - 1 }}>{field.label}{field.required && <span style={{ color: '#ef4444' }}> *</span>}</p>
                   )}
                   {(field.options || []).map((opt, i) => (
-                    <label key={i} className="flex items-center gap-3 p-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg }}>
+                    <label key={i} className="flex items-center gap-3 px-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg, height: inputHeight }}>
                       <input
                         type="checkbox"
                         value={opt.value}
@@ -389,8 +393,8 @@ export default function EmbedFormPage() {
                   onChange={(e) => setAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
                   placeholder={hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
                   required={field.required}
-                  className="w-full px-4 py-3 border focus:outline-none focus:ring-2"
-                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg, fontSize: fontSize - 1 }}
+                  className="w-full px-4 border focus:outline-none focus:ring-2"
+                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg, fontSize: fontSize - 1, height: inputHeight }}
                 />
               )}
             </div>
@@ -407,8 +411,8 @@ export default function EmbedFormPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3.5 text-white font-semibold transition-opacity disabled:opacity-50"
-            style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius, fontSize }}
+            className="w-full text-white font-semibold transition-opacity disabled:opacity-50"
+            style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius, fontSize, height: inputHeight + 4 }}
           >
             {isSubmitting ? 'Enviando...' : buttonText}
           </button>

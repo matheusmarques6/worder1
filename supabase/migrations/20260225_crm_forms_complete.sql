@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS crm_forms (
     "hideTitle": false,
     "inputBackgroundColor": "#ffffff",
     "inputBorderColor": "#e5e7eb",
+    "inputHeight": 44,
     "headline": "",
     "subheadline": "",
     "buttonText": "Enviar"

@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       hideTitle: false,
       inputBackgroundColor: '#ffffff',
       inputBorderColor: '#e5e7eb',
+      inputHeight: 44,
       headline: '',
       subheadline: '',
       buttonText: 'Enviar',
