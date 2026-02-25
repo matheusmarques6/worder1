@@ -194,6 +194,7 @@ export async function POST(
           .from('contacts')
           .insert({
             organization_id: form.organization_id,
+            store_id: form.store_id || null,
             name: contactData.name || contactData.email || 'Lead sem nome',
             email: contactData.email || null,
             phone: contactData.phone || null,
@@ -232,12 +233,14 @@ export async function POST(
           .from('deals')
           .insert({
             organization_id: form.organization_id,
+            store_id: form.store_id || null,
             pipeline_id: form.pipeline_id,
             stage_id: targetStageId,
             contact_id: contactId,
             title: contactData.name || contactData.email || 'Novo Lead',
             value: 0,
             source: 'form',
+            status: 'open',
             position: 0,
           })
           .select('id')
