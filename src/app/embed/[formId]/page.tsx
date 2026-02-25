@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { Loader2, CheckCircle, AlertCircle } from 'lucide-react'
+import { InternationalPhoneInput } from '@/components/ui/InternationalPhoneInput'
 
 interface FormField {
   id: string
@@ -380,11 +381,27 @@ export default function EmbedFormPage() {
                 </div>
               ) : field.field_type === 'hidden' ? (
                 <input type="hidden" value={answers[field.id] || field.placeholder || ''} />
+              ) : (field.field_type === 'phone' || field.field_type === 'whatsapp') ? (
+                <InternationalPhoneInput
+                  value={answers[field.id] || ''}
+                  onChange={(fullNumber, _formatted, _country) => {
+                    setAnswers(prev => ({ ...prev, [field.id]: fullNumber }))
+                  }}
+                  placeholder={hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || undefined)}
+                  required={field.required}
+                  style={{
+                    borderColor: inputBorder,
+                    borderRadius: theme.borderRadius,
+                    backgroundColor: inputBg,
+                    textColor: theme.textColor,
+                    fontSize: fontSize - 1,
+                    height: inputHeight,
+                  }}
+                />
               ) : (
                 <input
                   type={
                     field.field_type === 'email' ? 'email' :
-                    field.field_type === 'phone' ? 'tel' :
                     field.field_type === 'number' ? 'number' :
                     field.field_type === 'date' ? 'date' :
                     field.field_type === 'url' ? 'url' : 'text'
