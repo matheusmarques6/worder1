@@ -278,11 +278,12 @@ export async function POST(
     let dealId: string | null = null
     if (form.pipeline_id && contactId) {
       const stageId = form.stage_id
+      console.log('[Form Submit] Creating deal - Pipeline:', form.pipeline_id, 'Stage configured:', stageId)
 
       // Se não tem stage específico, pegar o primeiro estágio
       let targetStageId = stageId
       if (!targetStageId) {
-        const { data: firstStage } = await supabase
+        const { data: firstStage, error: stageError } = await supabase
           .from('pipeline_stages')
           .select('id')
           .eq('pipeline_id', form.pipeline_id)
@@ -290,29 +291,60 @@ export async function POST(
           .limit(1)
           .single()
 
+        if (stageError) {
+          console.error('[Form Submit] Error fetching first stage:', stageError)
+        }
         targetStageId = firstStage?.id
+        console.log('[Form Submit] Using first stage:', targetStageId)
       }
 
       if (targetStageId) {
-        const { data: deal } = await supabase
+        // Build UTM data for custom_fields
+        const utmData: Record<string, string> = {}
+        if (utm_source) utmData.utm_source = utm_source
+        if (utm_medium) utmData.utm_medium = utm_medium
+        if (utm_campaign) utmData.utm_campaign = utm_campaign
+        if (utm_term) utmData.utm_term = utm_term
+        if (utm_content) utmData.utm_content = utm_content
+
+        const dealTitle = contactData.first_name
+          ? `${contactData.first_name}${contactData.last_name ? ' ' + contactData.last_name : ''}`
+          : (contactData.email || 'Novo Lead')
+
+        const { data: deal, error: dealError } = await supabase
           .from('deals')
           .insert({
             organization_id: form.organization_id,
-            store_id: form.store_id || null,
             pipeline_id: form.pipeline_id,
             stage_id: targetStageId,
             contact_id: contactId,
-            title: contactData.first_name ? `${contactData.first_name}${contactData.last_name ? ' ' + contactData.last_name : ''}` : (contactData.email || 'Novo Lead'),
+            title: dealTitle,
             value: 0,
-            source: 'form',
             status: 'open',
             position: 0,
+            custom_fields: {
+              source: 'form',
+              form_id: formId,
+              ...utmData,
+            },
+            notes: Object.keys(utmData).length > 0
+              ? `Lead via formulário\n\nUTMs:\n${Object.entries(utmData).map(([k, v]) => `• ${k}: ${v}`).join('\n')}`
+              : 'Lead via formulário',
           })
           .select('id')
           .single()
 
-        dealId = deal?.id || null
+        if (dealError) {
+          console.error('[Form Submit] Error creating deal:', dealError)
+        } else {
+          dealId = deal?.id || null
+          console.log('[Form Submit] Deal created:', dealId)
+        }
+      } else {
+        console.error('[Form Submit] No stage found for pipeline:', form.pipeline_id)
       }
+    } else {
+      console.log('[Form Submit] Skipping deal creation - Pipeline:', form.pipeline_id, 'Contact:', contactId)
     }
 
     // 6. Criar submission
