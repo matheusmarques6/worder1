@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -194,17 +194,23 @@ export default function FormBuilderPage() {
     }
   }
 
+  // Ref to always have latest form for theme saves (avoids stale closures)
+  const formRef = useRef(form)
+  formRef.current = form
+
   // Theme helpers
   const updateTheme = (updates: Record<string, any>) => {
     setForm(prev => prev ? { ...prev, theme: { ...prev.theme, ...updates } } : null)
   }
 
   const saveTheme = () => {
-    if (form) saveFormSettings({ theme: form.theme })
+    const current = formRef.current
+    if (current) saveFormSettings({ theme: current.theme })
   }
 
   const updateAndSaveTheme = (updates: Record<string, any>) => {
-    const newTheme = { ...form?.theme, ...updates }
+    const currentTheme = formRef.current?.theme || {}
+    const newTheme = { ...currentTheme, ...updates }
     setForm(prev => prev ? { ...prev, theme: newTheme } : null)
     saveFormSettings({ theme: newTheme })
   }

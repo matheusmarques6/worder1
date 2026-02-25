@@ -74,6 +74,23 @@ export async function POST(request: NextRequest) {
 
     const slug = `${baseSlug}-${Date.now().toString(36)}`
 
+    // Default theme completo
+    const defaultTheme = {
+      primaryColor: '#6366f1',
+      backgroundColor: '#ffffff',
+      textColor: '#1f2937',
+      borderRadius: 12,
+      fontFamily: 'Inter',
+      fontSize: 14,
+      hideLabels: false,
+      hideTitle: false,
+      inputBackgroundColor: '#ffffff',
+      inputBorderColor: '#e5e7eb',
+      headline: '',
+      subheadline: '',
+      buttonText: 'Enviar',
+    }
+
     // Criar formulário
     const { data: form, error } = await supabase
       .from('crm_forms')
@@ -84,7 +101,7 @@ export async function POST(request: NextRequest) {
         description: description || null,
         pipeline_id: pipeline_id || null,
         stage_id: stage_id || null,
-        theme: theme || undefined,
+        theme: theme ? { ...defaultTheme, ...theme } : defaultTheme,
         status: 'draft',
       })
       .select()
