@@ -198,7 +198,7 @@ export interface InboxMessage {
   }
   
   // Status
-  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
+  status: 'pending' | 'sent' | 'delivered' | 'read' | 'played' | 'failed'
   error_code?: string
   error_message?: string
   

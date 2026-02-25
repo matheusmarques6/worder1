@@ -376,7 +376,7 @@ export interface WhatsAppMessage {
   type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'template';
   content: string;
   media_url?: string;
-  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+  status: 'pending' | 'sent' | 'delivered' | 'read' | 'played' | 'failed';
   is_outgoing?: boolean;
   direction?: 'inbound' | 'outbound';
   sent_at?: string;
