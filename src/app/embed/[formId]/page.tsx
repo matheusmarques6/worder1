@@ -250,32 +250,33 @@ export default function EmbedFormPage() {
   const containerMargin = theme.containerMargin ?? 0
   const maxWidth = theme.maxWidth || '512'
 
+  // Loading state - minimal, no background flash
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: theme.backgroundColor }}>
-        <Loader2 className="w-8 h-8 animate-spin" style={{ color: theme.primaryColor }} />
+      <div className="flex items-center justify-center py-8" style={{ backgroundColor: 'transparent' }}>
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: theme.primaryColor, opacity: 0.5 }} />
       </div>
     )
   }
 
   if (error || !form) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ backgroundColor: theme.backgroundColor }}>
-        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <p className="text-lg font-medium" style={{ color: theme.textColor }}>{error || 'Formulario nao encontrado'}</p>
+      <div className="flex flex-col items-center justify-center p-4" style={{ backgroundColor: 'transparent' }}>
+        <AlertCircle className="w-10 h-10 text-red-500 mb-3" />
+        <p className="text-base font-medium" style={{ color: theme.textColor }}>{error || 'Formulario nao encontrado'}</p>
       </div>
     )
   }
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-8" style={{ backgroundColor: theme.backgroundColor, fontFamily: theme.fontFamily }}>
+      <div className="flex flex-col items-center justify-center p-6" style={{ backgroundColor: theme.backgroundColor || 'transparent', fontFamily: theme.fontFamily }}>
         <div className="max-w-md text-center">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: `${theme.primaryColor}20` }}>
-            <CheckCircle className="w-8 h-8" style={{ color: theme.primaryColor }} />
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: `${theme.primaryColor}20` }}>
+            <CheckCircle className="w-7 h-7" style={{ color: theme.primaryColor }} />
           </div>
-          <h2 className="text-2xl font-bold mb-3" style={{ color: theme.textColor }}>Enviado com sucesso!</h2>
-          <p className="text-base" style={{ color: `${theme.textColor}99` }}>{form.success_message}</p>
+          <h2 className="text-xl font-bold mb-2" style={{ color: theme.textColor }}>Enviado com sucesso!</h2>
+          <p className="text-sm" style={{ color: `${theme.textColor}99` }}>{form.success_message}</p>
         </div>
       </div>
     )
@@ -283,7 +284,6 @@ export default function EmbedFormPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center"
       style={{
         backgroundColor: theme.backgroundColor || 'transparent',
         fontFamily: theme.fontFamily,
@@ -298,7 +298,7 @@ export default function EmbedFormPage() {
         .embed-select-${form.id} option { color: ${inputTextColor}; background: ${inputBgForDropdown}; }
         .embed-select-${form.id} option[value=""] { color: ${placeholderColor}; }
       `}</style>
-      <div className="w-full" style={{ maxWidth: maxWidth === '100%' ? '100%' : `${maxWidth}px` }}>
+      <div className="w-full mx-auto" style={{ maxWidth: maxWidth === '100%' ? '100%' : `${maxWidth}px` }}>
         {/* Logo */}
         {form.logo_url && (
           <div className="mb-6 text-center">
