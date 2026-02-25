@@ -86,6 +86,11 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
     transition,
   }
 
+  // Extract UTM info from custom_fields
+  const customFields = (deal as any).custom_fields || {}
+  const utmSource = customFields.utm_source
+  const source = customFields.source || (deal as any).source
+
   return (
     <motion.div
       ref={setNodeRef}
@@ -99,8 +104,8 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
       )}
       onClick={onClick}
     >
-      <div className="flex items-start justify-between mb-3">
-        <h4 className="font-medium text-dark-100 group-hover:text-primary-400 transition-colors line-clamp-2">
+      <div className="flex items-start justify-between mb-2">
+        <h4 className="font-medium text-dark-100 group-hover:text-primary-400 transition-colors line-clamp-2 text-sm">
           {deal.title}
         </h4>
         <button
@@ -111,48 +116,69 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
         </button>
       </div>
 
+      {/* Contact Info */}
       {deal.contact && (
-        <div className="flex items-center gap-2 mb-3">
-          <Avatar
-            fallback={getInitials(`${deal.contact.first_name || ''} ${deal.contact.last_name || ''}`.trim() || deal.contact.email || '?')}
-            size="sm"
-          />
-          <div className="min-w-0">
-            <p className="text-sm text-dark-200 truncate">
-              {`${deal.contact.first_name || ''} ${deal.contact.last_name || ''}`.trim() || deal.contact.email || 'Sem nome'}
-            </p>
-            {deal.contact.company && (
-              <p className="text-xs text-dark-500 truncate">{deal.contact.company}</p>
-            )}
-          </div>
+        <div className="space-y-1.5 mb-3">
+          {/* Phone/WhatsApp */}
+          {(deal.contact.whatsapp || deal.contact.phone) && (
+            <div className="flex items-center gap-1.5 text-dark-400 text-xs">
+              <Phone className="w-3 h-3 text-emerald-500" />
+              <span className="truncate">{deal.contact.whatsapp || deal.contact.phone}</span>
+            </div>
+          )}
+          {/* Email */}
+          {deal.contact.email && (
+            <div className="flex items-center gap-1.5 text-dark-400 text-xs">
+              <Mail className="w-3 h-3 text-blue-400" />
+              <span className="truncate">{deal.contact.email}</span>
+            </div>
+          )}
+          {/* Company */}
+          {deal.contact.company && (
+            <div className="flex items-center gap-1.5 text-dark-400 text-xs">
+              <Building className="w-3 h-3" />
+              <span className="truncate">{deal.contact.company}</span>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      {/* Value & Source */}
+      <div className="flex items-center justify-between pt-2 border-t border-dark-700/50">
         <div className="flex items-center gap-1.5 text-success-400">
           <DollarSign className="w-4 h-4" />
-          <span className="font-semibold">{formatCurrency(deal.value)}</span>
+          <span className="font-semibold text-sm">{formatCurrency(deal.value)}</span>
         </div>
-        {deal.expected_close_date && (
-          <div className="flex items-center gap-1 text-dark-500 text-xs">
-            <Calendar className="w-3 h-3" />
-            <span>{new Date(deal.expected_close_date).toLocaleDateString('pt-BR')}</span>
-          </div>
+        {(utmSource || source) && (
+          <span className="px-1.5 py-0.5 bg-dark-700/50 text-dark-400 text-[10px] rounded">
+            {utmSource || source}
+          </span>
         )}
       </div>
 
-      {/* Progress bar */}
-      <div className="mt-3 pt-3 border-t border-dark-700">
-        <div className="flex items-center justify-between text-xs mb-1.5">
-          <span className="text-dark-500">Probabilidade</span>
-          <span className="text-dark-300 font-medium">{deal.probability}%</span>
+      {/* Tags */}
+      {deal.tags && deal.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {deal.tags.slice(0, 2).map((tag: string) => (
+            <span
+              key={tag}
+              className="px-1.5 py-0.5 bg-primary-500/20 text-primary-400 text-[10px] rounded"
+            >
+              {tag}
+            </span>
+          ))}
+          {deal.tags.length > 2 && (
+            <span className="px-1.5 py-0.5 bg-dark-700 text-dark-400 text-[10px] rounded">
+              +{deal.tags.length - 2}
+            </span>
+          )}
         </div>
-        <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-300"
-            style={{ width: `${deal.probability}%` }}
-          />
-        </div>
+      )}
+
+      {/* Time ago */}
+      <div className="flex items-center gap-1 text-dark-600 text-[10px] mt-2">
+        <Calendar className="w-3 h-3" />
+        <span>{new Date(deal.created_at).toLocaleDateString('pt-BR')}</span>
       </div>
     </motion.div>
   )
