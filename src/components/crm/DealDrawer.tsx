@@ -20,11 +20,8 @@ import {
   Megaphone,
   Link2,
   Plus,
-  ExternalLink,
-  Copy,
-  User,
   Calendar,
-  Zap,
+  XCircle,
 } from 'lucide-react'
 import { DealTimeline } from './DealTimeline'
 import type { Deal, PipelineStage } from '@/types'
