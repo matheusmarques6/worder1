@@ -365,6 +365,7 @@ export default function EmbedFormPage() {
                   required={field.required}
                   className="w-full px-4 py-3 border text-sm focus:outline-none focus:ring-2"
                   style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg }}
+                />
               )}
             </div>
           ))}
