@@ -37,6 +37,8 @@ interface FormData {
     headline?: string
     subheadline?: string
     buttonText?: string
+    placeholderColor?: string
+    inputTextColor?: string
   }
   logo_url: string | null
   success_message: string
@@ -237,6 +239,9 @@ export default function EmbedFormPage() {
   const headline = theme.headline || form?.name || ''
   const subheadline = theme.subheadline || form?.description || ''
   const buttonText = theme.buttonText || 'Enviar'
+  const placeholderColor = theme.placeholderColor || '#9ca3af'
+  const inputTextColor = theme.inputTextColor || '#1f2937'
+  const bgIsTransparent = !theme.backgroundColor
 
   if (isLoading) {
     return (
@@ -270,7 +275,15 @@ export default function EmbedFormPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8" style={{ backgroundColor: theme.backgroundColor, fontFamily: theme.fontFamily, fontSize }}>
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8" style={{ backgroundColor: theme.backgroundColor || 'transparent', fontFamily: theme.fontFamily, fontSize }}>
+      {/* CSS for placeholder and select colors */}
+      <style>{`
+        .embed-input-${form.id}::placeholder { color: ${placeholderColor} !important; opacity: 1; }
+        .embed-select-${form.id} { color: ${placeholderColor} !important; }
+        .embed-select-${form.id}:valid { color: ${inputTextColor} !important; }
+        .embed-select-${form.id} option { color: ${inputTextColor}; background: ${inputBg || '#fff'}; }
+        .embed-select-${form.id} option[value=""] { color: ${placeholderColor}; }
+      `}</style>
       <div className="w-full max-w-lg">
         {/* Logo */}
         {form.logo_url && (
@@ -310,12 +323,12 @@ export default function EmbedFormPage() {
                   placeholder={hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
                   required={field.required}
                   rows={4}
-                  className="w-full px-4 border focus:outline-none focus:ring-2"
+                  className={`w-full px-4 border focus:outline-none focus:ring-2 embed-input-${form.id}`}
                   style={{
                     borderColor: inputBorder,
                     borderRadius: theme.borderRadius,
-                    color: theme.textColor,
-                    backgroundColor: inputBg,
+                    color: inputTextColor,
+                    backgroundColor: inputBg || 'transparent',
                     fontSize: fontSize - 1,
                     paddingTop: (inputHeight - fontSize) / 2,
                     paddingBottom: (inputHeight - fontSize) / 2,
@@ -326,8 +339,8 @@ export default function EmbedFormPage() {
                   value={answers[field.id] || ''}
                   onChange={(e) => setAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
                   required={field.required}
-                  className="w-full px-4 border focus:outline-none focus:ring-2"
-                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg, fontSize: fontSize - 1, height: inputHeight }}
+                  className={`w-full px-4 border focus:outline-none focus:ring-2 embed-select-${form.id}`}
+                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: answers[field.id] ? inputTextColor : placeholderColor, backgroundColor: inputBg || 'transparent', fontSize: fontSize - 1, height: inputHeight }}
                 >
                   <option value="">{hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || 'Selecione...')}</option>
                   {(field.options || []).map((opt, i) => (
@@ -340,7 +353,7 @@ export default function EmbedFormPage() {
                     <p style={{ color: theme.textColor, fontSize: fontSize - 1 }}>{field.label}{field.required && <span style={{ color: '#ef4444' }}> *</span>}</p>
                   )}
                   {(field.options || []).map((opt, i) => (
-                    <label key={i} className="flex items-center gap-3 px-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg, height: inputHeight }}>
+                    <label key={i} className="flex items-center gap-3 px-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg || 'transparent', height: inputHeight }}>
                       <input
                         type="radio"
                         name={field.id}
@@ -350,7 +363,7 @@ export default function EmbedFormPage() {
                         className="w-4 h-4"
                         style={{ accentColor: theme.primaryColor }}
                       />
-                      <span style={{ color: theme.textColor, fontSize: fontSize - 1 }}>{opt.label}</span>
+                      <span style={{ color: inputTextColor, fontSize: fontSize - 1 }}>{opt.label}</span>
                     </label>
                   ))}
                 </div>
@@ -360,7 +373,7 @@ export default function EmbedFormPage() {
                     <p style={{ color: theme.textColor, fontSize: fontSize - 1 }}>{field.label}{field.required && <span style={{ color: '#ef4444' }}> *</span>}</p>
                   )}
                   {(field.options || []).map((opt, i) => (
-                    <label key={i} className="flex items-center gap-3 px-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg, height: inputHeight }}>
+                    <label key={i} className="flex items-center gap-3 px-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg || 'transparent', height: inputHeight }}>
                       <input
                         type="checkbox"
                         value={opt.value}
@@ -375,7 +388,7 @@ export default function EmbedFormPage() {
                         className="w-4 h-4"
                         style={{ accentColor: theme.primaryColor }}
                       />
-                      <span style={{ color: theme.textColor, fontSize: fontSize - 1 }}>{opt.label}</span>
+                      <span style={{ color: inputTextColor, fontSize: fontSize - 1 }}>{opt.label}</span>
                     </label>
                   ))}
                 </div>
@@ -410,8 +423,8 @@ export default function EmbedFormPage() {
                   onChange={(e) => setAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
                   placeholder={hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
                   required={field.required}
-                  className="w-full px-4 border focus:outline-none focus:ring-2"
-                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg, fontSize: fontSize - 1, height: inputHeight }}
+                  className={`w-full px-4 border focus:outline-none focus:ring-2 embed-input-${form.id}`}
+                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: inputTextColor, backgroundColor: inputBg || 'transparent', fontSize: fontSize - 1, height: inputHeight }}
                 />
               )}
             </div>

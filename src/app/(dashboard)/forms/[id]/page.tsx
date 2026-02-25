@@ -44,7 +44,10 @@ const triggerTypeLabels: Record<string, string> = {
 
 const fontOptions = [
   'Inter', 'Roboto', 'Open Sans', 'Poppins', 'Montserrat',
-  'Lato', 'DM Sans', 'Playfair Display', 'Arial', 'Georgia',
+  'Lato', 'DM Sans', 'Playfair Display', 'Raleway', 'Nunito',
+  'Source Sans Pro', 'Oswald', 'Merriweather', 'Ubuntu', 'Rubik',
+  'Work Sans', 'Quicksand', 'Mulish', 'Barlow', 'Manrope',
+  'Arial', 'Georgia', 'Times New Roman', 'Helvetica', 'Verdana',
 ]
 
 interface FormField {
@@ -403,9 +406,26 @@ export default function FormBuilderPage() {
     )
   }
 
+  // Load Google Font for preview
+  useEffect(() => {
+    if (!form?.theme?.fontFamily) return
+    const font = form.theme.fontFamily
+    const systemFonts = ['Arial', 'Georgia', 'Times New Roman', 'Helvetica', 'Verdana']
+    if (systemFonts.includes(font)) return
+
+    const link = document.createElement('link')
+    link.href = `https://fonts.googleapis.com/css2?family=${font.replace(/\s+/g, '+')}:wght@400;500;600;700&display=swap`
+    link.rel = 'stylesheet'
+    document.head.appendChild(link)
+
+    return () => {
+      document.head.removeChild(link)
+    }
+  }, [form?.theme?.fontFamily])
+
   // Theme values for preview
   const t = form.theme || {}
-  const previewBg = t.backgroundColor || '#ffffff'
+  const previewBg = t.backgroundColor || ''  // Empty = transparent
   const previewText = t.textColor || '#1f2937'
   const previewPrimary = t.primaryColor || '#6366f1'
   const previewInputBg = t.inputBackgroundColor || '#ffffff'
@@ -416,6 +436,8 @@ export default function FormBuilderPage() {
   const previewHideLabels = t.hideLabels || false
   const previewHideTitle = t.hideTitle || false
   const previewInputHeight = t.inputHeight || 44
+  const previewPlaceholderColor = t.placeholderColor || '#9ca3af'
+  const previewInputTextColor = t.inputTextColor || '#1f2937'
 
   return (
     <div className="space-y-6">
@@ -657,31 +679,54 @@ export default function FormBuilderPage() {
               <h4 className="text-sm font-semibold text-white">Cores</h4>
               <div className="space-y-2.5">
                 {[
-                  { key: 'backgroundColor', label: 'Fundo da pagina', def: '#ffffff' },
-                  { key: 'textColor', label: 'Cor do texto', def: '#1f2937' },
-                  { key: 'primaryColor', label: 'Cor do botao', def: '#6366f1' },
-                  { key: 'inputBackgroundColor', label: 'Fundo dos campos', def: '#ffffff' },
-                  { key: 'inputBorderColor', label: 'Borda dos campos', def: '#e5e7eb' },
-                ].map(({ key, label, def }) => (
-                  <div key={key} className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={form.theme?.[key] || def}
-                      onChange={(e) => updateTheme({ [key]: e.target.value })}
-                      onBlur={saveTheme}
-                      className="w-9 h-9 rounded-lg cursor-pointer border border-dark-600 p-0.5"
-                    />
+                  { key: 'backgroundColor', label: 'Fundo da pagina', def: '', allowEmpty: true },
+                  { key: 'textColor', label: 'Cor dos titulos', def: '#1f2937', allowEmpty: false },
+                  { key: 'primaryColor', label: 'Cor do botao', def: '#6366f1', allowEmpty: false },
+                  { key: 'inputBackgroundColor', label: 'Fundo dos campos', def: '#ffffff', allowEmpty: true },
+                  { key: 'inputBorderColor', label: 'Borda dos campos', def: '#e5e7eb', allowEmpty: false },
+                  { key: 'inputTextColor', label: 'Texto digitado', def: '#1f2937', allowEmpty: false },
+                  { key: 'placeholderColor', label: 'Texto placeholder', def: '#9ca3af', allowEmpty: false },
+                ].map(({ key, label, def, allowEmpty }) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <div className="relative">
+                      <input
+                        type="color"
+                        value={form.theme?.[key] || def || '#ffffff'}
+                        onChange={(e) => updateTheme({ [key]: e.target.value })}
+                        onBlur={saveTheme}
+                        className="w-9 h-9 rounded-lg cursor-pointer border border-dark-600 p-0.5"
+                      />
+                      {/* Transparent indicator */}
+                      {allowEmpty && !form.theme?.[key] && (
+                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                          <div className="w-6 h-6 rounded bg-[repeating-conic-gradient(#808080_0%_25%,#fff_0%_50%)] bg-[length:8px_8px] opacity-60" />
+                        </div>
+                      )}
+                    </div>
                     <span className="text-sm text-dark-300 flex-1">{label}</span>
                     <input
                       type="text"
-                      value={form.theme?.[key] || def}
+                      value={form.theme?.[key] || (allowEmpty ? '' : def)}
                       onChange={(e) => updateTheme({ [key]: e.target.value })}
                       onBlur={saveTheme}
-                      className="w-24 px-2 py-1.5 bg-dark-900 border border-dark-700 rounded-lg text-xs text-dark-300 text-center focus:outline-none focus:border-primary-500"
+                      placeholder={allowEmpty ? 'transparente' : def}
+                      className="w-24 px-2 py-1.5 bg-dark-900 border border-dark-700 rounded-lg text-xs text-dark-300 text-center focus:outline-none focus:border-primary-500 placeholder:text-dark-600"
                     />
+                    {allowEmpty && form.theme?.[key] && (
+                      <button
+                        onClick={() => updateAndSaveTheme({ [key]: '' })}
+                        className="p-1 text-dark-500 hover:text-red-400 transition-colors"
+                        title="Tornar transparente"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
+              <p className="text-[10px] text-dark-500 mt-2">
+                Dica: Para fundo transparente, apague o valor ou clique no X
+              </p>
             </div>
 
             {/* Quick Themes */}
@@ -691,23 +736,23 @@ export default function FormBuilderPage() {
                 {[
                   {
                     name: 'Claro',
-                    theme: { backgroundColor: '#ffffff', textColor: '#1f2937', primaryColor: '#6366f1', inputBackgroundColor: '#ffffff', inputBorderColor: '#e5e7eb' },
+                    theme: { backgroundColor: '#ffffff', textColor: '#1f2937', primaryColor: '#6366f1', inputBackgroundColor: '#ffffff', inputBorderColor: '#e5e7eb', inputTextColor: '#1f2937', placeholderColor: '#9ca3af' },
                     cls: 'bg-white border-gray-300 text-gray-800',
                   },
                   {
                     name: 'Escuro',
-                    theme: { backgroundColor: '#1a1a2e', textColor: '#ffffff', primaryColor: '#6366f1', inputBackgroundColor: '#16213e', inputBorderColor: '#0f3460' },
+                    theme: { backgroundColor: '#1a1a2e', textColor: '#ffffff', primaryColor: '#6366f1', inputBackgroundColor: '#16213e', inputBorderColor: '#0f3460', inputTextColor: '#ffffff', placeholderColor: '#64748b' },
                     cls: 'bg-[#1a1a2e] border-[#0f3460] text-white',
                   },
                   {
                     name: 'Verde',
-                    theme: { backgroundColor: '#0d1117', textColor: '#c9d1d9', primaryColor: '#238636', inputBackgroundColor: '#161b22', inputBorderColor: '#30363d' },
+                    theme: { backgroundColor: '#0d1117', textColor: '#c9d1d9', primaryColor: '#238636', inputBackgroundColor: '#161b22', inputBorderColor: '#30363d', inputTextColor: '#c9d1d9', placeholderColor: '#6e7681' },
                     cls: 'bg-[#0d1117] border-[#30363d] text-[#c9d1d9]',
                   },
                   {
-                    name: 'Azul',
-                    theme: { backgroundColor: '#0f172a', textColor: '#e2e8f0', primaryColor: '#3b82f6', inputBackgroundColor: '#1e293b', inputBorderColor: '#334155' },
-                    cls: 'bg-[#0f172a] border-[#334155] text-[#e2e8f0]',
+                    name: 'Transparente',
+                    theme: { backgroundColor: '', textColor: '#1f2937', primaryColor: '#6366f1', inputBackgroundColor: '', inputBorderColor: '#d1d5db', inputTextColor: '#1f2937', placeholderColor: '#9ca3af' },
+                    cls: 'bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#fff_0%_50%)] bg-[length:8px_8px] border-gray-300 text-gray-800',
                   },
                 ].map(({ name, theme: presetTheme, cls }) => (
                   <button
@@ -730,11 +775,18 @@ export default function FormBuilderPage() {
                   <Eye className="w-3.5 h-3.5 text-dark-400" />
                   <span className="text-xs font-medium text-dark-400">Preview ao vivo</span>
                 </div>
-                <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
+                <div className={`max-h-[calc(100vh-240px)] overflow-y-auto ${!previewBg ? 'bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#fff_0%_50%)] bg-[length:16px_16px]' : ''}`}>
                   <div
                     className="p-6"
-                    style={{ backgroundColor: previewBg, fontFamily: previewFont, fontSize: previewFontSize }}
+                    style={{ backgroundColor: previewBg || 'transparent', fontFamily: previewFont, fontSize: previewFontSize }}
                   >
+                    {/* CSS for placeholder and select colors */}
+                    <style>{`
+                      .preview-input-${form.id}::placeholder { color: ${previewPlaceholderColor} !important; opacity: 1; }
+                      .preview-select-${form.id} { color: ${previewPlaceholderColor} !important; }
+                      .preview-select-${form.id} option { color: ${previewInputTextColor}; background: ${previewInputBg || '#fff'}; }
+                    `}</style>
+
                     {/* Logo */}
                     {form.logo_url && (
                       <div className="mb-4 text-center">
@@ -771,18 +823,18 @@ export default function FormBuilderPage() {
                           {field.field_type === 'textarea' ? (
                             <textarea
                               placeholder={previewHideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
-                              className="w-full px-3 border"
+                              className={`w-full px-3 border preview-input-${form.id}`}
                               rows={3}
                               readOnly
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 2, paddingTop: (previewInputHeight - previewFontSize) / 2, paddingBottom: (previewInputHeight - previewFontSize) / 2 }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewInputTextColor, backgroundColor: previewInputBg || 'transparent', fontSize: previewFontSize - 2, paddingTop: (previewInputHeight - previewFontSize) / 2, paddingBottom: (previewInputHeight - previewFontSize) / 2 }}
                             />
                           ) : field.field_type === 'select' ? (
                             <select
-                              className="w-full px-3 border"
+                              className={`w-full px-3 border preview-select-${form.id}`}
                               disabled
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 2, height: previewInputHeight }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg || 'transparent', fontSize: previewFontSize - 2, height: previewInputHeight }}
                             >
-                              <option>{previewHideLabels ? field.label : (field.placeholder || 'Selecione...')}</option>
+                              <option value="">{previewHideLabels ? field.label : (field.placeholder || 'Selecione...')}</option>
                             </select>
                           ) : field.field_type === 'radio' || field.field_type === 'checkbox' ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -795,7 +847,7 @@ export default function FormBuilderPage() {
                                 <label
                                   key={i}
                                   className="flex items-center gap-2 border cursor-pointer"
-                                  style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg, color: previewText, fontSize: previewFontSize - 2, height: previewInputHeight, paddingLeft: 8, paddingRight: 8 }}
+                                  style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg || 'transparent', color: previewInputTextColor, fontSize: previewFontSize - 2, height: previewInputHeight, paddingLeft: 8, paddingRight: 8 }}
                                 >
                                   <input type={field.field_type} disabled className="w-3 h-3" style={{ accentColor: previewPrimary }} />
                                   {opt.label}
@@ -806,9 +858,9 @@ export default function FormBuilderPage() {
                             <input
                               type="text"
                               placeholder={previewHideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
-                              className="w-full px-3 border"
+                              className={`w-full px-3 border preview-input-${form.id}`}
                               readOnly
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 2, height: previewInputHeight }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewInputTextColor, backgroundColor: previewInputBg || 'transparent', fontSize: previewFontSize - 2, height: previewInputHeight }}
                             />
                           )}
                         </div>
@@ -1384,8 +1436,14 @@ export default function FormBuilderPage() {
                   <Eye className="w-4 h-4" />
                   Preview
                 </h3>
-                <div className="rounded-xl overflow-hidden" style={{ backgroundColor: previewBg }}>
+                <div className={`rounded-xl overflow-hidden ${!previewBg ? 'bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#fff_0%_50%)] bg-[length:12px_12px]' : ''}`} style={{ backgroundColor: previewBg || 'transparent' }}>
                   <div className="p-4" style={{ fontFamily: previewFont, fontSize: previewFontSize }}>
+                    {/* CSS for sidebar preview */}
+                    <style>{`
+                      .sidebar-input-${form.id}::placeholder { color: ${previewPlaceholderColor} !important; opacity: 1; }
+                      .sidebar-select-${form.id} { color: ${previewPlaceholderColor} !important; }
+                      .sidebar-select-${form.id} option { color: ${previewInputTextColor}; background: ${previewInputBg || '#fff'}; }
+                    `}</style>
                     {!previewHideTitle && (
                       <div className="mb-3">
                         <h4 className="font-bold" style={{ color: previewText, fontSize: previewFontSize + 2 }}>
@@ -1404,19 +1462,19 @@ export default function FormBuilderPage() {
                           {field.field_type === 'textarea' ? (
                             <textarea
                               placeholder={previewHideLabels ? field.label : (field.placeholder || '')}
-                              className="w-full px-2.5 border"
+                              className={`w-full px-2.5 border sidebar-input-${form.id}`}
                               rows={2}
                               readOnly
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 3, paddingTop: (previewInputHeight * 0.8 - previewFontSize) / 2, paddingBottom: (previewInputHeight * 0.8 - previewFontSize) / 2 }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewInputTextColor, backgroundColor: previewInputBg || 'transparent', fontSize: previewFontSize - 3, paddingTop: (previewInputHeight * 0.8 - previewFontSize) / 2, paddingBottom: (previewInputHeight * 0.8 - previewFontSize) / 2 }}
                             />
                           ) : field.field_type === 'select' ? (
-                            <select className="w-full px-2.5 border" disabled style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 3, height: previewInputHeight * 0.8 }}>
-                              <option>{previewHideLabels ? field.label : (field.placeholder || 'Selecione...')}</option>
+                            <select className={`w-full px-2.5 border sidebar-select-${form.id}`} disabled style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg || 'transparent', fontSize: previewFontSize - 3, height: previewInputHeight * 0.8 }}>
+                              <option value="">{previewHideLabels ? field.label : (field.placeholder || 'Selecione...')}</option>
                             </select>
                           ) : field.field_type === 'radio' || field.field_type === 'checkbox' ? (
                             <div className="space-y-1">
                               {(field.options || []).map((opt: any, i: number) => (
-                                <label key={i} className="flex items-center gap-1.5 px-2 border" style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg, color: previewText, fontSize: previewFontSize - 3, height: previewInputHeight * 0.8 }}>
+                                <label key={i} className="flex items-center gap-1.5 px-2 border" style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg || 'transparent', color: previewInputTextColor, fontSize: previewFontSize - 3, height: previewInputHeight * 0.8 }}>
                                   <input type={field.field_type} disabled className="w-3 h-3" style={{ accentColor: previewPrimary }} />
                                   {opt.label}
                                 </label>
@@ -1426,9 +1484,9 @@ export default function FormBuilderPage() {
                             <input
                               type="text"
                               placeholder={previewHideLabels ? field.label : (field.placeholder || '')}
-                              className="w-full px-2.5 border"
+                              className={`w-full px-2.5 border sidebar-input-${form.id}`}
                               readOnly
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewText, backgroundColor: previewInputBg, fontSize: previewFontSize - 3, height: previewInputHeight * 0.8 }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewInputTextColor, backgroundColor: previewInputBg || 'transparent', fontSize: previewFontSize - 3, height: previewInputHeight * 0.8 }}
                             />
                           )}
                         </div>
