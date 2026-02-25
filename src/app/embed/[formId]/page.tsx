@@ -232,8 +232,9 @@ export default function EmbedFormPage() {
     }
   }
 
-  const theme = form?.theme || { primaryColor: '#6366f1', backgroundColor: '#ffffff', textColor: '#1f2937', borderRadius: 12, fontFamily: 'Inter' }
-  const inputBg = theme.inputBackgroundColor || '#ffffff'
+  const theme = form?.theme || { primaryColor: '#6366f1', backgroundColor: '', textColor: '#1f2937', borderRadius: 12, fontFamily: 'Inter' }
+  const inputBg = theme.inputBackgroundColor // Can be empty for transparent
+  const inputBgForDropdown = inputBg || '#ffffff' // Dropdown needs solid background
   const inputBorder = theme.inputBorderColor || '#e5e7eb'
   const hideLabels = theme.hideLabels || false
   const hideTitle = theme.hideTitle || false
@@ -294,9 +295,7 @@ export default function EmbedFormPage() {
       {/* CSS for placeholder and select colors */}
       <style>{`
         .embed-input-${form.id}::placeholder { color: ${placeholderColor} !important; opacity: 1; }
-        .embed-select-${form.id} { color: ${placeholderColor} !important; }
-        .embed-select-${form.id}:valid { color: ${inputTextColor} !important; }
-        .embed-select-${form.id} option { color: ${inputTextColor}; background: ${inputBg || '#fff'}; }
+        .embed-select-${form.id} option { color: ${inputTextColor}; background: ${inputBgForDropdown}; }
         .embed-select-${form.id} option[value=""] { color: ${placeholderColor}; }
       `}</style>
       <div className="w-full" style={{ maxWidth: maxWidth === '100%' ? '100%' : `${maxWidth}px` }}>
@@ -355,7 +354,7 @@ export default function EmbedFormPage() {
                   onChange={(e) => setAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
                   required={field.required}
                   className={`w-full px-4 border focus:outline-none focus:ring-2 embed-select-${form.id}`}
-                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: answers[field.id] ? inputTextColor : placeholderColor, backgroundColor: inputBg || 'transparent', fontSize: fontSize - 1, height: inputHeight }}
+                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: answers[field.id] ? inputTextColor : placeholderColor, backgroundColor: inputBg ? inputBg : 'transparent', fontSize: fontSize - 1, height: inputHeight }}
                 >
                   <option value="">{hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || 'Selecione...')}</option>
                   {(field.options || []).map((opt, i) => (

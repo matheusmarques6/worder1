@@ -428,7 +428,8 @@ export default function FormBuilderPage() {
   const previewBg = t.backgroundColor || ''  // Empty = transparent
   const previewText = t.textColor || '#1f2937'
   const previewPrimary = t.primaryColor || '#6366f1'
-  const previewInputBg = t.inputBackgroundColor || '#ffffff'
+  const previewInputBg = t.inputBackgroundColor // Can be empty for transparent
+  const previewInputBgForDropdown = previewInputBg || '#ffffff' // Dropdown needs solid background
   const previewInputBorder = t.inputBorderColor || '#e5e7eb'
   const previewRadius = t.borderRadius ?? 12
   const previewFont = t.fontFamily || 'Inter'
@@ -845,8 +846,7 @@ export default function FormBuilderPage() {
                     {/* CSS for placeholder and select colors */}
                     <style>{`
                       .preview-input-${form.id}::placeholder { color: ${previewPlaceholderColor} !important; opacity: 1; }
-                      .preview-select-${form.id} { color: ${previewPlaceholderColor} !important; }
-                      .preview-select-${form.id} option { color: ${previewInputTextColor}; background: ${previewInputBg || '#fff'}; }
+                      .preview-select-${form.id} option { color: ${previewInputTextColor}; background: ${previewInputBgForDropdown}; }
                     `}</style>
 
                     {/* Logo */}
@@ -894,7 +894,7 @@ export default function FormBuilderPage() {
                             <select
                               className={`w-full px-3 border preview-select-${form.id}`}
                               disabled
-                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, backgroundColor: previewInputBg || 'transparent', fontSize: previewFontSize - 2, height: previewInputHeight }}
+                              style={{ borderColor: previewInputBorder, borderRadius: previewRadius, color: previewPlaceholderColor, backgroundColor: previewInputBg ? previewInputBg : 'transparent', fontSize: previewFontSize - 2, height: previewInputHeight }}
                             >
                               <option value="">{previewHideLabels ? field.label : (field.placeholder || 'Selecione...')}</option>
                             </select>
