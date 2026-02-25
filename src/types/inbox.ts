@@ -173,7 +173,7 @@ export interface InboxMessage {
   direction: 'inbound' | 'outbound'
   
   // Tipo e conteúdo
-  message_type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'location' | 'contact' | 'sticker' | 'template' | 'interactive'
+  message_type: 'text' | 'image' | 'video' | 'audio' | 'ptt' | 'document' | 'location' | 'contact' | 'sticker' | 'template' | 'interactive'
   content?: string
   
   // Mídia
