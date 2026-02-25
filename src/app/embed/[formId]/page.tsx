@@ -27,6 +27,9 @@ interface FormData {
     textColor: string
     borderRadius: number
     fontFamily: string
+    hideLabels?: boolean
+    inputBackgroundColor?: string
+    inputBorderColor?: string
   }
   logo_url: string | null
   success_message: string
@@ -204,7 +207,10 @@ export default function EmbedFormPage() {
     }
   }
 
-  const theme = form?.theme || { primaryColor: '#6366f1', backgroundColor: '#ffffff', textColor: '#1f2937', borderRadius: 12, fontFamily: 'Inter' }
+  const theme = form?.theme || { primaryColor: '#6366f1', backgroundColor: '#ffffff', textColor: '#1f2937', borderRadius: 12, fontFamily: 'Inter', hideLabels: false, inputBackgroundColor: '#ffffff', inputBorderColor: '#e5e7eb' }
+  const inputBg = theme.inputBackgroundColor || '#ffffff'
+  const inputBorder = theme.inputBorderColor || '#e5e7eb'
+  const hideLabels = theme.hideLabels || false
 
   if (isLoading) {
     return (
@@ -259,11 +265,13 @@ export default function EmbedFormPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {form.fields.filter(shouldShowField).map(field => (
             <div key={field.id}>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textColor }}>
-                {field.label}
-                {field.required && <span style={{ color: '#ef4444' }}> *</span>}
-              </label>
-              {field.description && (
+              {!hideLabels && (
+                <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textColor }}>
+                  {field.label}
+                  {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                </label>
+              )}
+              {!hideLabels && field.description && (
                 <p className="text-xs mb-1.5" style={{ color: `${theme.textColor}60` }}>{field.description}</p>
               )}
 
@@ -271,14 +279,15 @@ export default function EmbedFormPage() {
                 <textarea
                   value={answers[field.id] || ''}
                   onChange={(e) => setAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                  placeholder={field.placeholder || ''}
+                  placeholder={hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
                   required={field.required}
                   rows={4}
-                  className="w-full px-4 py-3 border bg-white text-sm focus:outline-none focus:ring-2"
+                  className="w-full px-4 py-3 border text-sm focus:outline-none focus:ring-2"
                   style={{
-                    borderColor: '#e5e7eb',
+                    borderColor: inputBorder,
                     borderRadius: theme.borderRadius,
                     color: theme.textColor,
+                    backgroundColor: inputBg,
                   }}
                 />
               ) : field.field_type === 'select' ? (
@@ -286,18 +295,21 @@ export default function EmbedFormPage() {
                   value={answers[field.id] || ''}
                   onChange={(e) => setAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
                   required={field.required}
-                  className="w-full px-4 py-3 border bg-white text-sm focus:outline-none focus:ring-2"
-                  style={{ borderColor: '#e5e7eb', borderRadius: theme.borderRadius, color: theme.textColor }}
+                  className="w-full px-4 py-3 border text-sm focus:outline-none focus:ring-2"
+                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg }}
                 >
-                  <option value="">{field.placeholder || 'Selecione...'}</option>
+                  <option value="">{hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || 'Selecione...')}</option>
                   {(field.options || []).map((opt, i) => (
                     <option key={i} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
               ) : field.field_type === 'radio' ? (
                 <div className="space-y-2">
+                  {hideLabels && (
+                    <p className="text-sm mb-1" style={{ color: theme.textColor }}>{field.label}{field.required && <span style={{ color: '#ef4444' }}> *</span>}</p>
+                  )}
                   {(field.options || []).map((opt, i) => (
-                    <label key={i} className="flex items-center gap-3 p-3 border cursor-pointer hover:bg-gray-50 transition-colors" style={{ borderColor: '#e5e7eb', borderRadius: theme.borderRadius }}>
+                    <label key={i} className="flex items-center gap-3 p-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg }}>
                       <input
                         type="radio"
                         name={field.id}
@@ -313,8 +325,11 @@ export default function EmbedFormPage() {
                 </div>
               ) : field.field_type === 'checkbox' ? (
                 <div className="space-y-2">
+                  {hideLabels && (
+                    <p className="text-sm mb-1" style={{ color: theme.textColor }}>{field.label}{field.required && <span style={{ color: '#ef4444' }}> *</span>}</p>
+                  )}
                   {(field.options || []).map((opt, i) => (
-                    <label key={i} className="flex items-center gap-3 p-3 border cursor-pointer hover:bg-gray-50 transition-colors" style={{ borderColor: '#e5e7eb', borderRadius: theme.borderRadius }}>
+                    <label key={i} className="flex items-center gap-3 p-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg }}>
                       <input
                         type="checkbox"
                         value={opt.value}
@@ -346,11 +361,10 @@ export default function EmbedFormPage() {
                   }
                   value={answers[field.id] || ''}
                   onChange={(e) => setAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                  placeholder={field.placeholder || ''}
+                  placeholder={hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
                   required={field.required}
-                  className="w-full px-4 py-3 border bg-white text-sm focus:outline-none focus:ring-2"
-                  style={{ borderColor: '#e5e7eb', borderRadius: theme.borderRadius, color: theme.textColor }}
-                />
+                  className="w-full px-4 py-3 border text-sm focus:outline-none focus:ring-2"
+                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg }}
               )}
             </div>
           ))}

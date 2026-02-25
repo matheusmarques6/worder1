@@ -898,6 +898,260 @@ export default function FormBuilderPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Design/Appearance */}
+              <div className="p-5 bg-dark-800/60 border border-dark-700/50 rounded-xl">
+                <h3 className="text-base font-semibold text-white mb-4">Aparencia do Formulario</h3>
+                <div className="space-y-4">
+                  {/* Hide Labels Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm text-white">Ocultar labels</label>
+                      <p className="text-xs text-dark-400">Usar apenas placeholders nos campos</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const newTheme = { ...form.theme, hideLabels: !form.theme?.hideLabels }
+                        setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                        saveFormSettings({ theme: newTheme })
+                      }}
+                      className={`w-10 h-5 rounded-full relative transition-colors ${form.theme?.hideLabels ? 'bg-primary-500' : 'bg-dark-700'}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${form.theme?.hideLabels ? 'left-5' : 'left-0.5'}`} />
+                    </button>
+                  </div>
+
+                  {/* Color Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Background Color */}
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1">Cor de fundo</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={form.theme?.backgroundColor || '#ffffff'}
+                          onChange={(e) => {
+                            const newTheme = { ...form.theme, backgroundColor: e.target.value }
+                            setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                          }}
+                          onBlur={() => saveFormSettings({ theme: form.theme })}
+                          className="w-10 h-10 rounded-lg cursor-pointer border-0"
+                        />
+                        <input
+                          type="text"
+                          value={form.theme?.backgroundColor || '#ffffff'}
+                          onChange={(e) => {
+                            const newTheme = { ...form.theme, backgroundColor: e.target.value }
+                            setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                          }}
+                          onBlur={() => saveFormSettings({ theme: form.theme })}
+                          className="flex-1 px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Text Color */}
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1">Cor do texto</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={form.theme?.textColor || '#1f2937'}
+                          onChange={(e) => {
+                            const newTheme = { ...form.theme, textColor: e.target.value }
+                            setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                          }}
+                          onBlur={() => saveFormSettings({ theme: form.theme })}
+                          className="w-10 h-10 rounded-lg cursor-pointer border-0"
+                        />
+                        <input
+                          type="text"
+                          value={form.theme?.textColor || '#1f2937'}
+                          onChange={(e) => {
+                            const newTheme = { ...form.theme, textColor: e.target.value }
+                            setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                          }}
+                          onBlur={() => saveFormSettings({ theme: form.theme })}
+                          className="flex-1 px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Primary/Button Color */}
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1">Cor do botao</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={form.theme?.primaryColor || '#6366f1'}
+                          onChange={(e) => {
+                            const newTheme = { ...form.theme, primaryColor: e.target.value }
+                            setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                          }}
+                          onBlur={() => saveFormSettings({ theme: form.theme })}
+                          className="w-10 h-10 rounded-lg cursor-pointer border-0"
+                        />
+                        <input
+                          type="text"
+                          value={form.theme?.primaryColor || '#6366f1'}
+                          onChange={(e) => {
+                            const newTheme = { ...form.theme, primaryColor: e.target.value }
+                            setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                          }}
+                          onBlur={() => saveFormSettings({ theme: form.theme })}
+                          className="flex-1 px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Input Background */}
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1">Fundo dos campos</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={form.theme?.inputBackgroundColor || '#ffffff'}
+                          onChange={(e) => {
+                            const newTheme = { ...form.theme, inputBackgroundColor: e.target.value }
+                            setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                          }}
+                          onBlur={() => saveFormSettings({ theme: form.theme })}
+                          className="w-10 h-10 rounded-lg cursor-pointer border-0"
+                        />
+                        <input
+                          type="text"
+                          value={form.theme?.inputBackgroundColor || '#ffffff'}
+                          onChange={(e) => {
+                            const newTheme = { ...form.theme, inputBackgroundColor: e.target.value }
+                            setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                          }}
+                          onBlur={() => saveFormSettings({ theme: form.theme })}
+                          className="flex-1 px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Input Border Color */}
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1">Borda dos campos</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={form.theme?.inputBorderColor || '#e5e7eb'}
+                          onChange={(e) => {
+                            const newTheme = { ...form.theme, inputBorderColor: e.target.value }
+                            setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                          }}
+                          onBlur={() => saveFormSettings({ theme: form.theme })}
+                          className="w-10 h-10 rounded-lg cursor-pointer border-0"
+                        />
+                        <input
+                          type="text"
+                          value={form.theme?.inputBorderColor || '#e5e7eb'}
+                          onChange={(e) => {
+                            const newTheme = { ...form.theme, inputBorderColor: e.target.value }
+                            setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                          }}
+                          onBlur={() => saveFormSettings({ theme: form.theme })}
+                          className="flex-1 px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Border Radius */}
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1">Arredondamento (px)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="30"
+                        value={form.theme?.borderRadius || 12}
+                        onChange={(e) => {
+                          const newTheme = { ...form.theme, borderRadius: parseInt(e.target.value) || 0 }
+                          setForm(prev => prev ? { ...prev, theme: newTheme } : null)
+                        }}
+                        onBlur={() => saveFormSettings({ theme: form.theme })}
+                        className="w-full px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Themes */}
+                  <div>
+                    <label className="block text-xs text-dark-400 mb-2">Temas rapidos</label>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => {
+                          const lightTheme = {
+                            ...form.theme,
+                            backgroundColor: '#ffffff',
+                            textColor: '#1f2937',
+                            primaryColor: '#6366f1',
+                            inputBackgroundColor: '#ffffff',
+                            inputBorderColor: '#e5e7eb',
+                          }
+                          setForm(prev => prev ? { ...prev, theme: lightTheme } : null)
+                          saveFormSettings({ theme: lightTheme })
+                        }}
+                        className="px-3 py-1.5 bg-white border border-gray-300 text-gray-800 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
+                      >
+                        Claro
+                      </button>
+                      <button
+                        onClick={() => {
+                          const darkTheme = {
+                            ...form.theme,
+                            backgroundColor: '#1a1a2e',
+                            textColor: '#ffffff',
+                            primaryColor: '#6366f1',
+                            inputBackgroundColor: '#16213e',
+                            inputBorderColor: '#0f3460',
+                          }
+                          setForm(prev => prev ? { ...prev, theme: darkTheme } : null)
+                          saveFormSettings({ theme: darkTheme })
+                        }}
+                        className="px-3 py-1.5 bg-[#1a1a2e] border border-[#0f3460] text-white rounded-lg text-xs font-medium hover:bg-[#16213e] transition-colors"
+                      >
+                        Escuro
+                      </button>
+                      <button
+                        onClick={() => {
+                          const greenTheme = {
+                            ...form.theme,
+                            backgroundColor: '#0d1117',
+                            textColor: '#c9d1d9',
+                            primaryColor: '#238636',
+                            inputBackgroundColor: '#161b22',
+                            inputBorderColor: '#30363d',
+                          }
+                          setForm(prev => prev ? { ...prev, theme: greenTheme } : null)
+                          saveFormSettings({ theme: greenTheme })
+                        }}
+                        className="px-3 py-1.5 bg-[#0d1117] border border-[#30363d] text-[#c9d1d9] rounded-lg text-xs font-medium hover:bg-[#161b22] transition-colors"
+                      >
+                        GitHub
+                      </button>
+                      <button
+                        onClick={() => {
+                          const blueTheme = {
+                            ...form.theme,
+                            backgroundColor: '#0f172a',
+                            textColor: '#e2e8f0',
+                            primaryColor: '#3b82f6',
+                            inputBackgroundColor: '#1e293b',
+                            inputBorderColor: '#334155',
+                          }
+                          setForm(prev => prev ? { ...prev, theme: blueTheme } : null)
+                          saveFormSettings({ theme: blueTheme })
+                        }}
+                        className="px-3 py-1.5 bg-[#0f172a] border border-[#334155] text-[#e2e8f0] rounded-lg text-xs font-medium hover:bg-[#1e293b] transition-colors"
+                      >
+                        Azul
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 // =====================================================
 
 // Routes that don't require authentication
-const publicRoutes = ['/', '/signup', '/login', '/register', '/forgot-password', '/reset-password', '/change-password'];
+const publicRoutes = ['/', '/signup', '/login', '/register', '/forgot-password', '/reset-password', '/change-password', '/embed'];
 
 // Public API routes (webhooks, etc)
 const publicApiRoutes = ['/api/auth', '/api/shopify', '/api/klaviyo', '/api/webhooks', '/api/public', '/api/cron', '/api/debug', '/api/workers'];
