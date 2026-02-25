@@ -38,6 +38,7 @@ interface WhatsAppConnectUnifiedProps {
   onClose: () => void
   onSuccess: (instance: any) => void
   organizationId: string
+  storeId?: string | null
   existingConfig?: any
 }
 
@@ -56,6 +57,7 @@ export default function WhatsAppConnectUnified({
   onClose,
   onSuccess,
   organizationId,
+  storeId,
   existingConfig
 }: WhatsAppConnectUnifiedProps) {
   // State
@@ -129,6 +131,7 @@ export default function WhatsAppConnectUnified({
         body: JSON.stringify({
           action: 'create',
           organization_id: organizationId,
+          store_id: storeId,
           title: evolutionConfig.instanceName || 'WhatsApp Business',
           api_type: 'EVOLUTION',
           api_url: evolutionConfig.apiUrl,
@@ -179,7 +182,7 @@ export default function WhatsAppConnectUnified({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'qr',
-          id: instId,
+          instance_id: instId,
           organization_id: organizationId
         })
       })
@@ -211,7 +214,7 @@ export default function WhatsAppConnectUnified({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'status',
-            id: instId
+            instance_id: instId
           })
         })
 
