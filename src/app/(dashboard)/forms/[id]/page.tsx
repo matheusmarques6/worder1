@@ -386,6 +386,23 @@ export default function FormBuilderPage() {
 <script src="${baseUrl}/embed/widget.js" data-form-id="${formId}"></script>`
   }
 
+  // Load Google Font for preview - must be before conditional returns
+  useEffect(() => {
+    if (!form?.theme?.fontFamily) return
+    const font = form.theme.fontFamily
+    const systemFonts = ['Arial', 'Georgia', 'Times New Roman', 'Helvetica', 'Verdana']
+    if (systemFonts.includes(font)) return
+
+    const link = document.createElement('link')
+    link.href = `https://fonts.googleapis.com/css2?family=${font.replace(/\s+/g, '+')}:wght@400;500;600;700&display=swap`
+    link.rel = 'stylesheet'
+    document.head.appendChild(link)
+
+    return () => {
+      document.head.removeChild(link)
+    }
+  }, [form?.theme?.fontFamily])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -405,23 +422,6 @@ export default function FormBuilderPage() {
       </div>
     )
   }
-
-  // Load Google Font for preview
-  useEffect(() => {
-    if (!form?.theme?.fontFamily) return
-    const font = form.theme.fontFamily
-    const systemFonts = ['Arial', 'Georgia', 'Times New Roman', 'Helvetica', 'Verdana']
-    if (systemFonts.includes(font)) return
-
-    const link = document.createElement('link')
-    link.href = `https://fonts.googleapis.com/css2?family=${font.replace(/\s+/g, '+')}:wght@400;500;600;700&display=swap`
-    link.rel = 'stylesheet'
-    document.head.appendChild(link)
-
-    return () => {
-      document.head.removeChild(link)
-    }
-  }, [form?.theme?.fontFamily])
 
   // Theme values for preview
   const t = form.theme || {}
