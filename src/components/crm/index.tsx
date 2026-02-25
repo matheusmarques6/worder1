@@ -64,11 +64,43 @@ export { CustomFieldRenderer, CustomFieldsForm, useCustomFields, validateCustomF
 export type { CustomFieldDefinition } from './CustomFieldRenderer'
 
 // ===============================
-// KANBAN CARD
+// KANBAN CARD - Professional CRM Style
 // ===============================
 interface KanbanCardProps {
   deal: Deal
   onClick?: () => void
+}
+
+// Time ago helper
+function timeAgo(dateStr: string): string {
+  const now = new Date()
+  const date = new Date(dateStr)
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'agora'
+  if (diffMins < 60) return `${diffMins}min`
+  if (diffHours < 24) return `${diffHours}h`
+  if (diffDays < 7) return `${diffDays}d`
+  return new Date(dateStr).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+}
+
+// Avatar colors
+const cardAvatarColors = [
+  'from-blue-500 to-blue-600',
+  'from-purple-500 to-purple-600',
+  'from-emerald-500 to-emerald-600',
+  'from-orange-500 to-orange-600',
+  'from-pink-500 to-pink-600',
+  'from-cyan-500 to-cyan-600',
+]
+
+function getCardAvatarColor(name: string) {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  return cardAvatarColors[Math.abs(hash) % cardAvatarColors.length]
 }
 
 function KanbanCard({ deal, onClick }: KanbanCardProps) {
@@ -86,10 +118,26 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
     transition,
   }
 
-  // Extract UTM info from custom_fields
+  // Extract info
   const customFields = (deal as any).custom_fields || {}
   const utmSource = customFields.utm_source
   const source = customFields.source || (deal as any).source
+  const formName = customFields.form_name || customFields.formName
+  const formId = customFields.form_id || customFields.formId
+
+  // Contact info
+  const contact = deal.contact
+  const contactName = contact
+    ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email?.split('@')[0] || 'Lead'
+    : deal.title
+  const contactInitials = contact
+    ? `${contact.first_name?.[0] || ''}${contact.last_name?.[0] || ''}`.toUpperCase() || contact.email?.[0]?.toUpperCase() || '?'
+    : deal.title?.substring(0, 2).toUpperCase() || '?'
+  const phone = contact?.whatsapp || contact?.phone
+  const email = contact?.email
+
+  // Origin badge
+  const originLabel = formName || utmSource || source
 
   return (
     <motion.div
@@ -99,62 +147,69 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'kanban-card group',
+        'group relative bg-dark-850 border border-dark-700/60 rounded-xl p-3.5 cursor-pointer hover:border-dark-600 hover:bg-dark-800 transition-all',
         isDragging && 'opacity-50 shadow-2xl shadow-primary-500/20 border-primary-500/50'
       )}
       onClick={onClick}
     >
-      <div className="flex items-start justify-between mb-2">
-        <h4 className="font-medium text-dark-100 group-hover:text-primary-400 transition-colors line-clamp-2 text-sm">
-          {deal.title}
-        </h4>
-        <button
-          {...listeners}
-          className="p-1 rounded hover:bg-dark-700 text-dark-500 cursor-grab active:cursor-grabbing"
-        >
-          <GripVertical className="w-4 h-4" />
-        </button>
+      {/* Drag Handle - Top Right */}
+      <button
+        {...listeners}
+        className="absolute top-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-dark-700 text-dark-500 cursor-grab active:cursor-grabbing transition-all"
+      >
+        <GripVertical className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Header: Avatar + Name + Time */}
+      <div className="flex items-start gap-3 mb-3">
+        <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getCardAvatarColor(contactName)} flex items-center justify-center flex-shrink-0`}>
+          <span className="text-sm font-semibold text-white">{contactInitials}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-semibold text-dark-100 group-hover:text-white transition-colors truncate text-sm">
+            {contactName}
+          </h4>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-[11px] text-dark-500">{timeAgo(deal.created_at)}</span>
+            {deal.value > 0 && (
+              <>
+                <span className="text-dark-600">•</span>
+                <span className="text-[11px] font-medium text-emerald-400">{formatCurrency(deal.value)}</span>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Contact Info */}
-      {deal.contact && (
-        <div className="space-y-1.5 mb-3">
-          {/* Phone/WhatsApp */}
-          {(deal.contact.whatsapp || deal.contact.phone) && (
-            <div className="flex items-center gap-1.5 text-dark-400 text-xs">
-              <Phone className="w-3 h-3 text-emerald-500" />
-              <span className="truncate">{deal.contact.whatsapp || deal.contact.phone}</span>
+      {/* Contact Details */}
+      <div className="space-y-1.5 mb-3">
+        {phone && (
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded bg-emerald-500/15 flex items-center justify-center">
+              <Phone className="w-3 h-3 text-emerald-400" />
             </div>
-          )}
-          {/* Email */}
-          {deal.contact.email && (
-            <div className="flex items-center gap-1.5 text-dark-400 text-xs">
+            <span className="text-xs text-dark-300 truncate">{phone}</span>
+          </div>
+        )}
+        {email && (
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded bg-blue-500/15 flex items-center justify-center">
               <Mail className="w-3 h-3 text-blue-400" />
-              <span className="truncate">{deal.contact.email}</span>
             </div>
-          )}
-          {/* Company */}
-          {deal.contact.company && (
-            <div className="flex items-center gap-1.5 text-dark-400 text-xs">
-              <Building className="w-3 h-3" />
-              <span className="truncate">{deal.contact.company}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Value & Source */}
-      <div className="flex items-center justify-between pt-2 border-t border-dark-700/50">
-        <div className="flex items-center gap-1.5 text-success-400">
-          <DollarSign className="w-4 h-4" />
-          <span className="font-semibold text-sm">{formatCurrency(deal.value)}</span>
-        </div>
-        {(utmSource || source) && (
-          <span className="px-1.5 py-0.5 bg-dark-700/50 text-dark-400 text-[10px] rounded">
-            {utmSource || source}
-          </span>
+            <span className="text-xs text-dark-300 truncate">{email}</span>
+          </div>
         )}
       </div>
+
+      {/* Origin Badge */}
+      {originLabel && (
+        <div className="flex items-center gap-1.5 pt-2 border-t border-dark-700/50">
+          <div className="w-4 h-4 rounded bg-purple-500/15 flex items-center justify-center">
+            <Tag className="w-2.5 h-2.5 text-purple-400" />
+          </div>
+          <span className="text-[11px] text-dark-400 truncate">{originLabel}</span>
+        </div>
+      )}
 
       {/* Tags */}
       {deal.tags && deal.tags.length > 0 && (
@@ -162,24 +217,18 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
           {deal.tags.slice(0, 2).map((tag: string) => (
             <span
               key={tag}
-              className="px-1.5 py-0.5 bg-primary-500/20 text-primary-400 text-[10px] rounded"
+              className="px-1.5 py-0.5 bg-primary-500/15 text-primary-400 text-[10px] rounded-md font-medium"
             >
               {tag}
             </span>
           ))}
           {deal.tags.length > 2 && (
-            <span className="px-1.5 py-0.5 bg-dark-700 text-dark-400 text-[10px] rounded">
+            <span className="px-1.5 py-0.5 bg-dark-700 text-dark-400 text-[10px] rounded-md">
               +{deal.tags.length - 2}
             </span>
           )}
         </div>
       )}
-
-      {/* Time ago */}
-      <div className="flex items-center gap-1 text-dark-600 text-[10px] mt-2">
-        <Calendar className="w-3 h-3" />
-        <span>{new Date(deal.created_at).toLocaleDateString('pt-BR')}</span>
-      </div>
     </motion.div>
   )
 }

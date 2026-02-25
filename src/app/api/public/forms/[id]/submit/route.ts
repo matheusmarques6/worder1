@@ -325,11 +325,12 @@ export async function POST(
             custom_fields: {
               source: 'form',
               form_id: formId,
+              form_name: form.name || 'Formulário',
               ...utmData,
             },
             notes: Object.keys(utmData).length > 0
-              ? `Lead via formulário\n\nUTMs:\n${Object.entries(utmData).map(([k, v]) => `• ${k}: ${v}`).join('\n')}`
-              : 'Lead via formulário',
+              ? `Lead via formulário: ${form.name || 'Sem nome'}\n\nUTMs:\n${Object.entries(utmData).map(([k, v]) => `• ${k}: ${v}`).join('\n')}`
+              : `Lead via formulário: ${form.name || 'Sem nome'}`,
           })
           .select('id')
           .single()
