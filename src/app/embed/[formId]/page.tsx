@@ -27,9 +27,14 @@ interface FormData {
     textColor: string
     borderRadius: number
     fontFamily: string
+    fontSize?: number
     hideLabels?: boolean
+    hideTitle?: boolean
     inputBackgroundColor?: string
     inputBorderColor?: string
+    headline?: string
+    subheadline?: string
+    buttonText?: string
   }
   logo_url: string | null
   success_message: string
@@ -75,11 +80,27 @@ export default function EmbedFormPage() {
     fetchForm()
   }, [fetchForm])
 
+  // Load Google Font
+  useEffect(() => {
+    if (!form?.theme?.fontFamily) return
+    const font = form.theme.fontFamily
+    const systemFonts = ['Arial', 'Georgia', 'Times New Roman', 'Helvetica', 'Verdana']
+    if (systemFonts.includes(font)) return
+
+    const link = document.createElement('link')
+    link.href = `https://fonts.googleapis.com/css2?family=${font.replace(/\s+/g, '+')}:wght@400;500;600;700&display=swap`
+    link.rel = 'stylesheet'
+    document.head.appendChild(link)
+
+    return () => {
+      document.head.removeChild(link)
+    }
+  }, [form?.theme?.fontFamily])
+
   // Initialize Facebook Pixel
   useEffect(() => {
     if (!form?.facebook_pixel_id) return
 
-    // Load Facebook Pixel
     const script = document.createElement('script')
     script.innerHTML = `
       !function(f,b,e,v,n,t,s)
@@ -155,7 +176,6 @@ export default function EmbedFormPage() {
       // Fire client-side events
       if (data.tracking?.events) {
         for (const event of data.tracking.events) {
-          // Facebook Pixel client-side event
           if (event.platforms.facebook && form.facebook_pixel_id && typeof window !== 'undefined' && (window as any).fbq) {
             (window as any).fbq('track', event.name, event.value ? {
               value: event.value,
@@ -163,7 +183,6 @@ export default function EmbedFormPage() {
             } : undefined)
           }
 
-          // Google Ads conversion
           if (event.platforms.google && form.google_ads_id && typeof window !== 'undefined' && (window as any).gtag) {
             (window as any).gtag('event', 'conversion', {
               send_to: form.google_ads_id,
@@ -176,7 +195,6 @@ export default function EmbedFormPage() {
 
       // Redirect or show success
       if (data.redirect_url) {
-        // Fire page_view event before redirecting
         const redirectUrl = new URL(data.redirect_url)
         redirectUrl.searchParams.set('submission_id', data.submission_id)
         redirectUrl.searchParams.set('form_id', formId)
@@ -207,10 +225,15 @@ export default function EmbedFormPage() {
     }
   }
 
-  const theme = form?.theme || { primaryColor: '#6366f1', backgroundColor: '#ffffff', textColor: '#1f2937', borderRadius: 12, fontFamily: 'Inter', hideLabels: false, inputBackgroundColor: '#ffffff', inputBorderColor: '#e5e7eb' }
+  const theme = form?.theme || { primaryColor: '#6366f1', backgroundColor: '#ffffff', textColor: '#1f2937', borderRadius: 12, fontFamily: 'Inter' }
   const inputBg = theme.inputBackgroundColor || '#ffffff'
   const inputBorder = theme.inputBorderColor || '#e5e7eb'
   const hideLabels = theme.hideLabels || false
+  const hideTitle = theme.hideTitle || false
+  const fontSize = theme.fontSize || 14
+  const headline = theme.headline || form?.name || ''
+  const subheadline = theme.subheadline || form?.description || ''
+  const buttonText = theme.buttonText || 'Enviar'
 
   if (isLoading) {
     return (
@@ -231,7 +254,7 @@ export default function EmbedFormPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-8" style={{ backgroundColor: theme.backgroundColor }}>
+      <div className="min-h-screen flex flex-col items-center justify-center p-8" style={{ backgroundColor: theme.backgroundColor, fontFamily: theme.fontFamily }}>
         <div className="max-w-md text-center">
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: `${theme.primaryColor}20` }}>
             <CheckCircle className="w-8 h-8" style={{ color: theme.primaryColor }} />
@@ -244,7 +267,7 @@ export default function EmbedFormPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8" style={{ backgroundColor: theme.backgroundColor, fontFamily: theme.fontFamily }}>
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8" style={{ backgroundColor: theme.backgroundColor, fontFamily: theme.fontFamily, fontSize }}>
       <div className="w-full max-w-lg">
         {/* Logo */}
         {form.logo_url && (
@@ -254,25 +277,27 @@ export default function EmbedFormPage() {
         )}
 
         {/* Form Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold" style={{ color: theme.textColor }}>{form.name}</h1>
-          {form.description && (
-            <p className="mt-2 text-base" style={{ color: `${theme.textColor}80` }}>{form.description}</p>
-          )}
-        </div>
+        {!hideTitle && (
+          <div className="mb-6">
+            <h1 className="font-bold" style={{ color: theme.textColor, fontSize: fontSize + 8 }}>{headline}</h1>
+            {subheadline && (
+              <p className="mt-2" style={{ color: `${theme.textColor}80`, fontSize }}>{subheadline}</p>
+            )}
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           {form.fields.filter(shouldShowField).map(field => (
             <div key={field.id}>
               {!hideLabels && (
-                <label className="block text-sm font-medium mb-1.5" style={{ color: theme.textColor }}>
+                <label className="block font-medium mb-1.5" style={{ color: theme.textColor, fontSize: fontSize - 1 }}>
                   {field.label}
                   {field.required && <span style={{ color: '#ef4444' }}> *</span>}
                 </label>
               )}
               {!hideLabels && field.description && (
-                <p className="text-xs mb-1.5" style={{ color: `${theme.textColor}60` }}>{field.description}</p>
+                <p className="mb-1.5" style={{ color: `${theme.textColor}60`, fontSize: fontSize - 2 }}>{field.description}</p>
               )}
 
               {field.field_type === 'textarea' ? (
@@ -282,12 +307,13 @@ export default function EmbedFormPage() {
                   placeholder={hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
                   required={field.required}
                   rows={4}
-                  className="w-full px-4 py-3 border text-sm focus:outline-none focus:ring-2"
+                  className="w-full px-4 py-3 border focus:outline-none focus:ring-2"
                   style={{
                     borderColor: inputBorder,
                     borderRadius: theme.borderRadius,
                     color: theme.textColor,
                     backgroundColor: inputBg,
+                    fontSize: fontSize - 1,
                   }}
                 />
               ) : field.field_type === 'select' ? (
@@ -295,8 +321,8 @@ export default function EmbedFormPage() {
                   value={answers[field.id] || ''}
                   onChange={(e) => setAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
                   required={field.required}
-                  className="w-full px-4 py-3 border text-sm focus:outline-none focus:ring-2"
-                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg }}
+                  className="w-full px-4 py-3 border focus:outline-none focus:ring-2"
+                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg, fontSize: fontSize - 1 }}
                 >
                   <option value="">{hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || 'Selecione...')}</option>
                   {(field.options || []).map((opt, i) => (
@@ -306,7 +332,7 @@ export default function EmbedFormPage() {
               ) : field.field_type === 'radio' ? (
                 <div className="space-y-2">
                   {hideLabels && (
-                    <p className="text-sm mb-1" style={{ color: theme.textColor }}>{field.label}{field.required && <span style={{ color: '#ef4444' }}> *</span>}</p>
+                    <p style={{ color: theme.textColor, fontSize: fontSize - 1 }}>{field.label}{field.required && <span style={{ color: '#ef4444' }}> *</span>}</p>
                   )}
                   {(field.options || []).map((opt, i) => (
                     <label key={i} className="flex items-center gap-3 p-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg }}>
@@ -319,14 +345,14 @@ export default function EmbedFormPage() {
                         className="w-4 h-4"
                         style={{ accentColor: theme.primaryColor }}
                       />
-                      <span className="text-sm" style={{ color: theme.textColor }}>{opt.label}</span>
+                      <span style={{ color: theme.textColor, fontSize: fontSize - 1 }}>{opt.label}</span>
                     </label>
                   ))}
                 </div>
               ) : field.field_type === 'checkbox' ? (
                 <div className="space-y-2">
                   {hideLabels && (
-                    <p className="text-sm mb-1" style={{ color: theme.textColor }}>{field.label}{field.required && <span style={{ color: '#ef4444' }}> *</span>}</p>
+                    <p style={{ color: theme.textColor, fontSize: fontSize - 1 }}>{field.label}{field.required && <span style={{ color: '#ef4444' }}> *</span>}</p>
                   )}
                   {(field.options || []).map((opt, i) => (
                     <label key={i} className="flex items-center gap-3 p-3 border cursor-pointer transition-colors" style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, backgroundColor: inputBg }}>
@@ -344,7 +370,7 @@ export default function EmbedFormPage() {
                         className="w-4 h-4"
                         style={{ accentColor: theme.primaryColor }}
                       />
-                      <span className="text-sm" style={{ color: theme.textColor }}>{opt.label}</span>
+                      <span style={{ color: theme.textColor, fontSize: fontSize - 1 }}>{opt.label}</span>
                     </label>
                   ))}
                 </div>
@@ -363,8 +389,8 @@ export default function EmbedFormPage() {
                   onChange={(e) => setAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
                   placeholder={hideLabels ? `${field.label}${field.required ? ' *' : ''}` : (field.placeholder || '')}
                   required={field.required}
-                  className="w-full px-4 py-3 border text-sm focus:outline-none focus:ring-2"
-                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg }}
+                  className="w-full px-4 py-3 border focus:outline-none focus:ring-2"
+                  style={{ borderColor: inputBorder, borderRadius: theme.borderRadius, color: theme.textColor, backgroundColor: inputBg, fontSize: fontSize - 1 }}
                 />
               )}
             </div>
@@ -381,10 +407,10 @@ export default function EmbedFormPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3.5 text-white font-semibold text-base transition-opacity disabled:opacity-50"
-            style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius }}
+            className="w-full py-3.5 text-white font-semibold transition-opacity disabled:opacity-50"
+            style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius, fontSize }}
           >
-            {isSubmitting ? 'Enviando...' : 'Enviar'}
+            {isSubmitting ? 'Enviando...' : buttonText}
           </button>
         </form>
 
