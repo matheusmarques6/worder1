@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 
 // GET - List conversations
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const searchParams = request.nextUrl.searchParams
+    const organizationId = searchParams.get('organization_id')
     const accountId = searchParams.get('account_id')
     const status = searchParams.get('status') || 'open'
     const assignedTo = searchParams.get('assigned_to')
@@ -19,15 +13,8 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0')
     const search = searchParams.get('search')
 
-    // Get user's organization
-    const { data: membership } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     let query = supabase
@@ -38,7 +25,7 @@ export async function GET(request: NextRequest) {
         contact:instagram_contacts(id, username, name, profile_picture_url),
         assigned_user:profiles!instagram_conversations_assigned_to_fkey(id, full_name, avatar_url)
       `, { count: 'exact' })
-      .eq('organization_id', membership.organization_id)
+      .eq('organization_id', organizationId)
       .order('last_message_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -84,29 +71,15 @@ export async function GET(request: NextRequest) {
 // PATCH - Update conversation (assign, close, etc)
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
-    const { conversation_id, ...updates } = body
+    const { conversation_id, organization_id, ...updates } = body
 
     if (!conversation_id) {
       return NextResponse.json({ error: 'conversation_id is required' }, { status: 400 })
     }
 
-    // Get user's organization
-    const { data: membership } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    if (!organization_id) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     // Verify conversation belongs to organization
@@ -114,7 +87,7 @@ export async function PATCH(request: NextRequest) {
       .from('instagram_conversations')
       .select('id')
       .eq('id', conversation_id)
-      .eq('organization_id', membership.organization_id)
+      .eq('organization_id', organization_id)
       .single()
 
     if (!conversation) {

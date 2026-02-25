@@ -1,31 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 
 // GET - List Instagram accounts for organization
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const searchParams = request.nextUrl.searchParams
+    const organizationId = searchParams.get('organization_id')
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Get user's organization
-    const { data: membership } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     const { data: accounts, error } = await supabase
       .from('instagram_accounts')
       .select('*')
-      .eq('organization_id', membership.organization_id)
+      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -50,29 +39,16 @@ export async function GET(request: NextRequest) {
 // DELETE - Disconnect an Instagram account
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const searchParams = request.nextUrl.searchParams
     const accountId = searchParams.get('account_id')
+    const organizationId = searchParams.get('organization_id')
 
     if (!accountId) {
       return NextResponse.json({ error: 'account_id is required' }, { status: 400 })
     }
 
-    // Get user's organization
-    const { data: membership } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     // Verify account belongs to organization
@@ -80,7 +56,7 @@ export async function DELETE(request: NextRequest) {
       .from('instagram_accounts')
       .select('id')
       .eq('id', accountId)
-      .eq('organization_id', membership.organization_id)
+      .eq('organization_id', organizationId)
       .single()
 
     if (!account) {
@@ -113,7 +89,7 @@ export async function DELETE(request: NextRequest) {
       await supabase
         .from('installed_integrations')
         .update({ status: 'disconnected' })
-        .eq('organization_id', membership.organization_id)
+        .eq('organization_id', organizationId)
         .eq('integration_id', integration.id)
     }
 
@@ -127,29 +103,15 @@ export async function DELETE(request: NextRequest) {
 // PATCH - Update Instagram account settings
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
-    const { account_id, ...updates } = body
+    const { account_id, organization_id, ...updates } = body
 
     if (!account_id) {
       return NextResponse.json({ error: 'account_id is required' }, { status: 400 })
     }
 
-    // Get user's organization
-    const { data: membership } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    if (!organization_id) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     // Verify account belongs to organization
@@ -157,7 +119,7 @@ export async function PATCH(request: NextRequest) {
       .from('instagram_accounts')
       .select('id')
       .eq('id', account_id)
-      .eq('organization_id', membership.organization_id)
+      .eq('organization_id', organization_id)
       .single()
 
     if (!account) {

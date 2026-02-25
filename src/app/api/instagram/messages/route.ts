@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { createInstagramClient } from '@/lib/instagram/api'
 
 // GET - Get messages for a conversation
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const searchParams = request.nextUrl.searchParams
     const conversationId = searchParams.get('conversation_id')
+    const organizationId = searchParams.get('organization_id')
     const limit = parseInt(searchParams.get('limit') || '50')
     const before = searchParams.get('before') // cursor for pagination
 
@@ -21,15 +15,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'conversation_id is required' }, { status: 400 })
     }
 
-    // Get user's organization
-    const { data: membership } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     // Verify conversation belongs to organization
@@ -37,7 +24,7 @@ export async function GET(request: NextRequest) {
       .from('instagram_conversations')
       .select('id, account_id, participant_id')
       .eq('id', conversationId)
-      .eq('organization_id', membership.organization_id)
+      .eq('organization_id', organizationId)
       .single()
 
     if (!conversation) {
@@ -82,18 +69,15 @@ export async function GET(request: NextRequest) {
 // POST - Send a message
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
-    const { conversation_id, message_type = 'text', text, media_url } = body
+    const { conversation_id, organization_id, message_type = 'text', text, media_url } = body
 
     if (!conversation_id) {
       return NextResponse.json({ error: 'conversation_id is required' }, { status: 400 })
+    }
+
+    if (!organization_id) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     if (message_type === 'text' && !text) {
@@ -104,17 +88,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'media_url is required for media messages' }, { status: 400 })
     }
 
-    // Get user's organization
-    const { data: membership } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
-    }
-
     // Get conversation with account details
     const { data: conversation } = await supabase
       .from('instagram_conversations')
@@ -123,7 +96,7 @@ export async function POST(request: NextRequest) {
         account:instagram_accounts(*)
       `)
       .eq('id', conversation_id)
-      .eq('organization_id', membership.organization_id)
+      .eq('organization_id', organization_id)
       .single()
 
     if (!conversation) {
@@ -201,7 +174,7 @@ export async function POST(request: NextRequest) {
     const { data: message, error: insertError } = await supabase
       .from('instagram_messages')
       .insert({
-        organization_id: membership.organization_id,
+        organization_id: organization_id,
         store_id: conversation.store_id,
         account_id: account.id,
         conversation_id: conversation_id,

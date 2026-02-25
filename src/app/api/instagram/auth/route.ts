@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { randomBytes } from 'crypto'
 
 const META_APP_ID = process.env.META_APP_ID!
@@ -20,35 +20,22 @@ const INSTAGRAM_SCOPES = [
 // GET - Generate OAuth URL
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const searchParams = request.nextUrl.searchParams
+    const organizationId = searchParams.get('organization_id')
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Get user's organization
-    const { data: membership } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     // Generate state token for security
     const stateToken = randomBytes(32).toString('hex')
 
-    // Store state token temporarily (in a more robust system, use Redis or DB)
+    // Store state token in DB
     const stateData = {
-      user_id: user.id,
-      organization_id: membership.organization_id,
+      organization_id: organizationId,
       created_at: new Date().toISOString(),
     }
 
-    // Store in DB for verification
     await supabase.from('oauth_states').upsert({
       state_token: stateToken,
       data: stateData,
@@ -78,13 +65,6 @@ export async function GET(request: NextRequest) {
 // POST - Exchange code for token and save account
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
     const { code, state } = body
 
