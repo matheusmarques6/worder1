@@ -15,13 +15,14 @@ export async function GET(request: NextRequest) {
     const { supabase, user } = auth
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const storeId = searchParams.get('storeId') || searchParams.get('store_id')
 
     let query = supabase
       .from('crm_forms')
       .select(`
         id, name, slug, description, status,
         submissions_count, views_count,
-        pipeline_id, stage_id,
+        pipeline_id, stage_id, store_id,
         facebook_pixel_id, google_ads_id,
         theme, logo_url,
         created_at, updated_at,
@@ -31,6 +32,11 @@ export async function GET(request: NextRequest) {
       `)
       .eq('organization_id', user.organization_id)
       .order('created_at', { ascending: false })
+
+    // Filtrar por loja se fornecido
+    if (storeId) {
+      query = query.or(`store_id.eq.${storeId},store_id.is.null`)
+    }
 
     if (status) {
       query = query.eq('status', status)
@@ -58,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     const { supabase, user } = auth
     const body = await request.json()
-    const { name, description, pipeline_id, stage_id, theme } = body
+    const { name, description, pipeline_id, stage_id, theme, store_id } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
@@ -97,6 +103,7 @@ export async function POST(request: NextRequest) {
       .from('crm_forms')
       .insert({
         organization_id: user.organization_id,
+        store_id: store_id || null,
         name,
         slug,
         description: description || null,
