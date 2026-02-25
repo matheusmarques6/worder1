@@ -301,15 +301,8 @@ export default function DashboardLayout({
           }
         } catch (error) {
           console.error('Error initializing user:', error)
-          setUser({
-            id: 'default-user',
-            email: 'demo@worder.com',
-            name: 'Usuário',
-            organization_id: 'default-org',
-            role: 'admin',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
+          // ✅ CORREÇÃO: Não definir usuário inválido - forçar re-login
+          setUser(null)
         }
       }
     }

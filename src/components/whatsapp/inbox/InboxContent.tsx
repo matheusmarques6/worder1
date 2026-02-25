@@ -43,9 +43,10 @@ interface InboxContentProps {
 export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxContentProps) {
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
-  
-  const organizationId = user?.organization_id || 'default-org'
-  const storeId = currentStore?.id || null // ✅ CRÍTICO: ID da loja atual
+
+  // ✅ CORREÇÃO: Usar organization_id da loja se usuário não tiver
+  const organizationId = user?.organization_id || currentStore?.organization_id || null
+  const storeId = currentStore?.id || null
   
   // ✅ CORREÇÃO: Passar storeId para filtrar instâncias por loja
   const { 
