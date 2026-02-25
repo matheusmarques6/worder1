@@ -244,7 +244,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (caption) payload.caption = caption
     } else if (mediaType === 'audio') {
       endpoint = `/message/sendWhatsAppAudio/${instanceName}`
-      payload.audio = `data:audio/ogg;base64,${base64}`
+      // Usar o tipo real do arquivo (pode ser webm, ogg, mp3, etc)
+      payload.audio = `data:${file.type || 'audio/ogg'};base64,${base64}`
     } else {
       endpoint = `/message/sendMedia/${instanceName}`
       payload.mediatype = 'document'

@@ -123,11 +123,12 @@ export default function InboxPage() {
   useEffect(() => {
     if (selectedConversation) {
       fetchMessages(selectedConversation.id)
-      
+
       // Fetch contact se tiver contact_id ou unified_contact_id
       const contactId = selectedConversation.unified_contact_id || selectedConversation.contact_id
       if (contactId) {
-        fetchContact(contactId, organizationId)
+        // CORREÇÃO: Passar conversation.id em vez de organizationId
+        fetchContact(contactId, selectedConversation.id)
       }
     } else {
       clearMessages()
