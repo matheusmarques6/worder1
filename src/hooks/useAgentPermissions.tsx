@@ -133,7 +133,7 @@ export function useAgentPermissions(): UseAgentPermissionsReturn {
   const [permissions, setPermissions] = useState<AgentPermissions | null>(null)
   const [agent, setAgent] = useState<AgentInfo | null>(null)
   const [isAgent, setIsAgent] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(true) // Default true para não bloquear enquanto carrega
+  const [isAdmin, setIsAdmin] = useState(false) // ✅ CORREÇÃO: Default false por segurança
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   

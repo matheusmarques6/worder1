@@ -69,9 +69,11 @@ export const useStoreStore = create<StoreState>()(
           // Limpar Automation Store  
           useAutomationStore.getState().clearAll();
           
-        // Limpar Inbox Store (importar dinamicamente para evitar circular)
+          // Limpar Inbox Store (importar dinamicamente para evitar circular)
           import('./inboxStore').then(({ useInboxStore }) => {
             useInboxStore.getState().reset();
+          }).catch(err => {
+            console.error('[Store] Erro ao limpar InboxStore:', err);
           });
         }
         
@@ -138,7 +140,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Limpar Inbox Store
     import('./inboxStore').then(({ useInboxStore }) => {
       useInboxStore.getState().reset();
-    });
+    }).catch(err => console.error('[Auth] Erro ao limpar InboxStore:', err));
     set({ user: null, isLoading: false, error: null })
   },
   signOut: async () => {
@@ -158,7 +160,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     useAutomationStore.getState().clearAll()
     import('./inboxStore').then(({ useInboxStore }) => {
       useInboxStore.getState().reset();
-    });
+    }).catch(err => console.error('[Auth] Erro ao limpar InboxStore:', err));
     set({ user: null, isLoading: false, error: null })
   },
 }))

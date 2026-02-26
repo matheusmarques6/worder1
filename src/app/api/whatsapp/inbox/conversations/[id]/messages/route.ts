@@ -231,6 +231,11 @@ const { data: savedUpsert, error: msgError } = await supabase
 
 if (msgError) {
   console.error('[Messages POST] ❌ Error saving outbound message:', msgError);
+  // ✅ CORREÇÃO: Retornar erro se não conseguiu salvar
+  return NextResponse.json(
+    { error: 'Erro ao salvar mensagem', details: msgError.message },
+    { status: 500, headers: NO_CACHE_HEADERS }
+  );
 }
 
 const saved = savedUpsert || null;
