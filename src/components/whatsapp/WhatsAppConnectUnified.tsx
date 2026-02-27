@@ -140,8 +140,12 @@ export default function WhatsAppConnectUnified({
       })
 
       const createData = await createResponse.json()
-      
+
       if (!createResponse.ok) {
+        // ✅ CORREÇÃO: Mensagem mais clara quando Evolution API não está configurada
+        if (createData.code === 'EVOLUTION_NOT_CONFIGURED') {
+          throw new Error('A conexão via QR Code requer a Evolution API configurada. Use a opção "API Oficial" ou configure EVOLUTION_API_KEY nas variáveis de ambiente.')
+        }
         throw new Error(createData.error || 'Erro ao criar instância')
       }
 

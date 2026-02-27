@@ -174,8 +174,8 @@ export async function POST(request: NextRequest) {
 // =============================================
 
 async function handleCreate(body: any) {
-  const { organization_id, store_id, title } = body; // ✅ NOVO: store_id
-  
+  const { organization_id, store_id, title } = body;
+
   const api_url = body.api_url || EVOLUTION_API_URL;
   const api_key = body.api_key || EVOLUTION_API_KEY;
 
@@ -186,6 +186,14 @@ async function handleCreate(body: any) {
   // ✅ CRÍTICO: Verificar se store_id foi fornecido
   if (!store_id) {
     return NextResponse.json({ error: 'store_id is required' }, { status: 400 });
+  }
+
+  // ✅ CORREÇÃO: Verificar se Evolution API está configurada
+  if (!api_key) {
+    return NextResponse.json({
+      error: 'Evolution API não configurada. Configure EVOLUTION_API_KEY nas variáveis de ambiente ou use a API Oficial do WhatsApp.',
+      code: 'EVOLUTION_NOT_CONFIGURED'
+    }, { status: 400 });
   }
 
   const uniqueId = `zapzap_${organization_id.slice(0, 8)}_${Date.now()}`;
