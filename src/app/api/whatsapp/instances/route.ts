@@ -250,6 +250,8 @@ async function handleCreate(body: any) {
 async function handleGenerateQR(body: any) {
   const { instance_id } = body;
 
+  console.log(`📱 handleGenerateQR called for instance: ${instance_id}`);
+
   if (!instance_id) {
     return NextResponse.json({ error: 'instance_id required' }, { status: 400 });
   }
@@ -261,12 +263,24 @@ async function handleGenerateQR(body: any) {
     .single();
 
   if (error || !instance) {
+    console.error('❌ Instance not found:', instance_id, error);
     return NextResponse.json({ error: 'Instance not found' }, { status: 404 });
   }
 
+  console.log(`✅ Instance found: ${instance.unique_id}, API: ${instance.server_url || EVOLUTION_API_URL}`);
+
   const qrResult = await getEvolutionQR(instance);
 
+  if (qrResult.error) {
+    console.error('❌ QR generation failed:', qrResult.error);
+    return NextResponse.json({
+      error: qrResult.error,
+      details: qrResult.raw
+    }, { status: 500 });
+  }
+
   if (qrResult.connected) {
+    console.log(`✅ Instance already connected: ${qrResult.phoneNumber}`);
     await supabase
       .from('whatsapp_instances')
       .update({
@@ -281,6 +295,7 @@ async function handleGenerateQR(body: any) {
   }
 
   if (qrResult.qrcode) {
+    console.log(`✅ QR Code generated successfully`);
     await supabase
       .from('whatsapp_instances')
       .update({
@@ -293,7 +308,11 @@ async function handleGenerateQR(body: any) {
     return NextResponse.json({ qrcode: qrResult.qrcode });
   }
 
-  return NextResponse.json({ error: qrResult.error || 'Could not generate QR' }, { status: 500 });
+  console.error('❌ No QR code and not connected:', qrResult);
+  return NextResponse.json({
+    error: 'Could not generate QR. Check Evolution API logs.',
+    details: qrResult.raw
+  }, { status: 500 });
 }
 
 async function handleConnect(body: any) {
@@ -363,6 +382,13 @@ async function handleStatus(body: any) {
 
 async function createEvolutionInstance(params: { apiUrl: string; apiKey: string; instanceName: string }) {
   try {
+    console.log(`🚀 Creating Evolution instance: ${params.instanceName}`);
+    console.log(`🔗 API URL: ${params.apiUrl}`);
+
+    if (!params.apiUrl || !params.apiKey) {
+      return { success: false, error: 'Evolution API URL ou API Key não configurados' };
+    }
+
     const response = await fetch(`${params.apiUrl}/instance/create`, {
       method: 'POST',
       headers: {
@@ -377,14 +403,18 @@ async function createEvolutionInstance(params: { apiUrl: string; apiKey: string;
     });
 
     const data = await response.json();
+    console.log(`📥 Evolution create response:`, JSON.stringify(data).substring(0, 500));
 
     if (!response.ok) {
-      return { success: false, error: data.message || data.error || 'Failed to create instance' };
+      console.error(`❌ Evolution create failed: ${response.status}`, data);
+      return { success: false, error: data.message || data.error || `Erro ao criar instância: ${response.status}` };
     }
 
+    console.log(`✅ Instance created successfully`);
     return { success: true, data };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    console.error(`❌ createEvolutionInstance error:`, error);
+    return { success: false, error: `Erro de conexão: ${error.message}` };
   }
 }
 
@@ -429,32 +459,54 @@ async function getEvolutionQR(instance: any) {
   try {
     const apiUrl = instance.server_url || instance.api_url || EVOLUTION_API_URL;
     const apiKey = instance.api_key || EVOLUTION_API_KEY;
-    
+
+    console.log(`🔍 Getting QR for instance: ${instance.unique_id}`);
+    console.log(`🔗 API URL: ${apiUrl}`);
+
+    if (!apiUrl || !apiKey) {
+      console.error('❌ Evolution API not configured');
+      return { error: 'Evolution API não configurada. Verifique EVOLUTION_API_URL e EVOLUTION_API_KEY.' };
+    }
+
     const response = await fetch(`${apiUrl}/instance/connect/${instance.unique_id}`, {
       method: 'GET',
       headers: { 'apikey': apiKey },
     });
 
     const data = await response.json();
+    console.log(`📱 QR Response:`, JSON.stringify(data).substring(0, 500));
+
+    // Se a API retornou erro
+    if (!response.ok) {
+      console.error(`❌ Evolution API error: ${response.status}`, data);
+      return { error: data.message || data.error || `Erro da Evolution API: ${response.status}` };
+    }
 
     if (data.instance?.state === 'open') {
-      return { 
-        connected: true, 
-        phoneNumber: data.instance?.owner?.split('@')?.[0] || data.instance?.phoneNumber 
+      return {
+        connected: true,
+        phoneNumber: data.instance?.owner?.split('@')?.[0] || data.instance?.phoneNumber
       };
     }
 
     if (data.base64) {
       return { qrcode: data.base64 };
     }
-    
+
     if (data.code) {
       return { qrcode: data.code, needsConversion: true };
     }
 
-    return { error: 'No QR code available', raw: data };
+    // Para Evolution API v2
+    if (data.qrcode?.base64) {
+      return { qrcode: data.qrcode.base64 };
+    }
+
+    console.warn('⚠️ No QR code in response:', data);
+    return { error: 'QR Code não disponível. Tente novamente.', raw: data };
   } catch (error: any) {
-    return { error: error.message };
+    console.error('❌ getEvolutionQR error:', error);
+    return { error: `Erro de conexão: ${error.message}` };
   }
 }
 
