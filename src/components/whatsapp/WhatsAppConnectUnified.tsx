@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useStoreStore } from '@/stores'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -39,7 +38,6 @@ interface WhatsAppConnectUnifiedProps {
   onClose: () => void
   onSuccess: (instance: any) => void
   organizationId: string
-  storeId?: string
   existingConfig?: any
 }
 
@@ -58,12 +56,8 @@ export default function WhatsAppConnectUnified({
   onClose,
   onSuccess,
   organizationId,
-  storeId,
   existingConfig
 }: WhatsAppConnectUnifiedProps) {
-  const { currentStore } = useStoreStore()
-  const effectiveStoreId = storeId || currentStore?.id
-
   // State
   const [method, setMethod] = useState<ConnectionMethod>('qrcode')
   const [step, setStep] = useState(1)
@@ -135,7 +129,6 @@ export default function WhatsAppConnectUnified({
         body: JSON.stringify({
           action: 'create',
           organization_id: organizationId,
-          store_id: effectiveStoreId,
           title: evolutionConfig.instanceName || 'WhatsApp Business',
           api_type: 'EVOLUTION',
           api_url: evolutionConfig.apiUrl,
@@ -186,7 +179,7 @@ export default function WhatsAppConnectUnified({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'qr',
-          instance_id: instId,
+          id: instId,
           organization_id: organizationId
         })
       })
@@ -218,7 +211,7 @@ export default function WhatsAppConnectUnified({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'status',
-            instance_id: instId
+            id: instId
           })
         })
 

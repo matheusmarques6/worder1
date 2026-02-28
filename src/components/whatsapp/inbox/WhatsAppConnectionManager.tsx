@@ -143,7 +143,7 @@ export default function WhatsAppConnectionManager({
     
     setActionLoading(instanceId)
     try {
-      await fetch(`/api/whatsapp/instances?id=${instanceId}&organization_id=${organizationId}`, { method: 'DELETE' })
+      await fetch(`/api/whatsapp/instances?id=${instanceId}`, { method: 'DELETE' })
       if (selectedInstance?.id === instanceId) {
         onSelectInstance(null)
       }
