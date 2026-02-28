@@ -398,7 +398,7 @@ export function useWhatsAppConnection(organizationId: string | null, storeId?: s
 
   const deleteInstance = useCallback(async (instanceId: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/whatsapp/instances?id=${instanceId}`, {
+      const response = await fetch(`/api/whatsapp/instances?id=${instanceId}&organization_id=${organizationId}`, {
         method: 'DELETE',
       })
 

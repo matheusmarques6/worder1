@@ -377,6 +377,59 @@ async function handleStatus(body: any) {
 }
 
 // =============================================
+// DELETE - Deletar instância
+// =============================================
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const body = await request.json().catch(() => null);
+    const instanceId = body?.instance_id || searchParams.get('id');
+    const organizationId = body?.organization_id || searchParams.get('organization_id');
+
+    if (!instanceId) {
+      return NextResponse.json({ error: 'instance_id is required' }, { status: 400 });
+    }
+
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
+    }
+
+    const { data: instance } = await supabase
+      .from('whatsapp_instances')
+      .select('*')
+      .eq('id', instanceId)
+      .eq('organization_id', organizationId)
+      .single();
+
+    if (!instance) {
+      return NextResponse.json({ error: 'Instance not found' }, { status: 404 });
+    }
+
+    // Deletar na Evolution API (se tiver unique_id)
+    if (instance.unique_id) {
+      try {
+        const apiUrl = instance.server_url || instance.api_url || EVOLUTION_API_URL;
+        const apiKey = instance.api_key || EVOLUTION_API_KEY;
+        await fetch(`${apiUrl}/instance/delete/${instance.unique_id}`, {
+          method: 'DELETE',
+          headers: { apikey: apiKey },
+        });
+      } catch (e) {
+        console.warn('⚠️ Could not delete from Evolution API:', e);
+      }
+    }
+
+    // Deletar no banco
+    await supabase.from('whatsapp_instances').delete().eq('id', instanceId);
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('❌ Instances DELETE error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// =============================================
 // EVOLUTION API HELPERS
 // =============================================
 
