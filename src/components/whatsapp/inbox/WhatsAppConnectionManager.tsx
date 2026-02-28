@@ -7,17 +7,9 @@ import {
   Check,
   ChevronDown,
   Smartphone,
-  Cloud,
-  Wifi,
-  WifiOff,
   Loader2,
-  Settings,
   Trash2,
-  RefreshCw,
-  AlertCircle,
-  MessageSquare,
   MoreVertical,
-  QrCode,
   Power,
   PowerOff
 } from 'lucide-react'
@@ -51,6 +43,9 @@ export default function WhatsAppConnectionManager({
   const [isOpen, setIsOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [qrCode, setQrCode] = useState<string | null>(null)
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   // =============================================
   // FETCH INSTANCES - COM STORE_ID
@@ -109,13 +104,32 @@ export default function WhatsAppConnectionManager({
     }
   }, [organizationId, storeId])
   
-  // Auto-refresh
+  // Auto-refresh (pauses during reconnect since reconnect has its own faster polling)
   useEffect(() => {
-    if (!organizationId || !storeId) return
-    
+    if (!organizationId || !storeId || reconnectingId) return
+
     const interval = setInterval(fetchInstances, 5000)
     return () => clearInterval(interval)
-  }, [organizationId, storeId])
+  }, [organizationId, storeId, reconnectingId])
+
+  // Faster polling during reconnect
+  useEffect(() => {
+    if (!reconnectingId) return
+
+    const interval = setInterval(fetchInstances, 3000)
+    return () => clearInterval(interval)
+  }, [reconnectingId])
+
+  // Reactive check: detect when reconnecting instance becomes connected
+  useEffect(() => {
+    if (!reconnectingId) return
+
+    const instance = instances.find((i) => i.id === reconnectingId)
+    if (instance && (instance.status === 'connected' || instance.status === 'ACTIVE')) {
+      setQrCode(null)
+      setReconnectingId(null)
+    }
+  }, [reconnectingId, instances])
 
   // =============================================
   // ACTIONS
@@ -135,6 +149,37 @@ export default function WhatsAppConnectionManager({
     } finally {
       setActionLoading(null)
       setMenuOpen(null)
+    }
+  }
+
+  const handleReconnect = async (instanceId: string) => {
+    setActionLoading(instanceId)
+    setMenuOpen(null)
+    setError(null)
+    try {
+      const response = await fetch('/api/whatsapp/instances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'connect', instance_id: instanceId })
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(data.error || `Erro do servidor: ${response.status}`)
+      }
+
+      const qr = data.qrcode?.base64 || data.qrcode?.code || data.base64 || data.code
+      if (qr) {
+        setQrCode(qr)
+        setReconnectingId(instanceId)
+      } else {
+        setError('Não foi possível gerar o QR Code. Tente novamente.')
+      }
+    } catch (err) {
+      console.error('Error reconnecting:', err)
+      setError(err instanceof Error ? err.message : 'Erro ao reconectar. Tente novamente.')
+    } finally {
+      setActionLoading(null)
     }
   }
 
@@ -339,6 +384,20 @@ export default function WhatsAppConnectionManager({
                               Desconectar
                             </button>
                           )}
+                          {instance.status !== 'connected' && instance.status !== 'ACTIVE' && (
+                            <button
+                              onClick={() => handleReconnect(instance.id)}
+                              disabled={actionLoading === instance.id}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-400 hover:bg-dark-600"
+                            >
+                              {actionLoading === instance.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Power className="w-4 h-4" />
+                              )}
+                              Reconectar
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDelete(instance.id)}
                             disabled={actionLoading === instance.id}
@@ -375,6 +434,48 @@ export default function WhatsAppConnectionManager({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mt-2 flex items-center gap-2 p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <p className="text-xs text-red-400 flex-1">{error}</p>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300 p-0.5">
+            &times;
+          </button>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {qrCode && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-dark-800 border border-dark-700 rounded-2xl p-8 max-w-md w-full mx-4 text-center">
+            <h3 className="text-xl font-semibold text-white mb-4">Escaneie o QR Code</h3>
+            <p className="text-dark-400 mb-6">
+              Abra o WhatsApp no seu celular, vá em Configurações → Aparelhos Conectados → Conectar
+            </p>
+            <div className="bg-white p-4 rounded-xl inline-block mb-6">
+              <img
+                src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
+                alt="QR Code"
+                className="w-64 h-64"
+              />
+            </div>
+            <div className="flex items-center justify-center gap-2 text-sm text-dark-400 mb-6">
+              <Loader2 className="w-4 h-4 animate-spin text-green-500" />
+              Aguardando conexão...
+            </div>
+            <button
+              onClick={() => {
+                setQrCode(null)
+                setReconnectingId(null)
+              }}
+              className="px-5 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
