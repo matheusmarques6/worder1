@@ -6,7 +6,7 @@
 // =============================================
 
 import { useState, useEffect } from 'react';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useStoreStore } from '@/stores';
 import { 
   Phone, 
   CheckCircle, 
@@ -43,6 +43,7 @@ interface EvolutionInstance {
 
 export default function EvolutionConnect() {
   const { user } = useAuthStore();
+  const { currentStore } = useStoreStore();
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -82,7 +83,7 @@ export default function EvolutionConnect() {
       setLoading(true);
       
       const response = await fetch(
-        `/api/whatsapp/instances?organization_id=${user.organization_id}`
+        `/api/whatsapp/instances?organization_id=${user.organization_id}&store_id=${currentStore?.id}`
       );
 
       const data = await response.json();
@@ -148,6 +149,7 @@ export default function EvolutionConnect() {
         body: JSON.stringify({
           action: 'create',
           organization_id: user.organization_id,
+          store_id: currentStore?.id,
           title: instanceName,
           api_type: 'EVOLUTION',
           api_url: serverUrl || undefined,
@@ -157,7 +159,7 @@ export default function EvolutionConnect() {
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
+      if (response.ok && data.instance) {
         // Se retornou QR code, mostrar
         if (data.qrCode || data.qrcode) {
           setQrCode(data.qrCode || data.qrcode);
@@ -221,7 +223,7 @@ export default function EvolutionConnect() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'logout',
+          action: 'disconnect',
           organization_id: user.organization_id,
           instance_id: instanceId,
         }),
