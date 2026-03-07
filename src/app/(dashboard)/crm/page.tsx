@@ -41,6 +41,12 @@ import {
   User,
   Phone,
   Mail,
+  Building2,
+  Briefcase,
+  Star,
+  ShoppingBag,
+  TrendingUp,
+  MapPin,
 } from 'lucide-react'
 import { useDeals, usePipelines } from '@/hooks'
 import { useCRMStore, useAuthStore } from '@/stores'
@@ -154,8 +160,9 @@ interface DealCardProps {
 }
 
 function DealCard({ deal, isDragging, onClick }: DealCardProps) {
-  const contactName = deal.contact
-    ? `${deal.contact.first_name || ''} ${deal.contact.last_name || ''}`.trim() || deal.contact.email
+  const contact = deal.contact as any
+  const contactName = contact
+    ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email
     : null
   const displayName = contactName || deal.title
 
@@ -166,6 +173,15 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
   const assignedUser = deal.assigned_user
   const dealId = deal.id.split('-')[0] // Short ID for display
 
+  // Contact metrics
+  const lifetimeValue = contact?.lifetime_value || contact?.total_spent || 0
+  const totalOrders = contact?.total_orders || 0
+  const score = contact?.score || 0
+  const position = contact?.position
+  const city = contact?.city
+  const country = contact?.country
+  const hasCustomerHistory = lifetimeValue > 0 || totalOrders > 0
+
   return (
     <div
       onClick={onClick}
@@ -175,7 +191,33 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
         ${isDragging ? 'opacity-60 shadow-2xl shadow-black/40 scale-[1.02] rotate-1' : ''}
       `}
     >
-      {/* Booking URL Banner (like DataCrazy) */}
+      {/* Customer Value Banner - shows if customer has history */}
+      {hasCustomerHistory && (
+        <div className="flex items-center justify-between px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20">
+          <div className="flex items-center gap-2">
+            {totalOrders > 0 && (
+              <span className="flex items-center gap-1 text-amber-400 text-[10px]">
+                <ShoppingBag className="w-3 h-3" />
+                {totalOrders} {totalOrders === 1 ? 'pedido' : 'pedidos'}
+              </span>
+            )}
+            {lifetimeValue > 0 && (
+              <span className="flex items-center gap-1 text-amber-400 text-[10px]">
+                <TrendingUp className="w-3 h-3" />
+                {formatCurrency(lifetimeValue)}
+              </span>
+            )}
+          </div>
+          {score > 0 && (
+            <span className="flex items-center gap-0.5 text-amber-400 text-[10px]">
+              <Star className="w-3 h-3 fill-amber-400" />
+              {score}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Booking URL Banner */}
       {bookingUrl && (
         <a
           href={bookingUrl}
@@ -191,9 +233,9 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
       <div className="p-3">
         {/* Top row: Avatar + Name + ID */}
         <div className="flex items-start gap-2.5">
-          <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${getAvatarColor(displayName)} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+          <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${getAvatarColor(displayName)} flex items-center justify-center flex-shrink-0`}>
             <span className="text-[11px] font-bold text-white">
-              {getInitials(deal.contact?.first_name || deal.title?.split(' ')[0], deal.contact?.last_name || deal.title?.split(' ')[1])}
+              {getInitials(contact?.first_name || deal.title?.split(' ')[0], contact?.last_name || deal.title?.split(' ')[1])}
             </span>
           </div>
           <div className="flex-1 min-w-0">
@@ -205,39 +247,76 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
                 #{dealId}
               </span>
             </div>
+
+            {/* Company & Position row */}
+            {(contact?.company || position) && (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {contact?.company && (
+                  <span className="flex items-center gap-1 text-[10px] text-dark-400 truncate">
+                    <Building2 className="w-3 h-3 flex-shrink-0" />
+                    {contact.company}
+                  </span>
+                )}
+                {position && (
+                  <span className="flex items-center gap-1 text-[10px] text-dark-500 truncate">
+                    <Briefcase className="w-3 h-3 flex-shrink-0" />
+                    {position}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Form origin */}
             {formName && (
               <p className="text-[10px] text-dark-500 truncate mt-0.5">{formName}</p>
-            )}
-            {deal.contact?.company && (
-              <p className="text-[11px] text-dark-400 truncate mt-0.5">{deal.contact.company}</p>
             )}
           </div>
         </div>
 
-        {/* Middle row: Assigned User + Date */}
-        <div className="flex items-center gap-2 mt-2 pl-[42px] text-[10px]">
-          {assignedUser && (
-            <div className="flex items-center gap-1 text-dark-400">
-              <User className="w-3 h-3" />
-              <span className="truncate max-w-[80px]">{assignedUser.name || assignedUser.email}</span>
+        {/* Contact Info - Always visible */}
+        <div className="mt-2 pl-[46px] space-y-1">
+          {contact?.email && (
+            <div className="flex items-center gap-1.5 text-[10px] text-dark-400">
+              <Mail className="w-3 h-3 text-dark-500" />
+              <span className="truncate">{contact.email}</span>
             </div>
           )}
-          <div className="flex items-center gap-1 text-dark-500">
+          {(contact?.phone || contact?.whatsapp) && (
+            <div className="flex items-center gap-1.5 text-[10px] text-dark-400">
+              <Phone className="w-3 h-3 text-dark-500" />
+              <span>{contact.whatsapp || contact.phone}</span>
+            </div>
+          )}
+          {(city || country) && (
+            <div className="flex items-center gap-1.5 text-[10px] text-dark-500">
+              <MapPin className="w-3 h-3" />
+              <span className="truncate">{[city, country].filter(Boolean).join(', ')}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Value & Time row */}
+        <div className="flex items-center justify-between mt-2.5 pl-[46px]">
+          <span className={`text-[13px] font-bold ${deal.value > 0 ? 'text-emerald-400' : 'text-dark-500'}`}>
+            {formatCurrency(deal.value)}
+          </span>
+          <div className="flex items-center gap-1 text-dark-500 text-[10px]">
             <Clock className="w-3 h-3" />
             <span>{getRelativeTime(deal.updated_at || deal.created_at)}</span>
           </div>
         </div>
 
-        {/* Value */}
-        <div className="mt-2 pl-[42px]">
-          <span className={`text-[12px] font-semibold ${deal.value > 0 ? 'text-emerald-400' : 'text-dark-500'}`}>
-            {formatCurrency(deal.value)}
-          </span>
-        </div>
+        {/* Assigned User */}
+        {assignedUser && (
+          <div className="flex items-center gap-1 mt-1.5 pl-[46px] text-[10px] text-dark-400">
+            <User className="w-3 h-3" />
+            <span className="truncate">{assignedUser.name || assignedUser.email}</span>
+          </div>
+        )}
 
         {/* Tags row */}
         {deal.tags && deal.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2 pl-[42px]">
+          <div className="flex flex-wrap gap-1 mt-2 pl-[46px]">
             {deal.tags.slice(0, 3).map((tag, i) => {
               const colors = getTagColors(tag)
               return (
@@ -255,27 +334,29 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
           </div>
         )}
 
-        {/* Quick actions */}
-        <div className="flex items-center gap-1 mt-2 pl-[42px] opacity-0 group-hover:opacity-100 transition-opacity">
-          {deal.contact?.phone && (
+        {/* Quick actions - Always visible on mobile, hover on desktop */}
+        <div className="flex items-center gap-1.5 mt-2.5 pl-[46px]">
+          {(contact?.phone || contact?.whatsapp) && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                window.open(`https://wa.me/${(deal.contact!.phone || '').replace(/\D/g, '')}`)
+                window.open(`https://wa.me/${(contact.whatsapp || contact.phone || '').replace(/\D/g, '')}`)
               }}
-              className="p-1.5 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors text-[10px] font-medium"
               title="WhatsApp"
             >
               <Phone className="w-3 h-3" />
+              WhatsApp
             </button>
           )}
-          {deal.contact?.email && (
+          {contact?.email && (
             <button
-              onClick={(e) => { e.stopPropagation(); window.open(`mailto:${deal.contact!.email}`) }}
-              className="p-1.5 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
+              onClick={(e) => { e.stopPropagation(); window.open(`mailto:${contact.email}`) }}
+              className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 transition-colors text-[10px] font-medium"
               title="E-mail"
             >
               <Mail className="w-3 h-3" />
+              E-mail
             </button>
           )}
         </div>

@@ -22,6 +22,17 @@ import {
   Plus,
   Calendar,
   XCircle,
+  Briefcase,
+  MapPin,
+  ShoppingBag,
+  TrendingUp,
+  Star,
+  User,
+  CreditCard,
+  Activity,
+  BadgeCheck,
+  MailCheck,
+  MessageCircle,
 } from 'lucide-react'
 import { DealTimeline } from './DealTimeline'
 import type { Deal, PipelineStage } from '@/types'
@@ -337,28 +348,149 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
-              {/* Contact Info */}
+              {/* Contact Info - Enhanced */}
               {contact && (
-                <div className="space-y-3">
+                <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl space-y-3">
+                  <div className="flex items-center gap-2 pb-2 border-b border-dark-700/50">
+                    <User className="w-4 h-4 text-primary-400" />
+                    <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">Dados do Contato</span>
+                  </div>
+
                   {contact.email && (
                     <div className="flex items-center gap-3 text-dark-300">
                       <Mail className="w-4 h-4 text-dark-500" />
-                      <span>{contact.email}</span>
+                      <span className="text-sm">{contact.email}</span>
                     </div>
                   )}
                   {(contact.whatsapp || contact.phone) && (
                     <div className="flex items-center gap-3 text-dark-300">
                       <Phone className="w-4 h-4 text-dark-500" />
-                      <span>{contact.whatsapp || contact.phone}</span>
+                      <span className="text-sm">{contact.whatsapp || contact.phone}</span>
                     </div>
                   )}
                   {contact.company && (
                     <div className="flex items-center gap-3 text-dark-300">
                       <Building2 className="w-4 h-4 text-dark-500" />
-                      <span>{contact.company}</span>
+                      <span className="text-sm">{contact.company}</span>
+                    </div>
+                  )}
+                  {(contact as any).position && (
+                    <div className="flex items-center gap-3 text-dark-300">
+                      <Briefcase className="w-4 h-4 text-dark-500" />
+                      <span className="text-sm">{(contact as any).position}</span>
+                    </div>
+                  )}
+                  {((contact as any).city || (contact as any).country) && (
+                    <div className="flex items-center gap-3 text-dark-300">
+                      <MapPin className="w-4 h-4 text-dark-500" />
+                      <span className="text-sm">{[(contact as any).city, (contact as any).country].filter(Boolean).join(', ')}</span>
+                    </div>
+                  )}
+
+                  {/* Contact Tags */}
+                  {(contact as any).tags && (contact as any).tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-dark-700/50">
+                      {(contact as any).tags.map((tag: string, i: number) => (
+                        <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-dark-700/50 text-dark-300 border border-dark-600/50">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Subscription Status */}
+                  {((contact as any).is_subscribed_email !== undefined || (contact as any).is_subscribed_whatsapp !== undefined) && (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-dark-700/50">
+                      {(contact as any).is_subscribed_email && (
+                        <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px]">
+                          <MailCheck className="w-3 h-3" />
+                          E-mail
+                        </span>
+                      )}
+                      {(contact as any).is_subscribed_whatsapp && (
+                        <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px]">
+                          <MessageCircle className="w-3 h-3" />
+                          WhatsApp
+                        </span>
+                      )}
+                      {(contact as any).is_subscribed_sms && (
+                        <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px]">
+                          <MessageSquare className="w-3 h-3" />
+                          SMS
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Customer Metrics */}
+              {contact && (
+                ((contact as any).lifetime_value > 0 || (contact as any).total_spent > 0 || (contact as any).total_orders > 0 || (contact as any).score > 0) && (
+                  <div className="p-4 bg-gradient-to-br from-amber-500/5 to-orange-500/5 border border-amber-500/20 rounded-xl">
+                    <div className="flex items-center gap-2 pb-3 border-b border-amber-500/20 mb-3">
+                      <TrendingUp className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Metricas do Cliente</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {((contact as any).lifetime_value > 0 || (contact as any).total_spent > 0) && (
+                        <div className="p-3 bg-dark-800/50 rounded-lg">
+                          <div className="flex items-center gap-1.5 text-dark-400 mb-1">
+                            <CreditCard className="w-3.5 h-3.5" />
+                            <span className="text-[10px] uppercase">Valor Total</span>
+                          </div>
+                          <p className="text-lg font-bold text-amber-400">
+                            {formatCurrency((contact as any).lifetime_value || (contact as any).total_spent || 0)}
+                          </p>
+                        </div>
+                      )}
+
+                      {(contact as any).total_orders > 0 && (
+                        <div className="p-3 bg-dark-800/50 rounded-lg">
+                          <div className="flex items-center gap-1.5 text-dark-400 mb-1">
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <span className="text-[10px] uppercase">Pedidos</span>
+                          </div>
+                          <p className="text-lg font-bold text-white">
+                            {(contact as any).total_orders}
+                          </p>
+                        </div>
+                      )}
+
+                      {(contact as any).average_order_value > 0 && (
+                        <div className="p-3 bg-dark-800/50 rounded-lg">
+                          <div className="flex items-center gap-1.5 text-dark-400 mb-1">
+                            <Activity className="w-3.5 h-3.5" />
+                            <span className="text-[10px] uppercase">Ticket Medio</span>
+                          </div>
+                          <p className="text-lg font-bold text-white">
+                            {formatCurrency((contact as any).average_order_value)}
+                          </p>
+                        </div>
+                      )}
+
+                      {(contact as any).score > 0 && (
+                        <div className="p-3 bg-dark-800/50 rounded-lg">
+                          <div className="flex items-center gap-1.5 text-dark-400 mb-1">
+                            <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                            <span className="text-[10px] uppercase">Score</span>
+                          </div>
+                          <p className="text-lg font-bold text-amber-400">
+                            {(contact as any).score}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {(contact as any).last_order_at && (
+                      <div className="mt-3 pt-3 border-t border-amber-500/20 flex items-center gap-2 text-dark-400 text-xs">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Ultimo pedido: {new Date((contact as any).last_order_at).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                    )}
+                  </div>
+                )
               )}
 
               {/* Quick Actions */}
