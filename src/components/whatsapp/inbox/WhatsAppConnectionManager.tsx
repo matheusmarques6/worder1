@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
@@ -51,13 +51,22 @@ export default function WhatsAppConnectionManager({
   // FETCH INSTANCES - COM STORE_ID
   // =============================================
 
-  const fetchInstances = async () => {
+  // ✅ Debounce: evita chamadas simultâneas
+  const isFetchingRef = useRef(false)
+
+  const fetchInstances = useCallback(async () => {
     // ✅ CRÍTICO: Não buscar sem storeId
     if (!storeId) {
       setInstances([])
       setLoading(false)
       return
     }
+
+    // ✅ Debounce: ignora chamadas enquanto outra está em andamento
+    if (isFetchingRef.current) {
+      return
+    }
+    isFetchingRef.current = true
 
     try {
       // ✅ CRÍTICO: Passar store_id na requisição
@@ -91,8 +100,9 @@ export default function WhatsAppConnectionManager({
       console.error('Error fetching instances:', error)
     } finally {
       setLoading(false)
+      isFetchingRef.current = false
     }
-  }
+  }, [organizationId, storeId, selectedInstance, onSelectInstance])
 
   // ✅ CORREÇÃO: Refetch quando storeId mudar
   useEffect(() => {

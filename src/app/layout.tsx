@@ -5,7 +5,11 @@ export const metadata: Metadata = {
   title: 'Worder - Email Marketing Analytics & CRM',
   description: 'Track your email marketing ROI, manage customers, and automate communications',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/logo.svg', type: 'image/svg+xml' },
+      { url: '/logo.png', type: 'image/png' },
+    ],
+    apple: '/logo.png',
   },
 }
 

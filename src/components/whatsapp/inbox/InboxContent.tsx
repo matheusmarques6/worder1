@@ -168,19 +168,12 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   // EFFECTS
   // =============================================
   
-  // ✅ CORREÇÃO: Refetch quando trocar de loja
+  // ✅ CORREÇÃO: Fetch único quando trocar de loja ou organização
   useEffect(() => {
-    if (storeId) {
+    if (organizationId && storeId) {
       console.log('🏪 [InboxContent] Store changed to:', storeId)
       fetchConversations()
       fetchInstances()
-    }
-  }, [storeId])
-
-  // Fetch conversations on mount
-  useEffect(() => { 
-    if (organizationId && storeId) {
-      fetchConversations() 
     }
   }, [organizationId, storeId])
 
@@ -200,19 +193,38 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
     }
   }, [selectedConversation?.id])
 
-  // Polling fallback
+  // Polling fallback - usa refs para evitar re-criação do interval
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const refreshConversationsRef = useRef(refreshConversations)
+  const refetchLatestRef = useRef(refetchLatest)
+  const selectedConversationIdRef = useRef(selectedConversation?.id)
+
+  // Atualiza refs sem re-criar o interval
+  useEffect(() => {
+    refreshConversationsRef.current = refreshConversations
+  }, [refreshConversations])
 
   useEffect(() => {
+    refetchLatestRef.current = refetchLatest
+  }, [refetchLatest])
+
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversation?.id
+  }, [selectedConversation?.id])
+
+  // Polling interval estável - só recria se storeId/organizationId mudar
+  useEffect(() => {
+    if (!organizationId || !storeId) return
+
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
     }
 
     pollingRef.current = setInterval(() => {
-      if (selectedConversation) {
-        refetchLatest()
+      if (selectedConversationIdRef.current) {
+        refetchLatestRef.current()
       }
-      refreshConversations()
+      refreshConversationsRef.current()
     }, POLLING_INTERVAL)
 
     return () => {
@@ -220,7 +232,7 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
         clearInterval(pollingRef.current)
       }
     }
-  }, [selectedConversation?.id, refetchLatest, refreshConversations])
+  }, [organizationId, storeId])
 
   // =============================================
   // HANDLERS

@@ -39,7 +39,14 @@ export function useInboxConversations(organizationId: string | null, storeId?: s
   // ✅ Flag para saber se já carregou uma vez
   const hasLoadedOnce = useRef(false)
 
+  // ✅ Debounce: evita chamadas simultâneas
+  const isFetchingRef = useRef(false)
+
   const fetchConversations = useCallback(async (newFilters?: ConversationFilters) => {
+    // ✅ Debounce: ignora chamadas enquanto outra está em andamento
+    if (isFetchingRef.current) {
+      return
+    }
     if (!organizationId) {
       console.log('⚠️ No organizationId yet, waiting...')
       return
@@ -59,7 +66,8 @@ export function useInboxConversations(organizationId: string | null, storeId?: s
       setIsRefreshing(true) // Polling silencioso
     }
     setError(null)
-    
+    isFetchingRef.current = true
+
     try {
       const currentFilters = newFilters || filters
       const params = new URLSearchParams({
@@ -100,6 +108,7 @@ export function useInboxConversations(organizationId: string | null, storeId?: s
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
+      isFetchingRef.current = false
     }
   }, [organizationId, storeId, filters])
 
