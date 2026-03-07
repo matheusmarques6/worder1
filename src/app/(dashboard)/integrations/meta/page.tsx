@@ -363,9 +363,13 @@ function WhatsAppAccountRow({ account }: { account: WhatsAppAccount }) {
         </div>
         <div className="flex items-center gap-2">
           {account.webhook_configured ? (
-            <CheckCircle className="w-5 h-5 text-green-400" title="Webhook configurado" />
+            <span title="Webhook configurado">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+            </span>
           ) : (
-            <AlertTriangle className="w-5 h-5 text-amber-400" title="Webhook nao configurado" />
+            <span title="Webhook nao configurado">
+              <AlertTriangle className="w-5 h-5 text-amber-400" />
+            </span>
           )}
           <button className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors">
             <Settings className="w-5 h-5" />
@@ -420,9 +424,13 @@ function InstagramAccountRow({ account }: { account: InstagramAccount }) {
         </div>
         <div className="flex items-center gap-2">
           {account.webhook_configured ? (
-            <CheckCircle className="w-5 h-5 text-green-400" title="Webhook configurado" />
+            <span title="Webhook configurado">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+            </span>
           ) : (
-            <AlertTriangle className="w-5 h-5 text-amber-400" title="Webhook nao configurado" />
+            <span title="Webhook nao configurado">
+              <AlertTriangle className="w-5 h-5 text-amber-400" />
+            </span>
           )}
           <button className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors">
             <Settings className="w-5 h-5" />
