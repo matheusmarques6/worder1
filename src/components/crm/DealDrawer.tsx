@@ -68,12 +68,24 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length]
 }
 
-// Tag colors
+// Tag colors - matching DataCrazy CRM style
 const TAG_COLORS: Record<string, string> = {
+  // Standard tags
   cliente: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
   vip: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
   lead: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   prospect: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  // Source tags
+  inbound: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  'ads facebook': 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
+  'ads google': 'bg-red-500/20 text-red-400 border-red-500/30',
+  'tráfego pago': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  youtube: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+  'tiktok ads': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+  'site principal': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  outbound: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  'social selling': 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  // Default
   default: 'bg-dark-600/50 text-dark-300 border-dark-500/30',
 }
 
@@ -123,8 +135,41 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
   const source = customFields.source || (deal as any).source
   const formName = customFields.form_name || customFields.formName
   const formId = customFields.form_id || customFields.formId
+  const formResponses = customFields.form_responses || []
+  const referrer = customFields.referrer
+  const submittedAt = customFields.submitted_at
   const hasUtms = utmSource || utmMedium || utmCampaign || utmTerm || utmContent
   const hasOrigin = hasUtms || source || formName || formId
+  const hasFormResponses = Array.isArray(formResponses) && formResponses.length > 0
+
+  // Helper to detect if value is a URL
+  const isUrl = (value: any): boolean => {
+    if (typeof value !== 'string') return false
+    return value.startsWith('http://') || value.startsWith('https://') || value.includes('calendly.com') || value.includes('cal.com')
+  }
+
+  // Helper to render form response value
+  const renderFormValue = (value: any, type: string) => {
+    if (isUrl(value)) {
+      return (
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary-400 hover:text-primary-300 underline break-all"
+        >
+          {value.length > 50 ? value.substring(0, 50) + '...' : value}
+        </a>
+      )
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'Sim' : 'Não'
+    }
+    if (Array.isArray(value)) {
+      return value.join(', ')
+    }
+    return String(value)
+  }
 
   // Tags
   const dealTags = deal.tags || []
@@ -434,6 +479,50 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                         <FileText className="w-4 h-4 text-pink-400" />
                         <span className="text-dark-400 text-sm">utm_content:</span>
                         <span className="text-white text-sm font-medium">{utmContent}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Form Responses */}
+              {hasFormResponses && (
+                <div>
+                  <label className="block text-xs font-semibold text-dark-400 uppercase tracking-wider mb-3">Respostas do Formulário</label>
+                  <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl space-y-3">
+                    {formResponses.map((response: { label: string; value: any; type: string }, index: number) => (
+                      <div key={index} className="border-b border-dark-700/30 pb-2.5 last:border-0 last:pb-0">
+                        <span className="text-xs text-dark-500 block mb-1">{response.label}</span>
+                        <p className="text-sm text-white">
+                          {renderFormValue(response.value, response.type)}
+                        </p>
+                      </div>
+                    ))}
+                    {referrer && (
+                      <div className="pt-2 border-t border-dark-700/50">
+                        <span className="text-xs text-dark-500 block mb-1">Página de origem</span>
+                        <a
+                          href={referrer}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary-400 hover:text-primary-300 break-all"
+                        >
+                          {referrer.length > 60 ? referrer.substring(0, 60) + '...' : referrer}
+                        </a>
+                      </div>
+                    )}
+                    {submittedAt && (
+                      <div className="pt-2 border-t border-dark-700/50">
+                        <span className="text-xs text-dark-500 block mb-1">Enviado em</span>
+                        <p className="text-xs text-dark-300">
+                          {new Date(submittedAt).toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: 'long',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
                       </div>
                     )}
                   </div>

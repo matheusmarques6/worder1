@@ -115,6 +115,38 @@ function getRelativeTime(date: string) {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
 }
 
+// Tag color helper
+const TAG_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  'inbound': { bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30' },
+  'ads facebook': { bg: 'bg-indigo-500/15', text: 'text-indigo-400', border: 'border-indigo-500/30' },
+  'ads google': { bg: 'bg-red-500/15', text: 'text-red-400', border: 'border-red-500/30' },
+  'tráfego pago': { bg: 'bg-orange-500/15', text: 'text-orange-400', border: 'border-orange-500/30' },
+  'youtube': { bg: 'bg-rose-500/15', text: 'text-rose-400', border: 'border-rose-500/30' },
+  'tiktok ads': { bg: 'bg-pink-500/15', text: 'text-pink-400', border: 'border-pink-500/30' },
+  'site principal': { bg: 'bg-emerald-500/15', text: 'text-emerald-400', border: 'border-emerald-500/30' },
+  'outbound': { bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/30' },
+  'social selling': { bg: 'bg-cyan-500/15', text: 'text-cyan-400', border: 'border-cyan-500/30' },
+}
+
+function getTagColors(tag: string) {
+  const key = tag.toLowerCase()
+  return TAG_COLORS[key] || { bg: 'bg-dark-700/60', text: 'text-dark-300', border: 'border-dark-600/40' }
+}
+
+// Helper to detect calendly/booking URLs from custom_fields
+function extractBookingUrl(deal: Deal): string | null {
+  const customFields = (deal as any).custom_fields || {}
+  const formResponses = customFields.form_responses || []
+
+  for (const response of formResponses) {
+    const value = String(response.value || '')
+    if (value.includes('calendly.com') || value.includes('cal.com') || value.includes('booking')) {
+      return value
+    }
+  }
+  return null
+}
+
 interface DealCardProps {
   deal: Deal
   isDragging?: boolean
@@ -127,6 +159,13 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
     : null
   const displayName = contactName || deal.title
 
+  // Extract additional info from custom_fields
+  const customFields = (deal as any).custom_fields || {}
+  const formName = customFields.form_name
+  const bookingUrl = extractBookingUrl(deal)
+  const assignedUser = deal.assigned_user
+  const dealId = deal.id.split('-')[0] // Short ID for display
+
   return (
     <div
       onClick={onClick}
@@ -136,8 +175,21 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
         ${isDragging ? 'opacity-60 shadow-2xl shadow-black/40 scale-[1.02] rotate-1' : ''}
       `}
     >
+      {/* Booking URL Banner (like DataCrazy) */}
+      {bookingUrl && (
+        <a
+          href={bookingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 border-b border-cyan-500/20 text-cyan-400 text-[10px] hover:bg-cyan-500/20 transition-colors truncate"
+        >
+          <span className="truncate">{bookingUrl.includes('calendly') ? '📅' : '🔗'} {bookingUrl.length > 40 ? bookingUrl.substring(0, 40) + '...' : bookingUrl}</span>
+        </a>
+      )}
+
       <div className="p-3">
-        {/* Top row: Avatar + Name + Time */}
+        {/* Top row: Avatar + Name + ID */}
         <div className="flex items-start gap-2.5">
           <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${getAvatarColor(displayName)} flex items-center justify-center flex-shrink-0 mt-0.5`}>
             <span className="text-[11px] font-bold text-white">
@@ -149,58 +201,83 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
               <h4 className="text-[13px] font-semibold text-white truncate leading-tight">
                 {displayName}
               </h4>
-              <span className="text-[10px] text-dark-500 flex-shrink-0">
-                {getRelativeTime(deal.updated_at || deal.created_at)}
+              <span className="text-[9px] text-dark-600 flex-shrink-0 font-mono">
+                #{dealId}
               </span>
             </div>
+            {formName && (
+              <p className="text-[10px] text-dark-500 truncate mt-0.5">{formName}</p>
+            )}
             {deal.contact?.company && (
               <p className="text-[11px] text-dark-400 truncate mt-0.5">{deal.contact.company}</p>
-            )}
-            {contactName && contactName !== deal.title && (
-              <p className="text-[11px] text-dark-500 truncate mt-0.5">{deal.title}</p>
             )}
           </div>
         </div>
 
-        {/* Bottom row: Value + Tags + Actions */}
-        <div className="flex items-center justify-between mt-2.5 pl-[42px]">
-          <div className="flex items-center gap-2 min-w-0">
-            {deal.value > 0 && (
-              <span className="text-[12px] font-semibold text-emerald-400">
-                {formatCurrency(deal.value)}
-              </span>
-            )}
-            {(deal as any).source && (
-              <span className="px-1.5 py-0.5 rounded bg-dark-700/80 text-[10px] text-dark-400 capitalize">
-                {(deal as any).source}
-              </span>
-            )}
-            {deal.tags && deal.tags.length > 0 && (
-              <>
-                {deal.tags.slice(0, 1).map((tag, i) => (
-                  <span key={i} className="px-1.5 py-0.5 rounded bg-primary-500/15 text-[10px] text-primary-400 truncate max-w-[80px]">
-                    {tag}
-                  </span>
-                ))}
-                {deal.tags.length > 1 && (
-                  <span className="text-[10px] text-dark-500">+{deal.tags.length - 1}</span>
-                )}
-              </>
+        {/* Middle row: Assigned User + Date */}
+        <div className="flex items-center gap-2 mt-2 pl-[42px] text-[10px]">
+          {assignedUser && (
+            <div className="flex items-center gap-1 text-dark-400">
+              <User className="w-3 h-3" />
+              <span className="truncate max-w-[80px]">{assignedUser.name || assignedUser.email}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1 text-dark-500">
+            <Clock className="w-3 h-3" />
+            <span>{getRelativeTime(deal.updated_at || deal.created_at)}</span>
+          </div>
+        </div>
+
+        {/* Value */}
+        <div className="mt-2 pl-[42px]">
+          <span className={`text-[12px] font-semibold ${deal.value > 0 ? 'text-emerald-400' : 'text-dark-500'}`}>
+            {formatCurrency(deal.value)}
+          </span>
+        </div>
+
+        {/* Tags row */}
+        {deal.tags && deal.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2 pl-[42px]">
+            {deal.tags.slice(0, 3).map((tag, i) => {
+              const colors = getTagColors(tag)
+              return (
+                <span
+                  key={i}
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
+                >
+                  {tag}
+                </span>
+              )
+            })}
+            {deal.tags.length > 3 && (
+              <span className="text-[9px] text-dark-500 py-0.5">+{deal.tags.length - 3}</span>
             )}
           </div>
-          {/* Quick actions */}
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            {deal.contact?.phone && (
-              <button onClick={(e) => { e.stopPropagation(); window.open(`tel:${deal.contact!.phone}`) }} className="p-1 rounded text-dark-500 hover:text-white hover:bg-dark-700 transition-colors" title="Ligar">
-                <Phone className="w-3 h-3" />
-              </button>
-            )}
-            {deal.contact?.email && (
-              <button onClick={(e) => { e.stopPropagation(); window.open(`mailto:${deal.contact!.email}`) }} className="p-1 rounded text-dark-500 hover:text-white hover:bg-dark-700 transition-colors" title="E-mail">
-                <Mail className="w-3 h-3" />
-              </button>
-            )}
-          </div>
+        )}
+
+        {/* Quick actions */}
+        <div className="flex items-center gap-1 mt-2 pl-[42px] opacity-0 group-hover:opacity-100 transition-opacity">
+          {deal.contact?.phone && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                window.open(`https://wa.me/${(deal.contact!.phone || '').replace(/\D/g, '')}`)
+              }}
+              className="p-1.5 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+              title="WhatsApp"
+            >
+              <Phone className="w-3 h-3" />
+            </button>
+          )}
+          {deal.contact?.email && (
+            <button
+              onClick={(e) => { e.stopPropagation(); window.open(`mailto:${deal.contact!.email}`) }}
+              className="p-1.5 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
+              title="E-mail"
+            >
+              <Mail className="w-3 h-3" />
+            </button>
+          )}
         </div>
       </div>
     </div>

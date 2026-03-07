@@ -307,6 +307,45 @@ export async function POST(
         if (utm_term) utmData.utm_term = utm_term
         if (utm_content) utmData.utm_content = utm_content
 
+        // Build form responses with labels for display
+        const formResponses: Array<{ label: string; value: any; type: string }> = []
+        for (const field of (form.fields || [])) {
+          const value = answers[field.id]
+          if (value !== undefined && value !== '') {
+            formResponses.push({
+              label: field.label || field.id,
+              value: value,
+              type: field.field_type || 'text',
+            })
+          }
+        }
+
+        // Detect source tags based on UTM
+        const sourceTags: string[] = []
+        if (utm_source) {
+          const source = utm_source.toLowerCase()
+          if (source.includes('facebook') || source.includes('fb') || source.includes('ig') || source.includes('instagram')) {
+            sourceTags.push('Ads Facebook')
+          } else if (source.includes('google') || source.includes('gads') || source.includes('gclid')) {
+            sourceTags.push('Ads Google')
+          } else if (source.includes('tiktok')) {
+            sourceTags.push('TikTok Ads')
+          } else if (source.includes('youtube')) {
+            sourceTags.push('YouTube')
+          }
+        }
+        if (utm_medium) {
+          const medium = utm_medium.toLowerCase()
+          if (medium === 'cpc' || medium === 'ppc' || medium === 'paid') {
+            if (!sourceTags.some(t => t.includes('Ads'))) sourceTags.push('Tráfego Pago')
+          } else if (medium === 'organic' || medium === 'social') {
+            sourceTags.push('Inbound')
+          }
+        }
+        if (sourceTags.length === 0) {
+          sourceTags.push('Inbound')
+        }
+
         const dealTitle = contactData.first_name
           ? `${contactData.first_name}${contactData.last_name ? ' ' + contactData.last_name : ''}`
           : (contactData.email || 'Novo Lead')
@@ -322,10 +361,16 @@ export async function POST(
             value: 0,
             status: 'open',
             position: 0,
+            tags: sourceTags,
             custom_fields: {
               source: 'form',
               form_id: formId,
               form_name: form.name || 'Formulário',
+              form_responses: formResponses,
+              referrer: request.headers.get('referer') || null,
+              ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+              user_agent: request.headers.get('user-agent') || null,
+              submitted_at: new Date().toISOString(),
               ...utmData,
             },
             notes: Object.keys(utmData).length > 0
