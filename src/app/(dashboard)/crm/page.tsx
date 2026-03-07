@@ -153,6 +153,46 @@ function extractBookingUrl(deal: Deal): string | null {
   return null
 }
 
+// Helper to extract contact info from form_responses as fallback
+function extractFormContactData(deal: Deal): { email?: string; phone?: string; name?: string } {
+  const customFields = (deal as any).custom_fields || {}
+  const formResponses = customFields.form_responses || []
+  const result: { email?: string; phone?: string; name?: string } = {}
+
+  for (const response of formResponses) {
+    const label = (response.label || '').toLowerCase()
+    const value = response.value
+    const type = (response.type || '').toLowerCase()
+
+    if (!value) continue
+
+    // Email detection
+    if (!result.email) {
+      if (type === 'email' || label.includes('email') || label.includes('e-mail')) {
+        result.email = String(value)
+      } else if (typeof value === 'string' && value.includes('@') && value.includes('.')) {
+        result.email = value
+      }
+    }
+
+    // Phone detection
+    if (!result.phone) {
+      if (type === 'phone' || type === 'tel' || label.includes('telefone') || label.includes('celular') || label.includes('whatsapp') || label.includes('phone')) {
+        result.phone = String(value)
+      }
+    }
+
+    // Name detection
+    if (!result.name) {
+      if (label.includes('nome') || label.includes('name') || label === 'nome completo' || label === 'seu nome') {
+        result.name = String(value)
+      }
+    }
+  }
+
+  return result
+}
+
 interface DealCardProps {
   deal: Deal
   isDragging?: boolean
@@ -161,17 +201,31 @@ interface DealCardProps {
 
 function DealCard({ deal, isDragging, onClick }: DealCardProps) {
   const contact = deal.contact as any
-  const contactName = contact
-    ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email
-    : null
-  const displayName = contactName || deal.title
 
-  // Extract additional info from custom_fields
+  // Extract from custom_fields
   const customFields = (deal as any).custom_fields || {}
   const formName = customFields.form_name
+  const formResponses = customFields.form_responses || []
   const bookingUrl = extractBookingUrl(deal)
   const assignedUser = deal.assigned_user
-  const dealId = deal.id.split('-')[0] // Short ID for display
+  const dealId = deal.id.split('-')[0]
+
+  // Extract data from form_responses as fallback
+  const formData = extractFormContactData(deal)
+
+  // Use contact data OR fallback to form data
+  const email = contact?.email || formData.email
+  const phone = contact?.whatsapp || contact?.phone || formData.phone
+  const contactName = contact
+    ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email
+    : formData.name || deal.title
+  const displayName = contactName || deal.title
+
+  // UTM data
+  const utmSource = customFields.utm_source
+  const utmMedium = customFields.utm_medium
+  const utmCampaign = customFields.utm_campaign
+  const hasUtm = utmSource || utmMedium || utmCampaign
 
   // Contact metrics
   const lifetimeValue = contact?.lifetime_value || contact?.total_spent || 0
@@ -180,6 +234,7 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
   const position = contact?.position
   const city = contact?.city
   const country = contact?.country
+  const company = contact?.company
   const hasCustomerHistory = lifetimeValue > 0 || totalOrders > 0
 
   return (
@@ -248,43 +303,41 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
               </span>
             </div>
 
-            {/* Company & Position row */}
-            {(contact?.company || position) && (
-              <div className="flex items-center gap-1.5 mt-0.5">
-                {contact?.company && (
-                  <span className="flex items-center gap-1 text-[10px] text-dark-400 truncate">
-                    <Building2 className="w-3 h-3 flex-shrink-0" />
-                    {contact.company}
-                  </span>
-                )}
-                {position && (
-                  <span className="flex items-center gap-1 text-[10px] text-dark-500 truncate">
-                    <Briefcase className="w-3 h-3 flex-shrink-0" />
-                    {position}
-                  </span>
-                )}
+            {/* Position row */}
+            {position && (
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="flex items-center gap-1 text-[10px] text-dark-500 truncate">
+                  <Briefcase className="w-3 h-3 flex-shrink-0" />
+                  {position}
+                </span>
               </div>
             )}
 
             {/* Form origin */}
             {formName && (
-              <p className="text-[10px] text-dark-500 truncate mt-0.5">{formName}</p>
+              <p className="text-[10px] text-primary-400 truncate mt-0.5">{formName}</p>
             )}
           </div>
         </div>
 
-        {/* Contact Info - Always visible */}
+        {/* Contact Info - Always visible (from contact OR form_responses) */}
         <div className="mt-2 pl-[46px] space-y-1">
-          {contact?.email && (
-            <div className="flex items-center gap-1.5 text-[10px] text-dark-400">
-              <Mail className="w-3 h-3 text-dark-500" />
-              <span className="truncate">{contact.email}</span>
+          {email && (
+            <div className="flex items-center gap-1.5 text-[10px] text-dark-300">
+              <Mail className="w-3 h-3 text-blue-400" />
+              <span className="truncate">{email}</span>
             </div>
           )}
-          {(contact?.phone || contact?.whatsapp) && (
+          {phone && (
+            <div className="flex items-center gap-1.5 text-[10px] text-dark-300">
+              <Phone className="w-3 h-3 text-emerald-400" />
+              <span>{phone}</span>
+            </div>
+          )}
+          {company && (
             <div className="flex items-center gap-1.5 text-[10px] text-dark-400">
-              <Phone className="w-3 h-3 text-dark-500" />
-              <span>{contact.whatsapp || contact.phone}</span>
+              <Building2 className="w-3 h-3 text-dark-500" />
+              <span className="truncate">{company}</span>
             </div>
           )}
           {(city || country) && (
@@ -294,6 +347,27 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
             </div>
           )}
         </div>
+
+        {/* UTM Info - Show source/campaign */}
+        {hasUtm && (
+          <div className="mt-1.5 pl-[46px] flex flex-wrap gap-1">
+            {utmSource && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                {utmSource}
+              </span>
+            )}
+            {utmMedium && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                {utmMedium}
+              </span>
+            )}
+            {utmCampaign && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 truncate max-w-[120px]">
+                {utmCampaign}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Value & Time row */}
         <div className="flex items-center justify-between mt-2.5 pl-[46px]">
@@ -334,32 +408,34 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
           </div>
         )}
 
-        {/* Quick actions - Always visible on mobile, hover on desktop */}
-        <div className="flex items-center gap-1.5 mt-2.5 pl-[46px]">
-          {(contact?.phone || contact?.whatsapp) && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                window.open(`https://wa.me/${(contact.whatsapp || contact.phone || '').replace(/\D/g, '')}`)
-              }}
-              className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors text-[10px] font-medium"
-              title="WhatsApp"
-            >
-              <Phone className="w-3 h-3" />
-              WhatsApp
-            </button>
-          )}
-          {contact?.email && (
-            <button
-              onClick={(e) => { e.stopPropagation(); window.open(`mailto:${contact.email}`) }}
-              className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 transition-colors text-[10px] font-medium"
-              title="E-mail"
-            >
-              <Mail className="w-3 h-3" />
-              E-mail
-            </button>
-          )}
-        </div>
+        {/* Quick actions - Always visible */}
+        {(phone || email) && (
+          <div className="flex items-center gap-1.5 mt-2.5 pl-[46px]">
+            {phone && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  window.open(`https://wa.me/${phone.replace(/\D/g, '')}`)
+                }}
+                className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors text-[10px] font-medium"
+                title="WhatsApp"
+              >
+                <Phone className="w-3 h-3" />
+                WhatsApp
+              </button>
+            )}
+            {email && (
+              <button
+                onClick={(e) => { e.stopPropagation(); window.open(`mailto:${email}`) }}
+                className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 transition-colors text-[10px] font-medium"
+                title="E-mail"
+              >
+                <Mail className="w-3 h-3" />
+                E-mail
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

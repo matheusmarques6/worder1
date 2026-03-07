@@ -129,12 +129,6 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
 
   const currentStage = stages.find(s => s.id === deal.stage_id)
   const contact = deal.contact
-  const contactName = contact
-    ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email || 'Contato'
-    : deal.title
-  const contactInitials = contact
-    ? `${contact.first_name?.[0] || ''}${contact.last_name?.[0] || ''}`.toUpperCase() || '?'
-    : deal.title?.substring(0, 2).toUpperCase() || '?'
 
   // Extract UTM and source info from custom_fields
   const customFields = (deal as any).custom_fields || {}
@@ -152,6 +146,41 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
   const hasUtms = utmSource || utmMedium || utmCampaign || utmTerm || utmContent
   const hasOrigin = hasUtms || source || formName || formId
   const hasFormResponses = Array.isArray(formResponses) && formResponses.length > 0
+
+  // Extract contact data from form_responses as fallback
+  const extractFormData = () => {
+    const result: { email?: string; phone?: string; name?: string } = {}
+    for (const response of formResponses) {
+      const label = (response.label || '').toLowerCase()
+      const value = response.value
+      const type = (response.type || '').toLowerCase()
+      if (!value) continue
+      if (!result.email && (type === 'email' || label.includes('email') || label.includes('e-mail') || (typeof value === 'string' && value.includes('@')))) {
+        result.email = String(value)
+      }
+      if (!result.phone && (type === 'phone' || type === 'tel' || label.includes('telefone') || label.includes('celular') || label.includes('whatsapp') || label.includes('phone'))) {
+        result.phone = String(value)
+      }
+      if (!result.name && (label.includes('nome') || label.includes('name'))) {
+        result.name = String(value)
+      }
+    }
+    return result
+  }
+  const formData = extractFormData()
+
+  // Use contact data OR form data as fallback
+  const contactEmail = contact?.email || formData.email
+  const contactPhone = contact?.whatsapp || contact?.phone || formData.phone
+  const contactName = contact
+    ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email || 'Contato'
+    : formData.name || deal.title
+  const contactInitials = contact
+    ? `${contact.first_name?.[0] || ''}${contact.last_name?.[0] || ''}`.toUpperCase() || '?'
+    : (formData.name || deal.title)?.substring(0, 2).toUpperCase() || '?'
+
+  // Check if we have any contact info
+  const hasContactInfo = contactEmail || contactPhone || contact?.company
 
   // Helper to detect if value is a URL
   const isUrl = (value: any): boolean => {
@@ -348,79 +377,73 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
-              {/* Contact Info - Enhanced */}
-              {contact && (
+              {/* Contact Info - Enhanced - Shows data from contact OR form_responses */}
+              {hasContactInfo && (
                 <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl space-y-3">
                   <div className="flex items-center gap-2 pb-2 border-b border-dark-700/50">
                     <User className="w-4 h-4 text-primary-400" />
                     <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">Dados do Contato</span>
                   </div>
 
-                  {contact.email && (
-                    <div className="flex items-center gap-3 text-dark-300">
-                      <Mail className="w-4 h-4 text-dark-500" />
-                      <span className="text-sm">{contact.email}</span>
+                  {contactEmail && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-dark-300">
+                        <Mail className="w-4 h-4 text-blue-400" />
+                        <span className="text-sm font-medium">{contactEmail}</span>
+                      </div>
+                      <a
+                        href={`mailto:${contactEmail}`}
+                        className="px-2 py-1 rounded-md bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 text-xs font-medium transition-colors"
+                      >
+                        Enviar
+                      </a>
                     </div>
                   )}
-                  {(contact.whatsapp || contact.phone) && (
-                    <div className="flex items-center gap-3 text-dark-300">
-                      <Phone className="w-4 h-4 text-dark-500" />
-                      <span className="text-sm">{contact.whatsapp || contact.phone}</span>
+                  {contactPhone && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-dark-300">
+                        <Phone className="w-4 h-4 text-emerald-400" />
+                        <span className="text-sm font-medium">{contactPhone}</span>
+                      </div>
+                      <a
+                        href={`https://wa.me/${contactPhone.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 text-xs font-medium transition-colors"
+                      >
+                        WhatsApp
+                      </a>
                     </div>
                   )}
-                  {contact.company && (
+                  {contact?.company && (
                     <div className="flex items-center gap-3 text-dark-300">
                       <Building2 className="w-4 h-4 text-dark-500" />
                       <span className="text-sm">{contact.company}</span>
                     </div>
                   )}
-                  {(contact as any).position && (
+                  {(contact as any)?.position && (
                     <div className="flex items-center gap-3 text-dark-300">
                       <Briefcase className="w-4 h-4 text-dark-500" />
                       <span className="text-sm">{(contact as any).position}</span>
                     </div>
                   )}
-                  {((contact as any).city || (contact as any).country) && (
+                  {((contact as any)?.city || (contact as any)?.country) && (
                     <div className="flex items-center gap-3 text-dark-300">
                       <MapPin className="w-4 h-4 text-dark-500" />
                       <span className="text-sm">{[(contact as any).city, (contact as any).country].filter(Boolean).join(', ')}</span>
                     </div>
                   )}
+                </div>
+              )}
 
-                  {/* Contact Tags */}
-                  {(contact as any).tags && (contact as any).tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-dark-700/50">
-                      {(contact as any).tags.map((tag: string, i: number) => (
-                        <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-dark-700/50 text-dark-300 border border-dark-600/50">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Subscription Status */}
-                  {((contact as any).is_subscribed_email !== undefined || (contact as any).is_subscribed_whatsapp !== undefined) && (
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-dark-700/50">
-                      {(contact as any).is_subscribed_email && (
-                        <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px]">
-                          <MailCheck className="w-3 h-3" />
-                          E-mail
-                        </span>
-                      )}
-                      {(contact as any).is_subscribed_whatsapp && (
-                        <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px]">
-                          <MessageCircle className="w-3 h-3" />
-                          WhatsApp
-                        </span>
-                      )}
-                      {(contact as any).is_subscribed_sms && (
-                        <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px]">
-                          <MessageSquare className="w-3 h-3" />
-                          SMS
-                        </span>
-                      )}
-                    </div>
-                  )}
+              {/* No Contact Info Warning */}
+              {!hasContactInfo && (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <User className="w-4 h-4" />
+                    <span className="text-sm font-medium">Sem dados de contato</span>
+                  </div>
+                  <p className="text-xs text-dark-400 mt-1">Este lead não possui email ou telefone cadastrado.</p>
                 </div>
               )}
 
@@ -493,12 +516,12 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                 )
               )}
 
-              {/* Quick Actions */}
-              {contact && (
+              {/* Quick Actions - Uses contact OR form data */}
+              {(contactPhone || contactEmail) && (
                 <div className="flex gap-2">
-                  {(contact.whatsapp || contact.phone) && (
+                  {contactPhone && (
                     <a
-                      href={`https://wa.me/${(contact.whatsapp || contact.phone || '').replace(/\D/g, '')}`}
+                      href={`https://wa.me/${contactPhone.replace(/\D/g, '')}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors"
@@ -507,24 +530,41 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                       WhatsApp
                     </a>
                   )}
-                  {contact.phone && (
+                  {contactPhone && (
                     <a
-                      href={`tel:${contact.phone}`}
+                      href={`tel:${contactPhone}`}
                       className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-dark-700 hover:bg-dark-600 text-dark-300 text-sm font-medium transition-colors"
                     >
                       <Phone className="w-4 h-4" />
                       Ligar
                     </a>
                   )}
-                  {contact.email && (
+                  {contactEmail && (
                     <a
-                      href={`mailto:${contact.email}`}
+                      href={`mailto:${contactEmail}`}
                       className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-dark-700 hover:bg-dark-600 text-dark-300 text-sm font-medium transition-colors"
                     >
                       <Mail className="w-4 h-4" />
                       E-mail
                     </a>
                   )}
+                </div>
+              )}
+
+              {/* Form Responses - PROMINENT DISPLAY */}
+              {hasFormResponses && (
+                <div>
+                  <label className="block text-xs font-semibold text-dark-400 uppercase tracking-wider mb-3">Respostas do Formulario</label>
+                  <div className="p-4 bg-gradient-to-br from-primary-500/5 to-indigo-500/5 border border-primary-500/20 rounded-xl space-y-3">
+                    {formResponses.map((response: { label: string; value: any; type: string }, index: number) => (
+                      <div key={index} className="border-b border-primary-500/10 pb-3 last:border-0 last:pb-0">
+                        <span className="text-xs text-primary-400 font-medium block mb-1">{response.label}</span>
+                        <p className="text-sm text-white font-medium">
+                          {renderFormValue(response.value, response.type)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -611,50 +651,6 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                         <FileText className="w-4 h-4 text-pink-400" />
                         <span className="text-dark-400 text-sm">utm_content:</span>
                         <span className="text-white text-sm font-medium">{utmContent}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Form Responses */}
-              {hasFormResponses && (
-                <div>
-                  <label className="block text-xs font-semibold text-dark-400 uppercase tracking-wider mb-3">Respostas do Formulário</label>
-                  <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl space-y-3">
-                    {formResponses.map((response: { label: string; value: any; type: string }, index: number) => (
-                      <div key={index} className="border-b border-dark-700/30 pb-2.5 last:border-0 last:pb-0">
-                        <span className="text-xs text-dark-500 block mb-1">{response.label}</span>
-                        <p className="text-sm text-white">
-                          {renderFormValue(response.value, response.type)}
-                        </p>
-                      </div>
-                    ))}
-                    {referrer && (
-                      <div className="pt-2 border-t border-dark-700/50">
-                        <span className="text-xs text-dark-500 block mb-1">Página de origem</span>
-                        <a
-                          href={referrer}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-primary-400 hover:text-primary-300 break-all"
-                        >
-                          {referrer.length > 60 ? referrer.substring(0, 60) + '...' : referrer}
-                        </a>
-                      </div>
-                    )}
-                    {submittedAt && (
-                      <div className="pt-2 border-t border-dark-700/50">
-                        <span className="text-xs text-dark-500 block mb-1">Enviado em</span>
-                        <p className="text-xs text-dark-300">
-                          {new Date(submittedAt).toLocaleDateString('pt-BR', {
-                            day: '2-digit',
-                            month: 'long',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </p>
                       </div>
                     )}
                   </div>
