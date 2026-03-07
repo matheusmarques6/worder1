@@ -210,7 +210,7 @@ export async function GET(request: NextRequest, { params }: PipelineAnalyticsPar
           stageName: stage?.name || 'Unknown',
           stageColor: stage?.color || '#6366f1',
           probability: stage?.probability || 0,
-          contactName: Array.isArray(d.contacts) ? d.contacts[0]?.name : d.contacts?.name || null,
+          contactName: Array.isArray(d.contacts) ? d.contacts[0]?.name : (d.contacts as any)?.name || null,
           createdAt: d.created_at,
           expectedCloseDate: d.expected_close_date,
         }
