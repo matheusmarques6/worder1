@@ -193,7 +193,8 @@ export async function GET(request: NextRequest) {
       if (!deal.assigned_to) continue
 
       if (!agentMetrics[deal.assigned_to]) {
-        const profile = deal.profiles as { id: any; email: any; first_name: any; last_name: any; full_name: any } | null
+        const profilesData = deal.profiles as unknown
+        const profile = (Array.isArray(profilesData) ? profilesData[0] : profilesData) as { id: any; email: any; first_name: any; last_name: any; full_name: any } | null
         agentMetrics[deal.assigned_to] = {
           id: deal.assigned_to,
           name: profile?.full_name || profile?.email || 'Unknown',
@@ -317,8 +318,16 @@ export async function GET(request: NextRequest) {
 
     // LTV calculation (from contacts)
     const contactsWithLTV = allDeals
-      .filter(d => d.contacts?.lifetime_value > 0)
-      .map(d => d.contacts.lifetime_value)
+      .filter(d => {
+        const contactData = d.contacts as unknown
+        const contact = (Array.isArray(contactData) ? contactData[0] : contactData) as { lifetime_value?: number } | null
+        return contact?.lifetime_value && contact.lifetime_value > 0
+      })
+      .map(d => {
+        const contactData = d.contacts as unknown
+        const contact = (Array.isArray(contactData) ? contactData[0] : contactData) as { lifetime_value: number }
+        return contact.lifetime_value
+      })
 
     const avgLTV = contactsWithLTV.length > 0
       ? contactsWithLTV.reduce((sum, ltv) => sum + ltv, 0) / contactsWithLTV.length
