@@ -1,395 +1,440 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+// =============================================
+// API: Instagram Messaging - Webhook
+// src/app/api/instagram/webhook/route.ts
+//
+// Recebe eventos de mensagens do Instagram Direct
+// Documentacao: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging
+// =============================================
+
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import {
-  parseWebhookPayload,
-  extractMessaging,
-  isEchoMessage,
-  isDeletedMessage,
-  getMessageType,
-  extractMessageText,
-  extractMediaUrl,
-  isStoryMention,
-  isStoryReply,
-  getStoryInfo,
-  verifyWebhookSignature,
-  WebhookMessaging,
-} from '@/lib/instagram/api'
+  verifyInstagramWebhookSignature,
+  type WebhookEntry,
+} from '@/lib/instagram/instagram-api';
 
-const META_APP_SECRET = process.env.META_APP_SECRET!
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+export const dynamic = 'force-dynamic';
 
-// GET - Webhook verification (Meta challenge)
+// =============================================
+// GET - Verificacao do Webhook (Meta)
+// =============================================
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams
-  const mode = searchParams.get('hub.mode')
-  const token = searchParams.get('hub.verify_token')
-  const challenge = searchParams.get('hub.challenge')
+  const { searchParams } = new URL(request.url);
 
-  // For Instagram, we use a global verify token
-  const VERIFY_TOKEN = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN || 'worder_instagram_verify'
+  const mode = searchParams.get('hub.mode');
+  const token = searchParams.get('hub.verify_token');
+  const challenge = searchParams.get('hub.challenge');
 
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('Instagram webhook verified')
-    return new NextResponse(challenge, { status: 200 })
+  console.log('[Instagram Webhook] Verification request:', { mode, token, challenge });
+
+  if (mode !== 'subscribe') {
+    return new Response('Invalid mode', { status: 403 });
   }
 
-  return new NextResponse('Forbidden', { status: 403 })
+  // Buscar conta pelo verify token
+  const { data: account } = await supabase
+    .from('instagram_accounts')
+    .select('id, organization_id')
+    .eq('webhook_verify_token', token)
+    .single();
+
+  if (!account) {
+    // Fallback para token global
+    const globalToken = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN;
+    if (token !== globalToken) {
+      console.log('[Instagram Webhook] Invalid verify token');
+      return new Response('Invalid verify token', { status: 403 });
+    }
+  } else {
+    // Marcar webhook como configurado
+    await supabase
+      .from('instagram_accounts')
+      .update({ webhook_configured: true })
+      .eq('id', account.id);
+  }
+
+  console.log('[Instagram Webhook] Verification successful');
+  return new Response(challenge, { status: 200 });
 }
 
-// POST - Receive webhook events
+// =============================================
+// POST - Receber eventos
+// =============================================
 export async function POST(request: NextRequest) {
   try {
-    const rawBody = await request.text()
-    const signature = request.headers.get('x-hub-signature-256') || ''
+    const rawBody = await request.text();
 
-    // Verify signature
-    if (META_APP_SECRET && signature) {
-      const isValid = await verifyWebhookSignature(rawBody, signature, META_APP_SECRET)
+    // Verificar assinatura
+    const signature = request.headers.get('x-hub-signature-256');
+    if (signature && process.env.META_APP_SECRET) {
+      const isValid = await verifyInstagramWebhookSignature(rawBody, signature, process.env.META_APP_SECRET);
       if (!isValid) {
-        console.error('Invalid Instagram webhook signature')
-        return new NextResponse('Invalid signature', { status: 401 })
+        console.warn('[Instagram Webhook] Invalid signature');
       }
     }
 
-    const body = JSON.parse(rawBody)
+    const body = JSON.parse(rawBody);
 
-    // Only process Instagram events
+    // Verificar se e webhook do Instagram
     if (body.object !== 'instagram') {
-      return NextResponse.json({ received: true })
+      return NextResponse.json({ received: true });
     }
 
-    // Create Supabase client with service role
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-
-    // Process each entry
-    const entries = parseWebhookPayload(body)
-
-    for (const entry of entries) {
-      const pageId = entry.id
-      const messagingEvents = extractMessaging(entry)
-
-      // Find the Instagram account by page ID
-      const { data: account, error: accountError } = await supabase
-        .from('instagram_accounts')
-        .select('*')
-        .eq('page_id', pageId)
-        .eq('status', 'active')
-        .single()
-
-      if (accountError || !account) {
-        console.log(`No active Instagram account found for page ${pageId}`)
-        continue
-      }
-
-      // Process each messaging event
-      for (const messaging of messagingEvents) {
-        await processMessaging(supabase, account, messaging)
-      }
+    // Processar cada entry
+    for (const entry of body.entry || []) {
+      await processEntry(entry);
     }
 
-    return NextResponse.json({ received: true })
+    return NextResponse.json({ received: true });
   } catch (error) {
-    console.error('Instagram webhook error:', error)
-    // Always return 200 to acknowledge receipt
-    return NextResponse.json({ received: true, error: String(error) })
+    console.error('[Instagram Webhook] Error:', error);
+    return NextResponse.json({ received: true });
   }
 }
 
-async function processMessaging(supabase: any, account: any, messaging: WebhookMessaging) {
-  try {
-    const senderId = messaging.sender.id
-    const recipientId = messaging.recipient.id
-    const timestamp = new Date(messaging.timestamp)
+// =============================================
+// PROCESSAR ENTRY
+// =============================================
+async function processEntry(entry: WebhookEntry) {
+  const igUserId = entry.id;
 
-    // Skip echo messages (messages sent by the business)
-    if (isEchoMessage(messaging)) {
-      // Update message status if needed
-      if (messaging.message?.mid) {
-        await supabase
-          .from('instagram_messages')
-          .update({ status: 'sent', sent_at: timestamp.toISOString() })
-          .eq('message_id', messaging.message.mid)
-      }
-      return
+  // Buscar conta do Instagram
+  const { data: account } = await supabase
+    .from('instagram_accounts')
+    .select('*')
+    .eq('ig_user_id', igUserId)
+    .single();
+
+  if (!account) {
+    console.warn('[Instagram Webhook] Unknown ig_user_id:', igUserId);
+    return;
+  }
+
+  // Processar mensagens
+  for (const messaging of entry.messaging || []) {
+    if (messaging.message?.is_echo) {
+      console.log('[Instagram Webhook] Skipping echo message');
+      continue;
     }
 
-    // Skip deleted messages
-    if (isDeletedMessage(messaging)) {
-      return
-    }
-
-    // Handle read receipts
-    if (messaging.read) {
-      await handleReadReceipt(supabase, account, messaging)
-      return
-    }
-
-    // Handle reactions
-    if (messaging.reaction) {
-      await handleReaction(supabase, account, messaging)
-      return
-    }
-
-    // Handle regular messages
     if (messaging.message) {
-      await handleMessage(supabase, account, messaging, timestamp)
+      await processMessage(account, messaging);
     }
 
-    // Handle postbacks
     if (messaging.postback) {
-      await handlePostback(supabase, account, messaging, timestamp)
+      await processPostback(account, messaging);
     }
-  } catch (error) {
-    console.error('Error processing Instagram messaging:', error)
+
+    if (messaging.reaction) {
+      await processReaction(account, messaging);
+    }
+
+    if (messaging.read) {
+      await processRead(account, messaging);
+    }
+  }
+
+  for (const change of entry.changes || []) {
+    await processChange(account, change);
   }
 }
 
-async function handleMessage(supabase: any, account: any, messaging: WebhookMessaging, timestamp: Date) {
-  const senderId = messaging.sender.id
-  const messageId = messaging.message!.mid
-  const messageType = getMessageType(messaging)
-  const textBody = extractMessageText(messaging)
-  const mediaUrl = extractMediaUrl(messaging)
+// =============================================
+// PROCESSAR MENSAGEM RECEBIDA
+// =============================================
+async function processMessage(account: any, messaging: any) {
+  try {
+    const senderId = messaging.sender.id;
+    const messageId = messaging.message.mid;
+    const timestamp = messaging.timestamp;
+    const text = messaging.message.text || '';
+    const attachments = messaging.message.attachments || [];
+    const quickReply = messaging.message.quick_reply;
+    const isUnsupported = messaging.message.is_unsupported;
+    const isDeleted = messaging.message.is_deleted;
 
-  // Find or create Instagram contact
-  const { data: contact } = await supabase
-    .from('instagram_contacts')
-    .upsert({
-      organization_id: account.organization_id,
-      store_id: account.store_id,
-      instagram_user_id: senderId,
-      instagram_scoped_id: senderId,
-      source: 'instagram_dm',
-      last_message_at: timestamp.toISOString(),
-    }, {
-      onConflict: 'organization_id,instagram_user_id',
-    })
-    .select()
-    .single()
+    console.log('[Instagram] Message from:', senderId, '-', text || '[attachment]');
 
-  // Find or create conversation using the RPC function
-  const { data: conversationId } = await supabase.rpc('upsert_instagram_conversation', {
-    p_organization_id: account.organization_id,
-    p_store_id: account.store_id,
-    p_account_id: account.id,
-    p_participant_id: senderId,
-    p_username: null,
-    p_contact_name: null,
-    p_profile_picture_url: null,
-  })
-
-  // Build message content
-  const content: any = {}
-
-  if (messaging.message?.text) {
-    content.text = messaging.message.text
-  }
-
-  if (messaging.message?.attachments) {
-    content.attachments = messaging.message.attachments
-  }
-
-  if (isStoryReply(messaging)) {
-    const storyInfo = getStoryInfo(messaging)
-    content.story_reply = storyInfo
-  }
-
-  if (isStoryMention(messaging)) {
-    content.story_mention = true
-    if (messaging.message?.attachments?.[0]?.payload?.url) {
-      content.story_url = messaging.message.attachments[0].payload.url
+    if (isDeleted) {
+      console.log('[Instagram] Message was deleted, skipping');
+      return;
     }
-  }
 
-  // Insert message
-  const { error: messageError } = await supabase
-    .from('instagram_messages')
-    .upsert({
+    const contact = await getOrCreateContact(account, senderId);
+    const conversation = await getOrCreateConversation(account, contact, senderId);
+
+    const { data: existingMsg } = await supabase
+      .from('instagram_messages')
+      .select('id')
+      .eq('message_id', messageId)
+      .single();
+
+    if (existingMsg) {
+      console.log('[Instagram] Duplicate message, skipping:', messageId);
+      return;
+    }
+
+    let messageType = 'text';
+    let content: any = { text };
+    let mediaUrl: string | null = null;
+
+    if (attachments.length > 0) {
+      const attachment = attachments[0];
+      messageType = attachment.type;
+      mediaUrl = attachment.payload?.url || null;
+      content = {
+        text,
+        attachment: {
+          type: attachment.type,
+          url: mediaUrl,
+          reel_video_id: attachment.payload?.reel_video_id,
+          story_id: attachment.payload?.story_id,
+        },
+      };
+    }
+
+    if (quickReply) {
+      content.quick_reply = quickReply;
+    }
+
+    if (isUnsupported) {
+      messageType = 'unsupported';
+      content = { is_unsupported: true };
+    }
+
+    await supabase.from('instagram_messages').insert({
       organization_id: account.organization_id,
-      store_id: account.store_id,
       account_id: account.id,
-      conversation_id: conversationId,
+      conversation_id: conversation.id,
       message_id: messageId,
       direction: 'inbound',
-      from_user_id: senderId,
+      sender_id: senderId,
+      recipient_id: account.ig_user_id,
       message_type: messageType,
-      text_body: textBody,
       content,
+      text_body: text,
       media_url: mediaUrl,
       status: 'received',
-      timestamp: timestamp.toISOString(),
-    }, {
-      onConflict: 'account_id,message_id',
-      ignoreDuplicates: true,
-    })
+      timestamp: new Date(timestamp).toISOString(),
+    });
 
-  if (messageError) {
-    console.error('Error inserting Instagram message:', messageError)
-    return
-  }
-
-  // Update account last webhook timestamp
-  await supabase
-    .from('instagram_accounts')
-    .update({ last_webhook_at: new Date().toISOString() })
-    .eq('id', account.id)
-
-  // Find or create unified CRM contact and trigger automations
-  await processAutomation(supabase, account, senderId, textBody, conversationId, messageType)
-}
-
-async function handlePostback(supabase: any, account: any, messaging: WebhookMessaging, timestamp: Date) {
-  const senderId = messaging.sender.id
-  const messageId = messaging.postback!.mid
-  const payload = messaging.postback!.payload
-  const title = messaging.postback!.title
-
-  // Find or create conversation
-  const { data: conversationId } = await supabase.rpc('upsert_instagram_conversation', {
-    p_organization_id: account.organization_id,
-    p_store_id: account.store_id,
-    p_account_id: account.id,
-    p_participant_id: senderId,
-  })
-
-  // Insert as message
-  await supabase
-    .from('instagram_messages')
-    .upsert({
-      organization_id: account.organization_id,
-      store_id: account.store_id,
-      account_id: account.id,
-      conversation_id: conversationId,
-      message_id: messageId,
-      direction: 'inbound',
-      from_user_id: senderId,
-      message_type: 'postback',
-      text_body: title,
-      content: { payload, title },
-      status: 'received',
-      timestamp: timestamp.toISOString(),
-    }, {
-      onConflict: 'account_id,message_id',
-      ignoreDuplicates: true,
-    })
-
-  // Trigger automation
-  await processAutomation(supabase, account, senderId, title, conversationId, 'postback')
-}
-
-async function handleReaction(supabase: any, account: any, messaging: WebhookMessaging) {
-  const { mid, action, reaction, emoji } = messaging.reaction!
-
-  if (action === 'react') {
-    // Find the message and add reaction
     await supabase
-      .from('instagram_messages')
+      .from('instagram_conversations')
       .update({
-        content: supabase.sql`jsonb_set(COALESCE(content, '{}'), '{reaction}', ${JSON.stringify({ emoji: emoji || reaction, from: messaging.sender.id })}::jsonb)`,
+        status: 'open',
+        is_window_open: true,
+        window_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        last_customer_message_at: new Date().toISOString(),
+        last_message_at: new Date().toISOString(),
+        last_message_preview: text.substring(0, 100) || `[${messageType}]`,
+        last_message_direction: 'inbound',
+        unread_count: (conversation.unread_count || 0) + 1,
       })
-      .eq('message_id', mid)
-  } else {
-    // Remove reaction
+      .eq('id', conversation.id);
+
     await supabase
-      .from('instagram_messages')
+      .from('instagram_accounts')
       .update({
-        content: supabase.sql`content - 'reaction'`,
+        messages_received_today: (account.messages_received_today || 0) + 1,
+        total_messages_received: (account.total_messages_received || 0) + 1,
+        last_message_at: new Date().toISOString(),
+        last_webhook_at: new Date().toISOString(),
       })
-      .eq('message_id', mid)
+      .eq('id', account.id);
+
+    console.log('[Instagram] Message saved successfully');
+  } catch (error) {
+    console.error('[Instagram] Error processing message:', error);
   }
 }
 
-async function handleReadReceipt(supabase: any, account: any, messaging: WebhookMessaging) {
-  const { watermark } = messaging.read!
-
-  // Mark all messages before watermark as read
-  await supabase
-    .from('instagram_messages')
-    .update({ status: 'read', read_at: new Date().toISOString() })
-    .eq('account_id', account.id)
-    .eq('direction', 'outbound')
-    .lte('timestamp', new Date(watermark).toISOString())
-    .in('status', ['sent', 'delivered'])
-}
-
-async function processAutomation(
-  supabase: any,
-  account: any,
-  senderId: string,
-  messageText: string,
-  conversationId: string,
-  messageType: string
-) {
+async function processPostback(account: any, messaging: any) {
   try {
-    // Find or create unified CRM contact
-    let crmContactId: string | null = null
+    const senderId = messaging.sender.id;
+    const postback = messaging.postback;
 
-    // Check if Instagram contact has linked CRM contact
-    const { data: igContact } = await supabase
-      .from('instagram_contacts')
-      .select('crm_contact_id, username, name')
-      .eq('organization_id', account.organization_id)
-      .eq('instagram_user_id', senderId)
-      .single()
+    console.log('[Instagram] Postback from:', senderId, '-', postback.title);
 
-    if (igContact?.crm_contact_id) {
-      crmContactId = igContact.crm_contact_id
-    } else {
-      // Create CRM contact
-      const { data: newContact, error: contactError } = await supabase
-        .from('contacts')
-        .insert({
-          organization_id: account.organization_id,
-          first_name: igContact?.name || igContact?.username || 'Instagram User',
-          source: 'instagram',
-          tags: ['instagram'],
-          custom_fields: {
-            instagram_user_id: senderId,
-            instagram_username: igContact?.username,
-          },
+    const { data: conversation } = await supabase
+      .from('instagram_conversations')
+      .select('id')
+      .eq('account_id', account.id)
+      .eq('ig_user_id', senderId)
+      .single();
+
+    if (!conversation) return;
+
+    await supabase.from('instagram_messages').insert({
+      organization_id: account.organization_id,
+      account_id: account.id,
+      conversation_id: conversation.id,
+      message_id: postback.mid,
+      direction: 'inbound',
+      sender_id: senderId,
+      recipient_id: account.ig_user_id,
+      message_type: 'postback',
+      content: {
+        postback: {
+          title: postback.title,
+          payload: postback.payload,
+        },
+      },
+      text_body: postback.title,
+      status: 'received',
+      timestamp: new Date(messaging.timestamp).toISOString(),
+    });
+
+    console.log('[Instagram] Postback saved');
+  } catch (error) {
+    console.error('[Instagram] Error processing postback:', error);
+  }
+}
+
+async function processReaction(account: any, messaging: any) {
+  try {
+    const reaction = messaging.reaction;
+    const messageId = reaction.mid;
+    const action = reaction.action;
+    const emoji = reaction.emoji || reaction.reaction;
+
+    console.log('[Instagram] Reaction:', action, emoji, 'on message:', messageId);
+
+    if (action === 'react') {
+      await supabase
+        .from('instagram_messages')
+        .update({
+          reaction: emoji,
+          reaction_at: new Date().toISOString(),
         })
-        .select()
-        .single()
+        .eq('message_id', messageId);
+    } else {
+      await supabase
+        .from('instagram_messages')
+        .update({
+          reaction: null,
+          reaction_at: null,
+        })
+        .eq('message_id', messageId);
+    }
+  } catch (error) {
+    console.error('[Instagram] Error processing reaction:', error);
+  }
+}
 
-      if (!contactError && newContact) {
-        crmContactId = newContact.id
+async function processRead(account: any, messaging: any) {
+  try {
+    const senderId = messaging.sender.id;
+    const watermark = messaging.read.watermark;
 
-        // Link Instagram contact to CRM contact
-        await supabase
-          .from('instagram_contacts')
-          .update({ crm_contact_id: crmContactId })
-          .eq('organization_id', account.organization_id)
-          .eq('instagram_user_id', senderId)
+    await supabase
+      .from('instagram_messages')
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('account_id', account.id)
+      .eq('direction', 'outbound')
+      .eq('recipient_id', senderId)
+      .lte('timestamp', new Date(watermark).toISOString());
 
-        // Link conversation to CRM contact
-        await supabase
-          .from('instagram_conversations')
-          .update({ unified_contact_id: crmContactId })
-          .eq('id', conversationId)
-      }
+    console.log('[Instagram] Messages marked as read');
+  } catch (error) {
+    console.error('[Instagram] Error processing read:', error);
+  }
+}
+
+async function processChange(account: any, change: any) {
+  try {
+    console.log('[Instagram] Change:', change.field, change.value);
+  } catch (error) {
+    console.error('[Instagram] Error processing change:', error);
+  }
+}
+
+async function getOrCreateContact(account: any, igUserId: string) {
+  const { data: existingContacts } = await supabase
+    .from('instagram_contacts')
+    .select('*')
+    .eq('organization_id', account.organization_id)
+    .eq('ig_user_id', igUserId)
+    .limit(1);
+
+  if (existingContacts && existingContacts.length > 0) {
+    return { ...existingContacts[0], isNew: false };
+  }
+
+  const { data: newContact } = await supabase
+    .from('instagram_contacts')
+    .insert({
+      organization_id: account.organization_id,
+      ig_user_id: igUserId,
+      username: null,
+      name: null,
+      source: 'instagram_dm',
+    })
+    .select()
+    .single();
+
+  let crmContactId: string | undefined;
+
+  const { data: newCrmContact } = await supabase
+    .from('contacts')
+    .insert({
+      organization_id: account.organization_id,
+      name: `Instagram User ${igUserId}`,
+      instagram_id: igUserId,
+      source: 'instagram',
+      type: 'lead',
+      tags: ['instagram'],
+    })
+    .select('id')
+    .single();
+
+  crmContactId = newCrmContact?.id;
+
+  if (crmContactId && newContact) {
+    await supabase
+      .from('instagram_contacts')
+      .update({ crm_contact_id: crmContactId })
+      .eq('id', newContact.id);
+  }
+
+  return { ...newContact, isNew: true, crm_contact_id: crmContactId };
+}
+
+async function getOrCreateConversation(account: any, contact: any, igUserId: string) {
+  const { data: existingConvs } = await supabase
+    .from('instagram_conversations')
+    .select('*')
+    .eq('organization_id', account.organization_id)
+    .eq('account_id', account.id)
+    .eq('ig_user_id', igUserId)
+    .limit(1);
+
+  if (existingConvs && existingConvs.length > 0) {
+    const conv = existingConvs[0];
+
+    if (contact && conv.contact_id !== contact.id) {
+      await supabase
+        .from('instagram_conversations')
+        .update({ contact_id: contact.id })
+        .eq('id', conv.id);
     }
 
-    // Trigger automation rules
-    // Import RuleEngine dynamically to avoid circular dependencies
-    const { RuleEngine } = await import('@/lib/services/automation/rule-engine')
-
-    await RuleEngine.processCreationRules(
-      account.organization_id,
-      'instagram',
-      'message_received',
-      {
-        contact_id: crmContactId || undefined,
-        contact_name: igContact?.name || igContact?.username,
-        message_text: messageText,
-        message_type: messageType,
-        source_id: `instagram_${conversationId}`,
-        conversation_id: conversationId,
-        instagram_user_id: senderId,
-      }
-    )
-  } catch (error) {
-    console.error('Error processing Instagram automation:', error)
-    // Don't throw - automation failures shouldn't fail message processing
+    return { ...conv, isNew: false };
   }
+
+  const { data: newConv } = await supabase
+    .from('instagram_conversations')
+    .insert({
+      organization_id: account.organization_id,
+      account_id: account.id,
+      contact_id: contact?.id,
+      ig_user_id: igUserId,
+      contact_name: contact?.name || contact?.username || `User ${igUserId}`,
+      status: 'open',
+      is_window_open: true,
+      window_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    })
+    .select()
+    .single();
+
+  return { ...newConv, isNew: true };
 }

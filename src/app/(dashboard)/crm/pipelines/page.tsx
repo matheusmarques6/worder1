@@ -25,7 +25,9 @@ import {
   Trash2,
   GripVertical,
   ChevronRight,
+  BarChart3,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useDeals, usePipelines } from '@/hooks'
 import { useAuthStore } from '@/stores'
 import { PipelineModal } from '@/components/crm'
@@ -234,6 +236,13 @@ export default function PipelinesPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <Link
+                    href={`/crm/pipelines/${pipeline.id}/analytics`}
+                    className="p-2 rounded-lg text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 transition-colors"
+                    title="Ver Analytics"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </Link>
                   <button
                     onClick={() => setEditingPipeline(pipeline)}
                     className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors"
