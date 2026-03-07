@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
       if (!deal.assigned_to) continue
 
       if (!agentMetrics[deal.assigned_to]) {
-        const profile = deal.profiles
+        const profile = deal.profiles as { id: any; email: any; first_name: any; last_name: any; full_name: any } | null
         agentMetrics[deal.assigned_to] = {
           id: deal.assigned_to,
           name: profile?.full_name || profile?.email || 'Unknown',
