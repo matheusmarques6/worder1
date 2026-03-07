@@ -1450,10 +1450,32 @@ export default function FormBuilderPage() {
                   </div>
                 )}
 
+                {/* Script embed - RECOMENDADO */}
+                <div className="p-5 bg-gradient-to-br from-primary-500/10 to-indigo-500/10 border border-primary-500/30 rounded-xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-base font-semibold text-white">Incorporar via Script</h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary-500 text-white">RECOMENDADO</span>
+                  </div>
+                  <p className="text-xs text-dark-400 mb-1">Captura automaticamente UTMs da URL (utm_source, utm_campaign, fbclid, gclid, etc).</p>
+                  <p className="text-xs text-emerald-400 mb-4">Ideal para landing pages com trafego pago.</p>
+                  <div className="relative">
+                    <pre className="p-4 bg-dark-900 rounded-lg text-xs text-green-400 overflow-x-auto whitespace-pre-wrap">
+                      {getScriptCode()}
+                    </pre>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(getScriptCode())}
+                      className="absolute top-2 right-2 p-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-300 hover:text-white transition-colors"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
                 {/* iFrame embed */}
                 <div className="p-5 bg-dark-800/60 border border-dark-700/50 rounded-xl">
                   <h3 className="text-base font-semibold text-white mb-2">Incorporar via iFrame</h3>
-                  <p className="text-xs text-dark-400 mb-4">Cole este codigo no HTML do seu site onde deseja exibir o formulario.</p>
+                  <p className="text-xs text-dark-400 mb-1">Codigo simples de iframe.</p>
+                  <p className="text-xs text-amber-400 mb-4">UTMs devem ser passados manualmente na URL do iframe.</p>
                   <div className="relative">
                     <pre className="p-4 bg-dark-900 rounded-lg text-xs text-green-400 overflow-x-auto whitespace-pre-wrap">
                       {getEmbedCode()}
@@ -1470,7 +1492,7 @@ export default function FormBuilderPage() {
                 {/* Direct link */}
                 <div className="p-5 bg-dark-800/60 border border-dark-700/50 rounded-xl">
                   <h3 className="text-base font-semibold text-white mb-2">Link Direto</h3>
-                  <p className="text-xs text-dark-400 mb-4">Compartilhe este link diretamente com seus leads.</p>
+                  <p className="text-xs text-dark-400 mb-4">Compartilhe este link diretamente com seus leads. Adicione UTMs na URL manualmente.</p>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
@@ -1485,6 +1507,9 @@ export default function FormBuilderPage() {
                       <Copy className="w-4 h-4" />
                     </button>
                   </div>
+                  <p className="text-xs text-dark-500 mt-2">
+                    Exemplo com UTMs: {typeof window !== 'undefined' ? `${window.location.origin}/embed/${formId}?utm_source=facebook&utm_medium=cpc` : ''}
+                  </p>
                 </div>
               </div>
             )}
