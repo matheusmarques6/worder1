@@ -261,7 +261,7 @@ export async function GET(request: NextRequest, { params }: PipelineAnalyticsPar
     // Deals por owner
     const dealsByOwner = allDeals.reduce((acc: Record<string, { name: string; count: number; value: number; won: number; lost: number }>, deal) => {
       const ownerId = deal.owner_id || 'unassigned'
-      const ownerName = deal.users?.name || 'Sem atribuição'
+      const ownerName = Array.isArray(deal.users) ? deal.users[0]?.name : (deal.users as any)?.name || 'Sem atribuição'
       if (!acc[ownerId]) {
         acc[ownerId] = { name: ownerName, count: 0, value: 0, won: 0, lost: 0 }
       }
