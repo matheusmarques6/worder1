@@ -33,7 +33,8 @@ import { useWhatsAppConnection } from '@/hooks/useWhatsAppConnectionManager'
 // Types
 import type { InboxConversation, InboxTask } from '@/types/inbox'
 
-const POLLING_INTERVAL = 5000
+// Polling mais rápido para sincronização em tempo real
+const POLLING_INTERVAL = 2000 // 2 segundos
 
 interface InboxContentProps {
   /** Altura customizada (default: calc(100vh - 4rem)) */
