@@ -119,6 +119,7 @@ const toolsNavItems: NavItem[] = [
   { title: 'Conteúdo', href: '/content', icon: Folder, children: [
     { title: 'Templates E-mail', href: '/content/templates', icon: EnvelopeSimple },
     { title: 'Templates WhatsApp', href: '/content/templates/whatsapp', icon: WhatsappLogo },
+    { title: 'Produtos', href: '/content/products', icon: ShoppingBag },
     { title: 'Mídia', href: '/content/media', icon: ImageIcon },
     { title: 'Cupons', href: '/content/coupons', icon: Tag },
   ]},
