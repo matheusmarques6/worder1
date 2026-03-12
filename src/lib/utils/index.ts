@@ -1,2 +1,7 @@
-// Utils exports
+// Barrel export - preserves all existing imports from '@/lib/utils'
+export { cn } from './cn'
+export { formatCurrency, formatPercentage, formatNumber, formatDate, formatDateTime, formatRelativeTime, formatPhoneNumber, calculateChange } from './formatters'
+export { generateId, truncate, getInitials, stringToColor } from './strings'
+export { isValidEmail, isValidUrl, parseWhatsAppNumber } from './validation'
+export { debounce, sleep, groupBy, sortBy, getStatusColor } from './helpers'
 export * from './mentions'
