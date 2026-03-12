@@ -10,35 +10,39 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useUIStore, useStoreStore, useAuthStore } from '@/stores'
 import {
-  LayoutDashboard,
-  Users,
-  MessageSquare,
-  Zap,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  Store,
-  HelpCircle,
-  LogOut,
-  Bell,
-  ChevronDown,
-  Check,
-  CheckCheck,
+  ChartLineUp,
+  ChatCircleDots,
+  UsersThree,
+  Megaphone,
+  Lightning,
+  ShoppingCartSimple,
+  Globe,
+  Folder,
+  ChartBar,
+  Plugs,
+  GearSix,
+  CaretLeft,
+  CaretRight,
+  CaretDown,
+  Storefront,
   Plus,
-  ShoppingBag,
-  ShoppingCart,
-  Package,
-  Trash2,
-  AlertCircle,
-  AlertTriangle,
+  Check,
+  SignOut,
+  Bell,
+  CheckCircle,
+  Trash,
+  ArrowSquareOut,
+  Warning,
+  WarningCircle,
   Info,
-  ExternalLink,
-  FileText,
-  Loader2,
   User,
-  Building2,
-  Menu,
-} from 'lucide-react'
+  Buildings,
+  List,
+  Spinner,
+  ShoppingBag,
+  ChatCircle,
+  Question,
+} from '@phosphor-icons/react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
 import { formatDistanceToNow } from 'date-fns'
@@ -51,8 +55,10 @@ import { ptBR } from 'date-fns/locale'
 interface NavItem {
   title: string
   href: string
-  icon: React.ComponentType<{ className?: string }>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  icon: React.ComponentType<any>
   badge?: number
+  children?: NavItem[]
 }
 
 interface NotificationData {
@@ -75,25 +81,28 @@ interface Notification {
 }
 
 // ============================================
-// Navigation Items
+// Navigation Items — Estrutura conforme Arquitetura Worder
 // ============================================
 
 const mainNavItems: NavItem[] = [
-  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: 'Pedidos', href: '/orders', icon: ShoppingCart },
-  { title: 'Produtos', href: '/products', icon: Package },
-  { title: 'CRM', href: '/crm', icon: Users },
-  { title: 'Chat', href: '/chat', icon: MessageSquare, badge: 3 },
+  { title: 'Dashboard', href: '/dashboard', icon: ChartLineUp },
+  { title: 'Inbox', href: '/inbox', icon: ChatCircleDots, badge: 0 },
+  { title: 'Contatos', href: '/contacts', icon: UsersThree },
+  { title: 'Campanhas', href: '/campaigns', icon: Megaphone },
+  { title: 'Automações', href: '/automations', icon: Lightning },
+  { title: 'Recuperação', href: '/recovery', icon: ShoppingCartSimple },
 ]
 
 const toolsNavItems: NavItem[] = [
-  { title: 'Formulários', href: '/forms', icon: FileText },
-  { title: 'Automações', href: '/automations', icon: Zap },
+  { title: 'Site', href: '/site', icon: Globe },
+  { title: 'Conteúdo', href: '/content', icon: Folder },
+  { title: 'Analytics', href: '/analytics', icon: ChartBar },
+  { title: 'Integrações', href: '/integrations', icon: Plugs },
 ]
 
-const settingsNavItems: NavItem[] = [
-  { title: 'Configurações', href: '/settings', icon: Settings },
-  { title: 'Ajuda', href: '/help', icon: HelpCircle },
+const systemNavItems: NavItem[] = [
+  { title: 'Configurações', href: '/settings', icon: GearSix },
+  { title: 'Ajuda', href: '/help', icon: Question },
 ]
 
 // ============================================
@@ -105,11 +114,10 @@ export function Sidebar() {
   const router = useRouter()
   const { sidebarCollapsed, toggleSidebar } = useUIStore()
   const { stores, currentStore, setCurrentStore, addStore } = useStoreStore()
-  
+
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false)
   const [addStoreModalOpen, setAddStoreModalOpen] = useState(false)
 
-  // Get store initials for avatar
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -138,32 +146,44 @@ export function Sidebar() {
       <Link
         href={item.href}
         className={cn(
-          'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200',
-          'hover:bg-dark-800',
-          isActive && 'bg-primary-500/10 text-primary-400',
-          !isActive && 'text-dark-400 hover:text-dark-100'
+          'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200',
+          'hover:bg-white/[0.06]',
+          isActive && 'bg-white/[0.08] text-white',
+          !isActive && 'text-dark-400 hover:text-dark-200'
         )}
       >
-        <Icon className={cn('w-5 h-5 flex-shrink-0', isActive && 'text-primary-400')} />
+        {/* Active indicator — barra lateral laranja */}
+        {isActive && (
+          <motion.div
+            layoutId="sidebar-active"
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-gradient-to-b from-[#F26B2A] to-[#F5A623]"
+            transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
+          />
+        )}
+
+        <Icon
+          className={cn('w-5 h-5 flex-shrink-0 transition-colors', isActive && 'text-[#F26B2A]')}
+          weight={isActive ? 'fill' : 'regular'}
+        />
         <AnimatePresence>
           {!sidebarCollapsed && (
             <motion.span
               initial={{ opacity: 0, width: 0 }}
               animate={{ opacity: 1, width: 'auto' }}
               exit={{ opacity: 0, width: 0 }}
-              className="font-medium whitespace-nowrap overflow-hidden"
+              className="text-sm font-medium whitespace-nowrap overflow-hidden"
             >
               {item.title}
             </motion.span>
           )}
         </AnimatePresence>
-        {item.badge && !sidebarCollapsed && (
-          <span className="ml-auto bg-primary-500 text-white text-xs px-2 py-0.5 rounded-full">
-            {item.badge}
+        {item.badge !== undefined && item.badge > 0 && !sidebarCollapsed && (
+          <span className="ml-auto bg-[#F26B2A] text-white text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
+            {item.badge > 99 ? '99+' : item.badge}
           </span>
         )}
-        {item.badge && sidebarCollapsed && (
-          <span className="absolute top-2 right-2 w-2 h-2 bg-primary-500 rounded-full" />
+        {item.badge !== undefined && item.badge > 0 && sidebarCollapsed && (
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#F26B2A] rounded-full ring-2 ring-[#1A1A1A]" />
         )}
       </Link>
     )
@@ -181,14 +201,14 @@ export function Sidebar() {
 
   return (
     <>
-      {/* ✅ NOVO: Overlay para mobile (quando sidebar está aberta) */}
+      {/* Mobile overlay */}
       <AnimatePresence>
         {!sidebarCollapsed && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden"
             onClick={toggleSidebar}
           />
         )}
@@ -196,23 +216,23 @@ export function Sidebar() {
 
       <motion.aside
         initial={false}
-        animate={{ width: sidebarCollapsed ? 80 : 280 }}
-        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        animate={{ width: sidebarCollapsed ? 72 : 260 }}
+        transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         className={cn(
-          "fixed left-0 top-0 bottom-0 z-40 bg-dark-900/80 backdrop-blur-xl border-r border-dark-700/50 flex flex-col",
-          // ✅ NOVO: Esconder no mobile quando recolhido
+          "fixed left-0 top-0 bottom-0 z-40 flex flex-col",
+          "bg-[#1A1A1A] border-r border-white/[0.06]",
           sidebarCollapsed && "max-lg:-translate-x-full",
           "transition-transform duration-300"
         )}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-dark-700/50">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-white/[0.06]">
           <Link href="/dashboard" className="flex flex-col gap-0.5">
             <Image
               src="/logo.png"
               alt="Worder"
-              width={sidebarCollapsed ? 40 : 110}
-              height={sidebarCollapsed ? 8 : 21}
+              width={sidebarCollapsed ? 32 : 100}
+              height={sidebarCollapsed ? 7 : 19}
               className="object-contain"
               priority
             />
@@ -222,7 +242,7 @@ export function Sidebar() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="text-[10px] text-dark-500"
+                  className="text-[10px] text-dark-500 tracking-wide"
                 >
                   by Convertfy
                 </motion.span>
@@ -231,63 +251,63 @@ export function Sidebar() {
           </Link>
           <button
             onClick={toggleSidebar}
-            className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 flex items-center justify-center text-dark-400 hover:text-dark-100 transition-colors"
+            className="w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] flex items-center justify-center text-dark-400 hover:text-white transition-all duration-200"
           >
             {sidebarCollapsed ? (
-              <ChevronRight className="w-4 h-4" />
+              <CaretRight className="w-3.5 h-3.5" weight="bold" />
             ) : (
-              <ChevronLeft className="w-4 h-4" />
+              <CaretLeft className="w-3.5 h-3.5" weight="bold" />
             )}
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
-          {/* Main */}
+        <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+          {/* Principal */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-dark-500 uppercase tracking-wider">
+              <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-[0.12em]">
                 Principal
               </p>
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {mainNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>
           </div>
 
-          {/* Tools */}
+          {/* Ferramentas */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-dark-500 uppercase tracking-wider">
+              <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-[0.12em]">
                 Ferramentas
               </p>
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {toolsNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>
           </div>
 
-          {/* Settings */}
+          {/* Sistema */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-dark-500 uppercase tracking-wider">
+              <p className="px-3 mb-2 text-[10px] font-semibold text-dark-500 uppercase tracking-[0.12em]">
                 Sistema
               </p>
             )}
-            <div className="space-y-1">
-              {settingsNavItems.map((item) => (
+            <div className="space-y-0.5">
+              {systemNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>
           </div>
         </nav>
 
-        {/* Store Selector Section */}
-        <div className="p-3 border-t border-dark-700/50 relative">
+        {/* Store Selector */}
+        <div className="p-2.5 border-t border-white/[0.06] relative">
           {/* Store Dropdown */}
           <AnimatePresence>
             {storeDropdownOpen && !sidebarCollapsed && (
@@ -296,15 +316,14 @@ export function Sidebar() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.96 }}
                 transition={{ duration: 0.15 }}
-                className="absolute bottom-full left-3 right-3 mb-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-50"
+                className="absolute bottom-full left-2.5 right-2.5 mb-2 bg-[#222222] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
               >
-                {/* Stores List */}
                 {stores.length > 0 && (
-                  <div className="p-2 border-b border-dark-700">
-                    <p className="px-2 py-1 text-xs font-medium text-dark-500 uppercase tracking-wider">
+                  <div className="p-2 border-b border-white/[0.06]">
+                    <p className="px-2 py-1 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
                       Suas Lojas
                     </p>
-                    <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
+                    <div className="space-y-0.5 mt-1 max-h-48 overflow-y-auto">
                       {stores.map((store) => (
                         <button
                           key={store.id}
@@ -313,21 +332,21 @@ export function Sidebar() {
                             setStoreDropdownOpen(false)
                           }}
                           className={cn(
-                            'w-full flex items-center gap-3 p-2 rounded-lg transition-colors',
+                            'w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200',
                             currentStore?.id === store.id
-                              ? 'bg-primary-500/10 text-primary-400'
-                              : 'hover:bg-dark-700/50 text-white'
+                              ? 'bg-[#F26B2A]/10 text-[#F26B2A]'
+                              : 'hover:bg-white/[0.06] text-white'
                           )}
                         >
-                          <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center text-xs font-bold">
+                          <div className="w-8 h-8 rounded-lg bg-white/[0.08] flex items-center justify-center text-xs font-bold">
                             {getInitials(store.name)}
                           </div>
                           <div className="flex-1 text-left min-w-0">
                             <p className="text-sm font-medium truncate">{store.name}</p>
-                            <p className="text-xs text-dark-400 truncate">{store.domain}</p>
+                            <p className="text-xs text-dark-500 truncate">{store.domain}</p>
                           </div>
                           {currentStore?.id === store.id && (
-                            <Check className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                            <Check className="w-4 h-4 text-[#F26B2A] flex-shrink-0" weight="bold" />
                           )}
                         </button>
                       ))}
@@ -335,17 +354,16 @@ export function Sidebar() {
                   </div>
                 )}
 
-                {/* Add Store Button */}
                 <div className="p-2">
                   <button
                     onClick={() => {
                       setAddStoreModalOpen(true)
                       setStoreDropdownOpen(false)
                     }}
-                    className="w-full flex items-center gap-3 p-2 rounded-lg text-primary-400 hover:bg-primary-500/10 transition-colors"
+                    className="w-full flex items-center gap-3 p-2 rounded-lg text-[#F26B2A] hover:bg-[#F26B2A]/10 transition-all duration-200"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
-                      <Plus className="w-4 h-4" />
+                    <div className="w-8 h-8 rounded-lg bg-[#F26B2A]/15 flex items-center justify-center">
+                      <Plus className="w-4 h-4" weight="bold" />
                     </div>
                     <span className="text-sm font-medium">Adicionar Nova Loja</span>
                   </button>
@@ -364,15 +382,14 @@ export function Sidebar() {
               }
             }}
             className={cn(
-              'w-full flex items-center gap-3 p-3 rounded-xl transition-all',
-              'bg-dark-800/50 border border-dark-700/50 hover:border-dark-600',
-              storeDropdownOpen && 'border-primary-500/50 bg-dark-800',
+              'w-full flex items-center gap-3 p-2.5 rounded-xl transition-all duration-200',
+              'bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.06]',
+              storeDropdownOpen && 'border-[#F26B2A]/30 bg-[#F26B2A]/5',
               sidebarCollapsed && 'justify-center'
             )}
           >
-            {/* Store Avatar */}
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-              {currentStore ? getInitials(currentStore.name) : <Store className="w-5 h-5" />}
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center text-white font-bold text-xs flex-shrink-0 shadow-lg shadow-[#F26B2A]/20">
+              {currentStore ? getInitials(currentStore.name) : <Storefront className="w-4 h-4" weight="fill" />}
             </div>
 
             <AnimatePresence>
@@ -386,7 +403,7 @@ export function Sidebar() {
                   <p className="text-sm font-semibold text-white truncate">
                     {currentStore?.name || 'Selecionar Loja'}
                   </p>
-                  <p className="text-xs text-dark-400 truncate">
+                  <p className="text-[11px] text-dark-500 truncate">
                     {currentStore?.domain || 'Nenhuma loja conectada'}
                   </p>
                 </motion.div>
@@ -394,11 +411,12 @@ export function Sidebar() {
             </AnimatePresence>
 
             {!sidebarCollapsed && (
-              <ChevronDown
+              <CaretDown
                 className={cn(
-                  'w-4 h-4 text-dark-400 transition-transform flex-shrink-0',
+                  'w-3.5 h-3.5 text-dark-500 transition-transform flex-shrink-0',
                   storeDropdownOpen && 'rotate-180'
                 )}
+                weight="bold"
               />
             )}
           </button>
@@ -416,31 +434,28 @@ export function Sidebar() {
 }
 
 // ============================================
-// Header Component (com Notificações Reais)
+// Header Component
 // ============================================
 
-const POLLING_INTERVAL = 30000 // 30 segundos
+const POLLING_INTERVAL = 30000
 
 export function Header() {
   const router = useRouter()
-  const { sidebarCollapsed, toggleSidebar } = useUIStore() // ✅ MODIFICADO: Adicionar toggleSidebar
+  const { sidebarCollapsed, toggleSidebar } = useUIStore()
   const { currentStore } = useStoreStore()
   const { user, signOut } = useAuthStore()
-  
-  // Notifications state
+
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loadingNotifications, setLoadingNotifications] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // User data
   const userName = user?.name || user?.email?.split('@')[0] || 'Usuário'
-  const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+  const userInitials = userName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
   const userRole = user?.role || 'admin'
   const userAvatar = user?.avatar_url
 
-  // User menu state
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [agents, setAgents] = useState<Array<{
@@ -454,12 +469,10 @@ export function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
-  // Set mounted on client side (required for Portal)
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Fetch agents when menu opens
   const fetchAgents = useCallback(async () => {
     if (!user?.organization_id) return
     setLoadingAgents(true)
@@ -476,7 +489,6 @@ export function Header() {
     }
   }, [user?.organization_id])
 
-  // Handle logout
   const handleLogout = async () => {
     setIsLoggingOut(true)
     try {
@@ -494,7 +506,6 @@ export function Header() {
     }
   }
 
-  // Get role label
   const getRoleLabel = (role?: string) => {
     switch (role) {
       case 'admin': return 'Administrador'
@@ -504,7 +515,6 @@ export function Header() {
     }
   }
 
-  // Close user menu on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -515,24 +525,16 @@ export function Header() {
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
-  // Fetch agents when menu opens
   useEffect(() => {
     if (userMenuOpen && user?.organization_id) {
       fetchAgents()
     }
   }, [userMenuOpen, user?.organization_id, fetchAgents])
 
-  // ============================================
-  // Load notifications from API
-  // ============================================
   const loadNotifications = useCallback(async () => {
     if (!user?.organization_id) return
-    
     try {
-      const res = await fetch(
-        `/api/notifications?limit=15`
-      )
-      
+      const res = await fetch(`/api/notifications?limit=15`)
       if (res.ok) {
         const data = await res.json()
         setNotifications(data.notifications ?? [])
@@ -543,18 +545,15 @@ export function Header() {
     }
   }, [user?.organization_id])
 
-  // Initial load + polling
   useEffect(() => {
     if (user?.organization_id) {
       setLoadingNotifications(true)
       loadNotifications().finally(() => setLoadingNotifications(false))
-      
       const interval = setInterval(loadNotifications, POLLING_INTERVAL)
       return () => clearInterval(interval)
     }
   }, [user?.organization_id, loadNotifications])
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -565,24 +564,15 @@ export function Header() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // ============================================
-  // Notification actions
-  // ============================================
   const markAsRead = async (ids: string[]) => {
     if (!user?.organization_id || ids.length === 0) return
-    
     try {
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          notificationIds: ids,
-        }),
+        body: JSON.stringify({ notificationIds: ids }),
       })
-      
-      setNotifications(prev => 
-        prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n)
-      )
+      setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n))
       setUnreadCount(prev => Math.max(0, prev - ids.length))
     } catch (err) {
       console.error('Error marking as read:', err)
@@ -591,16 +581,12 @@ export function Header() {
 
   const markAllAsRead = async () => {
     if (!user?.organization_id) return
-    
     try {
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          markAllRead: true,
-        }),
+        body: JSON.stringify({ markAllRead: true }),
       })
-      
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       setUnreadCount(0)
     } catch (err) {
@@ -623,45 +609,39 @@ export function Header() {
     }
   }
 
-  // ============================================
-  // Helper functions
-  // ============================================
   const getNotificationIcon = (notification: Notification) => {
     const type = notification.data?.integration_type
-    
     if (type === 'shopify') {
-      return <ShoppingBag className="w-4 h-4 text-[#95BF47]" />
+      return <ShoppingBag className="w-4 h-4 text-[#95BF47]" weight="fill" />
     }
     if (type === 'whatsapp') {
-      return <MessageSquare className="w-4 h-4 text-[#25D366]" />
+      return <ChatCircle className="w-4 h-4 text-[#25D366]" weight="fill" />
     }
-    
     switch (notification.priority) {
       case 'urgent':
-        return <AlertCircle className="w-4 h-4 text-red-500" />
+        return <WarningCircle className="w-4 h-4 text-red-500" weight="fill" />
       case 'high':
-        return <AlertTriangle className="w-4 h-4 text-amber-500" />
+        return <Warning className="w-4 h-4 text-amber-500" weight="fill" />
       default:
-        return <Info className="w-4 h-4 text-blue-500" />
+        return <Info className="w-4 h-4 text-blue-500" weight="fill" />
     }
   }
 
   return (
     <header
       className={cn(
-        'fixed top-0 right-0 h-16 bg-dark-950/80 backdrop-blur-xl border-b border-dark-700/50 z-30 flex items-center justify-between px-4 lg:px-6 transition-all duration-300',
-        // ✅ MODIFICADO: Mobile sempre left-0, desktop depende do sidebar
+        'fixed top-0 right-0 h-16 bg-[#0F0F0F]/80 backdrop-blur-xl border-b border-white/[0.06] z-30 flex items-center justify-between px-4 lg:px-6 transition-all duration-300',
         'left-0',
-        'lg:left-20',
-        !sidebarCollapsed && 'lg:left-[280px]'
+        'lg:left-[72px]',
+        !sidebarCollapsed && 'lg:left-[260px]'
       )}
     >
-      {/* ✅ NOVO: Botão Hamburger (Mobile only) */}
+      {/* Mobile hamburger */}
       <button
         onClick={toggleSidebar}
-        className="lg:hidden p-2 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-dark-100 transition-colors mr-2"
+        className="lg:hidden p-2 rounded-lg hover:bg-white/[0.06] text-dark-400 hover:text-white transition-colors mr-2"
       >
-        <Menu className="w-5 h-5" />
+        <List className="w-5 h-5" weight="bold" />
       </button>
 
       {/* Search */}
@@ -670,7 +650,7 @@ export function Header() {
           <input
             type="text"
             placeholder="Buscar em tudo..."
-            className="w-full bg-dark-800/50 border border-dark-700 rounded-xl px-4 py-2.5 pl-10 text-sm text-dark-100 placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+            className="w-full bg-white/[0.04] border border-white/[0.06] rounded-xl px-4 py-2.5 pl-10 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-[#F26B2A]/40 focus:ring-2 focus:ring-[#F26B2A]/15 transition-all duration-200"
           />
           <svg
             className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500"
@@ -678,30 +658,25 @@ export function Header() {
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dark-500 bg-dark-700 px-2 py-1 rounded">
+          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-dark-500 bg-white/[0.06] px-1.5 py-0.5 rounded border border-white/[0.06]">
             ⌘K
           </kbd>
         </div>
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         {/* Notifications */}
         <div className="relative" ref={dropdownRef}>
-          <button 
+          <button
             onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="relative p-2 rounded-xl hover:bg-dark-800 text-dark-400 hover:text-dark-100 transition-colors"
+            className="relative p-2 rounded-xl hover:bg-white/[0.06] text-dark-400 hover:text-white transition-colors"
           >
-            <Bell className="w-5 h-5" />
+            <Bell className="w-5 h-5" weight={notificationsOpen ? 'fill' : 'regular'} />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-primary-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-[#F26B2A] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
@@ -714,61 +689,57 @@ export function Header() {
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="absolute right-0 top-full mt-2 w-96 bg-dark-900 border border-dark-700 rounded-xl shadow-2xl z-50 overflow-hidden"
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 top-full mt-2 w-96 bg-[#1A1A1A] border border-white/[0.08] rounded-xl shadow-2xl z-50 overflow-hidden"
               >
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-dark-700">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-white">Notificações</h3>
+                    <h3 className="font-semibold text-white font-display">Notificações</h3>
                     {unreadCount > 0 && (
-                      <span className="px-2 py-0.5 bg-primary-500/20 text-primary-400 text-xs font-medium rounded-full">
+                      <span className="px-2 py-0.5 bg-[#F26B2A]/15 text-[#F26B2A] text-xs font-medium rounded-full">
                         {unreadCount} nova{unreadCount > 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
                   {unreadCount > 0 && (
-                    <button 
+                    <button
                       onClick={markAllAsRead}
-                      className="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
+                      className="text-xs text-[#F26B2A] hover:text-[#F5A623] transition-colors flex items-center gap-1"
                     >
-                      <CheckCheck className="w-3.5 h-3.5" />
+                      <CheckCircle className="w-3.5 h-3.5" weight="fill" />
                       Marcar todas
                     </button>
                   )}
                 </div>
 
-                {/* Notifications List */}
+                {/* List */}
                 <div className="max-h-96 overflow-y-auto">
                   {loadingNotifications ? (
                     <div className="flex items-center justify-center py-12">
-                      <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
+                      <Spinner className="w-6 h-6 animate-spin text-dark-400" />
                     </div>
                   ) : notifications.length === 0 ? (
                     <div className="px-4 py-12 text-center">
-                      <div className="w-12 h-12 bg-dark-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Bell className="w-6 h-6 text-dark-500" />
+                      <div className="w-12 h-12 bg-white/[0.04] rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Bell className="w-6 h-6 text-dark-500" weight="duotone" />
                       </div>
                       <p className="text-sm text-dark-400">Nenhuma notificação</p>
-                      <p className="text-xs text-dark-500 mt-1">
-                        Você será notificado sobre eventos importantes
-                      </p>
+                      <p className="text-xs text-dark-500 mt-1">Você será notificado sobre eventos importantes</p>
                     </div>
                   ) : (
                     notifications.map((notification) => (
                       <div
                         key={notification.id}
                         className={cn(
-                          'px-4 py-3 border-b border-dark-700/50 hover:bg-dark-800/50 transition-colors',
-                          !notification.read && 'bg-primary-500/5'
+                          'px-4 py-3 border-b border-white/[0.04] hover:bg-white/[0.04] transition-colors',
+                          !notification.read && 'bg-[#F26B2A]/[0.03]'
                         )}
                       >
                         <div className="flex items-start gap-3">
-                          {/* Icon */}
                           <div className="flex-shrink-0 mt-0.5">
                             {getNotificationIcon(notification)}
                           </div>
-                          
-                          {/* Content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
                               <p className={cn(
@@ -777,57 +748,38 @@ export function Header() {
                               )}>
                                 {notification.title}
                               </p>
-                              
-                              {/* Actions */}
                               <div className="flex items-center gap-1 flex-shrink-0">
                                 {!notification.read && (
                                   <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      markAsRead([notification.id])
-                                    }}
+                                    onClick={(e) => { e.stopPropagation(); markAsRead([notification.id]) }}
                                     className="p-1 text-dark-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
                                     title="Marcar como lida"
                                   >
-                                    <Check className="w-3.5 h-3.5" />
+                                    <Check className="w-3.5 h-3.5" weight="bold" />
                                   </button>
                                 )}
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    deleteNotification(notification.id)
-                                  }}
+                                  onClick={(e) => { e.stopPropagation(); deleteNotification(notification.id) }}
                                   className="p-1 text-dark-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                                   title="Excluir"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash className="w-3.5 h-3.5" weight="bold" />
                                 </button>
                               </div>
                             </div>
-                            
-                            <p className="text-xs text-dark-400 mt-0.5 line-clamp-2">
-                              {notification.message}
-                            </p>
-                            
+                            <p className="text-xs text-dark-400 mt-0.5 line-clamp-2">{notification.message}</p>
                             <div className="flex items-center justify-between mt-2">
                               <p className="text-xs text-dark-500">
-                                {formatDistanceToNow(new Date(notification.created_at), {
-                                  addSuffix: true,
-                                  locale: ptBR,
-                                })}
+                                {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true, locale: ptBR })}
                               </p>
-                              
                               {notification.action_url && (
                                 <a
                                   href={notification.action_url}
-                                  onClick={() => {
-                                    markAsRead([notification.id])
-                                    setNotificationsOpen(false)
-                                  }}
-                                  className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1 transition-colors"
+                                  onClick={() => { markAsRead([notification.id]); setNotificationsOpen(false) }}
+                                  className="text-xs text-[#F26B2A] hover:text-[#F5A623] flex items-center gap-1 transition-colors"
                                 >
                                   {notification.action_label ?? 'Ver mais'}
-                                  <ExternalLink className="w-3 h-3" />
+                                  <ArrowSquareOut className="w-3 h-3" weight="bold" />
                                 </a>
                               )}
                             </div>
@@ -840,14 +792,14 @@ export function Header() {
 
                 {/* Footer */}
                 {notifications.length > 0 && (
-                  <div className="px-4 py-3 border-t border-dark-700">
-                    <a 
+                  <div className="px-4 py-3 border-t border-white/[0.06]">
+                    <a
                       href="/notifications"
                       onClick={() => setNotificationsOpen(false)}
-                      className="w-full text-center text-sm text-primary-400 hover:text-primary-300 transition-colors flex items-center justify-center gap-1"
+                      className="w-full text-center text-sm text-[#F26B2A] hover:text-[#F5A623] transition-colors flex items-center justify-center gap-1"
                     >
                       Ver todas as notificações
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      <ArrowSquareOut className="w-3.5 h-3.5" weight="bold" />
                     </a>
                   </div>
                 )}
@@ -856,83 +808,63 @@ export function Header() {
           </AnimatePresence>
         </div>
 
-        {/* User Avatar with Dropdown Menu */}
-        <div className="relative flex items-center gap-3 pl-4 border-l border-dark-700">
+        {/* User Avatar with Dropdown */}
+        <div className="relative flex items-center gap-3 pl-3 border-l border-white/[0.06]">
           <button
             ref={buttonRef}
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="flex items-center gap-3 p-1 rounded-lg hover:bg-dark-800/50 transition-colors"
+            className="flex items-center gap-3 p-1 rounded-lg hover:bg-white/[0.04] transition-colors"
           >
-            <div className="text-right">
+            <div className="text-right hidden sm:block">
               <p className="text-sm font-medium text-white">{userName}</p>
-              <p className="text-xs text-dark-400">{getRoleLabel(userRole)}</p>
+              <p className="text-[11px] text-dark-500">{getRoleLabel(userRole)}</p>
             </div>
             {userAvatar ? (
-              <img 
-                src={userAvatar} 
-                alt={userName}
-                className="w-9 h-9 rounded-lg object-cover"
-              />
+              <img src={userAvatar} alt={userName} className="w-9 h-9 rounded-lg object-cover" />
             ) : (
-              <Avatar
-                fallback={userInitials}
-                size="sm"
-                status="online"
-              />
+              <Avatar fallback={userInitials} size="sm" status="online" />
             )}
-            <ChevronDown className={cn(
-              "w-4 h-4 text-dark-400 transition-transform",
-              userMenuOpen && "rotate-180"
-            )} />
+            <CaretDown className={cn("w-3.5 h-3.5 text-dark-500 transition-transform", userMenuOpen && "rotate-180")} weight="bold" />
           </button>
 
-          {/* User Menu Dropdown - Rendered via Portal */}
+          {/* User Menu Dropdown */}
           {mounted && userMenuOpen && createPortal(
             <div className="fixed inset-0 z-[9999]">
-              {/* Backdrop */}
-              <div 
-                className="absolute inset-0" 
-                onClick={() => setUserMenuOpen(false)} 
-              />
-              {/* Menu */}
+              <div className="absolute inset-0" onClick={() => setUserMenuOpen(false)} />
               <motion.div
                 ref={userMenuRef}
                 initial={{ opacity: 0, y: -10, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.96 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-6 top-16 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-2xl overflow-hidden"
+                className="absolute right-6 top-16 w-72 bg-[#1A1A1A] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* User Info Header */}
-                <div className="p-4 border-b border-dark-700">
+                {/* User Info */}
+                <div className="p-4 border-b border-white/[0.06]">
                   <div className="flex items-center gap-3">
                     {userAvatar ? (
-                      <img 
-                        src={userAvatar} 
-                        alt={userName}
-                        className="w-12 h-12 rounded-xl object-cover"
-                      />
+                      <img src={userAvatar} alt={userName} className="w-12 h-12 rounded-xl object-cover" />
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center">
                         <span className="text-white font-bold text-lg">{userInitials}</span>
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white truncate">{userName}</p>
-                      <p className="text-xs text-dark-400 truncate">{user?.email}</p>
-                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-primary-500/20 text-primary-400">
+                      <p className="text-xs text-dark-500 truncate">{user?.email}</p>
+                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-[#F26B2A]/15 text-[#F26B2A]">
                         {getRoleLabel(userRole)}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Agents Section */}
+                {/* Agents */}
                 {agents.length > 0 && (
-                  <div className="px-3 py-2 border-b border-dark-700">
+                  <div className="px-3 py-2 border-b border-white/[0.06]">
                     <div className="flex items-center gap-2 px-1 mb-2">
-                      <Users className="w-3.5 h-3.5 text-dark-500" />
+                      <UsersThree className="w-3.5 h-3.5 text-dark-500" weight="duotone" />
                       <span className="text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
                         Agentes ({agents.filter(a => a.status === 'online').length} online)
                       </span>
@@ -940,34 +872,25 @@ export function Header() {
                     <div className="space-y-0.5 max-h-32 overflow-y-auto">
                       {loadingAgents ? (
                         <div className="flex items-center justify-center py-2">
-                          <Loader2 className="w-4 h-4 animate-spin text-dark-500" />
+                          <Spinner className="w-4 h-4 animate-spin text-dark-500" />
                         </div>
                       ) : (
                         agents.map((agent) => (
-                          <div
-                            key={agent.id}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
-                          >
+                          <div key={agent.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg">
                             <div className="relative">
                               {agent.avatar_url ? (
-                                <img 
-                                  src={agent.avatar_url} 
-                                  alt={agent.name}
-                                  className="w-6 h-6 rounded-full object-cover"
-                                />
+                                <img src={agent.avatar_url} alt={agent.name} className="w-6 h-6 rounded-full object-cover" />
                               ) : (
-                                <div className="w-6 h-6 rounded-full bg-dark-600 flex items-center justify-center">
-                                  <span className="text-[10px] text-dark-400">
-                                    {agent.name?.substring(0, 2).toUpperCase()}
-                                  </span>
+                                <div className="w-6 h-6 rounded-full bg-white/[0.08] flex items-center justify-center">
+                                  <span className="text-[10px] text-dark-400">{agent.name?.substring(0, 2).toUpperCase()}</span>
                                 </div>
                               )}
                               <div className={cn(
-                                'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-dark-800',
+                                'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#1A1A1A]',
                                 agent.status === 'online' && 'bg-green-500',
                                 agent.status === 'away' && 'bg-yellow-500',
                                 agent.status === 'busy' && 'bg-red-500',
-                                agent.status === 'offline' && 'bg-dark-500',
+                                agent.status === 'offline' && 'bg-dark-600',
                               )} />
                             </div>
                             <span className="text-xs text-dark-300 truncate flex-1">{agent.name}</span>
@@ -978,7 +901,7 @@ export function Header() {
                               agent.status === 'busy' && 'text-red-400',
                               agent.status === 'offline' && 'text-dark-500',
                             )}>
-                              {agent.status === 'online' ? 'Online' : 
+                              {agent.status === 'online' ? 'Online' :
                                agent.status === 'away' ? 'Ausente' :
                                agent.status === 'busy' ? 'Ocupado' : 'Offline'}
                             </span>
@@ -991,40 +914,28 @@ export function Header() {
 
                 {/* Menu Options */}
                 <div className="py-2">
-                  <Link
-                    href="/settings?tab=profile"
-                    onClick={() => setUserMenuOpen(false)}
-                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
-                  >
-                    <User className="w-4 h-4 text-dark-400" />
+                  <Link href="/settings?tab=profile" onClick={() => setUserMenuOpen(false)} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-white/[0.04] transition-colors">
+                    <User className="w-4 h-4 text-dark-400" weight="duotone" />
                     <span className="text-sm text-dark-300">Meu Perfil</span>
                   </Link>
-                  <Link
-                    href="/settings?tab=store"
-                    onClick={() => setUserMenuOpen(false)}
-                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
-                  >
-                    <Building2 className="w-4 h-4 text-dark-400" />
+                  <Link href="/settings?tab=store" onClick={() => setUserMenuOpen(false)} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-white/[0.04] transition-colors">
+                    <Buildings className="w-4 h-4 text-dark-400" weight="duotone" />
                     <span className="text-sm text-dark-300">Configurações da Loja</span>
                   </Link>
-                  <Link
-                    href="/settings?tab=integrations"
-                    onClick={() => setUserMenuOpen(false)}
-                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
-                  >
-                    <Settings className="w-4 h-4 text-dark-400" />
+                  <Link href="/integrations" onClick={() => setUserMenuOpen(false)} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-white/[0.04] transition-colors">
+                    <Plugs className="w-4 h-4 text-dark-400" weight="duotone" />
                     <span className="text-sm text-dark-300">Integrações</span>
                   </Link>
                 </div>
 
                 {/* Logout */}
-                <div className="px-4 py-2 border-t border-dark-700">
+                <div className="px-4 py-2 border-t border-white/[0.06]">
                   <button
                     onClick={handleLogout}
                     disabled={isLoggingOut}
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-red-500/10 transition-colors text-red-400 disabled:opacity-50"
                   >
-                    <LogOut className="w-4 h-4" />
+                    <SignOut className="w-4 h-4" weight="bold" />
                     <span className="text-sm">{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
                   </button>
                 </div>
