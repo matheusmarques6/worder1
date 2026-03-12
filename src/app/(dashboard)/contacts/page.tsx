@@ -38,15 +38,15 @@ export default function ContactsPage() {
   const storeId = useHydratedStoreId()
   const { user } = useAuthStore()
   const organizationId = user?.organization_id
-  const { contacts, loading, fetchContacts } = useContacts(storeId)
+  const { contacts, loading, refetch } = useContacts(storeId)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
 
   useEffect(() => {
     if (storeId && organizationId) {
-      fetchContacts()
+      refetch()
     }
-  }, [storeId, organizationId, fetchContacts])
+  }, [storeId, organizationId, refetch])
 
   const filteredContacts = contacts?.filter((c: any) =>
     !search ||
