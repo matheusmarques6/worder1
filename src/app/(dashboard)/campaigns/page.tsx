@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
   Megaphone,
@@ -58,10 +59,10 @@ export default function CampaignsPage() {
           <h1 className="text-2xl font-bold font-display text-white">Campanhas</h1>
           <p className="text-sm text-dark-400 mt-1">Crie e gerencie campanhas multicanal</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20">
+        <Link href="/campaigns/create" className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20">
           <Plus className="w-4 h-4" weight="bold" />
           Criar Campanha
-        </button>
+        </Link>
       </div>
 
       {/* KPIs */}
@@ -130,7 +131,7 @@ export default function CampaignsPage() {
           </thead>
           <tbody>
             {mockCampaigns.map((campaign) => (
-              <tr key={campaign.id} className="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer">
+              <tr key={campaign.id} onClick={() => window.location.href = `/campaigns/${campaign.id}`} className="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer">
                 <td className="px-5 py-4 text-sm font-medium text-white">{campaign.name}</td>
                 <td className="px-5 py-4">{channelIcons[campaign.channel]}</td>
                 <td className="px-5 py-4">

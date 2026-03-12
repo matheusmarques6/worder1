@@ -392,6 +392,13 @@ export default function AutomationsPage() {
           <Plus className="w-4 h-4" />
           Nova Automação
         </button>
+        <a
+          href="/automations/templates"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-dark-800/60 border border-dark-700/50 text-dark-300 hover:text-white hover:border-dark-600 font-medium transition-colors"
+        >
+          <LayoutGrid className="w-4 h-4" />
+          Templates
+        </a>
       </div>
 
       {/* Stats */}
