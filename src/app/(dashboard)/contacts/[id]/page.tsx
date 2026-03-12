@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -12,126 +12,189 @@ import {
   Calendar,
   Tag,
   PencilSimple,
-  Trash,
-  DotsThree,
   Plus,
-  ChatCircle,
   ShoppingCart,
   Eye,
   PaperPlaneTilt,
   CurrencyDollar,
   Clock,
   CheckCircle,
-  XCircle,
-  Star,
   Export,
-  Copy,
   UserCircle,
   ListBullets,
-  Note,
   ClipboardText,
   TrendUp,
-  Package,
-  CreditCard,
-  ArrowSquareOut,
+  ChatCircle,
   Warning,
+  Lightning,
+  Trash,
+  ArrowsClockwise,
+  Megaphone,
+  CursorClick,
 } from '@phosphor-icons/react'
 import Link from 'next/link'
+import { useInboxContact } from '@/hooks/useInboxContact'
+import { formatDistanceToNow } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+import type { InboxContact, InboxActivity, InboxNote, InboxTask, InboxOrder, InboxDeal } from '@/types/inbox'
 
-const mockContact = {
-  id: '1',
-  name: 'Maria Silva',
-  email: 'maria.silva@email.com',
-  phone: '+55 11 99999-1234',
-  whatsapp: '+55 11 99999-1234',
-  avatar: null,
-  initials: 'MS',
-  status: 'active',
-  source: 'Shopify',
-  createdAt: '2025-08-15T10:30:00Z',
-  lastActivity: '2026-03-10T14:22:00Z',
-  city: 'São Paulo, SP',
-  tags: [
-    { name: 'VIP', color: 'bg-yellow-500/10 text-yellow-400' },
-    { name: 'Black Friday', color: 'bg-purple-500/10 text-purple-400' },
-    { name: 'Recorrente', color: 'bg-emerald-500/10 text-emerald-400' },
-  ],
-  properties: [
-    { label: 'Data de Nascimento', value: '15/03/1990' },
-    { label: 'Gênero', value: 'Feminino' },
-    { label: 'Empresa', value: 'Tech Solutions' },
-    { label: 'Cargo', value: 'Gerente de Marketing' },
-  ],
-  lists: [
-    { name: 'Todos os Contatos', count: 12450 },
-    { name: 'Clientes VIP', count: 340 },
-    { name: 'Black Friday 2025', count: 8200 },
-  ],
-  metrics: {
-    totalOrders: 12,
-    totalSpent: 4890.50,
-    avgOrderValue: 407.54,
-    lastOrderDate: '2026-03-05',
-    emailsReceived: 48,
-    emailsOpened: 38,
-    emailsClicked: 22,
-    openRate: 79.2,
-    clickRate: 45.8,
-  },
+const activityIconMap: Record<string, { icon: React.ComponentType<any>; color: string; bgColor: string }> = {
+  conversation_started: { icon: ChatCircle, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  conversation_closed: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  message_sent: { icon: PaperPlaneTilt, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  message_received: { icon: ChatCircle, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
+  tag_added: { icon: Tag, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' },
+  tag_removed: { icon: Tag, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
+  deal_created: { icon: CurrencyDollar, color: 'text-[#F26B2A]', bgColor: 'bg-[#F26B2A]/10' },
+  deal_won: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  deal_lost: { icon: Warning, color: 'text-red-400', bgColor: 'bg-red-500/10' },
+  deal_stage_changed: { icon: TrendUp, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  order_placed: { icon: ShoppingCart, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  order_fulfilled: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  cart_abandoned: { icon: ShoppingCart, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' },
+  cart_recovered: { icon: ShoppingCart, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  task_created: { icon: ClipboardText, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
+  task_completed: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  note_added: { icon: PencilSimple, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
+  comment_added: { icon: PencilSimple, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
+  contact_created: { icon: UserCircle, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  contact_updated: { icon: PencilSimple, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
+  campaign_sent: { icon: Megaphone, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  campaign_clicked: { icon: CursorClick, color: 'text-[#F26B2A]', bgColor: 'bg-[#F26B2A]/10' },
+  bot_interaction: { icon: Lightning, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
+  blocked: { icon: Warning, color: 'text-red-400', bgColor: 'bg-red-500/10' },
 }
 
-const timeline = [
-  { id: '1', type: 'email_opened', title: 'Abriu e-mail "Novidades de Março"', time: '2h atrás', icon: Eye, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-  { id: '2', type: 'purchase', title: 'Comprou "Tênis Runner Pro"', subtitle: 'Pedido #4521 · R$ 349,90', time: '2 dias atrás', icon: ShoppingCart, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-  { id: '3', type: 'email_clicked', title: 'Clicou no link do e-mail "Esquenta Black Friday"', time: '5 dias atrás', icon: CurrencyDollar, color: 'text-[#F26B2A]', bgColor: 'bg-[#F26B2A]/10' },
-  { id: '4', type: 'page_view', title: 'Visitou página /colecao/tenis', time: '5 dias atrás', icon: Eye, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
-  { id: '5', type: 'email_sent', title: 'Recebeu e-mail "Esquenta Black Friday"', time: '6 dias atrás', icon: PaperPlaneTilt, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-  { id: '6', type: 'whatsapp', title: 'Mensagem WhatsApp enviada', subtitle: 'Confirmação de pedido #4480', time: '1 semana atrás', icon: WhatsappLogo, color: 'text-[#25D366]', bgColor: 'bg-[#25D366]/10' },
-  { id: '7', type: 'purchase', title: 'Comprou "Camiseta Premium Algodão" (x2)', subtitle: 'Pedido #4480 · R$ 179,80', time: '1 semana atrás', icon: ShoppingCart, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-  { id: '8', type: 'tag_added', title: 'Tag "VIP" adicionada automaticamente', subtitle: 'Automação: Clientes com 10+ compras', time: '2 semanas atrás', icon: Tag, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' },
-  { id: '9', type: 'email_opened', title: 'Abriu e-mail "Newsletter Fevereiro"', time: '3 semanas atrás', icon: Eye, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-  { id: '10', type: 'form_submit', title: 'Preencheu formulário "Pesquisa de Satisfação"', subtitle: 'NPS: 9/10', time: '1 mês atrás', icon: ClipboardText, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
-]
+const defaultActivityIcon = { icon: Eye, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' }
 
-const orders = [
-  { id: '#4521', date: '05/03/2026', total: 349.90, status: 'delivered', items: 1 },
-  { id: '#4480', date: '28/02/2026', total: 179.80, status: 'delivered', items: 2 },
-  { id: '#4312', date: '15/01/2026', total: 459.90, status: 'delivered', items: 1 },
-  { id: '#4156', date: '20/12/2025', total: 890.50, status: 'delivered', items: 4 },
-  { id: '#3980', date: '10/11/2025', total: 129.90, status: 'delivered', items: 1 },
+const tagColors = [
+  'bg-yellow-500/10 text-yellow-400',
+  'bg-purple-500/10 text-purple-400',
+  'bg-emerald-500/10 text-emerald-400',
+  'bg-blue-500/10 text-blue-400',
+  'bg-red-500/10 text-red-400',
+  'bg-pink-500/10 text-pink-400',
+  'bg-cyan-500/10 text-cyan-400',
 ]
-
-const notes = [
-  { id: '1', text: 'Cliente preferencial — sempre compra em promoções. Gosta de tênis e camisetas.', author: 'Ana Costa', date: '10/03/2026' },
-  { id: '2', text: 'Solicitou troca do pedido #4312, resolvido com sucesso.', author: 'Carlos Lima', date: '18/01/2026' },
-]
-
-const statusConfig: Record<string, { label: string; color: string }> = {
-  active: { label: 'Ativo', color: 'bg-emerald-500/10 text-emerald-400' },
-  inactive: { label: 'Inativo', color: 'bg-zinc-500/10 text-zinc-400' },
-  unsubscribed: { label: 'Descadastrado', color: 'bg-red-500/10 text-red-400' },
-  bounced: { label: 'Bounced', color: 'bg-yellow-500/10 text-yellow-400' },
-}
 
 const orderStatusConfig: Record<string, { label: string; color: string }> = {
-  delivered: { label: 'Entregue', color: 'text-emerald-400' },
-  shipped: { label: 'Enviado', color: 'text-blue-400' },
+  paid: { label: 'Pago', color: 'text-emerald-400' },
+  fulfilled: { label: 'Entregue', color: 'text-emerald-400' },
+  partially_fulfilled: { label: 'Parcial', color: 'text-yellow-400' },
   pending: { label: 'Pendente', color: 'text-yellow-400' },
+  refunded: { label: 'Reembolsado', color: 'text-red-400' },
   cancelled: { label: 'Cancelado', color: 'text-red-400' },
+  authorized: { label: 'Autorizado', color: 'text-blue-400' },
+}
+
+function getContactName(c: InboxContact): string {
+  if (c.full_name) return c.full_name
+  if (c.name) return c.name
+  if (c.first_name || c.last_name) return `${c.first_name || ''} ${c.last_name || ''}`.trim()
+  if (c.profile_name) return c.profile_name
+  return c.email || c.phone_number || 'Sem nome'
+}
+
+function getInitials(c: InboxContact): string {
+  const name = getContactName(c)
+  const parts = name.split(' ').filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  return (parts[0]?.[0] || '?').toUpperCase()
+}
+
+function getCity(c: InboxContact): string | null {
+  if (!c.address) return null
+  const parts = [c.address.city, c.address.state].filter(Boolean)
+  return parts.length > 0 ? parts.join(', ') : null
 }
 
 export default function ContactDetailPage() {
   const router = useRouter()
   const params = useParams()
+  const contactId = params.id as string
   const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'tasks'>('timeline')
-  const contact = mockContact
-  const status = statusConfig[contact.status] || statusConfig.active
+  const [noteText, setNoteText] = useState('')
+
+  const {
+    contact,
+    notes,
+    activities,
+    orders,
+    deals,
+    tasks,
+    isLoading,
+    error,
+    fetchContact,
+    addNote,
+    deleteNote,
+    addTag,
+    removeTag,
+    createTask,
+    completeTask,
+    deleteTask,
+  } = useInboxContact()
+
+  useEffect(() => {
+    if (contactId) {
+      fetchContact(contactId)
+    }
+  }, [contactId, fetchContact])
+
+  const handleAddNote = async () => {
+    if (!noteText.trim() || !contactId) return
+    try {
+      await addNote(contactId, noteText.trim())
+      setNoteText('')
+    } catch (err) {
+      console.error('Error adding note:', err)
+    }
+  }
 
   const tabs = [
     { id: 'timeline' as const, label: 'Timeline' },
-    { id: 'notes' as const, label: 'Notas' },
-    { id: 'tasks' as const, label: 'Tarefas' },
+    { id: 'notes' as const, label: `Notas${notes.length > 0 ? ` (${notes.length})` : ''}` },
+    { id: 'tasks' as const, label: `Tarefas${tasks.length > 0 ? ` (${tasks.length})` : ''}` },
   ]
+
+  // Loading state
+  if (isLoading && !contact) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <ArrowsClockwise size={32} className="animate-spin text-zinc-500" />
+      </div>
+    )
+  }
+
+  // Error state
+  if (error && !contact) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <button onClick={() => router.push('/contacts')} className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
+            <ArrowLeft size={18} weight="bold" />
+          </button>
+          <h1 className="text-2xl font-bold font-display text-white">Contato</h1>
+        </div>
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-12 text-center">
+          <Warning size={32} className="text-red-400 mx-auto mb-3" weight="duotone" />
+          <p className="text-sm text-zinc-400">Erro ao carregar contato</p>
+          <p className="text-xs text-zinc-600 mt-1">{error}</p>
+          <button onClick={() => fetchContact(contactId)} className="mt-4 px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-sm">
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!contact) return null
+
+  const contactName = getContactName(contact)
+  const initials = getInitials(contact)
+  const city = getCity(contact)
+  const totalSpent = contact.total_spent || contact.lifetime_value || 0
+  const totalOrders = contact.total_orders || 0
+  const avgOrder = totalOrders > 0 ? totalSpent / totalOrders : 0
 
   return (
     <div className="space-y-6">
@@ -145,8 +208,10 @@ export default function ContactDetailPage() {
             <ArrowLeft size={18} weight="bold" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold font-display text-white">{contact.name}</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">Contato desde {new Date(contact.createdAt).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p>
+            <h1 className="text-2xl font-bold font-display text-white">{contactName}</h1>
+            <p className="text-sm text-zinc-400 mt-0.5">
+              Contato desde {new Date(contact.created_at).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -171,36 +236,61 @@ export default function ContactDetailPage() {
           {/* Avatar & Basic Info */}
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
             <div className="flex flex-col items-center text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center mb-4">
-                <span className="text-2xl font-bold text-white">{contact.initials}</span>
-              </div>
-              <h2 className="text-lg font-bold text-white">{contact.name}</h2>
-              <span className={`mt-2 px-2.5 py-1 rounded-full text-xs font-medium ${status.color}`}>
-                {status.label}
+              {contact.avatar_url || contact.profile_picture_url ? (
+                <img
+                  src={contact.avatar_url || contact.profile_picture_url}
+                  alt={contactName}
+                  className="w-20 h-20 rounded-full object-cover mb-4"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center mb-4">
+                  <span className="text-2xl font-bold text-white">{initials}</span>
+                </div>
+              )}
+              <h2 className="text-lg font-bold text-white">{contactName}</h2>
+              {contact.company && (
+                <p className="text-xs text-zinc-500 mt-0.5">{contact.position ? `${contact.position} · ` : ''}{contact.company}</p>
+              )}
+              <span className={`mt-2 px-2.5 py-1 rounded-full text-xs font-medium ${
+                contact.is_blocked
+                  ? 'bg-red-500/10 text-red-400'
+                  : 'bg-emerald-500/10 text-emerald-400'
+              }`}>
+                {contact.is_blocked ? 'Bloqueado' : 'Ativo'}
               </span>
             </div>
 
             <div className="mt-6 space-y-3">
-              <div className="flex items-center gap-3">
-                <EnvelopeSimple size={16} className="text-zinc-500 flex-shrink-0" />
-                <span className="text-sm text-zinc-300 truncate">{contact.email}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Phone size={16} className="text-zinc-500 flex-shrink-0" />
-                <span className="text-sm text-zinc-300">{contact.phone}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <WhatsappLogo size={16} className="text-[#25D366] flex-shrink-0" />
-                <span className="text-sm text-zinc-300">{contact.whatsapp}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <MapPin size={16} className="text-zinc-500 flex-shrink-0" />
-                <span className="text-sm text-zinc-300">{contact.city}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Calendar size={16} className="text-zinc-500 flex-shrink-0" />
-                <span className="text-sm text-zinc-300">Origem: {contact.source}</span>
-              </div>
+              {contact.email && (
+                <div className="flex items-center gap-3">
+                  <EnvelopeSimple size={16} className="text-zinc-500 flex-shrink-0" />
+                  <span className="text-sm text-zinc-300 truncate">{contact.email}</span>
+                </div>
+              )}
+              {(contact.phone || contact.phone_number) && (
+                <div className="flex items-center gap-3">
+                  <Phone size={16} className="text-zinc-500 flex-shrink-0" />
+                  <span className="text-sm text-zinc-300">{contact.phone || contact.phone_number}</span>
+                </div>
+              )}
+              {(contact.whatsapp || contact.phone_number) && (
+                <div className="flex items-center gap-3">
+                  <WhatsappLogo size={16} className="text-[#25D366] flex-shrink-0" />
+                  <span className="text-sm text-zinc-300">{contact.whatsapp || contact.phone_number}</span>
+                </div>
+              )}
+              {city && (
+                <div className="flex items-center gap-3">
+                  <MapPin size={16} className="text-zinc-500 flex-shrink-0" />
+                  <span className="text-sm text-zinc-300">{city}</span>
+                </div>
+              )}
+              {contact.source && (
+                <div className="flex items-center gap-3">
+                  <Calendar size={16} className="text-zinc-500 flex-shrink-0" />
+                  <span className="text-sm text-zinc-300">Origem: {contact.source}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -215,53 +305,79 @@ export default function ContactDetailPage() {
                 <Plus size={14} className="text-zinc-500" />
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {contact.tags.map((tag) => (
-                <span key={tag.name} className={`px-2.5 py-1 rounded-full text-xs font-medium ${tag.color}`}>
-                  {tag.name}
-                </span>
-              ))}
-            </div>
+            {contact.tags && contact.tags.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {contact.tags.map((tag, i) => (
+                  <span
+                    key={tag}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium ${tagColors[i % tagColors.length]}`}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-600">Nenhuma tag adicionada</p>
+            )}
           </div>
 
-          {/* Properties */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-white">Propriedades</h3>
-              <button className="p-1 rounded hover:bg-zinc-800 transition-colors">
-                <PencilSimple size={14} className="text-zinc-500" />
-              </button>
+          {/* Custom Fields */}
+          {contact.custom_fields && Object.keys(contact.custom_fields).length > 0 && (
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-white">Propriedades</h3>
+                <button className="p-1 rounded hover:bg-zinc-800 transition-colors">
+                  <PencilSimple size={14} className="text-zinc-500" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                {Object.entries(contact.custom_fields).map(([key, value]) => (
+                  <div key={key}>
+                    <p className="text-xs text-zinc-500">{key}</p>
+                    <p className="text-sm text-zinc-300 mt-0.5">{String(value)}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="space-y-3">
-              {contact.properties.map((prop) => (
-                <div key={prop.label}>
-                  <p className="text-xs text-zinc-500">{prop.label}</p>
-                  <p className="text-sm text-zinc-300 mt-0.5">{prop.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
 
-          {/* Lists */}
+          {/* Subscriptions */}
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
               <ListBullets size={14} className="text-[#F26B2A]" />
-              Listas
+              Canais
             </h3>
             <div className="space-y-2">
-              {contact.lists.map((list) => (
-                <div key={list.name} className="flex items-center justify-between py-1.5">
-                  <span className="text-sm text-zinc-300">{list.name}</span>
-                  <span className="text-xs text-zinc-600">{list.count.toLocaleString('pt-BR')}</span>
-                </div>
-              ))}
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-sm text-zinc-300 flex items-center gap-2">
+                  <EnvelopeSimple size={14} className="text-zinc-500" /> E-mail
+                </span>
+                <span className={`text-xs ${contact.is_subscribed_email !== false ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                  {contact.is_subscribed_email !== false ? 'Inscrito' : 'Não inscrito'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-sm text-zinc-300 flex items-center gap-2">
+                  <WhatsappLogo size={14} className="text-[#25D366]" /> WhatsApp
+                </span>
+                <span className={`text-xs ${contact.is_subscribed_whatsapp !== false ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                  {contact.is_subscribed_whatsapp !== false ? 'Inscrito' : 'Não inscrito'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-sm text-zinc-300 flex items-center gap-2">
+                  <Phone size={14} className="text-zinc-500" /> SMS
+                </span>
+                <span className={`text-xs ${contact.is_subscribed_sms ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                  {contact.is_subscribed_sms ? 'Inscrito' : 'Não inscrito'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Center — Timeline/Notes/Tasks */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Tabs */}
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl">
             <div className="flex border-b border-zinc-800">
               {tabs.map((tab) => (
@@ -284,90 +400,145 @@ export default function ContactDetailPage() {
             </div>
 
             <div className="p-6">
+              {/* Timeline Tab */}
               {activeTab === 'timeline' && (
                 <div className="space-y-1">
-                  {timeline.map((event, i) => {
-                    const Icon = event.icon
-                    return (
-                      <div key={event.id} className="flex gap-4">
-                        <div className="flex flex-col items-center">
-                          <div className={`w-8 h-8 rounded-full ${event.bgColor} flex items-center justify-center flex-shrink-0`}>
-                            <Icon size={16} className={event.color} weight="fill" />
+                  {activities.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Clock size={24} className="text-zinc-700 mx-auto mb-2" weight="duotone" />
+                      <p className="text-sm text-zinc-500">Nenhuma atividade registrada</p>
+                    </div>
+                  ) : (
+                    activities.map((activity, i) => {
+                      const iconCfg = activityIconMap[activity.activity_type] || defaultActivityIcon
+                      const Icon = iconCfg.icon
+                      return (
+                        <div key={activity.id} className="flex gap-4">
+                          <div className="flex flex-col items-center">
+                            <div className={`w-8 h-8 rounded-full ${iconCfg.bgColor} flex items-center justify-center flex-shrink-0`}>
+                              <Icon size={16} className={iconCfg.color} weight="fill" />
+                            </div>
+                            {i < activities.length - 1 && <div className="w-px h-full bg-zinc-800 min-h-[24px]" />}
                           </div>
-                          {i < timeline.length - 1 && <div className="w-px h-full bg-zinc-800 min-h-[24px]" />}
+                          <div className="pb-5">
+                            <p className="text-sm text-white">{activity.title}</p>
+                            {activity.description && <p className="text-xs text-zinc-500 mt-0.5">{activity.description}</p>}
+                            <p className="text-xs text-zinc-600 mt-1 flex items-center gap-1">
+                              <Clock size={10} />
+                              {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true, locale: ptBR })}
+                            </p>
+                          </div>
                         </div>
-                        <div className="pb-5">
-                          <p className="text-sm text-white">{event.title}</p>
-                          {event.subtitle && <p className="text-xs text-zinc-500 mt-0.5">{event.subtitle}</p>}
-                          <p className="text-xs text-zinc-600 mt-1 flex items-center gap-1">
-                            <Clock size={10} />
-                            {event.time}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })
+                  )}
                 </div>
               )}
 
+              {/* Notes Tab */}
               {activeTab === 'notes' && (
                 <div className="space-y-4">
                   <div className="flex gap-3">
                     <input
                       type="text"
                       placeholder="Adicionar uma nota..."
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddNote()}
                       className="flex-1 bg-zinc-800/50 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#F26B2A]"
                     />
-                    <button className="px-4 py-2 bg-[#F26B2A] text-white text-sm rounded-lg hover:opacity-90">
+                    <button
+                      onClick={handleAddNote}
+                      disabled={!noteText.trim()}
+                      className="px-4 py-2 bg-[#F26B2A] text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
+                    >
                       Salvar
                     </button>
                   </div>
-                  {notes.map((note) => (
-                    <div key={note.id} className="bg-zinc-800/30 rounded-lg p-4">
-                      <p className="text-sm text-zinc-300 leading-relaxed">{note.text}</p>
-                      <div className="flex items-center gap-3 mt-3">
-                        <span className="text-xs text-zinc-500">{note.author}</span>
-                        <span className="text-xs text-zinc-600">·</span>
-                        <span className="text-xs text-zinc-600">{note.date}</span>
-                      </div>
+                  {notes.length === 0 ? (
+                    <div className="text-center py-8">
+                      <PencilSimple size={24} className="text-zinc-700 mx-auto mb-2" weight="duotone" />
+                      <p className="text-sm text-zinc-500">Nenhuma nota adicionada</p>
                     </div>
-                  ))}
+                  ) : (
+                    notes.map((note) => (
+                      <div key={note.id} className="bg-zinc-800/30 rounded-lg p-4 group">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-sm text-zinc-300 leading-relaxed flex-1">{note.content}</p>
+                          <button
+                            onClick={() => deleteNote(contactId, note.id)}
+                            className="p-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <Trash size={12} />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-3 mt-3">
+                          <span className="text-xs text-zinc-500">{note.created_by_name || 'Sistema'}</span>
+                          <span className="text-xs text-zinc-600">·</span>
+                          <span className="text-xs text-zinc-600">
+                            {formatDistanceToNow(new Date(note.created_at), { addSuffix: true, locale: ptBR })}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
 
+              {/* Tasks Tab */}
               {activeTab === 'tasks' && (
                 <div className="space-y-4">
-                  <div className="flex gap-3">
-                    <input
-                      type="text"
-                      placeholder="Adicionar uma tarefa..."
-                      className="flex-1 bg-zinc-800/50 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#F26B2A]"
-                    />
-                    <button className="px-4 py-2 bg-[#F26B2A] text-white text-sm rounded-lg hover:opacity-90">
-                      Criar
-                    </button>
-                  </div>
-                  <div className="bg-zinc-800/30 rounded-lg p-4 flex items-start gap-3">
-                    <CheckCircle size={18} className="text-emerald-400 mt-0.5 flex-shrink-0" weight="fill" />
-                    <div>
-                      <p className="text-sm text-zinc-400 line-through">Enviar e-mail de boas-vindas VIP</p>
-                      <p className="text-xs text-zinc-600 mt-1">Concluída em 01/03/2026 · Ana Costa</p>
+                  {tasks.length === 0 ? (
+                    <div className="text-center py-8">
+                      <ClipboardText size={24} className="text-zinc-700 mx-auto mb-2" weight="duotone" />
+                      <p className="text-sm text-zinc-500">Nenhuma tarefa criada</p>
                     </div>
-                  </div>
-                  <div className="bg-zinc-800/30 rounded-lg p-4 flex items-start gap-3">
-                    <div className="w-[18px] h-[18px] rounded-full border-2 border-zinc-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm text-white">Ligar para confirmar interesse em nova coleção</p>
-                      <p className="text-xs text-zinc-600 mt-1">Prazo: 15/03/2026 · Carlos Lima</p>
-                    </div>
-                  </div>
-                  <div className="bg-zinc-800/30 rounded-lg p-4 flex items-start gap-3">
-                    <div className="w-[18px] h-[18px] rounded-full border-2 border-zinc-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm text-white">Agendar reunião para parceria B2B</p>
-                      <p className="text-xs text-zinc-600 mt-1">Prazo: 20/03/2026 · Ana Costa</p>
-                    </div>
-                  </div>
+                  ) : (
+                    tasks.map((task) => {
+                      const isCompleted = task.status === 'completed'
+                      return (
+                        <div key={task.id} className="bg-zinc-800/30 rounded-lg p-4 flex items-start gap-3 group">
+                          {isCompleted ? (
+                            <CheckCircle size={18} className="text-emerald-400 mt-0.5 flex-shrink-0" weight="fill" />
+                          ) : (
+                            <button
+                              onClick={() => completeTask(task.id)}
+                              className="w-[18px] h-[18px] rounded-full border-2 border-zinc-600 mt-0.5 flex-shrink-0 hover:border-emerald-400 transition-colors"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm ${isCompleted ? 'text-zinc-400 line-through' : 'text-white'}`}>
+                              {task.title}
+                            </p>
+                            {task.description && (
+                              <p className="text-xs text-zinc-600 mt-0.5">{task.description}</p>
+                            )}
+                            <div className="flex items-center gap-3 mt-1">
+                              {task.due_date && (
+                                <span className={`text-xs ${task.is_overdue ? 'text-red-400' : 'text-zinc-600'}`}>
+                                  Prazo: {new Date(task.due_date).toLocaleDateString('pt-BR')}
+                                </span>
+                              )}
+                              {task.assigned_to_name && (
+                                <span className="text-xs text-zinc-600">· {task.assigned_to_name}</span>
+                              )}
+                              {isCompleted && task.completed_at && (
+                                <span className="text-xs text-zinc-600">
+                                  Concluída {formatDistanceToNow(new Date(task.completed_at), { addSuffix: true, locale: ptBR })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => deleteTask(task.id)}
+                            className="p-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                          >
+                            <Trash size={12} />
+                          </button>
+                        </div>
+                      )
+                    })
+                  )}
                 </div>
               )}
             </div>
@@ -381,36 +552,32 @@ export default function ContactDetailPage() {
             <h3 className="text-sm font-semibold text-white mb-4">Engajamento</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">E-mails recebidos</span>
-                <span className="text-sm text-white font-medium">{contact.metrics.emailsReceived}</span>
+                <span className="text-xs text-zinc-500">Total de mensagens</span>
+                <span className="text-sm text-white font-medium">{contact.total_messages_sent + contact.total_messages_received}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Taxa de abertura</span>
-                <span className="text-sm text-emerald-400 font-medium">{contact.metrics.openRate}%</span>
+                <span className="text-xs text-zinc-500">Mensagens enviadas</span>
+                <span className="text-sm text-blue-400 font-medium">{contact.total_messages_sent}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Taxa de cliques</span>
-                <span className="text-sm text-[#F26B2A] font-medium">{contact.metrics.clickRate}%</span>
+                <span className="text-xs text-zinc-500">Mensagens recebidas</span>
+                <span className="text-sm text-emerald-400 font-medium">{contact.total_messages_received}</span>
               </div>
-              <div className="w-full h-px bg-zinc-800 my-1" />
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Aberturas</span>
-                <div className="flex-1 mx-3">
-                  <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${contact.metrics.openRate}%` }} />
+                <span className="text-xs text-zinc-500">Conversas</span>
+                <span className="text-sm text-[#F26B2A] font-medium">{contact.total_conversations}</span>
+              </div>
+              {contact.last_message_at && (
+                <>
+                  <div className="w-full h-px bg-zinc-800 my-1" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-500">Última mensagem</span>
+                    <span className="text-xs text-zinc-400">
+                      {formatDistanceToNow(new Date(contact.last_message_at), { addSuffix: true, locale: ptBR })}
+                    </span>
                   </div>
-                </div>
-                <span className="text-xs text-zinc-400">{contact.metrics.emailsOpened}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Cliques</span>
-                <div className="flex-1 mx-3">
-                  <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-[#F26B2A] rounded-full" style={{ width: `${contact.metrics.clickRate}%` }} />
-                  </div>
-                </div>
-                <span className="text-xs text-zinc-400">{contact.metrics.emailsClicked}</span>
-              </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -423,48 +590,83 @@ export default function ContactDetailPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-zinc-800/30 rounded-lg p-3">
                 <p className="text-xs text-zinc-500">Total Gasto</p>
-                <p className="text-lg font-bold text-white mt-1">R$ {contact.metrics.totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                <p className="text-lg font-bold text-white mt-1">
+                  R$ {totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
               </div>
               <div className="bg-zinc-800/30 rounded-lg p-3">
                 <p className="text-xs text-zinc-500">Pedidos</p>
-                <p className="text-lg font-bold text-white mt-1">{contact.metrics.totalOrders}</p>
+                <p className="text-lg font-bold text-white mt-1">{totalOrders}</p>
               </div>
               <div className="bg-zinc-800/30 rounded-lg p-3 col-span-2">
                 <p className="text-xs text-zinc-500">Ticket Médio</p>
-                <p className="text-lg font-bold text-[#F26B2A] mt-1">R$ {contact.metrics.avgOrderValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                <p className="text-lg font-bold text-[#F26B2A] mt-1">
+                  R$ {avgOrder.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Recent Orders */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <ShoppingCart size={14} className="text-[#F26B2A]" />
-                Pedidos Recentes
+          {/* Deals */}
+          {deals.length > 0 && (
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-4">
+                <CurrencyDollar size={14} className="text-[#F26B2A]" />
+                Negociações
               </h3>
-              <Link href="/recovery" className="text-xs text-[#F26B2A] hover:text-[#F5A623] transition-colors">
-                Ver todos
-              </Link>
-            </div>
-            <div className="space-y-3">
-              {orders.map((order) => {
-                const orderStatus = orderStatusConfig[order.status] || orderStatusConfig.pending
-                return (
-                  <div key={order.id} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
+              <div className="space-y-3">
+                {deals.slice(0, 5).map((deal) => (
+                  <div key={deal.id} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
                     <div>
-                      <p className="text-sm text-white font-medium">{order.id}</p>
-                      <p className="text-xs text-zinc-600 mt-0.5">{order.date} · {order.items} {order.items === 1 ? 'item' : 'itens'}</p>
+                      <p className="text-sm text-white font-medium">{deal.title}</p>
+                      <p className="text-xs text-zinc-600 mt-0.5">
+                        {deal.stage?.name || 'Sem etapa'} · {deal.status === 'won' ? 'Ganho' : deal.status === 'lost' ? 'Perdido' : 'Aberto'}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-white font-medium">R$ {order.total.toFixed(2)}</p>
-                      <p className={`text-xs ${orderStatus.color}`}>{orderStatus.label}</p>
+                      <p className="text-sm text-white font-medium">R$ {deal.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      <p className={`text-xs ${deal.status === 'won' ? 'text-emerald-400' : deal.status === 'lost' ? 'text-red-400' : 'text-blue-400'}`}>
+                        {deal.status === 'won' ? 'Ganho' : deal.status === 'lost' ? 'Perdido' : 'Aberto'}
+                      </p>
                     </div>
                   </div>
-                )
-              })}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Recent Orders */}
+          {orders.length > 0 && (
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <ShoppingCart size={14} className="text-[#F26B2A]" />
+                  Pedidos Recentes
+                </h3>
+              </div>
+              <div className="space-y-3">
+                {orders.slice(0, 5).map((order) => {
+                  const status = orderStatusConfig[order.financial_status] || orderStatusConfig[order.fulfillment_status || ''] || { label: order.financial_status, color: 'text-zinc-400' }
+                  return (
+                    <div key={order.id} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
+                      <div>
+                        <p className="text-sm text-white font-medium">#{order.order_number}</p>
+                        <p className="text-xs text-zinc-600 mt-0.5">
+                          {new Date(order.created_at).toLocaleDateString('pt-BR')} · {order.line_items?.length || 0} {(order.line_items?.length || 0) === 1 ? 'item' : 'itens'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-white font-medium">
+                          {order.currency === 'BRL' ? 'R$ ' : `${order.currency} `}{order.total_price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className={`text-xs ${status.color}`}>{status.label}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
