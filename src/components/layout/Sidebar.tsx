@@ -42,6 +42,16 @@ import {
   ShoppingBag,
   ChatCircle,
   Question,
+  WhatsappLogo,
+  DeviceMobileSpeaker,
+  EnvelopeSimple,
+  Image as ImageIcon,
+  Tag,
+  Upload,
+  ListBullets,
+  Code,
+  ShieldCheck,
+  Key,
 } from '@phosphor-icons/react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
@@ -87,21 +97,42 @@ interface Notification {
 const mainNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: ChartLineUp },
   { title: 'Inbox', href: '/inbox', icon: ChatCircleDots, badge: 0 },
-  { title: 'Contatos', href: '/contacts', icon: UsersThree },
+  { title: 'Contatos', href: '/contacts', icon: UsersThree, children: [
+    { title: 'Todos', href: '/contacts', icon: UsersThree },
+    { title: 'Listas', href: '/contacts/lists', icon: ListBullets },
+    { title: 'Importar', href: '/contacts/import', icon: Upload },
+  ]},
   { title: 'Campanhas', href: '/campaigns', icon: Megaphone },
   { title: 'Automações', href: '/automations', icon: Lightning },
   { title: 'Recuperação', href: '/recovery', icon: ShoppingCartSimple },
+  { title: 'WhatsApp', href: '/whatsapp', icon: WhatsappLogo, children: [
+    { title: 'Inbox', href: '/whatsapp/inbox', icon: ChatCircleDots },
+    { title: 'Campanhas', href: '/whatsapp/campaigns', icon: Megaphone },
+    { title: 'Broadcast', href: '/whatsapp/broadcast', icon: WhatsappLogo },
+    { title: 'Phonebooks', href: '/whatsapp/phonebooks', icon: UsersThree },
+  ]},
+  { title: 'SMS', href: '/sms', icon: DeviceMobileSpeaker },
 ]
 
 const toolsNavItems: NavItem[] = [
   { title: 'Site', href: '/site', icon: Globe },
-  { title: 'Conteúdo', href: '/content', icon: Folder },
+  { title: 'Conteúdo', href: '/content', icon: Folder, children: [
+    { title: 'Templates E-mail', href: '/content/templates', icon: EnvelopeSimple },
+    { title: 'Templates WhatsApp', href: '/content/templates/whatsapp', icon: WhatsappLogo },
+    { title: 'Mídia', href: '/content/media', icon: ImageIcon },
+    { title: 'Cupons', href: '/content/coupons', icon: Tag },
+  ]},
   { title: 'Analytics', href: '/analytics', icon: ChartBar },
   { title: 'Integrações', href: '/integrations', icon: Plugs },
 ]
 
 const systemNavItems: NavItem[] = [
-  { title: 'Configurações', href: '/settings', icon: GearSix },
+  { title: 'Configurações', href: '/settings', icon: GearSix, children: [
+    { title: 'Geral', href: '/settings', icon: GearSix },
+    { title: 'API', href: '/settings/api', icon: Code },
+    { title: 'LGPD', href: '/settings/lgpd', icon: ShieldCheck },
+    { title: 'Credenciais', href: '/settings/credentials', icon: Key },
+  ]},
   { title: 'Ajuda', href: '/help', icon: Question },
 ]
 
@@ -138,22 +169,46 @@ export function Sidebar() {
     setAddStoreModalOpen(false)
   }
 
+  const [expandedItems, setExpandedItems] = useState<string[]>([])
+
+  const toggleExpand = (href: string) => {
+    setExpandedItems(prev => prev.includes(href) ? prev.filter(h => h !== href) : [...prev, href])
+  }
+
+  // Auto-expand parent if child is active
+  useEffect(() => {
+    const allItems = [...mainNavItems, ...toolsNavItems, ...systemNavItems]
+    allItems.forEach(item => {
+      if (item.children) {
+        const childActive = item.children.some(c => pathname === c.href || pathname.startsWith(c.href + '/'))
+        if (childActive && !expandedItems.includes(item.href)) {
+          setExpandedItems(prev => [...prev, item.href])
+        }
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
+
   const NavLink = ({ item }: { item: NavItem }) => {
-    const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+    const isExactActive = pathname === item.href
+    const isActive = isExactActive || pathname.startsWith(item.href + '/')
+    const hasChildren = item.children && item.children.length > 0
+    const isExpanded = expandedItems.includes(item.href)
     const Icon = item.icon
 
-    const content = (
-      <Link
-        href={item.href}
+    const linkContent = (
+      <div
         className={cn(
-          'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200',
+          'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 cursor-pointer',
           'hover:bg-white/[0.06]',
-          isActive && 'bg-white/[0.08] text-white',
+          isActive && !hasChildren && 'bg-white/[0.08] text-white',
+          isActive && hasChildren && 'text-white',
           !isActive && 'text-dark-400 hover:text-dark-200'
         )}
+        onClick={hasChildren && !sidebarCollapsed ? (e: React.MouseEvent) => { e.preventDefault(); toggleExpand(item.href) } : undefined}
       >
         {/* Active indicator — barra lateral laranja */}
-        {isActive && (
+        {isActive && !hasChildren && (
           <motion.div
             layoutId="sidebar-active"
             className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-gradient-to-b from-[#F26B2A] to-[#F5A623]"
@@ -171,12 +226,18 @@ export function Sidebar() {
               initial={{ opacity: 0, width: 0 }}
               animate={{ opacity: 1, width: 'auto' }}
               exit={{ opacity: 0, width: 0 }}
-              className="text-sm font-medium whitespace-nowrap overflow-hidden"
+              className="text-sm font-medium whitespace-nowrap overflow-hidden flex-1"
             >
               {item.title}
             </motion.span>
           )}
         </AnimatePresence>
+        {hasChildren && !sidebarCollapsed && (
+          <CaretDown
+            className={cn('w-3.5 h-3.5 text-dark-500 transition-transform', isExpanded && 'rotate-180')}
+            weight="bold"
+          />
+        )}
         {item.badge !== undefined && item.badge > 0 && !sidebarCollapsed && (
           <span className="ml-auto bg-[#F26B2A] text-white text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
             {item.badge > 99 ? '99+' : item.badge}
@@ -185,18 +246,64 @@ export function Sidebar() {
         {item.badge !== undefined && item.badge > 0 && sidebarCollapsed && (
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#F26B2A] rounded-full ring-2 ring-[#1A1A1A]" />
         )}
-      </Link>
+      </div>
+    )
+
+    const wrappedLink = hasChildren && !sidebarCollapsed ? (
+      <div>{linkContent}</div>
+    ) : (
+      <Link href={item.href}>{linkContent}</Link>
     )
 
     if (sidebarCollapsed) {
       return (
         <Tooltip content={item.title} side="right">
-          <div className="relative">{content}</div>
+          <div className="relative">
+            <Link href={item.href}>{linkContent}</Link>
+          </div>
         </Tooltip>
       )
     }
 
-    return content
+    return (
+      <div>
+        {wrappedLink}
+        {hasChildren && (
+          <AnimatePresence>
+            {isExpanded && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="ml-4 pl-3 border-l border-white/[0.06] mt-1 space-y-0.5">
+                  {item.children!.map((child) => {
+                    const ChildIcon = child.icon
+                    const isChildActive = pathname === child.href || (child.href !== item.href && pathname.startsWith(child.href + '/'))
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={cn(
+                          'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-200',
+                          'hover:bg-white/[0.06]',
+                          isChildActive ? 'text-[#F26B2A] bg-white/[0.04]' : 'text-dark-400 hover:text-dark-200'
+                        )}
+                      >
+                        <ChildIcon className="w-4 h-4 flex-shrink-0" weight={isChildActive ? 'fill' : 'regular'} />
+                        <span className="font-medium">{child.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+      </div>
+    )
   }
 
   return (
