@@ -95,10 +95,14 @@ const TikTokIcon = () => (
 
 // Tabs
 const settingsTabs = [
-  { id: 'integrations', label: 'Integrações', icon: Plug },
-  { id: 'profile', label: 'Perfil', icon: User },
+  { id: 'profile', label: 'Conta', icon: User },
   { id: 'store', label: 'Loja', icon: Store },
+  { id: 'integrations', label: 'Integrações', icon: Plug },
+  { id: 'email', label: 'E-mail', icon: Mail },
+  { id: 'whatsapp', label: 'WhatsApp', icon: Phone },
+  { id: 'tracking', label: 'Dados', icon: Shield },
   { id: 'api', label: 'API Keys', icon: Key },
+  { id: 'security', label: 'Segurança', icon: Lock },
 ];
 
 // AI Provider Config for API Keys
@@ -1304,6 +1308,281 @@ function SettingsContent() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* E-mail Settings */}
+            {activeTab === 'email' && (
+              <motion.div
+                key="email"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div>
+                  <h2 className="text-xl font-bold text-white">Configurações de E-mail</h2>
+                  <p className="text-sm text-dark-400 mt-1">Gerencie domínios de envio e configurações de e-mail marketing</p>
+                </div>
+
+                {/* Sending Domains */}
+                <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-white mb-4">Domínios de Envio</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-4 bg-dark-900/50 rounded-lg border border-dark-700/30">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                        <div>
+                          <p className="text-sm font-medium text-white">mail.sualoja.com.br</p>
+                          <p className="text-xs text-dark-400">SPF, DKIM, DMARC configurados</p>
+                        </div>
+                      </div>
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 font-medium">Verificado</span>
+                    </div>
+                  </div>
+                  <button className="mt-4 flex items-center gap-2 px-4 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-xl text-sm text-dark-300 hover:text-white transition-colors">
+                    <Plus className="w-4 h-4" />
+                    Adicionar Domínio
+                  </button>
+                </div>
+
+                {/* Sender Settings */}
+                <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-white mb-4">Remetente Padrão</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1.5">Nome do Remetente</label>
+                      <input type="text" placeholder="Sua Loja" className="w-full bg-dark-900/50 border border-dark-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1.5">E-mail do Remetente</label>
+                      <input type="email" placeholder="contato@sualoja.com.br" className="w-full bg-dark-900/50 border border-dark-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                    </div>
+                  </div>
+                  <button className="mt-4 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity">
+                    Salvar
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* WhatsApp Settings */}
+            {activeTab === 'whatsapp' && (
+              <motion.div
+                key="whatsapp"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div>
+                  <h2 className="text-xl font-bold text-white">WhatsApp Business API</h2>
+                  <p className="text-sm text-dark-400 mt-1">Gerencie a conexão com WhatsApp e configurações da IA</p>
+                </div>
+
+                {/* Connection Status */}
+                <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-white mb-4">Conexão</h3>
+                  <div className="flex items-center justify-between p-4 bg-dark-900/50 rounded-lg border border-dark-700/30">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-[#25D366]/10 flex items-center justify-center">
+                        <Phone className="w-5 h-5 text-[#25D366]" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-white">+55 11 99999-0000</p>
+                        <p className="text-xs text-dark-400">WhatsApp Business API — Conectado</p>
+                      </div>
+                    </div>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 font-medium">Online</span>
+                  </div>
+                </div>
+
+                {/* IA Persona */}
+                <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-white mb-4">Persona da IA</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1.5">Nome do Agente</label>
+                      <input type="text" placeholder="Ex: Ana da Sua Loja" className="w-full bg-dark-900/50 border border-dark-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1.5">Tom de Voz</label>
+                      <select className="w-full bg-dark-900/50 border border-dark-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary-500/50 transition-colors">
+                        <option>Amigável e profissional</option>
+                        <option>Formal</option>
+                        <option>Casual e descontraído</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-dark-400 mb-1.5">Limite máximo de desconto (%)</label>
+                      <input type="number" placeholder="15" className="w-full bg-dark-900/50 border border-dark-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                    </div>
+                  </div>
+                  <button className="mt-4 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity">
+                    Salvar Configurações
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Data & Tracking Settings */}
+            {activeTab === 'tracking' && (
+              <motion.div
+                key="tracking"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div>
+                  <h2 className="text-xl font-bold text-white">Dados & Rastreamento</h2>
+                  <p className="text-sm text-dark-400 mt-1">Configure tracking, atribuição e consentimento</p>
+                </div>
+
+                {/* Tracking Settings */}
+                <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-6 space-y-4">
+                  <h3 className="text-base font-semibold text-white">Rastreamento</h3>
+                  {[
+                    { label: 'Tracking de visitantes anônimos', desc: 'Identifica visitantes antes do login/compra', enabled: true },
+                    { label: 'Eventos comportamentais', desc: 'Pageviews, product_viewed, add_to_cart', enabled: true },
+                    { label: 'Identificação estendida', desc: 'Fingerprinting + cookies first-party', enabled: false },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center justify-between p-4 bg-dark-900/50 rounded-lg border border-dark-700/30">
+                      <div>
+                        <p className="text-sm font-medium text-white">{item.label}</p>
+                        <p className="text-xs text-dark-400 mt-0.5">{item.desc}</p>
+                      </div>
+                      <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-primary-500' : 'bg-dark-600'}`}>
+                        <div className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform ${item.enabled ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Attribution */}
+                <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-6 space-y-4">
+                  <h3 className="text-base font-semibold text-white">Atribuição de Receita</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { channel: 'E-mail', window: '5 dias' },
+                      { channel: 'WhatsApp', window: '3 dias' },
+                      { channel: 'SMS', window: '2 dias' },
+                      { channel: 'Chat Web', window: '1 dia' },
+                    ].map((item) => (
+                      <div key={item.channel} className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg border border-dark-700/30">
+                        <span className="text-sm text-dark-300">{item.channel}</span>
+                        <select className="bg-dark-800 border border-dark-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
+                          <option>{item.window}</option>
+                          <option>1 dia</option>
+                          <option>3 dias</option>
+                          <option>5 dias</option>
+                          <option>7 dias</option>
+                          <option>14 dias</option>
+                          <option>30 dias</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* UTM Tracking */}
+                <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-white mb-4">Rastreamento UTM</h3>
+                  <p className="text-sm text-dark-400 mb-4">Parâmetros UTM são automaticamente capturados e vinculados aos perfis de clientes</p>
+                  <div className="flex flex-wrap gap-2">
+                    {['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].map((param) => (
+                      <span key={param} className="px-3 py-1.5 bg-dark-700/50 rounded-lg text-xs text-dark-300 font-mono">{param}</span>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Security Settings */}
+            {activeTab === 'security' && (
+              <motion.div
+                key="security"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div>
+                  <h2 className="text-xl font-bold text-white">Segurança</h2>
+                  <p className="text-sm text-dark-400 mt-1">Autenticação, permissões e auditoria</p>
+                </div>
+
+                {/* 2FA */}
+                <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-white">Autenticação em Duas Etapas (2FA)</h3>
+                      <p className="text-sm text-dark-400 mt-1">Adicione uma camada extra de segurança à sua conta</p>
+                    </div>
+                    <button className="px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity">
+                      Ativar 2FA
+                    </button>
+                  </div>
+                </div>
+
+                {/* Users & Permissions */}
+                <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-white mb-4">Usuários & Permissões</h3>
+                  <div className="space-y-3">
+                    {[
+                      { name: 'Você', email: 'admin@loja.com', role: 'Admin', status: 'online' },
+                      { name: 'Maria Silva', email: 'maria@loja.com', role: 'Gerente', status: 'online' },
+                      { name: 'João Santos', email: 'joao@loja.com', role: 'Atendente', status: 'offline' },
+                    ].map((u) => (
+                      <div key={u.email} className="flex items-center justify-between p-4 bg-dark-900/50 rounded-lg border border-dark-700/30">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <div className="w-9 h-9 rounded-lg bg-dark-700 flex items-center justify-center text-xs font-bold text-dark-300">
+                              {u.name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-dark-800 ${u.status === 'online' ? 'bg-green-500' : 'bg-dark-500'}`} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-white">{u.name}</p>
+                            <p className="text-xs text-dark-400">{u.email}</p>
+                          </div>
+                        </div>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                          u.role === 'Admin' ? 'bg-primary-500/10 text-primary-400' :
+                          u.role === 'Gerente' ? 'bg-blue-500/10 text-blue-400' :
+                          'bg-dark-700 text-dark-400'
+                        }`}>
+                          {u.role}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="mt-4 flex items-center gap-2 px-4 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-xl text-sm text-dark-300 hover:text-white transition-colors">
+                    <Plus className="w-4 h-4" />
+                    Convidar Usuário
+                  </button>
+                </div>
+
+                {/* Audit Log */}
+                <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-white mb-4">Log de Auditoria</h3>
+                  <p className="text-sm text-dark-400 mb-4">Últimas ações realizadas na plataforma</p>
+                  <div className="space-y-2">
+                    {[
+                      { action: 'Login realizado', user: 'admin@loja.com', time: '2 min atrás' },
+                      { action: 'Campanha criada', user: 'maria@loja.com', time: '1h atrás' },
+                      { action: 'Contato importado (CSV)', user: 'admin@loja.com', time: '3h atrás' },
+                    ].map((log, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-dark-900/30 rounded-lg">
+                        <div>
+                          <p className="text-sm text-white">{log.action}</p>
+                          <p className="text-xs text-dark-500">{log.user}</p>
+                        </div>
+                        <span className="text-xs text-dark-500">{log.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
             {/* Other tabs - simplified */}
           </AnimatePresence>
