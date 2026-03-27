@@ -53,11 +53,11 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }>
   waiting_customer: { label: 'Aguard. Cliente', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20', icon: User },
   waiting_internal: { label: 'Aguard. Interno', color: 'bg-pink-500/10 text-pink-400 border-pink-500/20', icon: Clock },
   resolved: { label: 'Resolvido', color: 'bg-success-500/10 text-success-400 border-success-500/20', icon: CheckCircle },
-  closed: { label: 'Fechado', color: 'bg-dark-500/10 text-dark-400 border-dark-500/20', icon: XCircle },
+  closed: { label: 'Fechado', color: 'bg-gray-300/10 text-gray-500 border-gray-300/20', icon: XCircle },
 }
 
 const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
-  low: { label: 'Baixa', color: 'text-dark-400' },
+  low: { label: 'Baixa', color: 'text-gray-500' },
   normal: { label: 'Normal', color: 'text-blue-400' },
   high: { label: 'Alta', color: 'text-amber-400' },
   urgent: { label: 'Urgente', color: 'text-error-400' },
@@ -94,7 +94,7 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4 hover:bg-dark-800 
+      className="bg-gray-50 border border-gray-200 rounded-xl p-4 hover:bg-white 
                  transition-colors cursor-pointer group"
       onClick={() => onSelect(ticket)}
     >
@@ -110,7 +110,7 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
           <div className="flex items-start justify-between gap-2">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-dark-500">#{ticket.ticket_number}</span>
+                <span className="text-xs font-mono text-gray-400">#{ticket.ticket_number}</span>
                 <span className="text-lg">{CATEGORY_EMOJI[ticket.category] || '📋'}</span>
               </div>
               <h4 className="font-medium text-white mt-1">{ticket.title}</h4>
@@ -120,19 +120,19 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
             <div className="relative" onClick={(e) => e.stopPropagation()}>
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className="p-1.5 hover:bg-dark-700 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                className="p-1.5 hover:bg-gray-100 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
               >
-                <MoreVertical className="w-4 h-4 text-dark-400" />
+                <MoreVertical className="w-4 h-4 text-gray-500" />
               </button>
 
               {showMenu && (
-                <div className="absolute right-0 top-8 w-44 bg-dark-700 border border-dark-600 rounded-xl shadow-xl overflow-hidden z-10">
+                <div className="absolute right-0 top-8 w-44 bg-gray-100 border border-gray-300 rounded-xl shadow-xl overflow-hidden z-10">
                   <button
                     onClick={() => {
                       onStatusChange(ticket.id, 'in_progress')
                       setShowMenu(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-dark-600"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-200"
                   >
                     <Clock className="w-4 h-4" />
                     Em Andamento
@@ -142,7 +142,7 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
                       onStatusChange(ticket.id, 'waiting_customer')
                       setShowMenu(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-dark-600"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-200"
                   >
                     <User className="w-4 h-4" />
                     Aguard. Cliente
@@ -152,7 +152,7 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
                       onStatusChange(ticket.id, 'resolved')
                       setShowMenu(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-success-400 hover:bg-dark-600"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-success-400 hover:bg-gray-200"
                   >
                     <CheckCircle className="w-4 h-4" />
                     Resolver
@@ -164,7 +164,7 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
 
           {/* Description */}
           {ticket.description && (
-            <p className="text-sm text-dark-400 mt-2 line-clamp-2">{ticket.description}</p>
+            <p className="text-sm text-gray-500 mt-2 line-clamp-2">{ticket.description}</p>
           )}
 
           {/* Meta */}
@@ -178,19 +178,19 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
             )}
 
             {ticket.contact_name && (
-              <span className="text-dark-500 flex items-center gap-1">
+              <span className="text-gray-400 flex items-center gap-1">
                 <User className="w-3 h-3" />
                 {ticket.contact_name}
               </span>
             )}
 
             {ticket.assigned_to_name && (
-              <span className="text-primary-400 flex items-center gap-1">
+              <span className="text-brand-600 flex items-center gap-1">
                 → {ticket.assigned_to_name}
               </span>
             )}
 
-            <span className="text-dark-500">{formatDate(ticket.created_at)}</span>
+            <span className="text-gray-400">{formatDate(ticket.created_at)}</span>
 
             {ticket.sla_breached && (
               <span className="text-error-400 flex items-center gap-1">
@@ -266,8 +266,8 @@ export default function TicketsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Tickets</h1>
-          <p className="text-dark-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900">Tickets</h1>
+          <p className="text-gray-500 mt-1">
             Gerencie solicitações e problemas dos clientes
           </p>
         </div>
@@ -275,8 +275,8 @@ export default function TicketsPage() {
           <button
             onClick={handleRefresh}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-dark-700 text-white rounded-xl 
-                       hover:bg-dark-600 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-white rounded-xl 
+                       hover:bg-gray-200 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -294,33 +294,33 @@ export default function TicketsPage() {
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-          <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-3">
-            <p className="text-xl font-bold text-white">{stats.total}</p>
-            <p className="text-xs text-dark-400">Total</p>
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+            <p className="text-xl font-bold text-gray-900">{stats.total}</p>
+            <p className="text-xs text-gray-500">Total</p>
           </div>
-          <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-3">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
             <p className="text-xl font-bold text-blue-400">{stats.open}</p>
-            <p className="text-xs text-dark-400">Abertos</p>
+            <p className="text-xs text-gray-500">Abertos</p>
           </div>
-          <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-3">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
             <p className="text-xl font-bold text-amber-400">{stats.in_progress}</p>
-            <p className="text-xs text-dark-400">Em Andamento</p>
+            <p className="text-xs text-gray-500">Em Andamento</p>
           </div>
-          <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-3">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
             <p className="text-xl font-bold text-purple-400">{stats.waiting_customer}</p>
-            <p className="text-xs text-dark-400">Aguard. Cliente</p>
+            <p className="text-xs text-gray-500">Aguard. Cliente</p>
           </div>
-          <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-3">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
             <p className="text-xl font-bold text-success-400">{stats.resolved}</p>
-            <p className="text-xs text-dark-400">Resolvidos</p>
+            <p className="text-xs text-gray-500">Resolvidos</p>
           </div>
-          <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-3">
-            <p className="text-xl font-bold text-dark-400">{stats.closed}</p>
-            <p className="text-xs text-dark-400">Fechados</p>
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+            <p className="text-xl font-bold text-gray-500">{stats.closed}</p>
+            <p className="text-xs text-gray-500">Fechados</p>
           </div>
-          <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-3">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
             <p className="text-xl font-bold text-error-400">{stats.sla_breached}</p>
-            <p className="text-xs text-dark-400">SLA Violado</p>
+            <p className="text-xs text-gray-500">SLA Violado</p>
           </div>
         </div>
       )}
@@ -329,13 +329,13 @@ export default function TicketsPage() {
       <div className="flex items-center gap-4 flex-wrap">
         {/* Search */}
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por título ou #número..."
-            className="w-full pl-10 pr-4 py-2 bg-dark-700 border border-dark-600 rounded-xl 
+            className="w-full pl-10 pr-4 py-2 bg-gray-100 border border-gray-300 rounded-xl 
                        text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
           />
         </div>
@@ -355,7 +355,7 @@ export default function TicketsPage() {
               className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
                 statusFilter === value
                   ? 'bg-primary-500 text-white'
-                  : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               {label}
@@ -367,7 +367,7 @@ export default function TicketsPage() {
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="px-3 py-1.5 bg-dark-700 border border-dark-600 rounded-lg text-sm 
+          className="px-3 py-1.5 bg-gray-100 border border-gray-300 rounded-lg text-sm 
                      text-white focus:outline-none"
         >
           <option value="">Todas categorias</option>
@@ -393,17 +393,17 @@ export default function TicketsPage() {
       {/* Tickets List */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+          <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
         </div>
       ) : tickets.length === 0 ? (
         <div className="text-center py-12">
-          <div className="w-16 h-16 bg-dark-800 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Ticket className="w-8 h-8 text-dark-600" />
+          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
+            <Ticket className="w-8 h-8 text-gray-500" />
           </div>
           <h3 className="text-lg font-medium text-white mb-2">
             Nenhum ticket encontrado
           </h3>
-          <p className="text-dark-400 max-w-sm mx-auto mb-6">
+          <p className="text-gray-500 max-w-sm mx-auto mb-6">
             Crie um novo ticket para registrar uma solicitação ou problema
           </p>
           <button

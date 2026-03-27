@@ -165,19 +165,19 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="w-full max-w-2xl bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto"
+              className="w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto"
             >
               <form onSubmit={handleSubmit}>
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-dark-700">
-                  <h2 className="text-lg font-semibold text-white">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold text-gray-900">
                     {isEditing ? 'Editar Pipeline' : 'Novo Pipeline'}
                   </h2>
                   <button
                     type="button"
                     onClick={handleClose}
                     disabled={loading}
-                    className="p-2 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-white transition-colors disabled:opacity-50"
+                    className="p-2 rounded-lg hover:bg-white text-gray-500 hover:text-white transition-colors disabled:opacity-50"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -196,14 +196,14 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
 
                   {/* Pipeline Name */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Nome do Pipeline *
                     </label>
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
                       placeholder="Ex: Vendas, Suporte, Onboarding"
                       required
                       autoFocus
@@ -212,13 +212,13 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
 
                   {/* Pipeline Color */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Cor do Pipeline
                     </label>
                     <div className="flex items-center gap-3">
                       {/* Color Preview */}
                       <div 
-                        className="w-10 h-10 rounded-lg border-2 border-dark-600 flex-shrink-0"
+                        className="w-10 h-10 rounded-lg border-2 border-gray-300 flex-shrink-0"
                         style={{ backgroundColor: pipelineColor }}
                       />
                       {/* Color Grid */}
@@ -230,7 +230,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                             onClick={() => setPipelineColor(color)}
                             className={`w-7 h-7 rounded-lg transition-all ${
                               pipelineColor === color 
-                                ? 'ring-2 ring-white ring-offset-2 ring-offset-dark-900 scale-110' 
+                                ? 'ring-2 ring-white ring-offset-2 ring-offset-white scale-110' 
                                 : 'hover:scale-110'
                             }`}
                             style={{ backgroundColor: color }}
@@ -242,14 +242,14 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
 
                   {/* Description */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Descrição
                     </label>
                     <input
                       type="text"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
                       placeholder="Descrição opcional do pipeline"
                     />
                   </div>
@@ -257,13 +257,13 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                   {/* Stages */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <label className="text-sm font-medium text-dark-300">
+                      <label className="text-sm font-medium text-gray-600">
                         Estágios ({stages.length})
                       </label>
                       <button
                         type="button"
                         onClick={addStage}
-                        className="flex items-center gap-1.5 text-sm text-primary-400 hover:text-primary-300 transition-colors"
+                        className="flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-500 transition-colors"
                       >
                         <Plus className="w-4 h-4" />
                         Adicionar
@@ -274,7 +274,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                       {stages.map((stage, index) => (
                         <div
                           key={stage.id || `new-${index}`}
-                          className="flex items-center gap-3 p-3 bg-dark-800/30 border border-dark-700/50 rounded-xl group hover:border-dark-600/50 transition-colors"
+                          className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl group hover:border-gray-300/50 transition-colors"
                         >
                           {/* Drag Handle / Position */}
                           <div className="flex flex-col gap-0.5">
@@ -282,7 +282,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                               type="button"
                               onClick={() => moveStage(index, 'up')}
                               disabled={index === 0}
-                              className="p-0.5 text-dark-600 hover:text-dark-400 disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="p-0.5 text-gray-500 hover:text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -292,7 +292,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                               type="button"
                               onClick={() => moveStage(index, 'down')}
                               disabled={index === stages.length - 1}
-                              className="p-0.5 text-dark-600 hover:text-dark-400 disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="p-0.5 text-gray-500 hover:text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -301,14 +301,14 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                           </div>
                           
                           {/* Position Number */}
-                          <span className="w-6 h-6 rounded-full bg-dark-700 flex items-center justify-center text-xs text-dark-400">
+                          <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-500">
                             {index + 1}
                           </span>
                           
                           {/* Color Picker */}
                           <div className="relative flex-shrink-0">
                             <div 
-                              className="w-8 h-8 rounded-lg border-2 border-dark-600 hover:border-dark-500 transition-colors overflow-hidden"
+                              className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-300 transition-colors overflow-hidden"
                               style={{ backgroundColor: stage.color }}
                             >
                               <input
@@ -325,7 +325,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                             type="text"
                             value={stage.name}
                             onChange={(e) => updateStage(index, { name: e.target.value })}
-                            className="flex-1 px-3 py-2 bg-dark-800/50 border border-dark-700 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
+                            className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
                             placeholder="Nome do estágio"
                           />
 
@@ -334,7 +334,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                             type="button"
                             onClick={() => removeStage(index)}
                             disabled={stages.length <= 2}
-                            className="p-2 rounded-lg text-dark-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed opacity-0 group-hover:opacity-100"
+                            className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed opacity-0 group-hover:opacity-100"
                             title={stages.length <= 2 ? 'Mínimo 2 estágios' : 'Remover estágio'}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -343,7 +343,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                       ))}
                     </div>
 
-                    <p className="text-xs text-dark-500 mt-2">
+                    <p className="text-xs text-gray-400 mt-2">
                       Mínimo de 2 estágios. Use as setas para reordenar.
                     </p>
                   </div>
@@ -351,12 +351,12 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-3 p-6 border-t border-dark-700 bg-dark-900/50">
+                <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
                   <button
                     type="button"
                     onClick={handleClose}
                     disabled={loading}
-                    className="px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-white transition-colors disabled:opacity-50"
+                    className="px-4 py-2.5 rounded-xl bg-white hover:bg-gray-100 text-white transition-colors disabled:opacity-50"
                   >
                     Cancelar
                   </button>

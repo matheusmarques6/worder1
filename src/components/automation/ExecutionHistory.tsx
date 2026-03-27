@@ -283,7 +283,7 @@ export function ExecutionHistory({
       {/* Header com filtros */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#222222] bg-[#111111]">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-white">Execuções</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Execuções</h2>
           <Badge variant="default">{total}</Badge>
         </div>
 
@@ -346,7 +346,7 @@ export function ExecutionHistory({
       <div className="flex-1 overflow-y-auto">
         {loading && !refreshing ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+            <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-12 text-red-400">
@@ -357,8 +357,8 @@ export function ExecutionHistory({
             </Button>
           </div>
         ) : runs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-4 text-dark-400">
-            <PlayCircle className="w-12 h-12 mb-3 text-dark-600" />
+          <div className="flex flex-col items-center justify-center py-12 px-4 text-gray-500">
+            <PlayCircle className="w-12 h-12 mb-3 text-gray-500" />
             <p className="text-lg font-medium text-white mb-1">Nenhuma execução</p>
             <p className="text-sm text-center max-w-md mb-4">
               {automationId 
@@ -366,7 +366,7 @@ export function ExecutionHistory({
                 : 'As execuções das suas automações aparecerão aqui.'
               }
             </p>
-            <div className="text-xs text-dark-500 text-center space-y-1">
+            <div className="text-xs text-gray-400 text-center space-y-1">
               <p>Para ver execuções:</p>
               <p>1. Ative a automação</p>
               <p>2. Dispare o trigger (ex: mude um deal de estágio)</p>
@@ -393,17 +393,17 @@ export function ExecutionHistory({
 
                 {/* Horário */}
                 <div className="w-20 flex-shrink-0">
-                  <span className="text-sm text-dark-400">
+                  <span className="text-sm text-gray-500">
                     {formatDateTime(run.started_at)}
                   </span>
                 </div>
 
                 {/* Automação */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">
+                  <p className="text-sm font-medium text-gray-900 truncate">
                     {run.automation_name}
                   </p>
-                  <p className="text-xs text-dark-500 truncate">
+                  <p className="text-xs text-gray-400 truncate">
                     {TRIGGER_LABELS[run.trigger_type] || run.trigger_type}
                   </p>
                 </div>
@@ -415,12 +415,12 @@ export function ExecutionHistory({
                       <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-[10px] text-white font-medium">
                         {(run.contact.name?.[0] || run.contact.email[0]).toUpperCase()}
                       </div>
-                      <span className="text-sm text-dark-300 truncate">
+                      <span className="text-sm text-gray-600 truncate">
                         {run.contact.name || run.contact.email}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-xs text-dark-600">—</span>
+                    <span className="text-xs text-gray-500">—</span>
                   )}
                 </div>
 
@@ -428,8 +428,8 @@ export function ExecutionHistory({
                 <div className="w-20 flex-shrink-0 hidden lg:block">
                   <div className="flex items-center gap-1 text-xs">
                     <span className="text-green-400">{run.completed_steps}</span>
-                    <span className="text-dark-600">/</span>
-                    <span className="text-dark-400">{run.total_steps}</span>
+                    <span className="text-gray-500">/</span>
+                    <span className="text-gray-500">{run.total_steps}</span>
                     {run.failed_steps > 0 && (
                       <span className="text-red-400 ml-1">({run.failed_steps} erro)</span>
                     )}
@@ -438,13 +438,13 @@ export function ExecutionHistory({
 
                 {/* Duração */}
                 <div className="w-16 flex-shrink-0 text-right">
-                  <span className="text-xs text-dark-400">
+                  <span className="text-xs text-gray-500">
                     {formatDuration(run.duration_ms)}
                   </span>
                 </div>
 
                 {/* Seta */}
-                <ChevronRight className="w-4 h-4 text-dark-600 flex-shrink-0" />
+                <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
               </motion.div>
             ))}
           </div>
@@ -454,7 +454,7 @@ export function ExecutionHistory({
       {/* Paginação */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-[#222222] bg-[#111111]">
-          <span className="text-sm text-dark-400">
+          <span className="text-sm text-gray-500">
             Página {page} de {totalPages}
           </span>
           <div className="flex items-center gap-2">

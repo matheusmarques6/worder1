@@ -333,31 +333,31 @@ export function CreateAgentWizard({
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-dark-800 rounded-2xl w-full max-w-md border border-dark-700/50 overflow-hidden"
+          className="bg-white rounded-2xl w-full max-w-md border border-gray-200 overflow-hidden"
         >
           <div className="p-6">
             <div className="w-16 h-16 mx-auto rounded-full bg-green-500/20 flex items-center justify-center mb-4">
               <CheckCircle className="w-8 h-8 text-green-400" />
             </div>
 
-            <h2 className="text-xl font-semibold text-white text-center mb-2">
+            <h2 className="text-xl font-semibold text-gray-900 text-center mb-2">
               Agente Criado com Sucesso!
             </h2>
-            <p className="text-dark-400 text-center text-sm mb-6">
+            <p className="text-gray-500 text-center text-sm mb-6">
               Copie a senha temporária abaixo:
             </p>
 
-            <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4 mb-4">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-dark-400">Senha Temporária</span>
+                <span className="text-sm text-gray-500">Senha Temporária</span>
                 <button
                   onClick={handleCopyPassword}
-                  className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                  className="text-xs text-brand-600 hover:text-brand-500 flex items-center gap-1"
                 >
                   {copied ? <><Check className="w-3 h-3" /> Copiado!</> : <><Copy className="w-3 h-3" /> Copiar</>}
                 </button>
               </div>
-              <code className="block text-lg font-mono text-white bg-dark-800 rounded-lg p-3 text-center select-all">
+              <code className="block text-lg font-mono text-white bg-white rounded-lg p-3 text-center select-all">
                 {successData.password}
               </code>
             </div>
@@ -401,7 +401,7 @@ export function CreateAgentWizard({
           return (
             <div key={step} className="flex items-center">
               {index > 0 && (
-                <div className={`w-8 h-0.5 ${isCompleted ? 'bg-primary-500' : 'bg-dark-700'}`} />
+                <div className={`w-8 h-0.5 ${isCompleted ? 'bg-primary-500' : 'bg-gray-100'}`} />
               )}
               <div className="flex flex-col items-center">
                 <div
@@ -409,13 +409,13 @@ export function CreateAgentWizard({
                     isCompleted
                       ? 'bg-primary-500 text-white'
                       : isActive
-                      ? 'bg-primary-500/20 text-primary-400 border-2 border-primary-500'
-                      : 'bg-dark-700 text-dark-400'
+                      ? 'bg-brand-100 text-brand-600 border-2 border-primary-500'
+                      : 'bg-gray-100 text-gray-500'
                   }`}
                 >
                   {isCompleted ? <Check className="w-4 h-4" /> : stepIndex}
                 </div>
-                <span className={`text-xs mt-1 ${isActive ? 'text-primary-400' : 'text-dark-500'}`}>
+                <span className={`text-xs mt-1 ${isActive ? 'text-brand-600' : 'text-gray-400'}`}>
                   {stepLabels[step as keyof typeof stepLabels]}
                 </span>
               </div>
@@ -437,8 +437,8 @@ export function CreateAgentWizard({
             disabled={humanAgentsCount >= 3}
             className={`w-full p-4 rounded-xl border transition-all text-left ${
               humanAgentsCount >= 3
-                ? 'border-dark-700/30 bg-dark-800/30 opacity-50 cursor-not-allowed'
-                : 'border-dark-700/50 hover:border-blue-500/50 hover:bg-blue-500/5'
+                ? 'border-gray-200/30 bg-gray-50 opacity-50 cursor-not-allowed'
+                : 'border-gray-200 hover:border-blue-500/50 hover:bg-blue-500/5'
             }`}
           >
             <div className="flex items-start gap-3">
@@ -448,19 +448,19 @@ export function CreateAgentWizard({
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="font-medium text-white">Agente Humano</h3>
-                  <span className="text-xs bg-dark-700 text-dark-400 px-2 py-0.5 rounded-full">
+                  <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
                     {humanAgentsCount}/3
                   </span>
                 </div>
-                <p className="text-sm text-dark-400 mt-1">Atendente com login próprio</p>
+                <p className="text-sm text-gray-500 mt-1">Atendente com login próprio</p>
               </div>
-              <ChevronRight className="w-5 h-5 text-dark-500" />
+              <ChevronRight className="w-5 h-5 text-gray-400" />
             </div>
           </button>
 
           <button
             onClick={() => handleSelectType('ai')}
-            className="w-full p-4 rounded-xl border border-dark-700/50 hover:border-purple-500/50 hover:bg-purple-500/5 transition-all text-left"
+            className="w-full p-4 rounded-xl border border-gray-200 hover:border-purple-500/50 hover:bg-purple-500/5 transition-all text-left"
           >
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
@@ -468,9 +468,9 @@ export function CreateAgentWizard({
               </div>
               <div className="flex-1">
                 <h3 className="font-medium text-white">Agente de IA</h3>
-                <p className="text-sm text-dark-400 mt-1">Respostas automáticas 24/7</p>
+                <p className="text-sm text-gray-500 mt-1">Respostas automáticas 24/7</p>
               </div>
-              <ChevronRight className="w-5 h-5 text-dark-500" />
+              <ChevronRight className="w-5 h-5 text-gray-400" />
             </div>
           </button>
         </div>
@@ -482,24 +482,24 @@ export function CreateAgentWizard({
       return (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Nome Completo *</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Nome Completo *</label>
             <input
               type="text"
               value={humanForm.name}
               onChange={(e) => setHumanForm({ ...humanForm, name: e.target.value })}
               placeholder="Ex: João Silva"
-              className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50"
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Email (será o login) *</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Email (será o login) *</label>
             <input
               type="email"
               value={humanForm.email}
               onChange={(e) => setHumanForm({ ...humanForm, email: e.target.value })}
               placeholder="joao@empresa.com"
-              className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50"
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400"
             />
           </div>
         </div>
@@ -516,8 +516,8 @@ export function CreateAgentWizard({
               onClick={() => setHumanForm({ ...humanForm, generatePassword: true, password: '', passwordConfirmation: '' })}
               className={`flex-1 py-2.5 px-3 rounded-xl text-sm transition-all ${
                 humanForm.generatePassword
-                  ? 'bg-primary-500/20 border-primary-500 text-primary-400 border'
-                  : 'bg-dark-900/50 border-dark-700/50 text-dark-400 border hover:border-dark-600'
+                  ? 'bg-brand-100 border-primary-500 text-brand-600 border'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 border hover:border-gray-300'
               }`}
             >
               <Sparkles className="w-4 h-4 inline mr-2" />
@@ -528,8 +528,8 @@ export function CreateAgentWizard({
               onClick={() => setHumanForm({ ...humanForm, generatePassword: false })}
               className={`flex-1 py-2.5 px-3 rounded-xl text-sm transition-all ${
                 !humanForm.generatePassword
-                  ? 'bg-primary-500/20 border-primary-500 text-primary-400 border'
-                  : 'bg-dark-900/50 border-dark-700/50 text-dark-400 border hover:border-dark-600'
+                  ? 'bg-brand-100 border-primary-500 text-brand-600 border'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 border hover:border-gray-300'
               }`}
             >
               <Key className="w-4 h-4 inline mr-2" />
@@ -538,12 +538,12 @@ export function CreateAgentWizard({
           </div>
 
           {humanForm.generatePassword ? (
-            <div className="bg-dark-900/30 border border-dark-700/30 rounded-xl p-4">
+            <div className="bg-white/30 border border-gray-200/30 rounded-xl p-4">
               <div className="flex items-start gap-3">
-                <Sparkles className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+                <Sparkles className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm text-white font-medium">Senha será gerada automaticamente</p>
-                  <p className="text-xs text-dark-400 mt-1">
+                  <p className="text-xs text-gray-500 mt-1">
                     Uma senha forte será criada e exibida após a criação do agente.
                     O agente deverá trocar a senha no primeiro acesso.
                   </p>
@@ -553,19 +553,19 @@ export function CreateAgentWizard({
           ) : (
             <>
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">Senha *</label>
+                <label className="block text-sm font-medium text-gray-600 mb-2">Senha *</label>
                 <div className="relative">
                   <input
                     type={humanForm.showPassword ? 'text' : 'password'}
                     value={humanForm.password}
                     onChange={(e) => setHumanForm({ ...humanForm, password: e.target.value })}
                     placeholder="Digite a senha"
-                    className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 pr-10"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setHumanForm({ ...humanForm, showPassword: !humanForm.showPassword })}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
                   >
                     {humanForm.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -575,13 +575,13 @@ export function CreateAgentWizard({
 
               {humanForm.password && passwordValidation.isValid && (
                 <div>
-                  <label className="block text-sm font-medium text-dark-300 mb-2">Confirmar Senha *</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Confirmar Senha *</label>
                   <input
                     type={humanForm.showPassword ? 'text' : 'password'}
                     value={humanForm.passwordConfirmation}
                     onChange={(e) => setHumanForm({ ...humanForm, passwordConfirmation: e.target.value })}
                     placeholder="Repita a senha"
-                    className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400"
                   />
                   <PasswordMatchIndicator password={humanForm.password} confirmation={humanForm.passwordConfirmation} />
                 </div>
@@ -598,46 +598,46 @@ export function CreateAgentWizard({
         <div className="space-y-5">
           {loadingData ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+              <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
             </div>
           ) : (
             <>
               {/* Access Level */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-3">Nível de Acesso</label>
+                <label className="block text-sm font-medium text-gray-600 mb-3">Nível de Acesso</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setPermissions({ ...permissions, accessLevel: 'agent' })}
                     className={`p-3 rounded-xl border transition-all text-left ${
                       permissions.accessLevel === 'agent'
-                        ? 'border-primary-500 bg-primary-500/10'
-                        : 'border-dark-700/50 hover:border-dark-600'
+                        ? 'border-primary-500 bg-brand-50'
+                        : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
                     <User className="w-5 h-5 text-blue-400 mb-2" />
                     <div className="font-medium text-white text-sm">Agente</div>
-                    <div className="text-xs text-dark-400">Acesso limitado</div>
+                    <div className="text-xs text-gray-500">Acesso limitado</div>
                   </button>
                   <button
                     type="button"
                     onClick={() => setPermissions({ ...permissions, accessLevel: 'admin' })}
                     className={`p-3 rounded-xl border transition-all text-left ${
                       permissions.accessLevel === 'admin'
-                        ? 'border-primary-500 bg-primary-500/10'
-                        : 'border-dark-700/50 hover:border-dark-600'
+                        ? 'border-primary-500 bg-brand-50'
+                        : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
                     <Shield className="w-5 h-5 text-purple-400 mb-2" />
                     <div className="font-medium text-white text-sm">Administrador</div>
-                    <div className="text-xs text-dark-400">Acesso completo</div>
+                    <div className="text-xs text-gray-500">Acesso completo</div>
                   </button>
                 </div>
               </div>
 
               {/* WhatsApp Numbers */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-3">
+                <label className="block text-sm font-medium text-gray-600 mb-3">
                   <MessageSquare className="w-4 h-4 inline mr-2" />
                   Números WhatsApp
                 </label>
@@ -651,20 +651,20 @@ export function CreateAgentWizard({
                       whatsappAccessAll: e.target.checked,
                       whatsappNumberIds: e.target.checked ? [] : permissions.whatsappNumberIds
                     })}
-                    className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                    className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
                   />
-                  <span className="text-sm text-dark-300">Acesso a todos os números</span>
+                  <span className="text-sm text-gray-600">Acesso a todos os números</span>
                 </label>
 
                 {!permissions.whatsappAccessAll && (
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {whatsappNumbers.length === 0 ? (
-                      <p className="text-sm text-dark-500 italic">Nenhum número cadastrado</p>
+                      <p className="text-sm text-gray-400 italic">Nenhum número cadastrado</p>
                     ) : (
                       whatsappNumbers.map((number) => (
                         <label
                           key={number.id}
-                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-dark-800/50 cursor-pointer"
+                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
                         >
                           <input
                             type="checkbox"
@@ -682,15 +682,15 @@ export function CreateAgentWizard({
                                 })
                               }
                             }}
-                            className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                            className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
                           />
                           <div className="flex-1">
                             <div className="text-sm text-white">{number.phone_number}</div>
                             {number.display_name && (
-                              <div className="text-xs text-dark-400">{number.display_name}</div>
+                              <div className="text-xs text-gray-500">{number.display_name}</div>
                             )}
                           </div>
-                          <div className={`w-2 h-2 rounded-full ${number.is_connected ? 'bg-green-500' : 'bg-dark-500'}`} />
+                          <div className={`w-2 h-2 rounded-full ${number.is_connected ? 'bg-green-500' : 'bg-gray-300'}`} />
                         </label>
                       ))
                     )}
@@ -700,7 +700,7 @@ export function CreateAgentWizard({
 
               {/* Additional Permissions */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-3">
+                <label className="block text-sm font-medium text-gray-600 mb-3">
                   <Lock className="w-4 h-4 inline mr-2" />
                   Permissões Adicionais
                 </label>
@@ -715,9 +715,9 @@ export function CreateAgentWizard({
                         type="checkbox"
                         checked={permissions[perm.key as keyof typeof permissions] as boolean}
                         onChange={(e) => setPermissions({ ...permissions, [perm.key]: e.target.checked })}
-                        className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                        className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
                       />
-                      <span className="text-sm text-dark-300">{perm.label}</span>
+                      <span className="text-sm text-gray-600">{perm.label}</span>
                     </label>
                   ))}
                 </div>
@@ -733,13 +733,13 @@ export function CreateAgentWizard({
       return (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Nome do Agente *</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Nome do Agente *</label>
             <input
               type="text"
               value={aiForm.name}
               onChange={(e) => setAiForm({ ...aiForm, name: e.target.value })}
               placeholder="Ex: Bia - Assistente Virtual"
-              className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50"
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400"
             />
           </div>
         </div>
@@ -758,7 +758,7 @@ export function CreateAgentWizard({
         <div className="space-y-4">
           {/* Provider */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Provider</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Provider</label>
             <div className="grid grid-cols-4 gap-2">
               {['openai', 'anthropic', 'google', 'groq'].map((provider) => {
                 const hasKey = apiKeys.some(k => k.provider === provider && k.is_valid)
@@ -768,8 +768,8 @@ export function CreateAgentWizard({
                     onClick={() => setAiForm({ ...aiForm, provider, model: '' })}
                     className={`p-2 rounded-xl border transition-all relative text-xs ${
                       aiForm.provider === provider
-                        ? 'border-primary-500 bg-primary-500/10'
-                        : 'border-dark-700/50 hover:border-dark-600'
+                        ? 'border-primary-500 bg-brand-50'
+                        : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
                     <span className="text-white capitalize">{provider}</span>
@@ -791,11 +791,11 @@ export function CreateAgentWizard({
 
           {/* Model */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Modelo</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Modelo</label>
             <select
               value={aiForm.model}
               onChange={(e) => setAiForm({ ...aiForm, model: e.target.value })}
-              className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500/50"
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-brand-400"
             >
               <option value="">Selecione um modelo</option>
               {modelsByProvider[aiForm.provider]?.map((model) => (
@@ -808,7 +808,7 @@ export function CreateAgentWizard({
 
           {/* Temperature */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               Temperatura: {aiForm.temperature}
             </label>
             <input
@@ -820,7 +820,7 @@ export function CreateAgentWizard({
               onChange={(e) => setAiForm({ ...aiForm, temperature: parseFloat(e.target.value) })}
               className="w-full"
             />
-            <div className="flex justify-between text-xs text-dark-500">
+            <div className="flex justify-between text-xs text-gray-400">
               <span>Preciso</span>
               <span>Criativo</span>
             </div>
@@ -828,13 +828,13 @@ export function CreateAgentWizard({
 
           {/* System Prompt */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Prompt do Sistema</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Prompt do Sistema</label>
             <textarea
               value={aiForm.systemPrompt}
               onChange={(e) => setAiForm({ ...aiForm, systemPrompt: e.target.value })}
               placeholder="Instruções para o comportamento da IA..."
               rows={3}
-              className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 resize-none"
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 resize-none"
             />
           </div>
         </div>
@@ -846,7 +846,7 @@ export function CreateAgentWizard({
       return (
         <div className="space-y-4">
           {/* Agent info card */}
-          <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
                 agentType === 'human' ? 'bg-blue-500/20' : 'bg-purple-500/20'
@@ -862,10 +862,10 @@ export function CreateAgentWizard({
                   {agentType === 'human' ? humanForm.name : aiForm.name}
                 </h3>
                 {agentType === 'human' && (
-                  <p className="text-sm text-dark-400">{humanForm.email}</p>
+                  <p className="text-sm text-gray-500">{humanForm.email}</p>
                 )}
                 {agentType === 'ai' && (
-                  <p className="text-sm text-dark-400">{aiForm.model}</p>
+                  <p className="text-sm text-gray-500">{aiForm.model}</p>
                 )}
               </div>
             </div>
@@ -874,8 +874,8 @@ export function CreateAgentWizard({
           {/* Permissions summary for human */}
           {agentType === 'human' && (
             <>
-              <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4">
-                <h4 className="text-sm font-medium text-dark-300 mb-2 flex items-center gap-2">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <h4 className="text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
                   <MessageSquare className="w-4 h-4" />
                   Números WhatsApp
                 </h4>
@@ -888,20 +888,20 @@ export function CreateAgentWizard({
                 </p>
               </div>
 
-              <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4">
-                <h4 className="text-sm font-medium text-dark-300 mb-2 flex items-center gap-2">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <h4 className="text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
                   <Shield className="w-4 h-4" />
                   Permissões
                 </h4>
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-xs bg-dark-700 text-dark-300 px-2 py-1 rounded-full">
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
                     {permissions.accessLevel === 'admin' ? 'Administrador' : 'Agente'}
                   </span>
                   {permissions.canSendMessages && (
-                    <span className="text-xs bg-dark-700 text-dark-300 px-2 py-1 rounded-full">Enviar mensagens</span>
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">Enviar mensagens</span>
                   )}
                   {permissions.canTransferChats && (
-                    <span className="text-xs bg-dark-700 text-dark-300 px-2 py-1 rounded-full">Transferir chats</span>
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">Transferir chats</span>
                   )}
                 </div>
               </div>
@@ -912,9 +912,9 @@ export function CreateAgentWizard({
                   type="checkbox"
                   checked={sendWelcomeEmail}
                   onChange={(e) => setSendWelcomeEmail(e.target.checked)}
-                  className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                  className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
                 />
-                <span className="text-sm text-dark-300">Enviar email de boas-vindas com credenciais</span>
+                <span className="text-sm text-gray-600">Enviar email de boas-vindas com credenciais</span>
               </label>
             </>
           )}
@@ -955,29 +955,29 @@ export function CreateAgentWizard({
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-dark-800 rounded-2xl w-full max-w-lg border border-dark-700/50 overflow-hidden max-h-[90vh] flex flex-col"
+        className="bg-white rounded-2xl w-full max-w-lg border border-gray-200 overflow-hidden max-h-[90vh] flex flex-col"
       >
         {/* Header */}
-        <div className="p-4 border-b border-dark-700/50 flex items-center justify-between flex-shrink-0">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             {!isFirstStep && (
               <button
                 onClick={goBack}
-                className="p-1 hover:bg-dark-700 rounded-lg transition-colors"
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <ChevronLeft className="w-5 h-5 text-dark-400" />
+                <ChevronLeft className="w-5 h-5 text-gray-500" />
               </button>
             )}
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold text-gray-900">
               {currentStep === 'type' ? 'Novo Agente' : 
                agentType === 'human' ? 'Novo Agente Humano' : 'Novo Agente de IA'}
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-dark-700 rounded-lg transition-colors"
+            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <X className="w-5 h-5 text-dark-400" />
+            <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
@@ -999,10 +999,10 @@ export function CreateAgentWizard({
 
         {/* Footer */}
         {currentStep !== 'type' && (
-          <div className="p-4 border-t border-dark-700/50 flex gap-3 flex-shrink-0">
+          <div className="p-4 border-t border-gray-200 flex gap-3 flex-shrink-0">
             <button
               onClick={goBack}
-              className="flex-1 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+              className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
             >
               Voltar
             </button>
@@ -1010,7 +1010,7 @@ export function CreateAgentWizard({
               <button
                 onClick={handleSubmit}
                 disabled={loading || !canProceed()}
-                className="flex-1 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-600 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -1023,7 +1023,7 @@ export function CreateAgentWizard({
               <button
                 onClick={goNext}
                 disabled={!canProceed()}
-                className="flex-1 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-600 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 Próximo
                 <ChevronRight className="w-4 h-4" />

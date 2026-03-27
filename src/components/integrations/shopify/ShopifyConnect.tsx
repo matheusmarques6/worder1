@@ -91,8 +91,8 @@ const STATUS_CONFIGS: Record<ConnectionStatus, StatusConfig> = {
   },
   pending: {
     label: 'Pendente',
-    color: 'text-dark-400',
-    bgColor: 'bg-dark-700 border-dark-600',
+    color: 'text-gray-500',
+    bgColor: 'bg-gray-100 border-gray-300',
     icon: <Clock className="w-3.5 h-3.5" />,
   },
 };
@@ -313,13 +313,13 @@ export default function ShopifyConnect() {
             <ShoppingBag className="w-6 h-6 text-[#95BF47]" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-white">Shopify</h2>
-            <p className="text-sm text-dark-400">Conecte sua loja e sincronize dados</p>
+            <h2 className="text-xl font-semibold text-gray-900">Shopify</h2>
+            <p className="text-sm text-gray-500">Conecte sua loja e sincronize dados</p>
           </div>
         </div>
         <button
           onClick={loadStores}
-          className="p-2.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-xl transition-colors"
+          className="p-2.5 text-gray-500 hover:text-white hover:bg-gray-100 rounded-xl transition-colors"
           aria-label="Atualizar"
         >
           <RefreshCw className="w-5 h-5" />
@@ -350,7 +350,7 @@ export default function ShopifyConnect() {
       {/* Lojas Existentes */}
       {stores.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-medium text-dark-300">Suas Lojas Shopify</h3>
+          <h3 className="text-sm font-medium text-gray-600">Suas Lojas Shopify</h3>
           {stores.map((store) => {
             const statusConfig = STATUS_CONFIGS[store.connectionStatus] ?? STATUS_CONFIGS.pending;
             const showAlert = isErrorStatus(store.connectionStatus);
@@ -358,8 +358,8 @@ export default function ShopifyConnect() {
             return (
               <div 
                 key={store.id} 
-                className={`p-4 bg-dark-800 border rounded-xl ${
-                  showAlert ? 'border-red-500/50' : 'border-dark-700'
+                className={`p-4 bg-white border rounded-xl ${
+                  showAlert ? 'border-red-500/50' : 'border-gray-200'
                 }`}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -375,14 +375,14 @@ export default function ShopifyConnect() {
                           {statusConfig.label}
                         </span>
                       </div>
-                      <p className="text-sm text-dark-400">{store.domain}</p>
+                      <p className="text-sm text-gray-500">{store.domain}</p>
                     </div>
                   </div>
 
                   <button
                     onClick={() => checkHealth(store)}
                     disabled={checkingHealth === store.id}
-                    className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors disabled:opacity-50"
+                    className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
                     title="Verificar conexão"
                   >
                     {checkingHealth === store.id ? (
@@ -414,18 +414,18 @@ export default function ShopifyConnect() {
                 {store.connectionStatus === 'active' && (
                   <div className="grid grid-cols-3 gap-4 mb-4">
                     <div>
-                      <p className="text-xs text-dark-500">Pedidos</p>
-                      <p className="text-lg font-semibold text-white">{store.totalOrders ?? 0}</p>
+                      <p className="text-xs text-gray-400">Pedidos</p>
+                      <p className="text-lg font-semibold text-gray-900">{store.totalOrders ?? 0}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-dark-500">Receita</p>
-                      <p className="text-lg font-semibold text-white">
+                      <p className="text-xs text-gray-400">Receita</p>
+                      <p className="text-lg font-semibold text-gray-900">
                         R$ {(store.totalRevenue ?? 0).toLocaleString('pt-BR')}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-dark-500">Última Sync</p>
-                      <p className="text-sm text-dark-300">
+                      <p className="text-xs text-gray-400">Última Sync</p>
+                      <p className="text-sm text-gray-600">
                         {store.lastSyncAt 
                           ? formatDistanceToNow(new Date(store.lastSyncAt), { addSuffix: true, locale: ptBR })
                           : 'Nunca'}
@@ -434,8 +434,8 @@ export default function ShopifyConnect() {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between pt-3 border-t border-dark-700">
-                  <div className="text-xs text-dark-500">
+                <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                  <div className="text-xs text-gray-400">
                     {store.healthCheckedAt && (
                       <span>
                         Verificado {formatDistanceToNow(new Date(store.healthCheckedAt), { addSuffix: true, locale: ptBR })}
@@ -454,7 +454,7 @@ export default function ShopifyConnect() {
                     )}
                     <button
                       onClick={() => handleDisconnect(store)}
-                      className="p-2 text-dark-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                       title="Desconectar"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -471,7 +471,7 @@ export default function ShopifyConnect() {
       {!showNewStore && (
         <button
           onClick={() => setShowNewStore(true)}
-          className="w-full p-4 border-2 border-dashed border-dark-700 hover:border-[#95BF47]/50 rounded-xl text-dark-400 hover:text-[#95BF47] transition-colors flex items-center justify-center gap-2"
+          className="w-full p-4 border-2 border-dashed border-gray-200 hover:border-[#95BF47]/50 rounded-xl text-gray-500 hover:text-[#95BF47] transition-colors flex items-center justify-center gap-2"
         >
           <Plus className="w-5 h-5" />
           {stores.length > 0 ? 'Adicionar Nova Loja' : 'Conectar Loja Shopify'}
@@ -480,14 +480,14 @@ export default function ShopifyConnect() {
 
       {/* Formulário */}
       {showNewStore && (
-        <div id="new-store-form" className="p-5 bg-dark-800 border border-dark-700 rounded-xl space-y-5">
+        <div id="new-store-form" className="p-5 bg-white border border-gray-200 rounded-xl space-y-5">
           <div className="flex items-center justify-between">
             <h3 className="font-medium text-white">
               {reconnectingStore ? `Reconectar: ${reconnectingStore.name}` : 'Conectar Nova Loja'}
             </h3>
             <button
               onClick={resetForm}
-              className="p-1.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg"
+              className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg"
             >
               <X className="w-4 h-4" />
             </button>
@@ -520,7 +520,7 @@ export default function ShopifyConnect() {
           <form onSubmit={handleConnect} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Nome da Loja <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -528,12 +528,12 @@ export default function ShopifyConnect() {
                   value={storeName}
                   onChange={(e) => setStoreName(e.target.value)}
                   placeholder="Minha Loja"
-                  className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-[#95BF47] transition-colors"
+                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-[#95BF47] transition-colors"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Domínio <span className="text-red-400">*</span>
                 </label>
                 <div className="flex">
@@ -542,10 +542,10 @@ export default function ShopifyConnect() {
                     value={shopDomain}
                     onChange={(e) => setShopDomain(e.target.value)}
                     placeholder="minhaloja"
-                    className="flex-1 px-4 py-3 bg-dark-900 border border-dark-700 rounded-l-xl text-white placeholder-dark-500 focus:outline-none focus:border-[#95BF47] transition-colors"
+                    className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-l-xl text-white placeholder-dark-500 focus:outline-none focus:border-[#95BF47] transition-colors"
                     required
                   />
-                  <span className="px-3 py-3 bg-dark-700 border border-dark-700 rounded-r-xl text-dark-400 text-sm whitespace-nowrap">
+                  <span className="px-3 py-3 bg-gray-100 border border-gray-200 rounded-r-xl text-gray-500 text-sm whitespace-nowrap">
                     .myshopify.com
                   </span>
                 </div>
@@ -553,7 +553,7 @@ export default function ShopifyConnect() {
             </div>
 
             <div>
-              <label className="block text-sm text-dark-400 mb-2">
+              <label className="block text-sm text-gray-500 mb-2">
                 Admin API Access Token <span className="text-red-400">*</span>
               </label>
               <div className="relative">
@@ -562,13 +562,13 @@ export default function ShopifyConnect() {
                   value={accessToken}
                   onChange={(e) => setAccessToken(e.target.value)}
                   placeholder="shpat_xxxxxxxxxxxxxxxxxxxxxxxx"
-                  className="w-full px-4 py-3 pr-12 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-[#95BF47] transition-colors font-mono text-sm"
+                  className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-[#95BF47] transition-colors font-mono text-sm"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowToken(!showToken)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
                 >
                   {showToken ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -576,8 +576,8 @@ export default function ShopifyConnect() {
             </div>
 
             <div>
-              <label className="block text-sm text-dark-400 mb-2">
-                API Secret Key <span className="text-dark-500">(opcional)</span>
+              <label className="block text-sm text-gray-500 mb-2">
+                API Secret Key <span className="text-gray-400">(opcional)</span>
               </label>
               <div className="relative">
                 <input
@@ -585,12 +585,12 @@ export default function ShopifyConnect() {
                   value={apiSecret}
                   onChange={(e) => setApiSecret(e.target.value)}
                   placeholder="shpss_xxxxxxxxxxxxxxxxxxxxxxxx"
-                  className="w-full px-4 py-3 pr-12 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-[#95BF47] transition-colors font-mono text-sm"
+                  className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-[#95BF47] transition-colors font-mono text-sm"
                 />
                 <button
                   type="button"
                   onClick={() => setShowSecret(!showSecret)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
                 >
                   {showSecret ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -601,7 +601,7 @@ export default function ShopifyConnect() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="flex-1 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
               >
                 Cancelar
               </button>
@@ -629,21 +629,21 @@ export default function ShopifyConnect() {
 
       {/* O que sincroniza */}
       <div className="grid grid-cols-4 gap-3">
-        <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+        <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
           <Users className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-          <p className="text-xs text-dark-300">Clientes</p>
+          <p className="text-xs text-gray-600">Clientes</p>
         </div>
-        <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+        <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
           <Package className="w-5 h-5 text-green-400 mx-auto mb-1" />
-          <p className="text-xs text-dark-300">Pedidos</p>
+          <p className="text-xs text-gray-600">Pedidos</p>
         </div>
-        <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+        <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
           <ShoppingCart className="w-5 h-5 text-amber-400 mx-auto mb-1" />
-          <p className="text-xs text-dark-300">Carrinhos</p>
+          <p className="text-xs text-gray-600">Carrinhos</p>
         </div>
-        <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+        <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
           <Zap className="w-5 h-5 text-purple-400 mx-auto mb-1" />
-          <p className="text-xs text-dark-300">Tempo Real</p>
+          <p className="text-xs text-gray-600">Tempo Real</p>
         </div>
       </div>
     </div>

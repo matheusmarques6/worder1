@@ -334,39 +334,39 @@ export default function WhatsAppConnectUnified({
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-2xl max-h-[90vh] bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+          className="w-full max-w-2xl max-h-[90vh] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
         >
           {/* Header */}
-          <div className="p-6 border-b border-dark-700 flex items-center justify-between">
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
                 <MessageSquare className="w-6 h-6 text-green-400" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">Conectar WhatsApp</h2>
-                <p className="text-sm text-dark-400">
+                <h2 className="text-xl font-bold text-gray-900">Conectar WhatsApp</h2>
+                <p className="text-sm text-gray-500">
                   {method === 'qrcode' ? 'Via QR Code' : 'API Oficial Meta'}
                 </p>
               </div>
             </div>
             <button
               onClick={handleClose}
-              className="p-2 hover:bg-dark-800 rounded-xl transition-colors"
+              className="p-2 hover:bg-white rounded-xl transition-colors"
             >
-              <X className="w-5 h-5 text-dark-400" />
+              <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
 
           {/* Method Selector - Step 1 Only */}
           {step === 1 && (
-            <div className="px-6 py-4 border-b border-dark-700/50">
-              <div className="flex gap-2 p-1 bg-dark-800 rounded-xl">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex gap-2 p-1 bg-white rounded-xl">
                 <button
                   onClick={() => setMethod('qrcode')}
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all ${
                     method === 'qrcode'
                       ? 'bg-green-500 text-white'
-                      : 'text-dark-400 hover:text-white hover:bg-dark-700'
+                      : 'text-gray-500 hover:text-white hover:bg-gray-100'
                   }`}
                 >
                   <QrCode className="w-4 h-4" />
@@ -377,7 +377,7 @@ export default function WhatsAppConnectUnified({
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all ${
                     method === 'official'
                       ? 'bg-blue-500 text-white'
-                      : 'text-dark-400 hover:text-white hover:bg-dark-700'
+                      : 'text-gray-500 hover:text-white hover:bg-gray-100'
                   }`}
                 >
                   <Cloud className="w-4 h-4" />
@@ -389,7 +389,7 @@ export default function WhatsAppConnectUnified({
 
           {/* Progress Steps */}
           {step > 1 && (
-            <div className="px-6 py-4 border-b border-dark-700/50">
+            <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex items-center justify-center gap-4">
                 {[
                   { num: 1, label: method === 'qrcode' ? 'QR Code' : 'Credenciais' },
@@ -401,7 +401,7 @@ export default function WhatsAppConnectUnified({
                       w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors
                       ${step >= s.num 
                         ? method === 'qrcode' ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
-                        : 'bg-dark-700 text-dark-400'
+                        : 'bg-gray-100 text-gray-500'
                       }
                     `}>
                       {step > s.num ? <Check className="w-4 h-4" /> : s.num}
@@ -410,7 +410,7 @@ export default function WhatsAppConnectUnified({
                       <div className={`w-12 h-0.5 mx-2 ${
                         step > s.num 
                           ? method === 'qrcode' ? 'bg-green-500' : 'bg-blue-500'
-                          : 'bg-dark-700'
+                          : 'bg-gray-100'
                       }`} />
                     )}
                   </div>
@@ -442,65 +442,65 @@ export default function WhatsAppConnectUnified({
 
                 {/* Vantagens */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-dark-800/50 border border-dark-700 rounded-xl">
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
                     <Zap className="w-5 h-5 text-yellow-400 mb-2" />
                     <h4 className="font-medium text-white text-sm">Conexão Instantânea</h4>
-                    <p className="text-xs text-dark-400 mt-1">Conecte em segundos, sem configurações complexas</p>
+                    <p className="text-xs text-gray-500 mt-1">Conecte em segundos, sem configurações complexas</p>
                   </div>
-                  <div className="p-4 bg-dark-800/50 border border-dark-700 rounded-xl">
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
                     <MessageSquare className="w-5 h-5 text-blue-400 mb-2" />
                     <h4 className="font-medium text-white text-sm">Qualquer Número</h4>
-                    <p className="text-xs text-dark-400 mt-1">Use seu WhatsApp pessoal ou Business</p>
+                    <p className="text-xs text-gray-500 mt-1">Use seu WhatsApp pessoal ou Business</p>
                   </div>
                 </div>
 
                 {/* Evolution API Config (Advanced) */}
-                <div className="border border-dark-700 rounded-xl overflow-hidden">
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
                   <button
                     onClick={() => setShowEvolutionConfig(!showEvolutionConfig)}
-                    className="w-full p-4 flex items-center justify-between hover:bg-dark-800/50 transition-colors"
+                    className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <Settings2 className="w-5 h-5 text-dark-400" />
-                      <span className="text-sm text-dark-300">Configurações Avançadas</span>
+                      <Settings2 className="w-5 h-5 text-gray-500" />
+                      <span className="text-sm text-gray-600">Configurações Avançadas</span>
                     </div>
                     {showEvolutionConfig ? (
-                      <ChevronDown className="w-5 h-5 text-dark-400" />
+                      <ChevronDown className="w-5 h-5 text-gray-500" />
                     ) : (
-                      <ChevronRight className="w-5 h-5 text-dark-400" />
+                      <ChevronRight className="w-5 h-5 text-gray-500" />
                     )}
                   </button>
                   
                   {showEvolutionConfig && (
                     <div className="px-4 pb-4 space-y-4">
                       <div>
-                        <label className="block text-xs text-dark-400 mb-1">Nome da Instância</label>
+                        <label className="block text-xs text-gray-500 mb-1">Nome da Instância</label>
                         <input
                           type="text"
                           value={evolutionConfig.instanceName}
                           onChange={(e) => setEvolutionConfig(prev => ({ ...prev, instanceName: e.target.value }))}
                           placeholder="Ex: Atendimento Principal"
-                          className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-sm text-white placeholder-dark-500"
+                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white placeholder-dark-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-dark-400 mb-1">API URL (Evolution)</label>
+                        <label className="block text-xs text-gray-500 mb-1">API URL (Evolution)</label>
                         <input
                           type="text"
                           value={evolutionConfig.apiUrl}
                           onChange={(e) => setEvolutionConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
                           placeholder="https://api.evolution.com"
-                          className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-sm text-white placeholder-dark-500"
+                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white placeholder-dark-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-dark-400 mb-1">API Key</label>
+                        <label className="block text-xs text-gray-500 mb-1">API Key</label>
                         <input
                           type="password"
                           value={evolutionConfig.apiKey}
                           onChange={(e) => setEvolutionConfig(prev => ({ ...prev, apiKey: e.target.value }))}
                           placeholder="Sua chave de API"
-                          className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-sm text-white placeholder-dark-500"
+                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white placeholder-dark-500"
                         />
                       </div>
                     </div>
@@ -550,19 +550,19 @@ export default function WhatsAppConnectUnified({
 
                 {/* Guia Expandível */}
                 <div className="space-y-3">
-                  <div className="border border-dark-700 rounded-xl overflow-hidden">
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
                     <button
                       onClick={() => setExpandedGuide(expandedGuide === 1 ? null : 1)}
-                      className="w-full p-4 flex items-center justify-between hover:bg-dark-800/50 transition-colors"
+                      className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
                     >
                       <div className="flex items-center gap-3">
                         <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-sm font-medium">1</span>
                         <span className="font-medium text-white">Como obter as credenciais</span>
                       </div>
-                      {expandedGuide === 1 ? <ChevronDown className="w-5 h-5 text-dark-400" /> : <ChevronRight className="w-5 h-5 text-dark-400" />}
+                      {expandedGuide === 1 ? <ChevronDown className="w-5 h-5 text-gray-500" /> : <ChevronRight className="w-5 h-5 text-gray-500" />}
                     </button>
                     {expandedGuide === 1 && (
-                      <div className="px-4 pb-4 text-sm text-dark-300 space-y-2">
+                      <div className="px-4 pb-4 text-sm text-gray-600 space-y-2">
                         <p>1. Acesse <a href="https://developers.facebook.com" target="_blank" className="text-blue-400 hover:underline">developers.facebook.com</a></p>
                         <p>2. Vá em <strong>My Apps</strong> e selecione seu app</p>
                         <p>3. No menu, clique em <strong>WhatsApp {'>'} API Setup</strong></p>
@@ -575,7 +575,7 @@ export default function WhatsAppConnectUnified({
                 {/* Form Fields */}
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Phone Number ID <span className="text-red-400">*</span>
                     </label>
                     <input
@@ -583,25 +583,25 @@ export default function WhatsAppConnectUnified({
                       value={phoneNumberId}
                       onChange={(e) => setPhoneNumberId(e.target.value)}
                       placeholder="Ex: 123456789012345"
-                      className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
-                      WABA ID <span className="text-dark-500">(opcional)</span>
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
+                      WABA ID <span className="text-gray-400">(opcional)</span>
                     </label>
                     <input
                       type="text"
                       value={wabaId}
                       onChange={(e) => setWabaId(e.target.value)}
                       placeholder="Ex: 987654321098765"
-                      className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Access Token <span className="text-red-400">*</span>
                     </label>
                     <div className="relative">
@@ -610,12 +610,12 @@ export default function WhatsAppConnectUnified({
                         value={accessToken}
                         onChange={(e) => setAccessToken(e.target.value)}
                         placeholder="EAAG..."
-                        className="w-full px-4 py-3 pr-12 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                        className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
                       />
                       <button
                         type="button"
                         onClick={() => setShowToken(!showToken)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-white"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-white"
                       >
                         {showToken ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                       </button>
@@ -638,7 +638,7 @@ export default function WhatsAppConnectUnified({
               <div className="space-y-6">
                 <div className="text-center">
                   <h3 className="text-lg font-bold text-white mb-2">Escaneie o QR Code</h3>
-                  <p className="text-sm text-dark-400">
+                  <p className="text-sm text-gray-500">
                     Abra o WhatsApp no celular {'>'} Menu {'>'} Aparelhos conectados {'>'} Conectar
                   </p>
                 </div>
@@ -711,7 +711,7 @@ export default function WhatsAppConnectUnified({
                   <div className="flex justify-center">
                     <button
                       onClick={refreshQRCode}
-                      className="flex items-center gap-2 px-4 py-2 bg-dark-800 hover:bg-dark-700 rounded-xl text-sm text-white transition-colors"
+                      className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-100 rounded-xl text-sm text-white transition-colors"
                     >
                       <RefreshCw className="w-4 h-4" />
                       Gerar novo QR Code
@@ -720,12 +720,12 @@ export default function WhatsAppConnectUnified({
                 )}
 
                 {/* Instructions */}
-                <div className="p-4 bg-dark-800 rounded-xl">
+                <div className="p-4 bg-white rounded-xl">
                   <h4 className="font-medium text-white mb-3 flex items-center gap-2">
                     <Info className="w-4 h-4 text-blue-400" />
                     Instruções
                   </h4>
-                  <ol className="text-sm text-dark-300 space-y-2 list-decimal list-inside">
+                  <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside">
                     <li>Abra o WhatsApp no seu celular</li>
                     <li>Toque em <strong>Menu</strong> (⋮) ou <strong>Configurações</strong></li>
                     <li>Selecione <strong>Aparelhos conectados</strong></li>
@@ -749,8 +749,8 @@ export default function WhatsAppConnectUnified({
                       method === 'qrcode' ? 'text-green-400' : 'text-blue-400'
                     }`} />
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-2">Conectado com Sucesso!</h3>
-                  <p className="text-dark-400">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Conectado com Sucesso!</h3>
+                  <p className="text-gray-500">
                     {method === 'qrcode' 
                       ? `WhatsApp: ${connectedNumber || 'Número conectado'}`
                       : `${result?.config?.business_name || 'WhatsApp Business'} • ${result?.config?.phone_number}`
@@ -760,44 +760,44 @@ export default function WhatsAppConnectUnified({
 
                 {/* Webhook Config - Only for Official API */}
                 {method === 'official' && result?.config && (
-                  <div className="p-4 bg-dark-800 rounded-xl space-y-4">
+                  <div className="p-4 bg-white rounded-xl space-y-4">
                     <h4 className="font-medium text-white flex items-center gap-2">
                       <Info className="w-4 h-4 text-blue-400" />
                       Configure o Webhook no Meta
                     </h4>
                     
                     <div>
-                      <label className="block text-xs text-dark-400 mb-1">Callback URL</label>
+                      <label className="block text-xs text-gray-500 mb-1">Callback URL</label>
                       <div className="flex gap-2">
                         <input
                           type="text"
                           readOnly
                           value={result.config?.webhook_url || `${window.location.origin}/api/whatsapp/webhook`}
-                          className="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm text-dark-300"
+                          className="flex-1 px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-600"
                         />
                         <button
                           onClick={() => copyToClipboard(result.config?.webhook_url || `${window.location.origin}/api/whatsapp/webhook`)}
-                          className="px-3 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg transition-colors"
+                          className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                         >
-                          <Copy className="w-4 h-4 text-dark-300" />
+                          <Copy className="w-4 h-4 text-gray-600" />
                         </button>
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs text-dark-400 mb-1">Verify Token</label>
+                      <label className="block text-xs text-gray-500 mb-1">Verify Token</label>
                       <div className="flex gap-2">
                         <input
                           type="text"
                           readOnly
                           value={result.config?.webhook_verify_token || ''}
-                          className="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm text-dark-300"
+                          className="flex-1 px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-600"
                         />
                         <button
                           onClick={() => copyToClipboard(result.config?.webhook_verify_token || '')}
-                          className="px-3 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg transition-colors"
+                          className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                         >
-                          <Copy className="w-4 h-4 text-dark-300" />
+                          <Copy className="w-4 h-4 text-gray-600" />
                         </button>
                       </div>
                     </div>
@@ -806,12 +806,12 @@ export default function WhatsAppConnectUnified({
 
                 {/* QR Code Success Info */}
                 {method === 'qrcode' && (
-                  <div className="p-4 bg-dark-800 rounded-xl">
+                  <div className="p-4 bg-white rounded-xl">
                     <h4 className="font-medium text-white flex items-center gap-2 mb-3">
                       <Wifi className="w-4 h-4 text-green-400" />
                       Conexão Ativa
                     </h4>
-                    <ul className="text-sm text-dark-300 space-y-2">
+                    <ul className="text-sm text-gray-600 space-y-2">
                       <li className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-green-400" />
                         Mensagens sincronizadas em tempo real
@@ -832,12 +832,12 @@ export default function WhatsAppConnectUnified({
           </div>
 
           {/* Footer */}
-          <div className="p-6 border-t border-dark-700 flex items-center justify-between">
+          <div className="p-6 border-t border-gray-200 flex items-center justify-between">
             {step === 1 && (
               <>
                 <button
                   onClick={handleClose}
-                  className="px-4 py-2.5 text-dark-400 hover:text-white transition-colors"
+                  className="px-4 py-2.5 text-gray-500 hover:text-white transition-colors"
                 >
                   Cancelar
                 </button>
@@ -869,7 +869,7 @@ export default function WhatsAppConnectUnified({
               <>
                 <button
                   onClick={() => setStep(1)}
-                  className="px-4 py-2.5 text-dark-400 hover:text-white transition-colors"
+                  className="px-4 py-2.5 text-gray-500 hover:text-white transition-colors"
                 >
                   Voltar
                 </button>
@@ -897,7 +897,7 @@ export default function WhatsAppConnectUnified({
               <>
                 <button
                   onClick={() => { stopPolling(); setStep(1); }}
-                  className="px-4 py-2.5 text-dark-400 hover:text-white transition-colors"
+                  className="px-4 py-2.5 text-gray-500 hover:text-white transition-colors"
                 >
                   Voltar
                 </button>

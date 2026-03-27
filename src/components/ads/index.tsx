@@ -126,7 +126,7 @@ export const AdsPlatformCard = ({
     tiktok: { 
       name: 'TikTok Ads', 
       gradient: 'from-dark-800 to-dark-900',
-      border: 'border-dark-600',
+      border: 'border-gray-300',
       textColor: 'text-white',
     },
   }
@@ -145,7 +145,7 @@ export const AdsPlatformCard = ({
           </div>
         </div>
         <div className="text-center py-6">
-          <p className="text-dark-400 text-sm mb-4">Conecte sua conta para ver os dados</p>
+          <p className="text-gray-500 text-sm mb-4">Conecte sua conta para ver os dados</p>
           <button
             onClick={onConnect}
             className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-lg transition-colors"
@@ -171,7 +171,7 @@ export const AdsPlatformCard = ({
         <button 
           onClick={onSync}
           disabled={isSyncing}
-          className="p-2 text-dark-400 hover:text-white rounded-lg hover:bg-dark-700/50 transition-colors"
+          className="p-2 text-gray-500 hover:text-white rounded-lg hover:bg-gray-100 transition-colors"
         >
           <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
         </button>
@@ -179,7 +179,7 @@ export const AdsPlatformCard = ({
       
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <p className="text-xs text-dark-400">Gasto</p>
+          <p className="text-xs text-gray-500">Gasto</p>
           <div className="flex items-baseline gap-2">
             <p className="text-lg font-bold text-white">{formatCurrency(spend)}</p>
             {spendChange !== 0 && (
@@ -190,15 +190,15 @@ export const AdsPlatformCard = ({
           </div>
         </div>
         <div>
-          <p className="text-xs text-dark-400">Receita</p>
+          <p className="text-xs text-gray-500">Receita</p>
           <p className="text-lg font-bold text-success-400">{formatCurrency(revenue)}</p>
         </div>
         <div>
-          <p className="text-xs text-dark-400">ROAS</p>
+          <p className="text-xs text-gray-500">ROAS</p>
           <p className={`text-lg font-bold ${config[platform].textColor}`}>{roas.toFixed(2)}x</p>
         </div>
         <div>
-          <p className="text-xs text-dark-400">CPA</p>
+          <p className="text-xs text-gray-500">CPA</p>
           <p className="text-lg font-bold text-white">{formatCurrency(cpa)}</p>
         </div>
       </div>
@@ -220,12 +220,12 @@ export const AdsTrendChart = ({ data }: AdsTrendChartProps) => {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-dark-800/95 backdrop-blur-sm border border-dark-700/50 rounded-xl p-4 shadow-xl">
-          <p className="text-sm font-medium text-white mb-2">{label}</p>
+        <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-xl p-4 shadow-xl">
+          <p className="text-sm font-medium text-gray-900 mb-2">{label}</p>
           {payload.map((entry: any, index: number) => (
             <div key={index} className="flex items-center gap-2 text-sm">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
-              <span className="text-dark-400">{entry.name}:</span>
+              <span className="text-gray-500">{entry.name}:</span>
               <span className="text-white font-medium">{formatCurrency(entry.value)}</span>
             </div>
           ))}
@@ -239,7 +239,7 @@ export const AdsTrendChart = ({ data }: AdsTrendChartProps) => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+      className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
     >
       <h3 className="font-semibold text-white mb-4">Gasto por Plataforma (últimos dias)</h3>
       <ResponsiveContainer width="100%" height={200}>
@@ -287,14 +287,14 @@ export const AdsTrendChart = ({ data }: AdsTrendChartProps) => {
         </AreaChart>
       </ResponsiveContainer>
       <div className="flex justify-center gap-6 mt-4">
-        <div className="flex items-center gap-2 text-sm text-dark-400">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
           <div className="w-3 h-3 rounded-full bg-blue-600" /> Facebook
         </div>
-        <div className="flex items-center gap-2 text-sm text-dark-400">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
           <div className="w-3 h-3 rounded-full bg-red-500" /> Google
         </div>
-        <div className="flex items-center gap-2 text-sm text-dark-400">
-          <div className="w-3 h-3 rounded-full bg-dark-500" /> TikTok
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="w-3 h-3 rounded-full bg-gray-300" /> TikTok
         </div>
       </div>
     </motion.div>
@@ -313,10 +313,10 @@ export const SpendDistributionChart = ({ data }: SpendDistributionProps) => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+      className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
     >
       <h3 className="font-semibold text-white mb-2">Distribuição de Gastos</h3>
-      <p className="text-sm text-dark-400 mb-4">Por plataforma de anúncios</p>
+      <p className="text-sm text-gray-500 mb-4">Por plataforma de anúncios</p>
       
       <div className="flex items-center gap-8">
         <div className="w-40 h-40">
@@ -344,11 +344,11 @@ export const SpendDistributionChart = ({ data }: SpendDistributionProps) => {
             <div key={item.name} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                <span className="text-sm text-dark-300">{item.name}</span>
+                <span className="text-sm text-gray-600">{item.name}</span>
               </div>
               <div className="text-right">
-                <span className="text-sm font-medium text-white">{formatCurrency(item.value)}</span>
-                <span className="text-xs text-dark-500 ml-2">
+                <span className="text-sm font-medium text-gray-900">{formatCurrency(item.value)}</span>
+                <span className="text-xs text-gray-400 ml-2">
                   ({total > 0 ? ((item.value / total) * 100).toFixed(0) : 0}%)
                 </span>
               </div>
@@ -381,17 +381,17 @@ export const TopAdsList = ({ ads, onViewAll }: TopAdsListProps) => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+      className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
     >
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-semibold text-white">Top Anúncios</h3>
-          <p className="text-sm text-dark-400">Por ROAS</p>
+          <p className="text-sm text-gray-500">Por ROAS</p>
         </div>
         {onViewAll && (
           <button 
             onClick={onViewAll}
-            className="text-sm text-primary-400 hover:text-primary-300 font-medium"
+            className="text-sm text-brand-600 hover:text-brand-500 font-medium"
           >
             Ver todos →
           </button>
@@ -402,24 +402,24 @@ export const TopAdsList = ({ ads, onViewAll }: TopAdsListProps) => {
         {ads.slice(0, 5).map((ad) => (
           <div
             key={ad.id}
-            className="flex items-center gap-3 p-3 rounded-xl hover:bg-dark-800/50 transition-colors"
+            className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
           >
             <PlatformBadge platform={ad.platform} />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">{ad.name}</p>
-              <p className="text-xs text-dark-500">Gasto: {formatCurrency(ad.spend)}</p>
+              <p className="text-sm font-medium text-gray-900 truncate">{ad.name}</p>
+              <p className="text-xs text-gray-400">Gasto: {formatCurrency(ad.spend)}</p>
             </div>
             <div className="text-right">
               <p className="text-sm font-bold text-success-400">{ad.roas.toFixed(2)}x</p>
-              <p className="text-xs text-dark-500">ROAS</p>
+              <p className="text-xs text-gray-400">ROAS</p>
             </div>
           </div>
         ))}
         
         {ads.length === 0 && (
           <div className="text-center py-8">
-            <BarChart3 className="w-10 h-10 text-dark-600 mx-auto mb-2" />
-            <p className="text-dark-400 text-sm">Nenhum anúncio encontrado</p>
+            <BarChart3 className="w-10 h-10 text-gray-500 mx-auto mb-2" />
+            <p className="text-gray-500 text-sm">Nenhum anúncio encontrado</p>
           </div>
         )}
       </div>
@@ -439,13 +439,13 @@ interface AdsSummaryProps {
 export const AdsSummaryCards = ({ totalSpend, spendChange, cpa, roas, totalConversions }: AdsSummaryProps) => {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <div className="bg-dark-800/60 rounded-xl p-4 border border-dark-700/40">
+      <div className="bg-white rounded-xl p-4 border border-gray-200/40">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-blue-500/20">
             <DollarSign className="w-4 h-4 text-blue-400" />
           </div>
           <div className="flex-1">
-            <p className="text-xs text-dark-400">Total em Ads</p>
+            <p className="text-xs text-gray-500">Total em Ads</p>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-lg font-bold text-white">{formatCurrency(totalSpend)}</span>
               {spendChange !== 0 && (
@@ -458,37 +458,37 @@ export const AdsSummaryCards = ({ totalSpend, spendChange, cpa, roas, totalConve
         </div>
       </div>
       
-      <div className="bg-dark-800/60 rounded-xl p-4 border border-dark-700/40">
+      <div className="bg-white rounded-xl p-4 border border-gray-200/40">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary-500/20">
-            <Target className="w-4 h-4 text-primary-400" />
+          <div className="p-2 rounded-lg bg-brand-100">
+            <Target className="w-4 h-4 text-brand-600" />
           </div>
           <div className="flex-1">
-            <p className="text-xs text-dark-400">CPA Médio</p>
+            <p className="text-xs text-gray-500">CPA Médio</p>
             <span className="text-lg font-bold text-white">{formatCurrency(cpa)}</span>
           </div>
         </div>
       </div>
       
-      <div className="bg-dark-800/60 rounded-xl p-4 border border-dark-700/40">
+      <div className="bg-white rounded-xl p-4 border border-gray-200/40">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-success-500/20">
             <TrendingUp className="w-4 h-4 text-success-400" />
           </div>
           <div className="flex-1">
-            <p className="text-xs text-dark-400">ROAS Geral</p>
+            <p className="text-xs text-gray-500">ROAS Geral</p>
             <span className="text-lg font-bold text-white">{roas.toFixed(2)}x</span>
           </div>
         </div>
       </div>
       
-      <div className="bg-dark-800/60 rounded-xl p-4 border border-dark-700/40">
+      <div className="bg-white rounded-xl p-4 border border-gray-200/40">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-accent-500/20">
             <MousePointer className="w-4 h-4 text-accent-400" />
           </div>
           <div className="flex-1">
-            <p className="text-xs text-dark-400">Conversões</p>
+            <p className="text-xs text-gray-500">Conversões</p>
             <span className="text-lg font-bold text-white">{formatNumber(totalConversions)}</span>
           </div>
         </div>

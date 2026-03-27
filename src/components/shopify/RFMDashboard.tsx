@@ -267,7 +267,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Segmentação RFM</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Segmentação RFM</h2>
           <p className="text-sm text-gray-400">
             Análise de Recência, Frequência e Valor Monetário
           </p>
@@ -325,7 +325,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
                 >
                   <Icon className="h-4 w-4" />
                 </div>
-                <span className="text-2xl font-bold text-white">{s.count}</span>
+                <span className="text-2xl font-bold text-gray-900">{s.count}</span>
               </div>
               <p className="text-xs text-gray-400 truncate">{s.label}</p>
               <p className="text-xs text-gray-500">{s.percentage.toFixed(1)}%</p>
@@ -448,7 +448,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
                 </div>
                 <button
                   onClick={() => setSelectedSegment(null)}
-                  className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+                  className="p-2 hover:bg-gray-50 rounded-lg transition-colors"
                 >
                   <ChevronUp className="h-5 w-5 text-gray-400" />
                 </button>
@@ -563,7 +563,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
               <action.icon className={`h-5 w-5 text-${action.color}-400`} />
               <span className="font-medium text-white">{action.title}</span>
             </div>
-            <p className="text-2xl font-bold text-white">{action.count}</p>
+            <p className="text-2xl font-bold text-gray-900">{action.count}</p>
             <p className="text-sm text-gray-400">clientes elegíveis</p>
           </div>
         ))}

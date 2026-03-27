@@ -78,28 +78,28 @@ export default function FormSubmissionsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <button onClick={() => router.push(`/forms/${formId}`)} className="p-2 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-white transition-colors">
+        <button onClick={() => router.push(`/forms/${formId}`)} className="p-2 rounded-lg hover:bg-white text-gray-500 hover:text-white transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-white">Submissions</h1>
-          <p className="text-dark-400 mt-1">{total} leads captados</p>
+          <h1 className="text-2xl font-bold text-gray-900">Submissions</h1>
+          <p className="text-gray-500 mt-1">{total} leads captados</p>
         </div>
       </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
+          <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
         </div>
       ) : submissions.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col items-center justify-center py-20 bg-dark-800/40 rounded-2xl border border-dark-700/30 border-dashed"
+          className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-2xl border border-gray-200/30 border-dashed"
         >
-          <Users className="w-12 h-12 text-dark-400 mb-4" />
-          <h3 className="text-lg font-semibold text-white mb-2">Nenhum lead ainda</h3>
-          <p className="text-dark-400">Quando leads submeterem o formulario, eles aparecrao aqui.</p>
+          <Users className="w-12 h-12 text-gray-500 mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum lead ainda</h3>
+          <p className="text-gray-500">Quando leads submeterem o formulario, eles aparecrao aqui.</p>
         </motion.div>
       ) : (
         <>
@@ -112,22 +112,22 @@ export default function FormSubmissionsPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   onClick={() => setSelectedSubmission(sub)}
-                  className={`p-4 bg-dark-800/60 border rounded-xl cursor-pointer transition-all ${
+                  className={`p-4 bg-white border rounded-xl cursor-pointer transition-all ${
                     selectedSubmission?.id === sub.id
-                      ? 'border-primary-500/50 bg-dark-800/80'
-                      : 'border-dark-700/50 hover:border-dark-600'
+                      ? 'border-brand-400 bg-white'
+                      : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary-500/20 flex items-center justify-center">
-                        <Users className="w-5 h-5 text-primary-400" />
+                      <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center">
+                        <Users className="w-5 h-5 text-brand-600" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-white">
+                        <p className="text-sm font-medium text-gray-900">
                           {sub.contact?.name || 'Lead sem nome'}
                         </p>
-                        <div className="flex items-center gap-3 text-xs text-dark-400">
+                        <div className="flex items-center gap-3 text-xs text-gray-500">
                           {sub.contact?.email && (
                             <span className="flex items-center gap-1">
                               <Mail className="w-3 h-3" />
@@ -144,7 +144,7 @@ export default function FormSubmissionsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${statusLabels[sub.status]?.color || 'bg-dark-700 text-dark-400'}`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${statusLabels[sub.status]?.color || 'bg-gray-100 text-gray-500'}`}>
                         {statusLabels[sub.status]?.label || sub.status}
                       </span>
                       {sub.events_fired?.length > 0 && (
@@ -155,10 +155,10 @@ export default function FormSubmissionsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 mt-2 text-xs text-dark-500">
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
                     <Calendar className="w-3 h-3" />
                     {formatDate(sub.created_at)}
-                    {sub.utm_source && <span className="px-1.5 py-0.5 bg-dark-700 rounded">{sub.utm_source}</span>}
+                    {sub.utm_source && <span className="px-1.5 py-0.5 bg-gray-100 rounded">{sub.utm_source}</span>}
                   </div>
                 </motion.div>
               ))}
@@ -167,28 +167,28 @@ export default function FormSubmissionsPage() {
             {/* Detail Panel */}
             <div className="lg:col-span-1">
               {selectedSubmission ? (
-                <div className="sticky top-20 p-5 bg-dark-800/60 border border-dark-700/50 rounded-xl space-y-4">
-                  <h3 className="text-base font-semibold text-white">Detalhes</h3>
+                <div className="sticky top-20 p-5 bg-white border border-gray-200 rounded-xl space-y-4">
+                  <h3 className="text-base font-semibold text-gray-900">Detalhes</h3>
 
                   {/* Contact info */}
                   {selectedSubmission.contact && (
                     <div className="space-y-2">
-                      <p className="text-xs text-dark-400 font-medium">Contato</p>
+                      <p className="text-xs text-gray-500 font-medium">Contato</p>
                       <div className="space-y-1">
                         <p className="text-sm text-white">{selectedSubmission.contact.name}</p>
-                        {selectedSubmission.contact.email && <p className="text-xs text-dark-300">{selectedSubmission.contact.email}</p>}
-                        {selectedSubmission.contact.phone && <p className="text-xs text-dark-300">{selectedSubmission.contact.phone}</p>}
+                        {selectedSubmission.contact.email && <p className="text-xs text-gray-600">{selectedSubmission.contact.email}</p>}
+                        {selectedSubmission.contact.phone && <p className="text-xs text-gray-600">{selectedSubmission.contact.phone}</p>}
                       </div>
                     </div>
                   )}
 
                   {/* Answers */}
                   <div className="space-y-2">
-                    <p className="text-xs text-dark-400 font-medium">Respostas</p>
+                    <p className="text-xs text-gray-500 font-medium">Respostas</p>
                     <div className="space-y-2">
                       {Object.entries(selectedSubmission.answers).map(([fieldId, value]) => (
-                        <div key={fieldId} className="p-2 bg-dark-900/50 rounded-lg">
-                          <p className="text-[10px] text-dark-500">{fieldId}</p>
+                        <div key={fieldId} className="p-2 bg-gray-50 rounded-lg">
+                          <p className="text-[10px] text-gray-400">{fieldId}</p>
                           <p className="text-xs text-white">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</p>
                         </div>
                       ))}
@@ -198,17 +198,17 @@ export default function FormSubmissionsPage() {
                   {/* Events */}
                   {selectedSubmission.events_fired?.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs text-dark-400 font-medium">Eventos Disparados</p>
+                      <p className="text-xs text-gray-500 font-medium">Eventos Disparados</p>
                       <div className="space-y-1">
                         {selectedSubmission.events_fired.map((ev: any, i: number) => (
-                          <div key={i} className="flex items-center gap-2 p-2 bg-dark-900/50 rounded-lg">
+                          <div key={i} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
                             {ev.success ? (
                               <CheckCircle className="w-3 h-3 text-green-400" />
                             ) : (
                               <XCircle className="w-3 h-3 text-red-400" />
                             )}
                             <span className="text-xs text-white">{ev.event}</span>
-                            <span className="text-[10px] text-dark-500">{ev.platform}</span>
+                            <span className="text-[10px] text-gray-400">{ev.platform}</span>
                           </div>
                         ))}
                       </div>
@@ -218,19 +218,19 @@ export default function FormSubmissionsPage() {
                   {/* UTM data */}
                   {(selectedSubmission.utm_source || selectedSubmission.utm_campaign) && (
                     <div className="space-y-2">
-                      <p className="text-xs text-dark-400 font-medium">UTM</p>
+                      <p className="text-xs text-gray-500 font-medium">UTM</p>
                       <div className="flex flex-wrap gap-1">
-                        {selectedSubmission.utm_source && <span className="px-2 py-0.5 bg-dark-700 rounded text-[10px] text-dark-300">source: {selectedSubmission.utm_source}</span>}
-                        {selectedSubmission.utm_medium && <span className="px-2 py-0.5 bg-dark-700 rounded text-[10px] text-dark-300">medium: {selectedSubmission.utm_medium}</span>}
-                        {selectedSubmission.utm_campaign && <span className="px-2 py-0.5 bg-dark-700 rounded text-[10px] text-dark-300">campaign: {selectedSubmission.utm_campaign}</span>}
+                        {selectedSubmission.utm_source && <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] text-gray-600">source: {selectedSubmission.utm_source}</span>}
+                        {selectedSubmission.utm_medium && <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] text-gray-600">medium: {selectedSubmission.utm_medium}</span>}
+                        {selectedSubmission.utm_campaign && <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] text-gray-600">campaign: {selectedSubmission.utm_campaign}</span>}
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="p-5 bg-dark-800/40 rounded-xl border border-dark-700/30 text-center">
-                  <Eye className="w-8 h-8 text-dark-500 mx-auto mb-2" />
-                  <p className="text-sm text-dark-400">Selecione uma submission para ver detalhes</p>
+                <div className="p-5 bg-gray-50 rounded-xl border border-gray-200/30 text-center">
+                  <Eye className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Selecione uma submission para ver detalhes</p>
                 </div>
               )}
             </div>
@@ -242,17 +242,17 @@ export default function FormSubmissionsPage() {
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="p-2 bg-dark-800 border border-dark-700 rounded-lg text-dark-400 hover:text-white disabled:opacity-50"
+                className="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-white disabled:opacity-50"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="text-sm text-dark-400">
+              <span className="text-sm text-gray-500">
                 Pagina {page} de {totalPages}
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="p-2 bg-dark-800 border border-dark-700 rounded-lg text-dark-400 hover:text-white disabled:opacity-50"
+                className="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-white disabled:opacity-50"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

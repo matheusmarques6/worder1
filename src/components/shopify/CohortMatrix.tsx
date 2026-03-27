@@ -169,7 +169,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Análise de Cohort</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Análise de Cohort</h2>
           <p className="text-sm text-gray-400">
             Retenção de clientes por mês de primeira compra
           </p>
@@ -219,7 +219,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
               <Calendar className="h-4 w-4" />
               Retenção Mês 1
             </div>
-            <p className="text-2xl font-bold text-white">
+            <p className="text-2xl font-bold text-gray-900">
               {matrixData.summary.avgRetentionMonth1.toFixed(1)}%
             </p>
           </div>
@@ -228,7 +228,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
               <Calendar className="h-4 w-4" />
               Retenção Mês 3
             </div>
-            <p className="text-2xl font-bold text-white">
+            <p className="text-2xl font-bold text-gray-900">
               {matrixData.summary.avgRetentionMonth3.toFixed(1)}%
             </p>
           </div>

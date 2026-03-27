@@ -279,7 +279,7 @@ function HealthLogItem({ log }: { log: HealthLog }) {
       
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-white">
+          <span className="text-sm font-medium text-gray-900">
             {integrationLabels[log.integration_type] || log.integration_type}
           </span>
           {log.integration_name && (
@@ -468,7 +468,7 @@ export default function IntegrationHubPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-white mb-1">Hub de Integrações</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Hub de Integrações</h1>
             <p className="text-gray-400">
               Monitore a saúde das suas conexões em tempo real
             </p>

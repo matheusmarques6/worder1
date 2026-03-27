@@ -20,7 +20,7 @@ const statusOptions = [
   { id: 'online', label: 'Online', color: 'bg-green-500', textColor: 'text-green-400' },
   { id: 'away', label: 'Ausente', color: 'bg-yellow-500', textColor: 'text-yellow-400' },
   { id: 'busy', label: 'Ocupado', color: 'bg-red-500', textColor: 'text-red-400' },
-  { id: 'offline', label: 'Offline', color: 'bg-dark-500', textColor: 'text-dark-400' },
+  { id: 'offline', label: 'Offline', color: 'bg-gray-300', textColor: 'text-gray-500' },
 ]
 
 export function UserMenu() {
@@ -148,7 +148,7 @@ export function UserMenu() {
       {/* User Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-3 p-1.5 pr-4 rounded-xl hover:bg-dark-800/50 transition-all"
+        className="flex items-center gap-3 p-1.5 pr-4 rounded-xl hover:bg-gray-50 transition-all"
       >
         {/* Avatar */}
         <div className="relative">
@@ -165,15 +165,15 @@ export function UserMenu() {
 
         {/* Name and Role */}
         <div className="text-left hidden sm:block">
-          <p className="text-sm font-medium text-white truncate max-w-[120px]">
+          <p className="text-sm font-medium text-gray-900 truncate max-w-[120px]">
             {userName}
           </p>
-          <p className="text-xs text-dark-400">
+          <p className="text-xs text-gray-500">
             {userRole}
           </p>
         </div>
 
-        <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown Menu */}
@@ -184,10 +184,10 @@ export function UserMenu() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.96 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 w-64 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-50"
+            className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden z-50"
           >
             {/* User Info Header */}
-            <div className="p-4 border-b border-dark-700">
+            <div className="p-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
                   <span className="text-white font-bold text-lg">
@@ -195,10 +195,10 @@ export function UserMenu() {
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">
+                  <p className="text-sm font-semibold text-gray-900 truncate">
                     {userName}
                   </p>
-                  <p className="text-xs text-dark-400 truncate">
+                  <p className="text-xs text-gray-500 truncate">
                     {userEmail}
                   </p>
                   <span className={`inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full ${
@@ -206,7 +206,7 @@ export function UserMenu() {
                       ? 'bg-blue-500/20 text-blue-400' 
                       : userRole === 'Owner' 
                         ? 'bg-purple-500/20 text-purple-400'
-                        : 'bg-primary-500/20 text-primary-400'
+                        : 'bg-brand-100 text-brand-600'
                   }`}>
                     {userRole}
                   </span>
@@ -216,8 +216,8 @@ export function UserMenu() {
 
             {/* Status Section - Only for Agents */}
             {isAgent && (
-              <div className="p-2 border-b border-dark-700">
-                <p className="px-2 py-1 text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
+              <div className="p-2 border-b border-gray-200">
+                <p className="px-2 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Status
                 </p>
                 <div className="space-y-0.5 mt-1">
@@ -228,18 +228,18 @@ export function UserMenu() {
                       disabled={statusLoading}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                         agentStatus === status.id
-                          ? 'bg-dark-700/50'
-                          : 'hover:bg-dark-700/30'
+                          ? 'bg-gray-100'
+                          : 'hover:bg-gray-100/30'
                       }`}
                     >
                       <div className={`w-2.5 h-2.5 rounded-full ${status.color}`} />
                       <span className={`text-sm ${
-                        agentStatus === status.id ? status.textColor : 'text-dark-300'
+                        agentStatus === status.id ? status.textColor : 'text-gray-600'
                       }`}>
                         {status.label}
                       </span>
                       {agentStatus === status.id && (
-                        <span className="ml-auto text-xs text-dark-500">✓</span>
+                        <span className="ml-auto text-xs text-gray-400">✓</span>
                       )}
                     </button>
                   ))}
@@ -251,7 +251,7 @@ export function UserMenu() {
             <div className="p-2">
               <button
                 onClick={handleProfileClick}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-dark-300 hover:text-white hover:bg-dark-700/50 transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:text-white hover:bg-gray-100 transition-colors"
               >
                 <User className="w-4 h-4" />
                 <span className="text-sm">Meu Perfil</span>
@@ -259,7 +259,7 @@ export function UserMenu() {
 
               <button
                 onClick={handleChangePasswordClick}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-dark-300 hover:text-white hover:bg-dark-700/50 transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:text-white hover:bg-gray-100 transition-colors"
               >
                 <Key className="w-4 h-4" />
                 <span className="text-sm">Trocar Senha</span>
@@ -271,7 +271,7 @@ export function UserMenu() {
                     setIsOpen(false)
                     router.push('/settings')
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-dark-300 hover:text-white hover:bg-dark-700/50 transition-colors"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:text-white hover:bg-gray-100 transition-colors"
                 >
                   <Settings className="w-4 h-4" />
                   <span className="text-sm">Configurações</span>
@@ -280,7 +280,7 @@ export function UserMenu() {
             </div>
 
             {/* Logout */}
-            <div className="p-2 border-t border-dark-700">
+            <div className="p-2 border-t border-gray-200">
               <button
                 onClick={handleLogout}
                 disabled={isLoggingOut}

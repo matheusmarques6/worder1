@@ -122,10 +122,10 @@ export default function NumberSelector({
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-3 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl hover:border-dark-600 transition-colors w-full"
+        className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl hover:border-gray-300 transition-colors w-full"
       >
         {loading ? (
-          <Loader2 className="w-5 h-5 text-dark-400 animate-spin" />
+          <Loader2 className="w-5 h-5 text-gray-500 animate-spin" />
         ) : (
           <>
             <div className="relative">
@@ -134,35 +134,35 @@ export default function NumberSelector({
                   ? 'bg-green-500/20' 
                   : selectedNumber 
                   ? 'bg-red-500/20'
-                  : 'bg-dark-700/50'
+                  : 'bg-gray-100'
               }`}>
                 <Phone className={`w-4 h-4 ${
                   selectedNumber?.is_connected 
                     ? 'text-green-400' 
                     : selectedNumber 
                     ? 'text-red-400'
-                    : 'text-dark-400'
+                    : 'text-gray-500'
                 }`} />
               </div>
               {selectedNumber && (
-                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-dark-800 ${
+                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-gray-200 ${
                   selectedNumber.is_connected ? 'bg-green-400' : 'bg-red-400'
                 }`} />
               )}
             </div>
             
             <div className="flex-1 text-left min-w-0">
-              <p className="text-sm font-medium text-white truncate">
+              <p className="text-sm font-medium text-gray-900 truncate">
                 {selectedNumber?.display_name || selectedNumber?.phone_number || 'Todos os números'}
               </p>
-              <p className="text-xs text-dark-400">
+              <p className="text-xs text-gray-500">
                 {selectedNumber 
                   ? (selectedNumber.provider === 'meta_cloud' ? 'API Oficial' : 'Evolution')
                   : `${connectedCount} conectado${connectedCount !== 1 ? 's' : ''}`}
               </p>
             </div>
 
-            <ChevronDown className={`w-5 h-5 text-dark-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </>
         )}
       </button>
@@ -174,13 +174,13 @@ export default function NumberSelector({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute z-50 w-full mt-2 bg-dark-800 border border-dark-700 rounded-xl shadow-2xl overflow-hidden"
+            className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden"
           >
             {/* Header */}
-            <div className="px-4 py-3 border-b border-dark-700/50">
+            <div className="px-4 py-3 border-b border-gray-200">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-white">Números de WhatsApp</p>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-dark-700 text-dark-300">
+                <p className="text-sm font-medium text-gray-900">Números de WhatsApp</p>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
                   {numbers.length} número{numbers.length !== 1 ? 's' : ''}
                 </span>
               </div>
@@ -195,19 +195,19 @@ export default function NumberSelector({
                     onNumberChange(null)
                     setIsOpen(false)
                   }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/50 transition-colors ${
-                    !selectedNumberId ? 'bg-primary-500/10' : ''
+                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-100 transition-colors ${
+                    !selectedNumberId ? 'bg-brand-50' : ''
                   }`}
                 >
-                  <div className="w-8 h-8 rounded-lg bg-dark-700/50 flex items-center justify-center">
-                    <Users className="w-4 h-4 text-dark-400" />
+                  <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                    <Users className="w-4 h-4 text-gray-500" />
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="text-sm font-medium text-white">Todos os números</p>
-                    <p className="text-xs text-dark-400">Ver todas as conversas</p>
+                    <p className="text-sm font-medium text-gray-900">Todos os números</p>
+                    <p className="text-xs text-gray-500">Ver todas as conversas</p>
                   </div>
                   {!selectedNumberId && (
-                    <Check className="w-5 h-5 text-primary-400" />
+                    <Check className="w-5 h-5 text-brand-600" />
                   )}
                 </button>
               )}
@@ -215,11 +215,11 @@ export default function NumberSelector({
               {/* Number List */}
               {numbers.length === 0 ? (
                 <div className="px-4 py-8 text-center">
-                  <Phone className="w-8 h-8 text-dark-500 mx-auto mb-2" />
-                  <p className="text-sm text-dark-400">Nenhum número conectado</p>
+                  <Phone className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Nenhum número conectado</p>
                   <Link
                     href="/whatsapp/settings"
-                    className="inline-flex items-center gap-1 text-xs text-primary-400 hover:text-primary-300 mt-2"
+                    className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-500 mt-2"
                   >
                     <Plus className="w-3 h-3" />
                     Conectar número
@@ -233,8 +233,8 @@ export default function NumberSelector({
                       onNumberChange(number.id)
                       setIsOpen(false)
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/50 transition-colors ${
-                      selectedNumberId === number.id ? 'bg-primary-500/10' : ''
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-100 transition-colors ${
+                      selectedNumberId === number.id ? 'bg-brand-50' : ''
                     }`}
                   >
                     <div className="relative">
@@ -245,18 +245,18 @@ export default function NumberSelector({
                           number.is_connected ? 'text-green-400' : 'text-red-400'
                         }`} />
                       </div>
-                      <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-dark-800 ${
+                      <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-gray-200 ${
                         number.is_connected ? 'bg-green-400' : 'bg-red-400'
                       }`} />
                     </div>
                     
                     <div className="flex-1 text-left min-w-0">
-                      <p className="text-sm font-medium text-white truncate">
+                      <p className="text-sm font-medium text-gray-900 truncate">
                         {number.display_name || number.phone_number}
                       </p>
-                      <div className="flex items-center gap-2 text-xs text-dark-400">
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
                         <span>{number.phone_number}</span>
-                        <span className="text-dark-600">•</span>
+                        <span className="text-gray-500">•</span>
                         <span className={`flex items-center gap-1 ${
                           number.is_connected ? 'text-green-400' : 'text-red-400'
                         }`}>
@@ -272,13 +272,13 @@ export default function NumberSelector({
                     {/* Stats */}
                     {number.stats && (
                       <div className="text-right">
-                        <p className="text-xs text-dark-300">{number.stats.messages_today} hoje</p>
-                        <p className="text-xs text-dark-500">{number.stats.total_conversations} total</p>
+                        <p className="text-xs text-gray-600">{number.stats.messages_today} hoje</p>
+                        <p className="text-xs text-gray-400">{number.stats.total_conversations} total</p>
                       </div>
                     )}
 
                     {selectedNumberId === number.id && (
-                      <Check className="w-5 h-5 text-primary-400 flex-shrink-0" />
+                      <Check className="w-5 h-5 text-brand-600 flex-shrink-0" />
                     )}
                   </button>
                 ))
@@ -286,10 +286,10 @@ export default function NumberSelector({
             </div>
 
             {/* Footer */}
-            <div className="px-4 py-3 border-t border-dark-700/50 bg-dark-900/50">
+            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
               <Link
                 href="/whatsapp/settings"
-                className="flex items-center justify-center gap-2 text-sm text-dark-400 hover:text-white transition-colors"
+                className="flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-white transition-colors"
               >
                 <Settings className="w-4 h-4" />
                 Gerenciar números
@@ -364,7 +364,7 @@ export function NumberSelectorCompact({
     <div ref={dropdownRef} className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 border border-dark-700/50 rounded-lg hover:border-dark-600 transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
       >
         <div className={`w-2 h-2 rounded-full ${
           selectedNumber?.is_connected ? 'bg-green-400' : 'bg-yellow-400'
@@ -372,7 +372,7 @@ export function NumberSelectorCompact({
         <span className="text-sm text-white">
           {selectedNumber?.display_name || selectedNumber?.phone_number || 'Todos'}
         </span>
-        <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       <AnimatePresence>
@@ -381,20 +381,20 @@ export function NumberSelectorCompact({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute right-0 z-50 mt-2 w-56 bg-dark-800 border border-dark-700 rounded-xl shadow-2xl overflow-hidden"
+            className="absolute right-0 z-50 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden"
           >
             <button
               onClick={() => {
                 onNumberChange(null)
                 setIsOpen(false)
               }}
-              className={`w-full flex items-center gap-2 px-4 py-2.5 hover:bg-dark-700/50 transition-colors ${
-                !selectedNumberId ? 'bg-primary-500/10' : ''
+              className={`w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-100 transition-colors ${
+                !selectedNumberId ? 'bg-brand-50' : ''
               }`}
             >
-              <Users className="w-4 h-4 text-dark-400" />
+              <Users className="w-4 h-4 text-gray-500" />
               <span className="text-sm text-white">Todos</span>
-              {!selectedNumberId && <Check className="w-4 h-4 text-primary-400 ml-auto" />}
+              {!selectedNumberId && <Check className="w-4 h-4 text-brand-600 ml-auto" />}
             </button>
 
             {numbers.map((number) => (
@@ -404,8 +404,8 @@ export function NumberSelectorCompact({
                   onNumberChange(number.id)
                   setIsOpen(false)
                 }}
-                className={`w-full flex items-center gap-2 px-4 py-2.5 hover:bg-dark-700/50 transition-colors ${
-                  selectedNumberId === number.id ? 'bg-primary-500/10' : ''
+                className={`w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-100 transition-colors ${
+                  selectedNumberId === number.id ? 'bg-brand-50' : ''
                 }`}
               >
                 <div className={`w-2 h-2 rounded-full ${
@@ -415,7 +415,7 @@ export function NumberSelectorCompact({
                   {number.display_name || number.phone_number}
                 </span>
                 {selectedNumberId === number.id && (
-                  <Check className="w-4 h-4 text-primary-400 ml-auto flex-shrink-0" />
+                  <Check className="w-4 h-4 text-brand-600 ml-auto flex-shrink-0" />
                 )}
               </button>
             ))}

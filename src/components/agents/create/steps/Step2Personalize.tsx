@@ -169,7 +169,7 @@ export function Step2Personalize({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-2">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">
           Personalize seu agente
         </h2>
         <p className="text-zinc-400">
@@ -215,7 +215,7 @@ export function Step2Personalize({
               `}
             >
               <span className="text-lg mb-1 block">{option.icon}</span>
-              <span className="text-sm font-medium text-white block">{option.label}</span>
+              <span className="text-sm font-medium text-gray-900 block">{option.label}</span>
               <span className="text-xs text-zinc-400">{option.description}</span>
             </button>
           ))}
@@ -240,7 +240,7 @@ export function Step2Personalize({
                 }
               `}
             >
-              <span className="text-sm font-medium text-white block">{option.label}</span>
+              <span className="text-sm font-medium text-gray-900 block">{option.label}</span>
               <span className="text-xs text-zinc-400">{option.description}</span>
             </button>
           ))}

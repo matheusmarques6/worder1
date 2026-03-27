@@ -50,17 +50,17 @@ export function HourlyHeatmap({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.6 }}
-      className="bg-dark-800/50 rounded-xl border border-dark-700/50 p-6"
+      className="bg-gray-50 rounded-xl border border-gray-200 p-6"
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Clock className="w-5 h-5 text-cyan-400" />
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
         </div>
         {bestHour && (
           <div className="flex items-center gap-2 text-sm">
             <TrendingUp className="w-4 h-4 text-emerald-400" />
-            <span className="text-dark-400">Melhor hora:</span>
+            <span className="text-gray-500">Melhor hora:</span>
             <span className="text-emerald-400 font-medium">
               {bestHour.hour.toString().padStart(2, '0')}h ({bestHour.rate.toFixed(1)}%)
             </span>
@@ -86,19 +86,19 @@ export function HourlyHeatmap({
                 title={`${item.hour}h: ${metric === 'interactions' ? value.toLocaleString() : value.toFixed(1) + '%'}`}
               >
                 {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-xs opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
                   <p className="font-medium text-white">{item.hour.toString().padStart(2, '0')}:00</p>
                   {item.sent !== undefined && (
-                    <p className="text-dark-300">Enviadas: {item.sent?.toLocaleString()}</p>
+                    <p className="text-gray-600">Enviadas: {item.sent?.toLocaleString()}</p>
                   )}
                   {item.delivered !== undefined && (
-                    <p className="text-dark-300">Entregues: {item.delivered?.toLocaleString()}</p>
+                    <p className="text-gray-600">Entregues: {item.delivered?.toLocaleString()}</p>
                   )}
                   {item.read !== undefined && (
-                    <p className="text-dark-300">Lidas: {item.read?.toLocaleString()}</p>
+                    <p className="text-gray-600">Lidas: {item.read?.toLocaleString()}</p>
                   )}
                   {item.interactions !== undefined && (
-                    <p className="text-dark-300">Interações: {item.interactions?.toLocaleString()}</p>
+                    <p className="text-gray-600">Interações: {item.interactions?.toLocaleString()}</p>
                   )}
                   {item.delivery_rate !== undefined && (
                     <p className="text-emerald-400">Taxa entrega: {item.delivery_rate.toFixed(1)}%</p>
@@ -120,7 +120,7 @@ export function HourlyHeatmap({
           {[0, 6, 12, 18, 23].map((hour) => (
             <div
               key={hour}
-              className="text-xs text-dark-400 text-center"
+              className="text-xs text-gray-500 text-center"
               style={{ gridColumn: hour + 1 }}
             >
               {hour}h
@@ -130,27 +130,27 @@ export function HourlyHeatmap({
       </div>
 
       {/* Legend */}
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-dark-700/50">
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-dark-400">Baixo</span>
+          <span className="text-xs text-gray-500">Baixo</span>
           <div className="flex gap-0.5">
-            {['bg-dark-700', 'bg-emerald-900/40', 'bg-emerald-700/50', 'bg-emerald-600/60', 'bg-emerald-500/80'].map((color, i) => (
+            {['bg-gray-100', 'bg-emerald-900/40', 'bg-emerald-700/50', 'bg-emerald-600/60', 'bg-emerald-500/80'].map((color, i) => (
               <div key={i} className={`w-6 h-3 ${color} rounded`} />
             ))}
           </div>
-          <span className="text-xs text-dark-400">Alto</span>
+          <span className="text-xs text-gray-500">Alto</span>
         </div>
 
         {/* Stats summary */}
         <div className="flex items-center gap-4 text-xs">
           <div>
-            <span className="text-dark-400">Pico: </span>
+            <span className="text-gray-500">Pico: </span>
             <span className="text-white font-medium">
               {findPeakHour(data, metric)}
             </span>
           </div>
           <div>
-            <span className="text-dark-400">Baixa: </span>
+            <span className="text-gray-500">Baixa: </span>
             <span className="text-white font-medium">
               {findLowHour(data, metric)}
             </span>
@@ -164,7 +164,7 @@ export function HourlyHeatmap({
 function getHeatmapColor(intensity: number, metric: string): string {
   if (metric === 'interactions') {
     // Escala roxa para interações
-    if (intensity < 0.1) return 'bg-dark-700';
+    if (intensity < 0.1) return 'bg-gray-100';
     if (intensity < 0.25) return 'bg-purple-900/30';
     if (intensity < 0.5) return 'bg-purple-700/40';
     if (intensity < 0.75) return 'bg-purple-600/60';

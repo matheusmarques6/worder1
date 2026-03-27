@@ -139,7 +139,7 @@ export function Canvas() {
           animated: true,
         }}
         proOptions={{ hideAttribution: true }}
-        className="bg-dark-800"
+        className="bg-white"
       >
         {/* Background */}
         <Background
@@ -152,8 +152,8 @@ export function Canvas() {
         {/* Controls */}
         <Controls
           className={cn(
-            '[&>button]:bg-dark-700 [&>button]:border-dark-600',
-            '[&>button]:text-dark-300 [&>button:hover]:bg-dark-600',
+            '[&>button]:bg-gray-100 [&>button]:border-gray-300',
+            '[&>button]:text-gray-600 [&>button:hover]:bg-gray-200',
             '[&>button:hover]:text-white [&>button]:shadow-sm'
           )}
         />
@@ -176,13 +176,13 @@ export function Canvas() {
             }
           }}
           maskColor="rgba(17, 24, 39, 0.8)"
-          className="!bg-dark-900 !border-dark-700 shadow-md"
+          className="!bg-white !border-gray-200 shadow-md"
         />
 
         {/* Empty state */}
         {nodes.length === 0 && (
           <Panel position="top-center" className="mt-20">
-            <div className="text-center text-dark-400 p-8">
+            <div className="text-center text-gray-500 p-8">
               <p className="text-lg mb-2">Arraste componentes da barra lateral</p>
               <p className="text-sm">ou clique duas vezes para adicionar</p>
             </div>

@@ -199,9 +199,9 @@ export function ExecutionDetail({
       case 'running':
         return <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />;
       case 'skipped':
-        return <div className="w-5 h-5 rounded-full bg-dark-700 flex items-center justify-center text-[10px] text-dark-400">—</div>;
+        return <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[10px] text-gray-500">—</div>;
       default:
-        return <Clock className="w-5 h-5 text-dark-500" />;
+        return <Clock className="w-5 h-5 text-gray-400" />;
     }
   };
 
@@ -237,11 +237,11 @@ export function ExecutionDetail({
               </div>
             )}
             <div>
-              <h2 className="text-lg font-semibold text-white">
+              <h2 className="text-lg font-semibold text-gray-900">
                 {run?.automation_name || 'Carregando...'}
               </h2>
               {run && (
-                <p className="text-xs text-dark-400">
+                <p className="text-xs text-gray-500">
                   {formatFullDateTime(run.started_at)} • {formatDuration(run.duration_ms)}
                 </p>
               )}
@@ -249,16 +249,16 @@ export function ExecutionDetail({
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-dark-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-white rounded-lg transition-colors"
           >
-            <X className="w-5 h-5 text-dark-400" />
+            <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
         {/* Content */}
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+            <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
           </div>
         ) : error ? (
           <div className="flex-1 flex flex-col items-center justify-center text-red-400">
@@ -269,14 +269,14 @@ export function ExecutionDetail({
           <div className="flex-1 overflow-y-auto">
             {/* Contexto */}
             <div className="p-4 border-b border-[#222222]">
-              <h3 className="text-xs font-semibold text-dark-400 uppercase tracking-wider mb-3">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                 Contexto
               </h3>
               
               <div className="space-y-3">
                 {/* Contato */}
                 {run.contact && (
-                  <div className="flex items-center gap-3 p-3 bg-dark-900/50 rounded-xl">
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold">
                       {(run.contact.name?.[0] || run.contact.email[0]).toUpperCase()}
                     </div>
@@ -284,7 +284,7 @@ export function ExecutionDetail({
                       <p className="font-medium text-white truncate">
                         {run.contact.name || 'Sem nome'}
                       </p>
-                      <div className="flex items-center gap-3 text-xs text-dark-400">
+                      <div className="flex items-center gap-3 text-xs text-gray-500">
                         <span className="flex items-center gap-1">
                           <Mail className="w-3 h-3" />
                           {run.contact.email}
@@ -302,7 +302,7 @@ export function ExecutionDetail({
 
                 {/* Deal ID */}
                 {run.deal_id && (
-                  <div className="flex items-center gap-3 p-3 bg-dark-900/50 rounded-xl">
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                     <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
                       <Briefcase className="w-5 h-5 text-blue-400" />
                     </div>
@@ -310,7 +310,7 @@ export function ExecutionDetail({
                       <p className="font-medium text-white truncate">
                         Deal vinculado
                       </p>
-                      <p className="text-xs text-dark-400">
+                      <p className="text-xs text-gray-500">
                         ID: {run.deal_id}
                       </p>
                     </div>
@@ -319,9 +319,9 @@ export function ExecutionDetail({
 
                 {/* Trigger Data */}
                 {run.trigger_data && Object.keys(run.trigger_data).length > 0 && (
-                  <div className="p-3 bg-dark-900/50 rounded-xl">
-                    <p className="text-xs font-medium text-dark-400 mb-2">Dados do Trigger</p>
-                    <pre className="text-xs text-dark-300 bg-dark-950 rounded-lg p-2 overflow-x-auto max-h-[100px]">
+                  <div className="p-3 bg-gray-50 rounded-xl">
+                    <p className="text-xs font-medium text-gray-500 mb-2">Dados do Trigger</p>
+                    <pre className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 overflow-x-auto max-h-[100px]">
                       {JSON.stringify(run.trigger_data, null, 2)}
                     </pre>
                   </div>
@@ -342,14 +342,14 @@ export function ExecutionDetail({
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-dark-500" />
-                <span className="text-sm text-dark-400">{run.total_steps} total</span>
+                <div className="w-2 h-2 rounded-full bg-gray-300" />
+                <span className="text-sm text-gray-500">{run.total_steps} total</span>
               </div>
             </div>
 
             {/* Steps */}
             <div className="p-4">
-              <h3 className="text-xs font-semibold text-dark-400 uppercase tracking-wider mb-3">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                 Steps ({steps.length})
               </h3>
 
@@ -369,9 +369,9 @@ export function ExecutionDetail({
                         'rounded-xl border overflow-hidden transition-all',
                         step.status === 'success' && 'border-green-500/30 bg-green-500/5',
                         step.status === 'error' && 'border-red-500/30 bg-red-500/5',
-                        step.status === 'skipped' && 'border-dark-700 bg-dark-800/50 opacity-60',
+                        step.status === 'skipped' && 'border-gray-200 bg-gray-50 opacity-60',
                         step.status === 'running' && 'border-amber-500/30 bg-amber-500/5',
-                        step.status === 'pending' && 'border-dark-700 bg-dark-800/30',
+                        step.status === 'pending' && 'border-gray-200 bg-gray-50',
                       )}
                     >
                       {/* Step Header */}
@@ -379,7 +379,7 @@ export function ExecutionDetail({
                         className="flex items-center gap-3 p-3 cursor-pointer"
                         onClick={() => toggleStep(step.id)}
                       >
-                        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-dark-700 text-xs text-dark-300">
+                        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs text-gray-600">
                           {index + 1}
                         </div>
 
@@ -388,7 +388,7 @@ export function ExecutionDetail({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-sm">{nodeConfig.icon}</span>
-                            <span className="text-sm font-medium text-white truncate">
+                            <span className="text-sm font-medium text-gray-900 truncate">
                               {step.node_label || nodeConfig.label}
                             </span>
                           </div>
@@ -399,14 +399,14 @@ export function ExecutionDetail({
                           )}
                         </div>
 
-                        <span className="text-xs text-dark-500">
+                        <span className="text-xs text-gray-400">
                           {formatDuration(step.duration_ms)}
                         </span>
 
                         {isExpanded ? (
-                          <ChevronUp className="w-4 h-4 text-dark-500" />
+                          <ChevronUp className="w-4 h-4 text-gray-400" />
                         ) : (
-                          <ChevronDown className="w-4 h-4 text-dark-500" />
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
                         )}
                       </div>
 
@@ -417,22 +417,22 @@ export function ExecutionDetail({
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
-                            className="border-t border-dark-700"
+                            className="border-t border-gray-200"
                           >
-                            <div className="p-3 space-y-3 bg-dark-900/50">
+                            <div className="p-3 space-y-3 bg-gray-50">
                               {/* Input */}
                               {step.input_data && Object.keys(step.input_data).length > 0 && (
                                 <div>
                                   <div className="flex items-center justify-between mb-1">
-                                    <p className="text-xs font-medium text-dark-400">INPUT</p>
+                                    <p className="text-xs font-medium text-gray-500">INPUT</p>
                                     <button
                                       onClick={() => copyToClipboard(JSON.stringify(step.input_data, null, 2))}
-                                      className="p-1 hover:bg-dark-700 rounded"
+                                      className="p-1 hover:bg-gray-100 rounded"
                                     >
-                                      <Copy className="w-3 h-3 text-dark-500" />
+                                      <Copy className="w-3 h-3 text-gray-400" />
                                     </button>
                                   </div>
-                                  <pre className="text-xs text-dark-300 bg-dark-950 rounded-lg p-2 overflow-x-auto max-h-[150px]">
+                                  <pre className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 overflow-x-auto max-h-[150px]">
                                     {JSON.stringify(step.input_data, null, 2)}
                                   </pre>
                                 </div>
@@ -442,15 +442,15 @@ export function ExecutionDetail({
                               {step.output_data && Object.keys(step.output_data).length > 0 && (
                                 <div>
                                   <div className="flex items-center justify-between mb-1">
-                                    <p className="text-xs font-medium text-dark-400">OUTPUT</p>
+                                    <p className="text-xs font-medium text-gray-500">OUTPUT</p>
                                     <button
                                       onClick={() => copyToClipboard(JSON.stringify(step.output_data, null, 2))}
-                                      className="p-1 hover:bg-dark-700 rounded"
+                                      className="p-1 hover:bg-gray-100 rounded"
                                     >
-                                      <Copy className="w-3 h-3 text-dark-500" />
+                                      <Copy className="w-3 h-3 text-gray-400" />
                                     </button>
                                   </div>
-                                  <pre className="text-xs text-dark-300 bg-dark-950 rounded-lg p-2 overflow-x-auto max-h-[150px]">
+                                  <pre className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 overflow-x-auto max-h-[150px]">
                                     {JSON.stringify(step.output_data, null, 2)}
                                   </pre>
                                 </div>
@@ -469,8 +469,8 @@ export function ExecutionDetail({
                               {/* Config Used */}
                               {step.config_used && Object.keys(step.config_used).length > 0 && (
                                 <div>
-                                  <p className="text-xs font-medium text-dark-400 mb-1">CONFIG</p>
-                                  <pre className="text-xs text-dark-300 bg-dark-950 rounded-lg p-2 overflow-x-auto max-h-[100px]">
+                                  <p className="text-xs font-medium text-gray-500 mb-1">CONFIG</p>
+                                  <pre className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 overflow-x-auto max-h-[100px]">
                                     {JSON.stringify(step.config_used, null, 2)}
                                   </pre>
                                 </div>
