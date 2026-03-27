@@ -247,9 +247,9 @@ export default function AIAgentEditor({
         animate={{ opacity: 1 }}
         className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center"
       >
-        <div className="bg-dark-800 rounded-2xl p-8 flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
-          <p className="text-dark-300">Carregando agente...</p>
+        <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
+          <p className="text-gray-600">Carregando agente...</p>
         </div>
       </motion.div>
     )
@@ -263,12 +263,12 @@ export default function AIAgentEditor({
         animate={{ opacity: 1 }}
         className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center"
       >
-        <div className="bg-dark-800 rounded-2xl p-8 flex flex-col items-center gap-4 max-w-md">
+        <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4 max-w-md">
           <AlertCircle className="w-12 h-12 text-red-400" />
           <p className="text-white text-center">Agente não encontrado</p>
           <button
             onClick={onClose}
-            className="px-6 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-xl"
+            className="px-6 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-xl"
           >
             Voltar
           </button>
@@ -290,27 +290,27 @@ export default function AIAgentEditor({
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="ml-auto h-full w-full max-w-5xl bg-dark-900 border-l border-dark-700 flex flex-col"
+        className="ml-auto h-full w-full max-w-5xl bg-white border-l border-gray-200 flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-dark-700 bg-dark-800/50">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center gap-4">
             <button
               onClick={onClose}
-              className="p-2 rounded-xl hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
+              className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                agent.is_active ? 'bg-purple-500/20' : 'bg-dark-700'
+                agent.is_active ? 'bg-purple-500/20' : 'bg-gray-100'
               }`}>
-                <Bot className={`w-5 h-5 ${agent.is_active ? 'text-purple-400' : 'text-dark-500'}`} />
+                <Bot className={`w-5 h-5 ${agent.is_active ? 'text-purple-400' : 'text-gray-400'}`} />
               </div>
               <div>
                 <h2 className="text-white font-semibold">{agent.name}</h2>
-                <p className="text-xs text-dark-400">
+                <p className="text-xs text-gray-500">
                   {agent.provider} • {agent.model}
                 </p>
               </div>
@@ -323,8 +323,8 @@ export default function AIAgentEditor({
               onClick={() => setShowPreview(!showPreview)}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-colors ${
                 showPreview 
-                  ? 'bg-primary-500/20 text-primary-400' 
-                  : 'bg-dark-700 text-dark-300 hover:text-white'
+                  ? 'bg-brand-100 text-brand-600' 
+                  : 'bg-gray-100 text-gray-600 hover:text-white'
               }`}
             >
               <MessageSquare className="w-4 h-4" />
@@ -337,7 +337,7 @@ export default function AIAgentEditor({
               className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-colors ${
                 agent.is_active
                   ? 'bg-green-500/20 text-green-400'
-                  : 'bg-dark-700 text-dark-400'
+                  : 'bg-gray-100 text-gray-500'
               }`}
             >
               {agent.is_active ? (
@@ -356,7 +356,7 @@ export default function AIAgentEditor({
             {/* Delete Button */}
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="p-2 rounded-xl bg-dark-700 text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              className="p-2 rounded-xl bg-gray-100 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -368,7 +368,7 @@ export default function AIAgentEditor({
               className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all ${
                 hasChanges
                   ? 'bg-gradient-to-r from-primary-500 to-accent-500 text-white hover:from-primary-600 hover:to-accent-600'
-                  : 'bg-dark-700 text-dark-500 cursor-not-allowed'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               }`}
             >
               {saving ? (
@@ -412,7 +412,7 @@ export default function AIAgentEditor({
         </AnimatePresence>
 
         {/* Tabs Navigation */}
-        <div className="flex gap-1 p-4 border-b border-dark-700 overflow-x-auto">
+        <div className="flex gap-1 p-4 border-b border-gray-200 overflow-x-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
@@ -430,14 +430,14 @@ export default function AIAgentEditor({
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all whitespace-nowrap ${
                   isActive
                     ? `${tab.bg} ${tab.color}`
-                    : 'text-dark-400 hover:text-white hover:bg-dark-800'
+                    : 'text-gray-500 hover:text-white hover:bg-white'
                 }`}
               >
                 <Icon className="w-4 h-4" />
                 <span className="text-sm">{tab.label}</span>
                 {badge && (
                   <span className={`px-1.5 py-0.5 rounded-full text-xs ${
-                    isActive ? 'bg-white/20' : 'bg-dark-700'
+                    isActive ? 'bg-white/20' : 'bg-gray-100'
                   }`}>
                     {badge}
                   </span>
@@ -545,7 +545,7 @@ export default function AIAgentEditor({
                 initial={{ width: 0, opacity: 0 }}
                 animate={{ width: '50%', opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
-                className="border-l border-dark-700 overflow-hidden"
+                className="border-l border-gray-200 overflow-hidden"
               >
                 <AgentPreview
                   agent={agent}
@@ -571,7 +571,7 @@ export default function AIAgentEditor({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-dark-800 rounded-2xl p-6 max-w-md w-full border border-dark-700"
+              className="bg-white rounded-2xl p-6 max-w-md w-full border border-gray-200"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center gap-3 mb-4">
@@ -579,12 +579,12 @@ export default function AIAgentEditor({
                   <Trash2 className="w-6 h-6 text-red-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Excluir Agente</h3>
-                  <p className="text-sm text-dark-400">Esta ação não pode ser desfeita</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Excluir Agente</h3>
+                  <p className="text-sm text-gray-500">Esta ação não pode ser desfeita</p>
                 </div>
               </div>
 
-              <p className="text-dark-300 mb-6">
+              <p className="text-gray-600 mb-6">
                 Tem certeza que deseja excluir o agente <strong className="text-white">{agent.name}</strong>? 
                 Todas as fontes, ações e configurações serão perdidas.
               </p>
@@ -592,7 +592,7 @@ export default function AIAgentEditor({
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
-                  className="flex-1 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
                 >
                   Cancelar
                 </button>

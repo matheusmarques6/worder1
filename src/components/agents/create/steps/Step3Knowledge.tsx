@@ -142,7 +142,7 @@ export function Step3Knowledge({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-2">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">
           Base de Conhecimento
         </h2>
         <p className="text-zinc-400">
@@ -241,7 +241,7 @@ export function Step3Knowledge({
                       }
                       className="w-full text-left"
                     >
-                      <p className="text-sm font-medium text-white">
+                      <p className="text-sm font-medium text-gray-900">
                         {item.question}
                       </p>
                     </button>

@@ -15,11 +15,11 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', isLoading, leftIcon, rightIcon, children, disabled, ...props }, ref) => {
     const variants = {
-      primary: 'bg-gradient-to-r from-primary-600 to-primary-500 text-white hover:from-primary-500 hover:to-primary-400 shadow-lg shadow-primary-500/20',
-      secondary: 'bg-dark-800 text-dark-100 border border-dark-600 hover:bg-dark-700 hover:border-dark-500',
-      ghost: 'text-dark-300 hover:bg-dark-800 hover:text-dark-100',
-      danger: 'bg-gradient-to-r from-error-600 to-error-500 text-white hover:from-error-500 hover:to-error-400 shadow-lg shadow-error-500/20',
-      success: 'bg-gradient-to-r from-success-600 to-success-500 text-white hover:from-success-500 hover:to-success-400 shadow-lg shadow-success-500/20',
+      primary: 'bg-brand-500 text-white hover:bg-brand-600 shadow-sm',
+      secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50',
+      ghost: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+      danger: 'bg-red-500 text-white hover:bg-red-600 shadow-sm',
+      success: 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm',
     }
 
     const sizes = {
@@ -33,13 +33,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={cn(
           'inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-300',
-          'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-950',
+          'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white',
           'active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
           variants[variant],
-          variant === 'primary' && 'focus:ring-primary-500/50',
-          variant === 'secondary' && 'focus:ring-dark-500/50',
-          variant === 'danger' && 'focus:ring-error-500/50',
-          variant === 'success' && 'focus:ring-success-500/50',
+          variant === 'primary' && 'focus:ring-brand-500/50',
+          variant === 'secondary' && 'focus:ring-gray-300',
+          variant === 'danger' && 'focus:ring-red-500/50',
+          variant === 'success' && 'focus:ring-emerald-500/50',
           sizes[size],
           className
         )}

@@ -112,7 +112,7 @@ function KPICard({
   color?: 'primary' | 'success' | 'warning' | 'danger'
 }) {
   const colorClasses = {
-    primary: 'text-primary-400 bg-primary-500/20',
+    primary: 'text-brand-600 bg-brand-100',
     success: 'text-green-400 bg-green-500/20',
     warning: 'text-yellow-400 bg-yellow-500/20',
     danger: 'text-red-400 bg-red-500/20',
@@ -122,7 +122,7 @@ function KPICard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-dark-800/50 rounded-xl p-5 border border-dark-700/50"
+      className="bg-gray-50 rounded-xl p-5 border border-gray-200"
     >
       <div className="flex items-start justify-between mb-3">
         <div className={`p-2.5 rounded-lg ${colorClasses[color]}`}>
@@ -135,9 +135,9 @@ function KPICard({
           </div>
         )}
       </div>
-      <h3 className="text-2xl font-bold text-white mb-1">{value}</h3>
-      <p className="text-sm text-dark-400">{title}</p>
-      {subtitle && <p className="text-xs text-dark-500 mt-1">{subtitle}</p>}
+      <h3 className="text-2xl font-bold text-gray-900 mb-1">{value}</h3>
+      <p className="text-sm text-gray-500">{title}</p>
+      {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
     </motion.div>
   )
 }
@@ -155,15 +155,15 @@ function StageFunnel({ stages }: { stages: ForecastData['byStage'] }) {
                 className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: stage.color }}
               />
-              <span className="text-sm font-medium text-white">{stage.name}</span>
-              <span className="text-xs text-dark-400">({stage.count})</span>
+              <span className="text-sm font-medium text-gray-900">{stage.name}</span>
+              <span className="text-xs text-gray-500">({stage.count})</span>
             </div>
             <div className="text-right">
-              <span className="text-sm font-medium text-white">{formatCurrency(stage.value)}</span>
-              <span className="text-xs text-dark-500 ml-2">{stage.probability}%</span>
+              <span className="text-sm font-medium text-gray-900">{formatCurrency(stage.value)}</span>
+              <span className="text-xs text-gray-400 ml-2">{stage.probability}%</span>
             </div>
           </div>
-          <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${(stage.value / maxValue) * 100}%` }}
@@ -173,7 +173,7 @@ function StageFunnel({ stages }: { stages: ForecastData['byStage'] }) {
             />
           </div>
           <div className="flex justify-between mt-1">
-            <span className="text-xs text-dark-500">Ponderado: {formatCurrency(stage.weightedValue)}</span>
+            <span className="text-xs text-gray-400">Ponderado: {formatCurrency(stage.weightedValue)}</span>
           </div>
         </div>
       ))}
@@ -184,7 +184,7 @@ function StageFunnel({ stages }: { stages: ForecastData['byStage'] }) {
 function VelocityTable({ velocity }: { velocity: ForecastData['velocity'] }) {
   if (velocity.length === 0) {
     return (
-      <div className="text-center py-8 text-dark-400">
+      <div className="text-center py-8 text-gray-500">
         <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
         <p>Sem dados de velocidade ainda</p>
         <p className="text-xs">Mova deals entre estágios para começar a medir</p>
@@ -195,11 +195,11 @@ function VelocityTable({ velocity }: { velocity: ForecastData['velocity'] }) {
   return (
     <div className="space-y-2">
       {velocity.map(v => (
-        <div key={v.stageId} className="flex items-center justify-between p-3 bg-dark-700/30 rounded-lg">
+        <div key={v.stageId} className="flex items-center justify-between p-3 bg-gray-100/30 rounded-lg">
           <span className="text-sm text-white">{v.stageName}</span>
           <div className="text-right">
-            <span className="text-sm font-medium text-primary-400">{formatTime(v.avgTimeHours)}</span>
-            <span className="text-xs text-dark-500 ml-2">({v.dealsCount} deals)</span>
+            <span className="text-sm font-medium text-brand-600">{formatTime(v.avgTimeHours)}</span>
+            <span className="text-xs text-gray-400 ml-2">({v.dealsCount} deals)</span>
           </div>
         </div>
       ))}
@@ -210,7 +210,7 @@ function VelocityTable({ velocity }: { velocity: ForecastData['velocity'] }) {
 function TopDealsTable({ deals }: { deals: ForecastData['topDeals'] }) {
   if (deals.length === 0) {
     return (
-      <div className="text-center py-8 text-dark-400">
+      <div className="text-center py-8 text-gray-500">
         <Target className="w-8 h-8 mx-auto mb-2 opacity-50" />
         <p>Nenhum deal aberto</p>
       </div>
@@ -220,16 +220,16 @@ function TopDealsTable({ deals }: { deals: ForecastData['topDeals'] }) {
   return (
     <div className="space-y-2">
       {deals.map(deal => (
-        <div key={deal.id} className="flex items-center justify-between p-3 bg-dark-700/30 rounded-lg">
+        <div key={deal.id} className="flex items-center justify-between p-3 bg-gray-100/30 rounded-lg">
           <div>
-            <p className="text-sm font-medium text-white">{deal.title}</p>
-            <p className="text-xs text-dark-400">
+            <p className="text-sm font-medium text-gray-900">{deal.title}</p>
+            <p className="text-xs text-gray-500">
               {deal.contact?.name || 'Sem contato'} • {deal.stage}
             </p>
           </div>
           <div className="text-right">
             <p className="text-sm font-medium text-success-400">{formatCurrency(deal.value)}</p>
-            <p className="text-xs text-dark-500">{deal.probability}%</p>
+            <p className="text-xs text-gray-400">{deal.probability}%</p>
           </div>
         </div>
       ))}
@@ -281,7 +281,7 @@ export default function ForecastPage() {
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <RefreshCw className="w-8 h-8 animate-spin text-primary-500" />
+        <RefreshCw className="w-8 h-8 animate-spin text-brand-500" />
       </div>
     )
   }
@@ -293,7 +293,7 @@ export default function ForecastPage() {
         <p>{error}</p>
         <button 
           onClick={fetchForecast}
-          className="mt-4 px-4 py-2 bg-dark-700 rounded-lg hover:bg-dark-600 transition-colors"
+          className="mt-4 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
         >
           Tentar novamente
         </button>
@@ -308,8 +308,8 @@ export default function ForecastPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Forecast de Vendas</h1>
-          <p className="text-dark-400">Previsão e métricas do pipeline</p>
+          <h1 className="text-2xl font-bold text-gray-900">Forecast de Vendas</h1>
+          <p className="text-gray-500">Previsão e métricas do pipeline</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -318,21 +318,21 @@ export default function ForecastPage() {
             <select
               value={period}
               onChange={(e) => setPeriod(e.target.value as any)}
-              className="appearance-none bg-dark-800 border border-dark-700 rounded-lg px-4 py-2 pr-10 text-white focus:outline-none focus:border-primary-500"
+              className="appearance-none bg-white border border-gray-200 rounded-lg px-4 py-2 pr-10 text-white focus:outline-none focus:border-primary-500"
             >
               <option value="month">Este Mês</option>
               <option value="quarter">Este Trimestre</option>
               <option value="year">Este Ano</option>
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400 pointer-events-none" />
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
           </div>
           
           <button
             onClick={fetchForecast}
             disabled={loading}
-            className="p-2 bg-dark-800 border border-dark-700 rounded-lg hover:bg-dark-700 transition-colors"
+            className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
           >
-            <RefreshCw className={`w-5 h-5 text-dark-400 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-5 h-5 text-gray-500 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -375,42 +375,42 @@ export default function ForecastPage() {
       
       {/* Commit Level Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
-          <p className="text-xs text-dark-400 mb-1">Commit</p>
+        <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+          <p className="text-xs text-gray-500 mb-1">Commit</p>
           <p className="text-xl font-bold text-green-400">{formatCurrency(data.byCommitLevel.commit)}</p>
         </div>
-        <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
-          <p className="text-xs text-dark-400 mb-1">Best Case</p>
+        <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+          <p className="text-xs text-gray-500 mb-1">Best Case</p>
           <p className="text-xl font-bold text-blue-400">{formatCurrency(data.byCommitLevel.bestCase)}</p>
         </div>
-        <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
-          <p className="text-xs text-dark-400 mb-1">Pipeline</p>
+        <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+          <p className="text-xs text-gray-500 mb-1">Pipeline</p>
           <p className="text-xl font-bold text-yellow-400">{formatCurrency(data.byCommitLevel.pipeline)}</p>
         </div>
-        <div className="bg-dark-800/50 rounded-xl p-4 border border-dark-700/50">
-          <p className="text-xs text-dark-400 mb-1">Omitido</p>
-          <p className="text-xl font-bold text-dark-400">{formatCurrency(data.byCommitLevel.omit)}</p>
+        <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+          <p className="text-xs text-gray-500 mb-1">Omitido</p>
+          <p className="text-xl font-bold text-gray-500">{formatCurrency(data.byCommitLevel.omit)}</p>
         </div>
       </div>
       
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Funnel */}
-        <div className="lg:col-span-2 bg-dark-800/50 rounded-xl p-6 border border-dark-700/50">
-          <h2 className="text-lg font-semibold text-white mb-4">Funil de Vendas</h2>
+        <div className="lg:col-span-2 bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Funil de Vendas</h2>
           <StageFunnel stages={data.byStage} />
         </div>
         
         {/* Velocity */}
-        <div className="bg-dark-800/50 rounded-xl p-6 border border-dark-700/50">
-          <h2 className="text-lg font-semibold text-white mb-4">Velocidade por Estágio</h2>
+        <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Velocidade por Estágio</h2>
           <VelocityTable velocity={data.velocity} />
         </div>
       </div>
       
       {/* Top Deals */}
-      <div className="bg-dark-800/50 rounded-xl p-6 border border-dark-700/50">
-        <h2 className="text-lg font-semibold text-white mb-4">Top 5 Deals</h2>
+      <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Top 5 Deals</h2>
         <TopDealsTable deals={data.topDeals} />
       </div>
     </div>

@@ -197,12 +197,12 @@ const getInitials = (name?: string) => {
 // Status Icon
 function MessageStatus({ status }: { status: string }) {
   switch (status) {
-    case 'pending': return <Clock className="w-4 h-4 text-dark-500" />
-    case 'sent': return <Check className="w-4 h-4 text-dark-500" />
-    case 'delivered': return <CheckCheck className="w-4 h-4 text-dark-500" />
+    case 'pending': return <Clock className="w-4 h-4 text-gray-400" />
+    case 'sent': return <Check className="w-4 h-4 text-gray-400" />
+    case 'delivered': return <CheckCheck className="w-4 h-4 text-gray-400" />
     case 'read': return <CheckCheck className="w-4 h-4 text-cyan-400" />
     case 'failed': return <AlertCircle className="w-4 h-4 text-red-400" />
-    default: return <Clock className="w-4 h-4 text-dark-500" />
+    default: return <Clock className="w-4 h-4 text-gray-400" />
   }
 }
 
@@ -219,9 +219,9 @@ function DateSeparator({ date }: { date: string }) {
 
   return (
     <div className="flex items-center gap-4 my-4">
-      <div className="flex-1 h-px bg-dark-700/50" />
-      <span className="text-xs text-dark-500 bg-dark-900 px-3 py-1 rounded-full">{label}</span>
-      <div className="flex-1 h-px bg-dark-700/50" />
+      <div className="flex-1 h-px bg-gray-100" />
+      <span className="text-xs text-gray-400 bg-white px-3 py-1 rounded-full">{label}</span>
+      <div className="flex-1 h-px bg-gray-100" />
     </div>
   )
 }
@@ -1031,10 +1031,10 @@ export default function InboxTab() {
   ]
 
   return (
-    <div className="h-[calc(100vh-80px)] flex bg-dark-900/50 rounded-2xl border border-dark-700/50 overflow-hidden">
+    <div className="h-[calc(100vh-80px)] flex bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
       {/* ========== CONVERSATION LIST ========== */}
-      <div className={`w-full md:w-[360px] flex-shrink-0 border-r border-dark-700/50 flex flex-col bg-dark-900/30 ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
-        <div className="p-4 border-b border-dark-700/50">
+      <div className={`w-full md:w-[360px] flex-shrink-0 border-r border-gray-200 flex flex-col bg-white/30 ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
+        <div className="p-4 border-b border-gray-200">
           {/* Connection Manager */}
           <div className="mb-4">
             <WhatsAppConnectionManager
@@ -1047,7 +1047,7 @@ export default function InboxTab() {
 
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-white">Conversas</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Conversas</h2>
               {/* Connection Status Indicator */}
               {selectedInstance && (
                 <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
@@ -1086,7 +1086,7 @@ export default function InboxTab() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={fetchConversations} disabled={conversationsLoading} className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors disabled:opacity-50">
+              <button onClick={fetchConversations} disabled={conversationsLoading} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors disabled:opacity-50">
                 <RefreshCw className={`w-5 h-5 ${conversationsLoading ? 'animate-spin' : ''}`} />
               </button>
               <button className="p-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors">
@@ -1095,14 +1095,14 @@ export default function InboxTab() {
             </div>
           </div>
           <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               type="text"
               placeholder="Buscar por nome ou telefone..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && fetchConversations()}
-              className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-primary-500/50"
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-brand-400"
             />
           </div>
           <div className="flex gap-2">
@@ -1112,8 +1112,8 @@ export default function InboxTab() {
                 onClick={() => setStatusFilter(status)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                   statusFilter === status
-                    ? 'bg-primary-500/20 text-primary-400'
-                    : 'bg-dark-800/50 text-dark-400 hover:bg-dark-700/50 hover:text-white'
+                    ? 'bg-brand-100 text-brand-600'
+                    : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-white'
                 }`}
               >
                 {status === 'all' ? 'Todas' : status === 'open' ? 'Abertas' : status === 'pending' ? 'Pendentes' : 'Fechadas'}
@@ -1126,12 +1126,12 @@ export default function InboxTab() {
         <div className="flex-1 overflow-y-auto">
           {conversationsLoading && conversations.length === 0 ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+              <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
             </div>
           ) : conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <MessageSquare className="w-12 h-12 text-dark-500 mb-4" />
-              <p className="text-dark-400 text-sm">Nenhuma conversa encontrada</p>
+              <MessageSquare className="w-12 h-12 text-gray-400 mb-4" />
+              <p className="text-gray-500 text-sm">Nenhuma conversa encontrada</p>
             </div>
           ) : (
             <div className="p-2 space-y-1">
@@ -1141,8 +1141,8 @@ export default function InboxTab() {
                   onClick={() => handleSelectConversation(conv)}
                   className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
                     selectedConversation?.id === conv.id
-                      ? 'bg-primary-500/10 border border-primary-500/20'
-                      : 'hover:bg-dark-800/50'
+                      ? 'bg-brand-50 border border-primary-500/20'
+                      : 'hover:bg-gray-50'
                   }`}
                 >
                   {/* Avatar */}
@@ -1151,11 +1151,11 @@ export default function InboxTab() {
                       <img src={conv.contact_avatar} alt="" className="w-12 h-12 rounded-full object-cover" />
                     ) : (
                       <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
-                        <span className="text-sm font-semibold text-white">{getInitials(conv.contact_name)}</span>
+                        <span className="text-sm font-semibold text-gray-900">{getInitials(conv.contact_name)}</span>
                       </div>
                     )}
                     {conv.is_bot_active && (
-                      <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-cyan-500 rounded-full flex items-center justify-center border-2 border-dark-900">
+                      <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-cyan-500 rounded-full flex items-center justify-center border-2 border-gray-200">
                         <Bot className="w-3 h-3 text-white" />
                       </div>
                     )}
@@ -1164,21 +1164,21 @@ export default function InboxTab() {
                   {/* Info */}
                   <div className="flex-1 min-w-0 text-left">
                     <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-sm font-medium text-white truncate">
+                      <p className="text-sm font-medium text-gray-900 truncate">
                         {conv.contact_name || formatPhone(conv.phone_number)}
                       </p>
-                      <span className="text-xs text-dark-500">{formatTime(conv.last_message_at)}</span>
+                      <span className="text-xs text-gray-400">{formatTime(conv.last_message_at)}</span>
                     </div>
-                    <p className="text-xs text-dark-400 truncate">{conv.last_message_preview || 'Sem mensagens'}</p>
+                    <p className="text-xs text-gray-500 truncate">{conv.last_message_preview || 'Sem mensagens'}</p>
                     {conv.contact_tags && conv.contact_tags.length > 0 && (
                       <div className="flex gap-1 mt-1.5">
                         {conv.contact_tags.slice(0, 2).map((tag, i) => (
-                          <span key={i} className="px-1.5 py-0.5 bg-primary-500/10 text-primary-400 text-[10px] rounded">
+                          <span key={i} className="px-1.5 py-0.5 bg-brand-50 text-brand-600 text-[10px] rounded">
                             {tag}
                           </span>
                         ))}
                         {conv.contact_tags.length > 2 && (
-                          <span className="text-[10px] text-dark-500">+{conv.contact_tags.length - 2}</span>
+                          <span className="text-[10px] text-gray-400">+{conv.contact_tags.length - 2}</span>
                         )}
                       </div>
                     )}
@@ -1198,33 +1198,33 @@ export default function InboxTab() {
       </div>
 
       {/* ========== CHAT AREA ========== */}
-      <div className={`flex-1 flex flex-col bg-dark-900/20 ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col bg-white/20 ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
         {!selectedConversation ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center mb-6">
-              <MessageSquare className="w-10 h-10 text-primary-400" />
+              <MessageSquare className="w-10 h-10 text-brand-600" />
             </div>
-            <h3 className="text-xl font-semibold text-white mb-2">Selecione uma conversa</h3>
-            <p className="text-dark-400 text-sm max-w-sm">Escolha uma conversa na lista à esquerda para começar a responder</p>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Selecione uma conversa</h3>
+            <p className="text-gray-500 text-sm max-w-sm">Escolha uma conversa na lista à esquerda para começar a responder</p>
           </div>
         ) : (
           <>
             {/* Chat Header */}
-            <div className="h-16 px-4 flex items-center justify-between border-b border-dark-700/50 bg-dark-800/30">
+            <div className="h-16 px-4 flex items-center justify-between border-b border-gray-200 bg-gray-50">
               <div className="flex items-center gap-3">
-                <button onClick={() => setMobileView('list')} className="md:hidden p-2 hover:bg-dark-700/50 rounded-lg">
-                  <ArrowLeft className="w-5 h-5 text-dark-400" />
+                <button onClick={() => setMobileView('list')} className="md:hidden p-2 hover:bg-gray-100 rounded-lg">
+                  <ArrowLeft className="w-5 h-5 text-gray-500" />
                 </button>
                 {selectedConversation.contact_avatar ? (
                   <img src={selectedConversation.contact_avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-white">{getInitials(selectedConversation.contact_name)}</span>
+                    <span className="text-sm font-semibold text-gray-900">{getInitials(selectedConversation.contact_name)}</span>
                   </div>
                 )}
                 <div>
-                  <p className="text-sm font-medium text-white">{contactName}</p>
-                  <p className="text-xs text-dark-400">{formatPhone(selectedConversation.phone_number)}</p>
+                  <p className="text-sm font-medium text-gray-900">{contactName}</p>
+                  <p className="text-xs text-gray-500">{formatPhone(selectedConversation.phone_number)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -1233,7 +1233,7 @@ export default function InboxTab() {
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                     selectedConversation.is_bot_active
                       ? 'bg-cyan-500/20 text-cyan-400'
-                      : 'bg-dark-700/50 text-dark-400 hover:text-white'
+                      : 'bg-gray-100 text-gray-500 hover:text-white'
                   }`}
                 >
                   <Bot className="w-4 h-4" />
@@ -1241,7 +1241,7 @@ export default function InboxTab() {
                 </button>
                 <button
                   onClick={() => setShowContactPanel(!showContactPanel)}
-                  className="p-2 hover:bg-dark-700/50 rounded-lg text-dark-400 hover:text-white transition-colors"
+                  className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white transition-colors"
                 >
                   {showContactPanel ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
                 </button>
@@ -1252,12 +1252,12 @@ export default function InboxTab() {
             <div className="flex-1 overflow-y-auto p-4">
               {messagesLoading ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+                  <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <MessageSquare className="w-12 h-12 text-dark-500 mb-4" />
-                  <p className="text-dark-400 text-sm">Nenhuma mensagem ainda</p>
+                  <MessageSquare className="w-12 h-12 text-gray-400 mb-4" />
+                  <p className="text-gray-500 text-sm">Nenhuma mensagem ainda</p>
                 </div>
               ) : (
                 <>
@@ -1273,7 +1273,7 @@ export default function InboxTab() {
                             className={`max-w-[70%] p-3 rounded-2xl ${
                               msg.direction === 'outbound'
                                 ? 'bg-primary-500 text-white rounded-br-md'
-                                : 'bg-dark-800 text-white rounded-bl-md'
+                                : 'bg-white text-white rounded-bl-md'
                             }`}
                           >
                             {msg.sent_by_bot && msg.direction === 'outbound' && (
@@ -1301,7 +1301,7 @@ export default function InboxTab() {
                                     onClick={() => msg.media_url && setLightboxImage(msg.media_url)}
                                   />
                                 ) : null}
-                                <div className="media-fallback hidden flex items-center gap-2 p-3 bg-dark-700/50 rounded-lg text-dark-400">
+                                <div className="media-fallback hidden flex items-center gap-2 p-3 bg-gray-100 rounded-lg text-gray-500">
                                   <FileText className="w-5 h-5" />
                                   <span className="text-sm">Imagem não disponível</span>
                                 </div>
@@ -1322,7 +1322,7 @@ export default function InboxTab() {
                                     }}
                                   />
                                 ) : (
-                                  <div className="flex items-center gap-2 p-3 bg-dark-700/50 rounded-lg text-dark-400">
+                                  <div className="flex items-center gap-2 p-3 bg-gray-100 rounded-lg text-gray-500">
                                     <span className="text-sm">🎵 Áudio não disponível</span>
                                   </div>
                                 )}
@@ -1343,7 +1343,7 @@ export default function InboxTab() {
                                     }}
                                   />
                                 ) : (
-                                  <div className="flex items-center gap-2 p-3 bg-dark-700/50 rounded-lg text-dark-400">
+                                  <div className="flex items-center gap-2 p-3 bg-gray-100 rounded-lg text-gray-500">
                                     <span className="text-sm">🎬 Vídeo não disponível</span>
                                   </div>
                                 )}
@@ -1366,8 +1366,8 @@ export default function InboxTab() {
                               </div>
                             )}
                             {msg.media_url && msg.message_type === 'document' && (
-                              <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 bg-dark-700/50 rounded-lg mb-1 hover:bg-dark-600/50 transition-colors">
-                                <FileText className="w-5 h-5 text-primary-400" />
+                              <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 bg-gray-100 rounded-lg mb-1 hover:bg-gray-200/50 transition-colors">
+                                <FileText className="w-5 h-5 text-brand-600" />
                                 <span className="text-sm truncate">{msg.media_filename || 'Documento'}</span>
                               </a>
                             )}
@@ -1393,17 +1393,17 @@ export default function InboxTab() {
             </div>
 
             {/* Input */}
-            <div className="p-4 border-t border-dark-700/50 bg-dark-800/30">
+            <div className="p-4 border-t border-gray-200 bg-gray-50">
               {selectedConversation.can_send_template_only ? (
                 <div className="text-center py-4">
                   <p className="text-sm text-yellow-400 mb-2">Janela de 24h expirada</p>
-                  <p className="text-xs text-dark-400">Envie um template para reabrir a conversa</p>
+                  <p className="text-xs text-gray-500">Envie um template para reabrir a conversa</p>
                 </div>
               ) : mediaPreview ? (
                 /* Media Preview UI - igual WhatsApp */
                 <div className="space-y-3">
                   {/* Preview da mídia */}
-                  <div className="relative bg-dark-800 rounded-xl overflow-hidden">
+                  <div className="relative bg-white rounded-xl overflow-hidden">
                     {/* Botão fechar */}
                     <button
                       onClick={cancelMediaPreview}
@@ -1430,11 +1430,11 @@ export default function InboxTab() {
                       )}
                       {mediaPreview.type === 'audio' && (
                         <div className="flex flex-col items-center gap-3 py-8">
-                          <div className="w-16 h-16 rounded-full bg-primary-500/20 flex items-center justify-center">
-                            <Mic className="w-8 h-8 text-primary-400" />
+                          <div className="w-16 h-16 rounded-full bg-brand-100 flex items-center justify-center">
+                            <Mic className="w-8 h-8 text-brand-600" />
                           </div>
                           <audio src={mediaPreview.url} controls className="w-full max-w-[300px]" />
-                          <p className="text-sm text-dark-400">{mediaPreview.file.name}</p>
+                          <p className="text-sm text-gray-500">{mediaPreview.file.name}</p>
                         </div>
                       )}
                       {mediaPreview.type === 'document' && (
@@ -1443,7 +1443,7 @@ export default function InboxTab() {
                             <FileText className="w-8 h-8 text-orange-400" />
                           </div>
                           <p className="text-sm text-white font-medium">{mediaPreview.file.name}</p>
-                          <p className="text-xs text-dark-400">
+                          <p className="text-xs text-gray-500">
                             {(mediaPreview.file.size / 1024).toFixed(1)} KB
                           </p>
                         </div>
@@ -1465,7 +1465,7 @@ export default function InboxTab() {
                           }
                         }}
                         placeholder="Adicionar legenda..."
-                        className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-primary-500/50"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-brand-400"
                       />
                     </div>
                     <button
@@ -1479,10 +1479,10 @@ export default function InboxTab() {
                 </div>
               ) : isRecording ? (
                 /* Recording UI */
-                <div className="flex items-center gap-3 bg-dark-800/50 rounded-xl p-3">
+                <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
                   <button
                     onClick={cancelRecording}
-                    className="p-2 hover:bg-dark-700/50 rounded-lg text-red-400 hover:text-red-300 transition-colors"
+                    className="p-2 hover:bg-gray-100 rounded-lg text-red-400 hover:text-red-300 transition-colors"
                     title="Cancelar"
                   >
                     <X className="w-5 h-5" />
@@ -1490,7 +1490,7 @@ export default function InboxTab() {
                   <div className="flex-1 flex items-center gap-3">
                     <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
                     <span className="text-sm text-white font-medium">{formatRecordingTime(recordingTime)}</span>
-                    <div className="flex-1 h-1 bg-dark-700 rounded-full overflow-hidden">
+                    <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full bg-red-500 animate-pulse" style={{ width: '100%' }} />
                     </div>
                   </div>
@@ -1520,8 +1520,8 @@ export default function InboxTab() {
                       onClick={() => setShowMediaMenu(!showMediaMenu)}
                       className={`p-2 rounded-lg transition-colors ${
                         showMediaMenu 
-                          ? 'bg-primary-500/20 text-primary-400' 
-                          : 'hover:bg-dark-700/50 text-dark-400 hover:text-white'
+                          ? 'bg-brand-100 text-brand-600' 
+                          : 'hover:bg-gray-100 text-gray-500 hover:text-white'
                       }`}
                       disabled={uploadingMedia}
                     >
@@ -1539,7 +1539,7 @@ export default function InboxTab() {
                           initial={{ opacity: 0, y: 10, scale: 0.95 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                          className="absolute bottom-full left-0 mb-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden min-w-[180px]"
+                          className="absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden min-w-[180px]"
                         >
                           <button
                             onClick={() => {
@@ -1548,7 +1548,7 @@ export default function InboxTab() {
                                 fileInputRef.current.click()
                               }
                             }}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/50 transition-colors text-left"
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-100 transition-colors text-left"
                           >
                             <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
                               <Image className="w-4 h-4 text-purple-400" />
@@ -1562,7 +1562,7 @@ export default function InboxTab() {
                                 fileInputRef.current.click()
                               }
                             }}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/50 transition-colors text-left"
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-100 transition-colors text-left"
                           >
                             <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
                               <Video className="w-4 h-4 text-blue-400" />
@@ -1576,7 +1576,7 @@ export default function InboxTab() {
                                 fileInputRef.current.click()
                               }
                             }}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/50 transition-colors text-left"
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-100 transition-colors text-left"
                           >
                             <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center">
                               <FileText className="w-4 h-4 text-orange-400" />
@@ -1593,7 +1593,7 @@ export default function InboxTab() {
                                 fileInputRef.current.click()
                               }
                             }}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/50 transition-colors text-left"
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-100 transition-colors text-left"
                           >
                             <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
                               <Camera className="w-4 h-4 text-green-400" />
@@ -1614,12 +1614,12 @@ export default function InboxTab() {
                       onKeyDown={handleKeyDown}
                       placeholder="Digite sua mensagem..."
                       rows={1}
-                      className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-primary-500/50 resize-none max-h-[120px]"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-brand-400 resize-none max-h-[120px]"
                     />
                   </div>
                   
                   {/* Emoji button (placeholder) */}
-                  <button className="p-2 hover:bg-dark-700/50 rounded-lg text-dark-400 hover:text-white transition-colors">
+                  <button className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white transition-colors">
                     <Smile className="w-5 h-5" />
                   </button>
                   
@@ -1657,37 +1657,37 @@ export default function InboxTab() {
             animate={{ width: 320, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="hidden lg:flex flex-col border-l border-dark-700/50 bg-dark-900/30 overflow-hidden"
+            className="hidden lg:flex flex-col border-l border-gray-200 bg-white/30 overflow-hidden"
           >
             {contactLoading ? (
               <div className="flex-1 flex items-center justify-center">
-                <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+                <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
               </div>
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Contact Header */}
-                <div className="p-6 text-center border-b border-dark-700/50">
+                <div className="p-6 text-center border-b border-gray-200">
                   {contact.profile_picture_url ? (
                     <img src={contact.profile_picture_url} alt="" className="w-20 h-20 rounded-full mx-auto mb-4 object-cover" />
                   ) : (
                     <div className="w-20 h-20 rounded-full mx-auto mb-4 bg-gradient-to-br from-primary-500/20 to-yellow-500/20 flex items-center justify-center">
-                      <span className="text-2xl font-semibold text-white">{getInitials(contact.name)}</span>
+                      <span className="text-2xl font-semibold text-gray-900">{getInitials(contact.name)}</span>
                     </div>
                   )}
-                  <h3 className="text-lg font-semibold text-white mb-1">{contact.name || 'Sem nome'}</h3>
-                  <p className="text-sm text-dark-400">{formatPhone(contact.phone_number)}</p>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">{contact.name || 'Sem nome'}</h3>
+                  <p className="text-sm text-gray-500">{formatPhone(contact.phone_number)}</p>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-dark-700/50">
+                <div className="flex border-b border-gray-200">
                   {tabs.map((tab) => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={`flex-1 py-3 text-xs font-medium transition-colors ${
                         activeTab === tab.id
-                          ? 'text-primary-400 border-b-2 border-primary-400'
-                          : 'text-dark-400 hover:text-white'
+                          ? 'text-brand-600 border-b-2 border-primary-400'
+                          : 'text-gray-500 hover:text-white'
                       }`}
                     >
                       {tab.label}
@@ -1700,47 +1700,47 @@ export default function InboxTab() {
                   {activeTab === 'info' && (
                     <div className="p-4 space-y-4">
                       {contact.email && (
-                        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
-                          <Mail className="w-5 h-5 text-dark-400" />
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                          <Mail className="w-5 h-5 text-gray-500" />
                           <div className="flex-1">
-                            <p className="text-xs text-dark-500">Email</p>
+                            <p className="text-xs text-gray-400">Email</p>
                             <p className="text-sm text-white">{contact.email}</p>
                           </div>
                         </div>
                       )}
-                      <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
-                        <Phone className="w-5 h-5 text-dark-400" />
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                        <Phone className="w-5 h-5 text-gray-500" />
                         <div className="flex-1">
-                          <p className="text-xs text-dark-500">Telefone</p>
+                          <p className="text-xs text-gray-400">Telefone</p>
                           <p className="text-sm text-white">{contact.phone_number}</p>
                         </div>
                       </div>
                       {contact.address?.city && (
-                        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
-                          <MapPin className="w-5 h-5 text-dark-400" />
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                          <MapPin className="w-5 h-5 text-gray-500" />
                           <div className="flex-1">
-                            <p className="text-xs text-dark-500">Cidade</p>
+                            <p className="text-xs text-gray-400">Cidade</p>
                             <p className="text-sm text-white">{contact.address.city}{contact.address.state ? `, ${contact.address.state}` : ''}</p>
                           </div>
                         </div>
                       )}
-                      <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
-                        <Calendar className="w-5 h-5 text-dark-400" />
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                        <Calendar className="w-5 h-5 text-gray-500" />
                         <div className="flex-1">
-                          <p className="text-xs text-dark-500">Contato desde</p>
+                          <p className="text-xs text-gray-400">Contato desde</p>
                           <p className="text-sm text-white">{formatDate(contact.created_at)}</p>
                         </div>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-sm font-medium text-dark-300">Tags</h4>
-                          <button onClick={() => setShowAddTag(true)} className="p-1 hover:bg-dark-700 rounded transition-colors">
-                            <Plus className="w-4 h-4 text-dark-400" />
+                          <h4 className="text-sm font-medium text-gray-600">Tags</h4>
+                          <button onClick={() => setShowAddTag(true)} className="p-1 hover:bg-gray-100 rounded transition-colors">
+                            <Plus className="w-4 h-4 text-gray-500" />
                           </button>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {contact.tags?.map((tag, i) => (
-                            <span key={i} className="px-2.5 py-1 bg-primary-500/10 text-primary-400 text-xs rounded-lg flex items-center gap-1 group">
+                            <span key={i} className="px-2.5 py-1 bg-brand-50 text-brand-600 text-xs rounded-lg flex items-center gap-1 group">
                               {tag}
                               <button onClick={() => handleRemoveTag(tag)} className="opacity-0 group-hover:opacity-100 transition-opacity">
                                 <X className="w-3 h-3 hover:text-white" />
@@ -1755,30 +1755,30 @@ export default function InboxTab() {
                                 onChange={(e) => setNewTag(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
                                 placeholder="Nova tag"
-                                className="w-24 px-2 py-1 text-xs bg-dark-700 border border-dark-600 rounded text-white placeholder-dark-400 focus:outline-none focus:border-primary-500"
+                                className="w-24 px-2 py-1 text-xs bg-gray-100 border border-gray-300 rounded text-white placeholder-dark-400 focus:outline-none focus:border-primary-500"
                                 autoFocus
                               />
-                              <button onClick={handleAddTag} className="text-primary-400 hover:text-primary-300">
+                              <button onClick={handleAddTag} className="text-brand-600 hover:text-brand-500">
                                 <CheckCircle className="w-4 h-4" />
                               </button>
-                              <button onClick={() => setShowAddTag(false)} className="text-dark-400 hover:text-white">
+                              <button onClick={() => setShowAddTag(false)} className="text-gray-500 hover:text-white">
                                 <X className="w-4 h-4" />
                               </button>
                             </div>
                           )}
                           {(!contact.tags || contact.tags.length === 0) && !showAddTag && (
-                            <span className="text-xs text-dark-500">Nenhuma tag</span>
+                            <span className="text-xs text-gray-400">Nenhuma tag</span>
                           )}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                          <p className="text-2xl font-bold text-white">{contact.total_messages_received}</p>
-                          <p className="text-xs text-dark-400">Msg Recebidas</p>
+                        <div className="p-3 bg-gray-50 rounded-xl text-center">
+                          <p className="text-2xl font-bold text-gray-900">{contact.total_messages_received}</p>
+                          <p className="text-xs text-gray-500">Msg Recebidas</p>
                         </div>
-                        <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                          <p className="text-2xl font-bold text-white">{contact.total_messages_sent}</p>
-                          <p className="text-xs text-dark-400">Msg Enviadas</p>
+                        <div className="p-3 bg-gray-50 rounded-xl text-center">
+                          <p className="text-2xl font-bold text-gray-900">{contact.total_messages_sent}</p>
+                          <p className="text-xs text-gray-500">Msg Enviadas</p>
                         </div>
                       </div>
                     </div>
@@ -1792,24 +1792,24 @@ export default function InboxTab() {
                             <h4 className="font-medium text-white">Deal Ativo</h4>
                             <span className="px-2 py-0.5 bg-primary-500 text-white text-xs rounded">{activeDeal.stage?.name || 'Em andamento'}</span>
                           </div>
-                          <p className="text-2xl font-bold text-white mb-1">{formatCurrency(activeDeal.value)}</p>
-                          <p className="text-sm text-dark-400">{activeDeal.pipeline?.name || 'Pipeline'}</p>
+                          <p className="text-2xl font-bold text-gray-900 mb-1">{formatCurrency(activeDeal.value)}</p>
+                          <p className="text-sm text-gray-500">{activeDeal.pipeline?.name || 'Pipeline'}</p>
                         </div>
                       ) : (
-                        <button onClick={handleCreateDeal} className="w-full py-4 border border-dashed border-dark-600 rounded-xl text-dark-400 hover:text-white hover:border-primary-500 transition-all flex items-center justify-center gap-2">
+                        <button onClick={handleCreateDeal} className="w-full py-4 border border-dashed border-gray-300 rounded-xl text-gray-500 hover:text-white hover:border-primary-500 transition-all flex items-center justify-center gap-2">
                           <Plus className="w-4 h-4" />Criar Novo Deal
                         </button>
                       )}
                       {deals.length > 0 && (
                         <div>
-                          <h4 className="text-sm font-medium text-dark-300 mb-3">Histórico</h4>
+                          <h4 className="text-sm font-medium text-gray-600 mb-3">Histórico</h4>
                           <div className="space-y-2">
                             {deals.filter(d => d.id !== activeDeal?.id).slice(0, 5).map((deal) => (
-                              <div key={deal.id} className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
+                              <div key={deal.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                                 <div className={`w-2 h-2 rounded-full ${deal.status === 'won' ? 'bg-green-500' : deal.status === 'lost' ? 'bg-red-500' : 'bg-yellow-500'}`} />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm text-white truncate">{deal.title}</p>
-                                  <p className="text-xs text-dark-400">{formatCurrency(deal.value)}</p>
+                                  <p className="text-xs text-gray-500">{formatCurrency(deal.value)}</p>
                                 </div>
                               </div>
                             ))}
@@ -1822,13 +1822,13 @@ export default function InboxTab() {
                   {activeTab === 'orders' && (
                     <div className="p-4 space-y-4">
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                          <p className="text-2xl font-bold text-white">{contact.total_orders}</p>
-                          <p className="text-xs text-dark-400">Pedidos</p>
+                        <div className="p-3 bg-gray-50 rounded-xl text-center">
+                          <p className="text-2xl font-bold text-gray-900">{contact.total_orders}</p>
+                          <p className="text-xs text-gray-500">Pedidos</p>
                         </div>
-                        <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                          <p className="text-2xl font-bold text-primary-400">{formatCurrency(contact.total_spent)}</p>
-                          <p className="text-xs text-dark-400">Total Gasto</p>
+                        <div className="p-3 bg-gray-50 rounded-xl text-center">
+                          <p className="text-2xl font-bold text-brand-600">{formatCurrency(contact.total_spent)}</p>
+                          <p className="text-xs text-gray-500">Total Gasto</p>
                         </div>
                       </div>
                       {cart && (
@@ -1837,25 +1837,25 @@ export default function InboxTab() {
                             <ShoppingCart className="w-5 h-5 text-yellow-400" />
                             <h4 className="font-medium text-yellow-400">Carrinho Abandonado</h4>
                           </div>
-                          <p className="text-sm text-dark-300 mb-1">{cart.line_items?.length || 0} itens • {formatCurrency(cart.total_price)}</p>
-                          <p className="text-xs text-dark-500 mb-3">Abandonado {formatRelativeTime(cart.created_at)}</p>
+                          <p className="text-sm text-gray-600 mb-1">{cart.line_items?.length || 0} itens • {formatCurrency(cart.total_price)}</p>
+                          <p className="text-xs text-gray-400 mb-3">Abandonado {formatRelativeTime(cart.created_at)}</p>
                           <button className="w-full py-2 bg-yellow-500 text-white text-sm rounded-lg hover:bg-yellow-600 transition-colors">Enviar Recuperação</button>
                         </div>
                       )}
                       {orders.length > 0 && (
-                        <div className="p-4 bg-dark-800/50 rounded-xl">
+                        <div className="p-4 bg-gray-50 rounded-xl">
                           <div className="flex items-center justify-between mb-3">
                             <h4 className="font-medium text-white">Último Pedido</h4>
                             <span className={`px-2 py-0.5 text-xs rounded ${orders[0].fulfillment_status === 'fulfilled' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
                               {orders[0].fulfillment_status === 'fulfilled' ? 'Entregue' : 'Pendente'}
                             </span>
                           </div>
-                          <p className="text-sm text-dark-300 mb-2">#{orders[0].order_number} • {orders[0].line_items?.length || 0} itens</p>
-                          <p className="text-lg font-semibold text-white">{formatCurrency(orders[0].total_price)}</p>
+                          <p className="text-sm text-gray-600 mb-2">#{orders[0].order_number} • {orders[0].line_items?.length || 0} itens</p>
+                          <p className="text-lg font-semibold text-gray-900">{formatCurrency(orders[0].total_price)}</p>
                         </div>
                       )}
                       {orders.length === 0 && !cart && (
-                        <div className="text-center py-8 text-dark-400">
+                        <div className="text-center py-8 text-gray-500">
                           <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
                           <p className="text-sm">Nenhum pedido encontrado</p>
                         </div>
@@ -1870,7 +1870,7 @@ export default function InboxTab() {
                           value={newNote}
                           onChange={(e) => setNewNote(e.target.value)}
                           placeholder="Adicionar uma nota..."
-                          className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 resize-none min-h-[80px]"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400 resize-none min-h-[80px]"
                         />
                         <button
                           onClick={handleAddNote}
@@ -1882,18 +1882,18 @@ export default function InboxTab() {
                       </div>
                       <div className="space-y-4">
                         {notes.length > 0 ? notes.map((note) => (
-                          <div key={note.id} className="relative pl-6 border-l-2 border-dark-700">
+                          <div key={note.id} className="relative pl-6 border-l-2 border-gray-200">
                             <div className="absolute left-[-5px] top-0 w-2 h-2 bg-primary-500 rounded-full" />
                             <div className="pb-4">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className="text-sm font-medium text-white">{note.created_by_name || 'Usuário'}</span>
-                                <span className="text-xs text-dark-500">{formatRelativeTime(note.created_at)}</span>
+                                <span className="text-sm font-medium text-gray-900">{note.created_by_name || 'Usuário'}</span>
+                                <span className="text-xs text-gray-400">{formatRelativeTime(note.created_at)}</span>
                               </div>
-                              <p className="text-sm text-dark-300">{note.content}</p>
+                              <p className="text-sm text-gray-600">{note.content}</p>
                             </div>
                           </div>
                         )) : (
-                          <div className="text-center py-8 text-dark-400">
+                          <div className="text-center py-8 text-gray-500">
                             <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
                             <p className="text-sm">Nenhuma nota ainda</p>
                           </div>
@@ -1904,15 +1904,15 @@ export default function InboxTab() {
                 </div>
 
                 {/* Contact Actions */}
-                <div className="p-4 border-t border-dark-700/50 bg-dark-800/30">
+                <div className="p-4 border-t border-gray-200 bg-gray-50">
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => setShowAddTag(true)} className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+                    <button onClick={() => setShowAddTag(true)} className="flex items-center justify-center gap-2 p-3 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-100 hover:text-white transition-all">
                       <Tag className="w-4 h-4" /><span className="text-sm">Tag</span>
                     </button>
-                    <button className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+                    <button className="flex items-center justify-center gap-2 p-3 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-100 hover:text-white transition-all">
                       <UserPlus className="w-4 h-4" /><span className="text-sm">Atribuir</span>
                     </button>
-                    <button onClick={handleCreateDeal} className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+                    <button onClick={handleCreateDeal} className="flex items-center justify-center gap-2 p-3 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-100 hover:text-white transition-all">
                       <DollarSign className="w-4 h-4" /><span className="text-sm">Deal</span>
                     </button>
                     <button onClick={handleBlockContact} className={`flex items-center justify-center gap-2 p-3 rounded-xl transition-all ${contact.is_blocked ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}>
@@ -1945,10 +1945,10 @@ export default function InboxTab() {
 
         {/* Debug Panel */}
         {showDebug && (
-          <div className="absolute bottom-14 right-0 w-96 max-h-80 bg-dark-900 border border-dark-700 rounded-xl shadow-2xl overflow-hidden">
-            <div className="p-3 border-b border-dark-700 bg-dark-800 flex items-center justify-between">
+          <div className="absolute bottom-14 right-0 w-96 max-h-80 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+            <div className="p-3 border-b border-gray-200 bg-white flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-white">🔧 Debug Realtime</span>
+                <span className="text-sm font-semibold text-gray-900">🔧 Debug Realtime</span>
                 <span className={`px-2 py-0.5 rounded text-xs ${
                   realtimeConnected && !realtimeError
                     ? 'bg-green-500/20 text-green-400'
@@ -1961,14 +1961,14 @@ export default function InboxTab() {
               </div>
               <button
                 onClick={() => setDebugEvents([])}
-                className="text-xs text-dark-400 hover:text-white"
+                className="text-xs text-gray-500 hover:text-white"
               >
                 Limpar
               </button>
             </div>
             
             {/* Status dos canais */}
-            <div className="p-2 border-b border-dark-700 bg-dark-800/50 text-xs">
+            <div className="p-2 border-b border-gray-200 bg-gray-50 text-xs">
               <div className="grid grid-cols-3 gap-2">
                 <div className={`p-1.5 rounded text-center ${
                   realtimeStatus.conversations === 'connected' ? 'bg-green-500/20 text-green-400' :
@@ -1980,7 +1980,7 @@ export default function InboxTab() {
                 <div className={`p-1.5 rounded text-center ${
                   realtimeStatus.messages === 'connected' ? 'bg-green-500/20 text-green-400' :
                   realtimeStatus.messages === 'error' ? 'bg-red-500/20 text-red-400' :
-                  realtimeStatus.messages === 'disconnected' ? 'bg-dark-600 text-dark-400' :
+                  realtimeStatus.messages === 'disconnected' ? 'bg-gray-200 text-gray-500' :
                   'bg-yellow-500/20 text-yellow-400'
                 }`}>
                   Msg: {realtimeStatus.messages}
@@ -1993,7 +1993,7 @@ export default function InboxTab() {
                   Inst: {realtimeStatus.instances}
                 </div>
               </div>
-              <div className="mt-2 text-dark-400">
+              <div className="mt-2 text-gray-500">
                 Org: {organizationId?.substring(0, 8)}... | Conv: {selectedConversation?.id?.substring(0, 8) || 'nenhuma'}
               </div>
             </div>
@@ -2001,12 +2001,12 @@ export default function InboxTab() {
             {/* Event Log */}
             <div className="max-h-40 overflow-y-auto p-2 space-y-1">
               {debugEvents.length === 0 ? (
-                <div className="text-center text-dark-500 text-xs py-4">
+                <div className="text-center text-gray-400 text-xs py-4">
                   Aguardando eventos...
                 </div>
               ) : (
                 debugEvents.map((event, i) => (
-                  <div key={i} className="text-xs text-dark-300 font-mono">
+                  <div key={i} className="text-xs text-gray-600 font-mono">
                     {event}
                   </div>
                 ))
@@ -2095,13 +2095,13 @@ export default function InboxTab() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-dark-900 border border-dark-700 rounded-xl p-6 w-full max-w-md shadow-xl"
+              className="bg-white border border-gray-200 rounded-xl p-6 w-full max-w-md shadow-xl"
             >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Selecionar Agente de IA</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Selecionar Agente de IA</h3>
                 <button
                   onClick={() => setShowAgentSelector(false)}
-                  className="p-1 hover:bg-dark-700 rounded-lg text-dark-400 hover:text-white"
+                  className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -2109,15 +2109,15 @@ export default function InboxTab() {
 
               {loadingAgents ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+                  <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
                 </div>
               ) : aiAgents.length === 0 ? (
                 <div className="text-center py-8">
-                  <Bot className="w-12 h-12 text-dark-500 mx-auto mb-3" />
-                  <p className="text-dark-400 text-sm mb-4">Nenhum agente de IA configurado</p>
+                  <Bot className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm mb-4">Nenhum agente de IA configurado</p>
                   <a 
                     href="/settings/agents" 
-                    className="text-primary-400 hover:text-primary-300 text-sm"
+                    className="text-brand-600 hover:text-brand-500 text-sm"
                   >
                     Criar agente de IA →
                   </a>
@@ -2128,19 +2128,19 @@ export default function InboxTab() {
                     <button
                       key={agent.id}
                       onClick={() => handleActivateBot(agent.id)}
-                      className="w-full flex items-center gap-3 p-3 bg-dark-800 hover:bg-dark-700 rounded-lg transition-colors text-left"
+                      className="w-full flex items-center gap-3 p-3 bg-white hover:bg-gray-100 rounded-lg transition-colors text-left"
                     >
                       <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
                         <Bot className="w-5 h-5 text-cyan-400" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-white">{agent.name}</p>
-                        <p className="text-xs text-dark-400">
+                        <p className="text-sm font-medium text-gray-900">{agent.name}</p>
+                        <p className="text-xs text-gray-500">
                           {agent.type === 'ai' ? 'Agente de IA' : 'Agente Humano'}
                         </p>
                       </div>
                       <div className={`w-2 h-2 rounded-full ${
-                        agent.status === 'online' || agent.is_active ? 'bg-green-400' : 'bg-dark-500'
+                        agent.status === 'online' || agent.is_active ? 'bg-green-400' : 'bg-gray-300'
                       }`} />
                     </button>
                   ))}

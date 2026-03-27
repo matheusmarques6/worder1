@@ -100,19 +100,19 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         exit={{ opacity: 0, scale: 0.95, y: -20 }}
         className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-xl z-50"
       >
-        <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden">
           {/* Search Input */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5">
-            <Search className="w-5 h-5 text-slate-400" />
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+            <Search className="w-5 h-5 text-gray-500" />
             <input
               type="text"
               placeholder="Buscar páginas, ações, contatos..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="flex-1 bg-transparent text-white placeholder:text-slate-400 outline-none text-sm"
+              className="flex-1 bg-transparent text-gray-900 placeholder:text-gray-500 outline-none text-sm"
               autoFocus
             />
-            <kbd className="px-2 py-1 text-xs bg-slate-800 rounded text-slate-400">
+            <kbd className="px-2 py-1 text-xs bg-gray-100 rounded text-gray-500">
               ESC
             </kbd>
           </div>
@@ -124,20 +124,20 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                 <button
                   key={index}
                   onClick={onClose}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
                 >
-                  <div className="p-1.5 rounded-lg bg-slate-800">
-                    <suggestion.icon className="w-4 h-4 text-slate-400" />
+                  <div className="p-1.5 rounded-lg bg-gray-100">
+                    <suggestion.icon className="w-4 h-4 text-gray-500" />
                   </div>
-                  <span className="text-sm text-white">{suggestion.label}</span>
-                  <span className="ml-auto text-xs text-slate-500 capitalize">
+                  <span className="text-sm text-gray-900">{suggestion.label}</span>
+                  <span className="ml-auto text-xs text-gray-400 capitalize">
                     {suggestion.type === 'page' ? 'Página' : 'Ação'}
                   </span>
                 </button>
               ))
             ) : (
               <div className="px-4 py-8 text-center">
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-gray-500">
                   Nenhum resultado encontrado
                 </p>
               </div>
@@ -145,14 +145,14 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center gap-4 px-4 py-2 border-t border-white/5 text-xs text-slate-500">
+          <div className="flex items-center gap-4 px-4 py-2 border-t border-gray-100 text-xs text-gray-400">
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-slate-800 rounded">↑</kbd>
-              <kbd className="px-1.5 py-0.5 bg-slate-800 rounded">↓</kbd>
+              <kbd className="px-1.5 py-0.5 bg-gray-100 rounded">↑</kbd>
+              <kbd className="px-1.5 py-0.5 bg-gray-100 rounded">↓</kbd>
               navegar
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-slate-800 rounded">↵</kbd>
+              <kbd className="px-1.5 py-0.5 bg-gray-100 rounded">↵</kbd>
               selecionar
             </span>
           </div>
@@ -231,12 +231,12 @@ function NotificationsDropdown({
         initial={{ opacity: 0, y: 10, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-        className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden"
+        className="absolute right-0 top-full mt-2 w-96 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-white">Notificações</h3>
+            <h3 className="font-semibold text-gray-900">Notificações</h3>
             {unreadCount > 0 && (
               <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded-full">
                 {unreadCount} nova{unreadCount > 1 ? 's' : ''}
@@ -258,15 +258,15 @@ function NotificationsDropdown({
         <div className="max-h-96 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+              <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
             </div>
           ) : notifications.length === 0 ? (
             <div className="px-4 py-12 text-center">
-              <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Bell className="w-6 h-6 text-slate-500" />
+              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Bell className="w-6 h-6 text-gray-400" />
               </div>
-              <p className="text-sm text-slate-400">Nenhuma notificação</p>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-sm text-gray-500">Nenhuma notificação</p>
+              <p className="text-xs text-gray-400 mt-1">
                 Você será notificado sobre eventos importantes
               </p>
             </div>
@@ -275,7 +275,7 @@ function NotificationsDropdown({
               <div
                 key={notification.id}
                 className={cn(
-                  'px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors',
+                  'px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors',
                   !notification.read && 'bg-primary/5'
                 )}
               >
@@ -290,7 +290,7 @@ function NotificationsDropdown({
                     <div className="flex items-start justify-between gap-2">
                       <p className={cn(
                         "text-sm font-medium line-clamp-1",
-                        notification.read ? 'text-slate-300' : 'text-white'
+                        notification.read ? 'text-gray-500' : 'text-gray-900'
                       )}>
                         {notification.title}
                       </p>
@@ -303,7 +303,7 @@ function NotificationsDropdown({
                               e.stopPropagation();
                               onMarkAsRead([notification.id]);
                             }}
-                            className="p-1 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
+                            className="p-1 text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
                             title="Marcar como lida"
                           >
                             <Check className="w-3.5 h-3.5" />
@@ -314,7 +314,7 @@ function NotificationsDropdown({
                             e.stopPropagation();
                             onDelete(notification.id);
                           }}
-                          className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                          className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                           title="Excluir"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -322,12 +322,12 @@ function NotificationsDropdown({
                       </div>
                     </div>
                     
-                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
                       {notification.message}
                     </p>
                     
                     <div className="flex items-center justify-between mt-2">
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-gray-400">
                         {formatDistanceToNow(new Date(notification.created_at), {
                           addSuffix: true,
                           locale: ptBR,
@@ -357,7 +357,7 @@ function NotificationsDropdown({
 
         {/* Footer */}
         {notifications.length > 0 && (
-          <div className="px-4 py-3 border-t border-white/5">
+          <div className="px-4 py-3 border-t border-gray-100">
             <a 
               href="/notifications"
               onClick={onClose}
@@ -469,10 +469,10 @@ function UserMenuDropdown({ isOpen, onClose, user }: UserMenuDropdownProps) {
         initial={{ opacity: 0, y: 10, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-        className="absolute right-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-50 overflow-hidden"
+        className="absolute right-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden"
       >
         {/* User Info */}
-        <div className="px-4 py-3 border-b border-dark-700">
+        <div className="px-4 py-3 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <Avatar 
               fallback={user.name?.substring(0, 2) || 'U'} 
@@ -480,9 +480,9 @@ function UserMenuDropdown({ isOpen, onClose, user }: UserMenuDropdownProps) {
               size="lg" 
             />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white truncate">{user.name}</p>
-              <p className="text-xs text-dark-400 truncate">{user.email}</p>
-              <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-primary-500/20 text-primary-400">
+              <p className="text-sm font-semibold text-gray-900 truncate">{user.name}</p>
+              <p className="text-xs text-gray-500 truncate">{user.email}</p>
+              <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-brand-100 text-brand-600">
                 {getRoleLabel()}
               </span>
             </div>
@@ -491,17 +491,17 @@ function UserMenuDropdown({ isOpen, onClose, user }: UserMenuDropdownProps) {
 
         {/* Agents Section */}
         {agents.length > 0 && (
-          <div className="px-3 py-2 border-b border-dark-700">
+          <div className="px-3 py-2 border-b border-gray-200">
             <div className="flex items-center gap-2 px-1 mb-2">
-              <Users className="w-3.5 h-3.5 text-dark-500" />
-              <span className="text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
+              <Users className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                 Agentes ({agents.filter(a => a.status === 'online').length} online)
               </span>
             </div>
             <div className="space-y-0.5 max-h-32 overflow-y-auto">
               {loadingAgents ? (
                 <div className="flex items-center justify-center py-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-dark-500" />
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
                 </div>
               ) : (
                 agents.map((agent) => (
@@ -517,27 +517,27 @@ function UserMenuDropdown({ isOpen, onClose, user }: UserMenuDropdownProps) {
                           className="w-6 h-6 rounded-full object-cover"
                         />
                       ) : (
-                        <div className="w-6 h-6 rounded-full bg-dark-600 flex items-center justify-center">
-                          <span className="text-[10px] text-dark-400">
+                        <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center">
+                          <span className="text-[10px] text-gray-500">
                             {agent.name?.substring(0, 2).toUpperCase()}
                           </span>
                         </div>
                       )}
                       <div className={cn(
-                        'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-dark-800',
+                        'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-gray-200',
                         agent.status === 'online' && 'bg-green-500',
                         agent.status === 'away' && 'bg-yellow-500',
                         agent.status === 'busy' && 'bg-red-500',
-                        agent.status === 'offline' && 'bg-dark-500',
+                        agent.status === 'offline' && 'bg-gray-300',
                       )} />
                     </div>
-                    <span className="text-xs text-dark-300 truncate flex-1">{agent.name}</span>
+                    <span className="text-xs text-gray-600 truncate flex-1">{agent.name}</span>
                     <span className={cn(
                       'text-[10px]',
                       agent.status === 'online' && 'text-green-400',
                       agent.status === 'away' && 'text-yellow-400',
                       agent.status === 'busy' && 'text-red-400',
-                      agent.status === 'offline' && 'text-dark-500',
+                      agent.status === 'offline' && 'text-gray-400',
                     )}>
                       {agent.status === 'online' ? 'Online' : 
                        agent.status === 'away' ? 'Ausente' :
@@ -554,51 +554,51 @@ function UserMenuDropdown({ isOpen, onClose, user }: UserMenuDropdownProps) {
         <div className="py-2">
           <button 
             onClick={() => handleNavigation('/settings?tab=profile')}
-            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
           >
-            <User className="w-4 h-4 text-dark-400" />
-            <span className="text-sm text-dark-300">Meu Perfil</span>
+            <User className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Meu Perfil</span>
           </button>
           <button 
             onClick={() => handleNavigation('/settings?tab=store')}
-            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
           >
-            <Building2 className="w-4 h-4 text-dark-400" />
-            <span className="text-sm text-dark-300">Configurações da Loja</span>
+            <Building2 className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Configurações da Loja</span>
           </button>
           <button 
             onClick={() => handleNavigation('/settings?tab=billing')}
-            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
           >
-            <CreditCard className="w-4 h-4 text-dark-400" />
-            <span className="text-sm text-dark-300">Faturamento</span>
+            <CreditCard className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Faturamento</span>
           </button>
           <button 
             onClick={() => handleNavigation('/settings?tab=integrations')}
-            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
           >
-            <Settings className="w-4 h-4 text-dark-400" />
-            <span className="text-sm text-dark-300">Integrações</span>
+            <Settings className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Integrações</span>
           </button>
         </div>
 
         {/* Theme Toggle */}
-        <div className="px-4 py-2 border-t border-dark-700">
+        <div className="px-4 py-2 border-t border-gray-200">
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-dark-700/50 transition-colors"
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <div className="flex items-center gap-3">
               {theme === 'dark' ? (
-                <Moon className="w-4 h-4 text-dark-400" />
+                <Moon className="w-4 h-4 text-gray-500" />
               ) : (
-                <Sun className="w-4 h-4 text-dark-400" />
+                <Sun className="w-4 h-4 text-gray-500" />
               )}
-              <span className="text-sm text-dark-300">
+              <span className="text-sm text-gray-600">
                 {theme === 'dark' ? 'Modo Escuro' : 'Modo Claro'}
               </span>
             </div>
-            <div className="w-8 h-5 rounded-full bg-primary-500/20 relative">
+            <div className="w-8 h-5 rounded-full bg-brand-100 relative">
               <div
                 className={cn(
                   'absolute top-0.5 w-4 h-4 rounded-full bg-primary-500 transition-all',
@@ -610,7 +610,7 @@ function UserMenuDropdown({ isOpen, onClose, user }: UserMenuDropdownProps) {
         </div>
 
         {/* Logout */}
-        <div className="px-4 py-2 border-t border-dark-700">
+        <div className="px-4 py-2 border-t border-gray-200">
           <button 
             onClick={handleLogout}
             disabled={isLoggingOut}
@@ -767,27 +767,27 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
 
   return (
     <>
-      <header className="h-16 border-b border-white/5 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-30">
+      <header className="h-16 border-b border-gray-100 bg-white backdrop-blur-sm sticky top-0 z-30">
         <div className="h-full px-6 flex items-center justify-between gap-4">
           {/* Left: Title or Search */}
           <div className="flex items-center gap-4 flex-1">
             {title ? (
               <div>
-                <h1 className="text-lg font-semibold text-white">{title}</h1>
+                <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
                 {subtitle && (
-                  <p className="text-sm text-slate-400">{subtitle}</p>
+                  <p className="text-sm text-gray-500">{subtitle}</p>
                 )}
               </div>
             ) : (
               <button
                 onClick={() => setIsCommandOpen(true)}
-                className="flex items-center gap-3 px-4 py-2 bg-slate-800/50 hover:bg-slate-800 border border-white/5 rounded-xl transition-colors w-full max-w-md"
+                className="flex items-center gap-3 px-4 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-xl transition-colors w-full max-w-md"
               >
-                <Search className="w-4 h-4 text-slate-400" />
-                <span className="text-sm text-slate-400 flex-1 text-left">
+                <Search className="w-4 h-4 text-gray-500" />
+                <span className="text-sm text-gray-500 flex-1 text-left">
                   Buscar...
                 </span>
-                <kbd className="px-2 py-0.5 text-xs bg-slate-700 rounded text-slate-400">
+                <kbd className="px-2 py-0.5 text-xs bg-gray-200 rounded text-gray-500">
                   ⌘K
                 </kbd>
               </button>
@@ -838,7 +838,7 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
                   setIsUserMenuOpen(!isUserMenuOpen);
                   setIsNotificationsOpen(false);
                 }}
-                className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-white/5 transition-colors"
+                className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-gray-50 transition-colors"
               >
                 <Avatar 
                   fallback={userData.name?.substring(0, 2) || 'U'} 
@@ -846,15 +846,15 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
                   size="sm" 
                 />
                 <div className="hidden sm:block text-left">
-                  <p className="text-xs font-medium text-white truncate max-w-[100px]">
+                  <p className="text-xs font-medium text-gray-900 truncate max-w-[100px]">
                     {userData.name}
                   </p>
-                  <p className="text-[10px] text-dark-400">
+                  <p className="text-[10px] text-gray-500">
                     {userData.role === 'admin' ? 'admin' : userData.role}
                   </p>
                 </div>
                 <ChevronDown className={cn(
-                  "w-4 h-4 text-slate-400 transition-transform",
+                  "w-4 h-4 text-gray-500 transition-transform",
                   isUserMenuOpen && "rotate-180"
                 )} />
               </button>

@@ -104,19 +104,19 @@ export function ReportExportDialog({
           {/* Modal */}
           <div 
             ref={modalRef}
-            className="relative bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+            className="relative bg-white border border-gray-200 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-dark-700">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div>
-                <h2 className="text-lg font-semibold text-dark-100">Exportar Relatório PDF</h2>
-                <p className="text-sm text-dark-400 mt-0.5">Selecione o tipo e período</p>
+                <h2 className="text-lg font-semibold text-gray-800">Exportar Relatório PDF</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Selecione o tipo e período</p>
               </div>
               <button 
                 onClick={() => setOpen(false)}
-                className="p-2 hover:bg-dark-800 rounded-lg transition-colors"
+                className="p-2 hover:bg-white rounded-lg transition-colors"
               >
-                <X className="w-5 h-5 text-dark-400" />
+                <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
@@ -124,15 +124,15 @@ export function ReportExportDialog({
             <div className="p-6 space-y-4">
               {/* Tipo de Relatório */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Tipo de Relatório
                 </label>
                 <select
                   value={selectedType}
                   onChange={(e) => setSelectedType(e.target.value as ReportType)}
                   className={cn(
-                    "w-full bg-dark-800/50 border border-dark-600 rounded-xl px-4 py-3",
-                    "text-dark-100 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20",
+                    "w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3",
+                    "text-gray-800 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20",
                     "transition-all duration-300"
                   )}
                 >
@@ -146,15 +146,15 @@ export function ReportExportDialog({
 
               {/* Período */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Período
                 </label>
                 <select
                   value={selectedPeriod}
                   onChange={(e) => setSelectedPeriod(e.target.value as PeriodOption)}
                   className={cn(
-                    "w-full bg-dark-800/50 border border-dark-600 rounded-xl px-4 py-3",
-                    "text-dark-100 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20",
+                    "w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3",
+                    "text-gray-800 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20",
                     "transition-all duration-300"
                   )}
                 >
@@ -169,15 +169,15 @@ export function ReportExportDialog({
               {/* Plataforma de Ads (condicional) */}
               {selectedType === 'ads' && (
                 <div>
-                  <label className="block text-sm font-medium text-dark-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     Plataforma de Ads
                   </label>
                   <select
                     value={selectedPlatform}
                     onChange={(e) => setSelectedPlatform(e.target.value as AdsPlatform)}
                     className={cn(
-                      "w-full bg-dark-800/50 border border-dark-600 rounded-xl px-4 py-3",
-                      "text-dark-100 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20",
+                      "w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3",
+                      "text-gray-800 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20",
                       "transition-all duration-300"
                     )}
                   >
@@ -192,7 +192,7 @@ export function ReportExportDialog({
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-dark-700 bg-dark-800/50">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <Button variant="ghost" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>

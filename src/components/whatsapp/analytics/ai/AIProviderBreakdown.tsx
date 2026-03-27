@@ -27,10 +27,10 @@ export function AIProviderBreakdown({ data }: AIProviderBreakdownProps) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.35 }}
-        className="bg-dark-800/50 rounded-xl border border-dark-700/50 p-6"
+        className="bg-gray-50 rounded-xl border border-gray-200 p-6"
       >
-        <h3 className="text-lg font-semibold text-white mb-4">Por Provedor</h3>
-        <p className="text-dark-400 text-center py-8">Nenhum dado disponível</p>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Provedor</h3>
+        <p className="text-gray-500 text-center py-8">Nenhum dado disponível</p>
       </motion.div>
     );
   }
@@ -40,9 +40,9 @@ export function AIProviderBreakdown({ data }: AIProviderBreakdownProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.35 }}
-      className="bg-dark-800/50 rounded-xl border border-dark-700/50 p-6"
+      className="bg-gray-50 rounded-xl border border-gray-200 p-6"
     >
-      <h3 className="text-lg font-semibold text-white mb-4">Por Provedor</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Provedor</h3>
 
       <div className="flex items-center gap-6">
         {/* Mini chart */}
@@ -76,7 +76,7 @@ export function AIProviderBreakdown({ data }: AIProviderBreakdownProps) {
                   className="w-3 h-3 rounded-sm"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="text-sm text-dark-300">{item.name}</span>
+                <span className="text-sm text-gray-600">{item.name}</span>
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-sm text-white font-medium">
@@ -89,20 +89,20 @@ export function AIProviderBreakdown({ data }: AIProviderBreakdownProps) {
       </div>
 
       {/* Summary stats */}
-      <div className="mt-4 pt-4 border-t border-dark-700/50 grid grid-cols-3 gap-4 text-center">
+      <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-3 gap-4 text-center">
         <div>
-          <p className="text-xs text-dark-400">Total</p>
-          <p className="text-sm font-medium text-white">{totalInteractions.toLocaleString()}</p>
+          <p className="text-xs text-gray-500">Total</p>
+          <p className="text-sm font-medium text-gray-900">{totalInteractions.toLocaleString()}</p>
         </div>
         <div>
-          <p className="text-xs text-dark-400">Tokens</p>
-          <p className="text-sm font-medium text-white">
+          <p className="text-xs text-gray-500">Tokens</p>
+          <p className="text-sm font-medium text-gray-900">
             {formatTokens(Object.values(data).reduce((sum, m) => sum + m.tokens, 0))}
           </p>
         </div>
         <div>
-          <p className="text-xs text-dark-400">Custo</p>
-          <p className="text-sm font-medium text-white">
+          <p className="text-xs text-gray-500">Custo</p>
+          <p className="text-sm font-medium text-gray-900">
             {formatCost(Object.values(data).reduce((sum, m) => sum + m.cost_usd, 0))}
           </p>
         </div>
@@ -117,11 +117,11 @@ function ProviderTooltip({ active, payload }: any) {
   const data = payload[0].payload;
   
   return (
-    <div className="bg-dark-800 border border-dark-700 rounded-lg p-3 shadow-xl">
+    <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-xl">
       <p className="text-white font-medium mb-1">{data.name}</p>
-      <p className="text-sm text-dark-300">Interações: {data.value.toLocaleString()}</p>
-      <p className="text-sm text-dark-300">Tokens: {formatTokens(data.tokens)}</p>
-      <p className="text-sm text-dark-300">Custo: {formatCost(data.cost)}</p>
+      <p className="text-sm text-gray-600">Interações: {data.value.toLocaleString()}</p>
+      <p className="text-sm text-gray-600">Tokens: {formatTokens(data.tokens)}</p>
+      <p className="text-sm text-gray-600">Custo: {formatCost(data.cost)}</p>
     </div>
   );
 }
@@ -136,9 +136,9 @@ export function AIQualityMetrics({ metrics }: AIQualityMetricsProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.4 }}
-      className="bg-dark-800/50 rounded-xl border border-dark-700/50 p-6"
+      className="bg-gray-50 rounded-xl border border-gray-200 p-6"
     >
-      <h3 className="text-lg font-semibold text-white mb-4">Qualidade do Atendimento</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Qualidade do Atendimento</h3>
 
       <div className="space-y-4">
         <QualityBar 
@@ -161,10 +161,10 @@ export function AIQualityMetrics({ metrics }: AIQualityMetricsProps) {
         />
       </div>
 
-      <div className="mt-4 pt-4 border-t border-dark-700/50">
+      <div className="mt-4 pt-4 border-t border-gray-200">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-dark-400">Msgs/conversa</span>
-          <span className="text-lg font-semibold text-white">
+          <span className="text-sm text-gray-500">Msgs/conversa</span>
+          <span className="text-lg font-semibold text-gray-900">
             {metrics.avg_messages_per_conversation.toFixed(1)}
           </span>
         </div>
@@ -197,14 +197,14 @@ function QualityBar({ label, value, color, description }: QualityBarProps) {
     <div>
       <div className="flex items-center justify-between mb-1">
         <div>
-          <span className="text-sm text-dark-300">{label}</span>
-          <span className="text-xs text-dark-500 ml-2">({description})</span>
+          <span className="text-sm text-gray-600">{label}</span>
+          <span className="text-xs text-gray-400 ml-2">({description})</span>
         </div>
         <span className={`text-sm font-medium ${textColorClasses[color]}`}>
           {value.toFixed(1)}%
         </span>
       </div>
-      <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(value, 100)}%` }}

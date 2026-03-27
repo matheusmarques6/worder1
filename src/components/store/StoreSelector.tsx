@@ -83,8 +83,8 @@ export function StoreSelector({
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           'w-full flex items-center gap-3 p-3 rounded-xl transition-all',
-          'bg-dark-800/50 border border-dark-700/50 hover:border-dark-600',
-          isOpen && 'border-primary-500/50 bg-dark-800'
+          'bg-gray-50 border border-gray-200 hover:border-gray-300',
+          isOpen && 'border-brand-400 bg-white'
         )}
       >
         {/* Store Avatar */}
@@ -94,10 +94,10 @@ export function StoreSelector({
 
         {/* Store Info */}
         <div className="flex-1 text-left min-w-0">
-          <p className="text-sm font-semibold text-white truncate">
+          <p className="text-sm font-semibold text-gray-900 truncate">
             {currentStore?.name || 'Selecionar Loja'}
           </p>
-          <p className="text-xs text-dark-400 truncate">
+          <p className="text-xs text-gray-500 truncate">
             {currentStore?.domain || 'Nenhuma loja conectada'}
           </p>
         </div>
@@ -105,7 +105,7 @@ export function StoreSelector({
         {/* Chevron */}
         <ChevronDown
           className={cn(
-            'w-4 h-4 text-dark-400 transition-transform flex-shrink-0',
+            'w-4 h-4 text-gray-500 transition-transform flex-shrink-0',
             isOpen && 'rotate-180'
           )}
         />
@@ -119,12 +119,12 @@ export function StoreSelector({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.96 }}
             transition={{ duration: 0.15 }}
-            className="absolute bottom-full left-0 right-0 mb-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-50"
+            className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden z-50"
           >
             {/* Stores List */}
             {stores.length > 0 && (
-              <div className="p-2 border-b border-dark-700">
-                <p className="px-2 py-1 text-xs font-medium text-dark-500 uppercase tracking-wider">
+              <div className="p-2 border-b border-gray-200">
+                <p className="px-2 py-1 text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Suas Lojas
                 </p>
                 <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
@@ -138,19 +138,19 @@ export function StoreSelector({
                       className={cn(
                         'w-full flex items-center gap-3 p-2 rounded-lg transition-colors',
                         currentStore?.id === store.id
-                          ? 'bg-primary-500/10 text-primary-400'
-                          : 'hover:bg-dark-700/50 text-white'
+                          ? 'bg-brand-50 text-brand-600'
+                          : 'hover:bg-gray-100 text-white'
                       )}
                     >
-                      <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center text-xs font-bold">
+                      <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-xs font-bold">
                         {getInitials(store.name)}
                       </div>
                       <div className="flex-1 text-left min-w-0">
                         <p className="text-sm font-medium truncate">{store.name}</p>
-                        <p className="text-xs text-dark-400 truncate">{store.domain}</p>
+                        <p className="text-xs text-gray-500 truncate">{store.domain}</p>
                       </div>
                       {currentStore?.id === store.id && (
-                        <Check className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                        <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
                       )}
                     </button>
                   ))}
@@ -165,9 +165,9 @@ export function StoreSelector({
                   onAddStore()
                   setIsOpen(false)
                 }}
-                className="w-full flex items-center gap-3 p-2 rounded-lg text-primary-400 hover:bg-primary-500/10 transition-colors"
+                className="w-full flex items-center gap-3 p-2 rounded-lg text-brand-600 hover:bg-brand-50 transition-colors"
               >
-                <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center">
                   <Plus className="w-4 h-4" />
                 </div>
                 <span className="text-sm font-medium">Adicionar Nova Loja</span>
@@ -175,14 +175,14 @@ export function StoreSelector({
             </div>
 
             {/* User Section */}
-            <div className="p-2 border-t border-dark-700 bg-dark-900/50">
+            <div className="p-2 border-t border-gray-200 bg-gray-50">
               <div className="flex items-center gap-3 px-2 py-1">
-                <div className="w-8 h-8 rounded-full bg-dark-700 flex items-center justify-center text-xs font-bold text-white">
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-white">
                   {getInitials(userName)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{userName}</p>
-                  <p className="text-xs text-dark-400 truncate">{userEmail}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{userName}</p>
+                  <p className="text-xs text-gray-500 truncate">{userEmail}</p>
                 </div>
               </div>
               
@@ -192,7 +192,7 @@ export function StoreSelector({
                     onLogout()
                     setIsOpen(false)
                   }}
-                  className="w-full flex items-center gap-3 p-2 mt-1 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  className="w-full flex items-center gap-3 p-2 mt-1 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
                   <span className="text-sm">Sair</span>

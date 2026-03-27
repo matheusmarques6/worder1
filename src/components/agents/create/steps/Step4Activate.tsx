@@ -134,7 +134,7 @@ export function Step4Activate({
           <CheckCircle className="w-10 h-10 text-green-400" />
         </motion.div>
 
-        <h2 className="text-2xl font-bold text-white mb-2">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">
           Agente criado com sucesso! 🎉
         </h2>
         <p className="text-zinc-400 mb-6">
@@ -175,7 +175,7 @@ export function Step4Activate({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-2">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">
           Revisar e Ativar
         </h2>
         <p className="text-zinc-400">
@@ -338,7 +338,7 @@ export function Step4Activate({
                   </div>
                   <Phone className="w-4 h-4 text-green-400" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-white">
+                    <p className="text-sm font-medium text-gray-900">
                       {channel.display_name || channel.phone_number}
                     </p>
                     <p className="text-xs text-zinc-500">{channel.phone_number}</p>

@@ -25,7 +25,7 @@ export function PasswordStrengthIndicator({
     <div className={`mt-2 space-y-2 ${className}`}>
       {/* Barra de força */}
       <div className="flex items-center gap-3">
-        <div className="flex-1 h-2 bg-dark-700 rounded-full overflow-hidden">
+        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
           <div 
             className={`h-full ${validation.strengthBgColor} ${validation.strengthWidth} transition-all duration-300`} 
           />
@@ -42,7 +42,7 @@ export function PasswordStrengthIndicator({
             <div 
               key={rule.id}
               className={`flex items-center gap-1.5 text-xs transition-colors ${
-                rule.passed ? 'text-green-400' : 'text-dark-500'
+                rule.passed ? 'text-green-400' : 'text-gray-400'
               }`}
             >
               {rule.passed ? (

@@ -107,19 +107,19 @@ export function TestModal({
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-[#222222]">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary-500/20 rounded-xl">
-                <Play className="w-5 h-5 text-primary-400" />
+              <div className="p-2 bg-brand-100 rounded-xl">
+                <Play className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-white">Testar Automação</h2>
-                <p className="text-sm text-dark-400">Selecione um contato para simular</p>
+                <h2 className="text-lg font-semibold text-gray-900">Testar Automação</h2>
+                <p className="text-sm text-gray-500">Selecione um contato para simular</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-dark-800 rounded-lg transition-colors"
+              className="p-2 hover:bg-white rounded-lg transition-colors"
             >
-              <X className="w-5 h-5 text-dark-400" />
+              <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
 
@@ -134,47 +134,47 @@ export function TestModal({
               className={cn(
                 'p-4 rounded-xl border-2 cursor-pointer transition-all',
                 useSampleData
-                  ? 'border-primary-500 bg-primary-500/10'
+                  ? 'border-primary-500 bg-brand-50'
                   : 'border-[#222222] hover:border-[#333333] bg-[#0a0a0a]'
               )}
             >
               <div className="flex items-center gap-3">
                 <div className={cn(
                   'p-2.5 rounded-xl',
-                  useSampleData ? 'bg-primary-500/20' : 'bg-dark-700'
+                  useSampleData ? 'bg-brand-100' : 'bg-gray-100'
                 )}>
                   <Sparkles className={cn(
                     'w-5 h-5',
-                    useSampleData ? 'text-primary-400' : 'text-dark-400'
+                    useSampleData ? 'text-brand-600' : 'text-gray-500'
                   )} />
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-white">Usar dados de exemplo</p>
-                  <p className="text-sm text-dark-400">
+                  <p className="text-sm text-gray-500">
                     João Silva • cliente.teste@exemplo.com
                   </p>
                 </div>
                 {useSampleData && (
-                  <CheckCircle2 className="w-5 h-5 text-primary-400" />
+                  <CheckCircle2 className="w-5 h-5 text-brand-600" />
                 )}
               </div>
             </div>
 
             <div className="relative flex items-center">
               <div className="flex-1 h-px bg-[#222222]" />
-              <span className="px-3 text-xs text-dark-500">ou selecione um contato real</span>
+              <span className="px-3 text-xs text-gray-400">ou selecione um contato real</span>
               <div className="flex-1 h-px bg-[#222222]" />
             </div>
 
             {/* Busca */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Buscar por email ou nome..."
-                className="w-full pl-10 pr-4 py-2.5 bg-[#0a0a0a] border border-[#222222] rounded-xl text-white text-sm focus:outline-none focus:border-primary-500/50"
+                className="w-full pl-10 pr-4 py-2.5 bg-[#0a0a0a] border border-[#222222] rounded-xl text-white text-sm focus:outline-none focus:border-brand-400"
               />
             </div>
 
@@ -182,12 +182,12 @@ export function TestModal({
             <div className="max-h-[240px] overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-dark-700">
               {loadingContacts ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+                  <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
                 </div>
               ) : contacts.length === 0 ? (
                 <div className="text-center py-8">
-                  <User className="w-10 h-10 text-dark-600 mx-auto mb-2" />
-                  <p className="text-dark-400 text-sm">Nenhum contato encontrado</p>
+                  <User className="w-10 h-10 text-gray-500 mx-auto mb-2" />
+                  <p className="text-gray-500 text-sm">Nenhum contato encontrado</p>
                 </div>
               ) : (
                 contacts.map((contact) => (
@@ -200,7 +200,7 @@ export function TestModal({
                     className={cn(
                       'p-3 rounded-xl border-2 cursor-pointer transition-all',
                       selectedContact?.id === contact.id && !useSampleData
-                        ? 'border-primary-500 bg-primary-500/10'
+                        ? 'border-primary-500 bg-brand-50'
                         : 'border-[#222222] hover:border-[#333333] bg-[#0a0a0a]'
                     )}
                   >
@@ -212,7 +212,7 @@ export function TestModal({
                         <p className="font-medium text-white truncate">
                           {contact.first_name} {contact.last_name}
                         </p>
-                        <div className="flex items-center gap-3 text-xs text-dark-400">
+                        <div className="flex items-center gap-3 text-xs text-gray-500">
                           <span className="flex items-center gap-1 truncate">
                             <Mail className="w-3 h-3" />
                             {contact.email}
@@ -226,7 +226,7 @@ export function TestModal({
                         </div>
                       </div>
                       {selectedContact?.id === contact.id && !useSampleData && (
-                        <CheckCircle2 className="w-5 h-5 text-primary-400 flex-shrink-0" />
+                        <CheckCircle2 className="w-5 h-5 text-brand-600 flex-shrink-0" />
                       )}
                     </div>
                   </div>
@@ -237,7 +237,7 @@ export function TestModal({
 
           {/* Footer */}
           <div className="p-4 border-t border-[#222222] flex items-center justify-between">
-            <p className="text-xs text-dark-500">
+            <p className="text-xs text-gray-400">
               {useSampleData 
                 ? '✨ Usando dados de exemplo' 
                 : selectedContact 
@@ -336,16 +336,16 @@ export function TestResultPanel({
             <h3 className="font-semibold text-white">
               {success ? 'Teste concluído!' : 'Teste com erros'}
             </h3>
-            <p className="text-xs text-dark-400">
+            <p className="text-xs text-gray-500">
               {totalDuration}ms • {contact?.email || 'Dados de exemplo'}
             </p>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="p-2 hover:bg-dark-800 rounded-lg transition-colors"
+          className="p-2 hover:bg-white rounded-lg transition-colors"
         >
-          <X className="w-4 h-4 text-dark-400" />
+          <X className="w-4 h-4 text-gray-500" />
         </button>
       </div>
 
@@ -363,7 +363,7 @@ export function TestResultPanel({
         )}
         {skippedCount > 0 && (
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-dark-500" />
+            <div className="w-2 h-2 rounded-full bg-gray-300" />
             <span className="text-sm text-white">{skippedCount} pulado</span>
           </div>
         )}
@@ -378,22 +378,22 @@ export function TestResultPanel({
               'rounded-xl border overflow-hidden transition-all',
               result.status === 'success' && 'border-green-500/30 bg-green-500/5',
               result.status === 'error' && 'border-red-500/30 bg-red-500/5',
-              result.status === 'skipped' && 'border-dark-700 bg-dark-800/50',
+              result.status === 'skipped' && 'border-gray-200 bg-gray-50',
             )}
           >
             <div
               className="flex items-center gap-3 p-3 cursor-pointer"
               onClick={() => setExpandedNode(expandedNode === result.nodeId ? null : result.nodeId)}
             >
-              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-dark-700 text-xs text-dark-300">
+              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs text-gray-600">
                 {index + 1}
               </div>
               
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">
+                <p className="text-sm font-medium text-gray-900 truncate">
                   {result.output?.action || result.nodeId}
                 </p>
-                <p className="text-xs text-dark-400">
+                <p className="text-xs text-gray-500">
                   {result.duration}ms
                   {result.output?.simulated && ' • Simulado'}
                 </p>
@@ -406,7 +406,7 @@ export function TestResultPanel({
                 <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
               )}
               {result.status === 'skipped' && (
-                <span className="text-xs text-dark-500">Pulado</span>
+                <span className="text-xs text-gray-400">Pulado</span>
               )}
             </div>
 
@@ -417,11 +417,11 @@ export function TestResultPanel({
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  className="border-t border-dark-700"
+                  className="border-t border-gray-200"
                 >
-                  <div className="p-3 bg-dark-900/50">
-                    <p className="text-xs font-medium text-dark-400 mb-2">OUTPUT</p>
-                    <pre className="text-xs text-dark-300 bg-dark-950 rounded-lg p-2 overflow-x-auto max-h-[200px]">
+                  <div className="p-3 bg-gray-50">
+                    <p className="text-xs font-medium text-gray-500 mb-2">OUTPUT</p>
+                    <pre className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 overflow-x-auto max-h-[200px]">
                       {JSON.stringify(result.output || result.error, null, 2)}
                     </pre>
                   </div>

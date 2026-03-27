@@ -91,7 +91,7 @@ const QUALITY_CONFIG = {
     label: 'Desconhecido',
     color: 'slate',
     bgColor: 'bg-slate-500/10',
-    textColor: 'text-slate-400',
+    textColor: 'text-gray-500',
     borderColor: 'border-slate-500/30',
     icon: Shield,
     description: 'Qualidade não verificada',
@@ -205,8 +205,8 @@ export function QualityDashboard({ organizationId, compact = false }: QualityDas
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Qualidade do Número</h2>
-          <p className="text-sm text-slate-400">
+          <h2 className="text-xl font-semibold text-gray-900">Qualidade do Número</h2>
+          <p className="text-sm text-gray-500">
             Monitore a qualidade e limites de mensagens
           </p>
         </div>
@@ -259,13 +259,13 @@ export function QualityDashboard({ organizationId, compact = false }: QualityDas
       )}
 
       {/* Instâncias */}
-      <div className="bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-800/50 overflow-hidden">
         <div className="p-4 border-b border-slate-800/50">
           <h3 className="font-medium text-white">Números WhatsApp</h3>
         </div>
         
         {instances.length === 0 ? (
-          <div className="p-8 text-center text-slate-500">
+          <div className="p-8 text-center text-gray-400">
             <Phone className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>Nenhum número WhatsApp configurado</p>
           </div>
@@ -280,22 +280,22 @@ export function QualityDashboard({ organizationId, compact = false }: QualityDas
 
       {/* Mudanças Recentes */}
       {recentChanges.length > 0 && (
-        <div className="bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-800/50 overflow-hidden">
           <button
             onClick={() => setShowHistory(!showHistory)}
-            className="w-full p-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors"
+            className="w-full p-4 flex items-center justify-between hover:bg-gray-100/30 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <History className="w-5 h-5 text-slate-400" />
+              <History className="w-5 h-5 text-gray-500" />
               <h3 className="font-medium text-white">Mudanças Recentes</h3>
-              <span className="px-2 py-0.5 bg-slate-800 text-slate-400 rounded text-xs">
+              <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">
                 {recentChanges.length}
               </span>
             </div>
             {showHistory ? (
-              <ChevronUp className="w-5 h-5 text-slate-400" />
+              <ChevronUp className="w-5 h-5 text-gray-500" />
             ) : (
-              <ChevronDown className="w-5 h-5 text-slate-400" />
+              <ChevronDown className="w-5 h-5 text-gray-500" />
             )}
           </button>
 
@@ -320,7 +320,7 @@ export function QualityDashboard({ organizationId, compact = false }: QualityDas
 
       {/* Gráfico (Simples) */}
       {chartData.length > 0 && (
-        <div className="bg-slate-900/50 rounded-2xl border border-slate-800/50 p-4">
+        <div className="bg-white rounded-2xl border border-slate-800/50 p-4">
           <h3 className="font-medium text-white mb-4">Histórico (7 dias)</h3>
           <SimpleChart data={chartData} />
         </div>
@@ -354,8 +354,8 @@ function StatCard({
         <Icon className={`w-5 h-5 text-${color}-400`} />
         <span className={`text-2xl font-bold text-${color}-400`}>{value}</span>
       </div>
-      <p className="text-sm text-slate-400">{label}</p>
-      <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+      <p className="text-sm text-gray-500">{label}</p>
+      <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
         <div
           className={`h-full bg-${color}-500 rounded-full transition-all`}
           style={{ width: `${percent}%` }}
@@ -371,14 +371,14 @@ function InstanceRow({ instance }: { instance: QualityInstance }) {
   const tierLabel = TIER_LABELS[instance.messaging_limit_tier] || instance.messaging_limit_tier
 
   return (
-    <div className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors">
+    <div className="p-4 flex items-center justify-between hover:bg-gray-100/30 transition-colors">
       <div className="flex items-center gap-4">
         <div className={`p-2 rounded-lg ${config.bgColor}`}>
           <Icon className={`w-5 h-5 ${config.textColor}`} />
         </div>
         <div>
           <p className="font-medium text-white">{instance.instance_name}</p>
-          <p className="text-sm text-slate-400">{instance.phone_number}</p>
+          <p className="text-sm text-gray-500">{instance.phone_number}</p>
         </div>
       </div>
 
@@ -386,26 +386,26 @@ function InstanceRow({ instance }: { instance: QualityInstance }) {
         {/* Qualidade */}
         <div className="text-right">
           <p className={`font-medium ${config.textColor}`}>{config.label}</p>
-          <p className="text-xs text-slate-500">{config.description}</p>
+          <p className="text-xs text-gray-400">{config.description}</p>
         </div>
 
         {/* Tier */}
         <div className="text-right min-w-[120px]">
-          <p className="text-sm text-slate-300">{tierLabel}</p>
-          <p className="text-xs text-slate-500">Limite diário</p>
+          <p className="text-sm text-gray-600">{tierLabel}</p>
+          <p className="text-xs text-gray-400">Limite diário</p>
         </div>
 
         {/* Última verificação */}
         <div className="text-right min-w-[100px]">
           {instance.quality_checked_at ? (
             <>
-              <p className="text-sm text-slate-300">
+              <p className="text-sm text-gray-600">
                 {formatTimeAgo(instance.quality_checked_at)}
               </p>
-              <p className="text-xs text-slate-500">Última verificação</p>
+              <p className="text-xs text-gray-400">Última verificação</p>
             </>
           ) : (
-            <p className="text-xs text-slate-500">Nunca verificado</p>
+            <p className="text-xs text-gray-400">Nunca verificado</p>
           )}
         </div>
       </div>
@@ -431,16 +431,16 @@ function QualityChangeRow({ change }: { change: QualityChange }) {
           <TrendingDown className="w-5 h-5 text-red-400" />
         )}
         <div>
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-gray-600">
             Qualidade mudou de{' '}
             <span className={prevConfig.textColor}>{prevConfig.label}</span>
             {' para '}
             <span className={newConfig.textColor}>{newConfig.label}</span>
           </p>
-          <p className="text-xs text-slate-500">{change.phone_number_id}</p>
+          <p className="text-xs text-gray-400">{change.phone_number_id}</p>
         </div>
       </div>
-      <p className="text-xs text-slate-500">{formatTimeAgo(change.checked_at)}</p>
+      <p className="text-xs text-gray-400">{formatTimeAgo(change.checked_at)}</p>
     </div>
   )
 }
@@ -477,7 +477,7 @@ function CompactQualityCard({
         <button
           onClick={onCheck}
           disabled={checking}
-          className="p-1.5 rounded-lg hover:bg-slate-800/50 text-slate-400 hover:text-white transition-colors"
+          className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 hover:text-white transition-colors"
         >
           {checking ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -490,22 +490,22 @@ function CompactQualityCard({
       <div className="flex items-center justify-between">
         <div>
           <p className={`text-2xl font-bold ${config.textColor}`}>{config.label}</p>
-          <p className="text-xs text-slate-500">{instances.length} número(s)</p>
+          <p className="text-xs text-gray-400">{instances.length} número(s)</p>
         </div>
 
         {stats && (
           <div className="flex gap-2">
             <div className="text-center px-2">
               <p className="text-emerald-400 font-medium">{stats.green}</p>
-              <p className="text-[10px] text-slate-500">OK</p>
+              <p className="text-[10px] text-gray-400">OK</p>
             </div>
             <div className="text-center px-2">
               <p className="text-amber-400 font-medium">{stats.yellow}</p>
-              <p className="text-[10px] text-slate-500">Médio</p>
+              <p className="text-[10px] text-gray-400">Médio</p>
             </div>
             <div className="text-center px-2">
               <p className="text-red-400 font-medium">{stats.red}</p>
-              <p className="text-[10px] text-slate-500">Baixo</p>
+              <p className="text-[10px] text-gray-400">Baixo</p>
             </div>
           </div>
         )}
@@ -548,7 +548,7 @@ function SimpleChart({ data }: { data: ChartDataPoint[] }) {
                 style={{ height: `${greenHeight}%` }}
               />
             )}
-            <p className="text-[10px] text-slate-500 text-center mt-1">
+            <p className="text-[10px] text-gray-400 text-center mt-1">
               {point.date.split('-')[2]}
             </p>
           </div>

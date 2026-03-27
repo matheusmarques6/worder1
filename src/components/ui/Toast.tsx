@@ -115,10 +115,10 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
   };
 
   const colors = {
-    success: 'bg-green-500/10 border-green-500/30 text-green-400',
-    error: 'bg-red-500/10 border-red-500/30 text-red-400',
-    warning: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
-    info: 'bg-blue-500/10 border-blue-500/30 text-blue-400',
+    success: 'bg-white border-emerald-200 text-emerald-600',
+    error: 'bg-white border-red-200 text-red-600',
+    warning: 'bg-white border-amber-200 text-amber-600',
+    info: 'bg-white border-blue-200 text-blue-600',
   };
 
   const Icon = icons[toast.type];
@@ -136,12 +136,12 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
       <div className="flex items-start gap-3">
         <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-white">{toast.title}</p>
+          <p className="font-medium text-gray-900">{toast.title}</p>
           {toast.message && <p className="text-sm opacity-80 mt-0.5">{toast.message}</p>}
         </div>
         <button
           onClick={onClose}
-          className="p-1 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0"
+          className="p-1 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0 text-gray-400"
         >
           <X className="w-4 h-4" />
         </button>

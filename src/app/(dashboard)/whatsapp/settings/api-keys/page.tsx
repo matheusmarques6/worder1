@@ -203,18 +203,18 @@ export default function ApiKeysPage() {
   )
 
   return (
-    <div className="min-h-screen bg-dark-900 p-6">
+    <div className="min-h-screen bg-white p-6">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center gap-2 text-dark-400 text-sm mb-2">
+        <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
           <Link href="/whatsapp/settings" className="hover:text-white">Configurações</Link>
           <ChevronRight className="w-4 h-4" />
           <span className="text-white">API Keys</span>
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">API Keys</h1>
-            <p className="text-dark-400 mt-1">
+            <h1 className="text-2xl font-bold text-gray-900">API Keys</h1>
+            <p className="text-gray-500 mt-1">
               Configure suas chaves de API para usar modelos de IA
             </p>
           </div>
@@ -230,12 +230,12 @@ export default function ApiKeysPage() {
       </div>
 
       {/* Info Banner */}
-      <div className="mb-6 p-4 rounded-xl bg-primary-500/10 border border-primary-500/20">
+      <div className="mb-6 p-4 rounded-xl bg-brand-50 border border-primary-500/20">
         <div className="flex gap-3">
-          <Info className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+          <Info className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm">
-            <p className="text-primary-300 font-medium mb-1">Como funciona</p>
-            <p className="text-primary-400/80">
+            <p className="text-brand-500 font-medium mb-1">Como funciona</p>
+            <p className="text-brand-600/80">
               Você usa suas próprias API keys e paga diretamente aos providers (OpenAI, Anthropic, etc).
               A Worder não cobra nada pelo uso de IA - você tem controle total sobre seus custos.
             </p>
@@ -246,7 +246,7 @@ export default function ApiKeysPage() {
       {/* Loading */}
       {loading ? (
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+          <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -265,8 +265,8 @@ export default function ApiKeysPage() {
                 key={key.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`bg-dark-800/50 border rounded-xl p-5 ${
-                  key.is_valid ? 'border-dark-700/50' : 'border-red-500/50'
+                className={`bg-gray-50 border rounded-xl p-5 ${
+                  key.is_valid ? 'border-gray-200' : 'border-red-500/50'
                 }`}
               >
                 {/* Header */}
@@ -294,38 +294,38 @@ export default function ApiKeysPage() {
                   </div>
                   <button
                     onClick={() => handleDelete(key.provider)}
-                    className="p-2 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
 
                 {/* Key hint */}
-                <div className="mb-4 p-3 bg-dark-900/50 rounded-lg">
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center justify-between">
-                    <code className="text-sm text-dark-300 font-mono">{key.api_key_hint}</code>
+                    <code className="text-sm text-gray-600 font-mono">{key.api_key_hint}</code>
                   </div>
                 </div>
 
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="text-center p-2 bg-dark-900/50 rounded-lg">
-                    <p className="text-lg font-semibold text-white">
+                  <div className="text-center p-2 bg-gray-50 rounded-lg">
+                    <p className="text-lg font-semibold text-gray-900">
                       {key.total_requests.toLocaleString()}
                     </p>
-                    <p className="text-xs text-dark-500">Requests</p>
+                    <p className="text-xs text-gray-400">Requests</p>
                   </div>
-                  <div className="text-center p-2 bg-dark-900/50 rounded-lg">
-                    <p className="text-lg font-semibold text-white">
+                  <div className="text-center p-2 bg-gray-50 rounded-lg">
+                    <p className="text-lg font-semibold text-gray-900">
                       {(key.total_tokens_used / 1000).toFixed(1)}K
                     </p>
-                    <p className="text-xs text-dark-500">Tokens</p>
+                    <p className="text-xs text-gray-400">Tokens</p>
                   </div>
                 </div>
 
                 {/* Last used */}
                 {key.last_used_at && (
-                  <div className="flex items-center gap-1 text-xs text-dark-500">
+                  <div className="flex items-center gap-1 text-xs text-gray-400">
                     <Clock className="w-3 h-3" />
                     Último uso: {new Date(key.last_used_at).toLocaleDateString('pt-BR')}
                   </div>
@@ -337,7 +337,7 @@ export default function ApiKeysPage() {
                     setSelectedProvider(key.provider)
                     setShowAddModal(true)
                   }}
-                  className="w-full mt-4 py-2 rounded-lg bg-dark-700/50 text-dark-300 hover:text-white hover:bg-dark-700 transition-colors text-sm"
+                  className="w-full mt-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:text-white hover:bg-gray-100 transition-colors text-sm"
                 >
                   Atualizar Key
                 </button>
@@ -349,13 +349,13 @@ export default function ApiKeysPage() {
           {availableProviders.length > 0 && (
             <button
               onClick={() => setShowAddModal(true)}
-              className="bg-dark-800/30 border border-dashed border-dark-700/50 rounded-xl p-5 hover:border-primary-500/50 hover:bg-dark-800/50 transition-all group min-h-[200px] flex flex-col items-center justify-center"
+              className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-5 hover:border-brand-400 hover:bg-gray-50 transition-all group min-h-[200px] flex flex-col items-center justify-center"
             >
-              <div className="w-12 h-12 rounded-xl bg-dark-700/50 group-hover:bg-primary-500/20 flex items-center justify-center mb-3 transition-colors">
-                <Plus className="w-6 h-6 text-dark-400 group-hover:text-primary-400" />
+              <div className="w-12 h-12 rounded-xl bg-gray-100 group-hover:bg-brand-100 flex items-center justify-center mb-3 transition-colors">
+                <Plus className="w-6 h-6 text-gray-500 group-hover:text-brand-600" />
               </div>
-              <p className="text-dark-400 group-hover:text-white font-medium">Adicionar API Key</p>
-              <p className="text-xs text-dark-500 mt-1">
+              <p className="text-gray-500 group-hover:text-white font-medium">Adicionar API Key</p>
+              <p className="text-xs text-gray-400 mt-1">
                 {availableProviders.length} providers disponíveis
               </p>
             </button>
@@ -366,11 +366,11 @@ export default function ApiKeysPage() {
       {/* Empty State */}
       {!loading && apiKeys.length === 0 && (
         <div className="text-center py-12">
-          <div className="w-20 h-20 rounded-2xl bg-dark-800/50 flex items-center justify-center mx-auto mb-4">
-            <Key className="w-10 h-10 text-dark-500" />
+          <div className="w-20 h-20 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4">
+            <Key className="w-10 h-10 text-gray-400" />
           </div>
           <h3 className="text-lg font-medium text-white mb-2">Nenhuma API key configurada</h3>
-          <p className="text-dark-400 mb-6 max-w-md mx-auto">
+          <p className="text-gray-500 mb-6 max-w-md mx-auto">
             Configure suas API keys para usar agentes de IA. Você paga diretamente aos providers.
           </p>
           <button
@@ -473,17 +473,17 @@ function AddApiKeyModal({
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden"
+        className="bg-white border border-gray-200 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-dark-700">
-          <h2 className="text-xl font-semibold text-white">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">
             {selectedProvider ? 'Atualizar API Key' : 'Adicionar API Key'}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -494,7 +494,7 @@ function AddApiKeyModal({
           {/* Provider Selection */}
           {!selectedProvider && (
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Provider
               </label>
               <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
@@ -507,15 +507,15 @@ function AddApiKeyModal({
                       onClick={() => setProvider(p)}
                       className={`p-3 rounded-xl border transition-all text-left ${
                         provider === p
-                          ? 'border-primary-500 bg-primary-500/10'
-                          : 'border-dark-700/50 hover:border-dark-600'
+                          ? 'border-primary-500 bg-brand-50'
+                          : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-xl">{cfg.icon}</span>
                         <div>
                           <p className={`text-sm font-medium ${cfg.color}`}>{cfg.name}</p>
-                          <p className="text-xs text-dark-500 truncate">{cfg.description}</p>
+                          <p className="text-xs text-gray-400 truncate">{cfg.description}</p>
                         </div>
                       </div>
                     </button>
@@ -532,13 +532,13 @@ function AddApiKeyModal({
                 <span className="text-2xl">{config.icon}</span>
                 <div>
                   <h3 className={`font-medium ${config.color}`}>{config.name}</h3>
-                  <p className="text-sm text-dark-400 mt-1">{config.description}</p>
+                  <p className="text-sm text-gray-500 mt-1">{config.description}</p>
                   <div className="flex gap-3 mt-2">
                     <a
                       href={config.createKeyUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                      className="text-xs text-brand-600 hover:text-brand-500 flex items-center gap-1"
                     >
                       Criar API Key <ExternalLink className="w-3 h-3" />
                     </a>
@@ -546,7 +546,7 @@ function AddApiKeyModal({
                       href={config.docsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-dark-400 hover:text-white flex items-center gap-1"
+                      className="text-xs text-gray-500 hover:text-white flex items-center gap-1"
                     >
                       Documentação <ExternalLink className="w-3 h-3" />
                     </a>
@@ -559,7 +559,7 @@ function AddApiKeyModal({
           {/* API Key Input */}
           {provider && (
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 API Key
               </label>
               <div className="relative">
@@ -568,12 +568,12 @@ function AddApiKeyModal({
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder={`Cole sua ${config?.name || provider} API key aqui`}
-                  className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 pr-12 font-mono text-sm"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 pr-12 font-mono text-sm"
                 />
                 <button
                   type="button"
                   onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
                 >
                   {showKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>

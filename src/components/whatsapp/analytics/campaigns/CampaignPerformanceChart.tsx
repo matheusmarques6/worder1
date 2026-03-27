@@ -35,22 +35,22 @@ export function CampaignPerformanceChart({ data, height = 350 }: CampaignPerform
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.2 }}
-      className="bg-dark-800/50 rounded-xl border border-dark-700/50 p-6"
+      className="bg-gray-50 rounded-xl border border-gray-200 p-6"
     >
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-white">Performance por Período</h3>
+        <h3 className="text-lg font-semibold text-gray-900">Performance por Período</h3>
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-sm bg-blue-500" />
-            <span className="text-dark-400">Enviadas</span>
+            <span className="text-gray-500">Enviadas</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-sm bg-emerald-500" />
-            <span className="text-dark-400">Entregues</span>
+            <span className="text-gray-500">Entregues</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-sm bg-cyan-500" />
-            <span className="text-dark-400">Lidas</span>
+            <span className="text-gray-500">Lidas</span>
           </div>
         </div>
       </div>
@@ -120,8 +120,8 @@ function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload) return null;
 
   return (
-    <div className="bg-dark-800 border border-dark-700 rounded-xl p-4 shadow-xl">
-      <p className="text-dark-300 text-sm mb-2">{label}</p>
+    <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-xl">
+      <p className="text-gray-600 text-sm mb-2">{label}</p>
       <div className="space-y-1.5">
         {payload.map((entry: any, index: number) => (
           <div key={index} className="flex items-center justify-between gap-4">
@@ -130,7 +130,7 @@ function CustomTooltip({ active, payload, label }: any) {
                 className="w-2.5 h-2.5 rounded-sm"
                 style={{ backgroundColor: entry.color }}
               />
-              <span className="text-sm text-dark-300 capitalize">
+              <span className="text-sm text-gray-600 capitalize">
                 {entry.dataKey === 'sent' ? 'Enviadas' : 
                  entry.dataKey === 'delivered' ? 'Entregues' : 
                  entry.dataKey === 'read' ? 'Lidas' : 
@@ -138,7 +138,7 @@ function CustomTooltip({ active, payload, label }: any) {
                  entry.dataKey === 'failed' ? 'Falhas' : entry.dataKey}
               </span>
             </div>
-            <span className="text-sm font-medium text-white">
+            <span className="text-sm font-medium text-gray-900">
               {formatNumber(entry.value)}
             </span>
           </div>

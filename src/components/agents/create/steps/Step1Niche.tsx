@@ -48,7 +48,7 @@ export function Step1Niche({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-2">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">
           Escolha o nicho do seu agente
         </h2>
         <p className="text-zinc-400">

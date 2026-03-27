@@ -115,11 +115,11 @@ export function CreateDealModal({
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto"
+              className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto"
             >
               <form onSubmit={handleSubmit}>
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-dark-700">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200">
                   <div className="flex items-center gap-3">
                     {currentStage && (
                       <div 
@@ -127,13 +127,13 @@ export function CreateDealModal({
                         style={{ backgroundColor: currentStage.color }}
                       />
                     )}
-                    <h2 className="text-lg font-semibold text-white">Novo Deal</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">Novo Deal</h2>
                   </div>
                   <button
                     type="button"
                     onClick={handleClose}
                     disabled={loading}
-                    className="p-2 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-white transition-colors disabled:opacity-50"
+                    className="p-2 rounded-lg hover:bg-white text-gray-500 hover:text-white transition-colors disabled:opacity-50"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -150,14 +150,14 @@ export function CreateDealModal({
 
                   {/* Title */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Título *
                     </label>
                     <input
                       type="text"
                       value={formData.title}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
                       placeholder="Ex: Implementação E-commerce"
                       required
                       autoFocus
@@ -166,7 +166,7 @@ export function CreateDealModal({
 
                   {/* Stage - Visual selector */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Estágio
                     </label>
                     <div className="flex flex-wrap gap-2">
@@ -178,7 +178,7 @@ export function CreateDealModal({
                           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                             formData.stage_id === stage.id
                               ? 'text-white shadow-lg'
-                              : 'bg-dark-800/50 text-dark-400 hover:bg-dark-700/50'
+                              : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
                           }`}
                           style={
                             formData.stage_id === stage.id
@@ -202,16 +202,16 @@ export function CreateDealModal({
                   {/* Value & Probability */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-dark-300 mb-2">
+                      <label className="block text-sm font-medium text-gray-600 mb-2">
                         Valor
                       </label>
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500 text-sm">R$</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
                         <input
                           type="number"
                           value={formData.value || ''}
                           onChange={(e) => setFormData({ ...formData, value: Number(e.target.value) || 0 })}
-                          className="w-full pl-10 pr-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
+                          className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
                           placeholder="0"
                           min="0"
                           step="0.01"
@@ -219,33 +219,33 @@ export function CreateDealModal({
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-dark-300 mb-2">
+                      <label className="block text-sm font-medium text-gray-600 mb-2">
                         Probabilidade
-                        <span className="ml-1 text-xs text-dark-500">(do estágio)</span>
+                        <span className="ml-1 text-xs text-gray-400">(do estágio)</span>
                       </label>
                       <div className="relative">
                         <input
                           type="number"
                           value={formData.probability || ''}
                           onChange={(e) => setFormData({ ...formData, probability: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
-                          className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
                           placeholder="50"
                           min="0"
                           max="100"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-500">%</span>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Commit Level */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Nível de Comprometimento (Forecast)
                     </label>
                     <div className="grid grid-cols-4 gap-2">
                       {([
-                        { value: 'omit', label: 'Omitir', color: 'bg-dark-600' },
+                        { value: 'omit', label: 'Omitir', color: 'bg-gray-200' },
                         { value: 'pipeline', label: 'Pipeline', color: 'bg-yellow-500' },
                         { value: 'best_case', label: 'Best Case', color: 'bg-blue-500' },
                         { value: 'commit', label: 'Commit', color: 'bg-green-500' },
@@ -256,8 +256,8 @@ export function CreateDealModal({
                           onClick={() => setFormData({ ...formData, commit_level: option.value })}
                           className={`p-2 rounded-lg border text-center transition-all ${
                             formData.commit_level === option.value
-                              ? 'border-primary-500 bg-primary-500/10'
-                              : 'border-dark-700 bg-dark-800/50 hover:border-dark-600'
+                              ? 'border-primary-500 bg-brand-50'
+                              : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                           }`}
                         >
                           <div className={`w-2 h-2 rounded-full ${option.color} mx-auto mb-1`} />
@@ -269,23 +269,23 @@ export function CreateDealModal({
 
                   {/* Expected Close Date */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Data de Fechamento Esperada
                     </label>
                     <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-500" />
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <input
                         type="date"
                         value={formData.expected_close_date || ''}
                         onChange={(e) => setFormData({ ...formData, expected_close_date: e.target.value })}
-                        className="w-full pl-10 pr-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
+                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
                       />
                     </div>
                   </div>
 
                   {/* Contact Selector */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Contato
                     </label>
                     <ContactSelector
@@ -296,26 +296,26 @@ export function CreateDealModal({
 
                   {/* Notes */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Notas
                     </label>
                     <textarea
                       value={formData.notes || ''}
                       onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                       rows={3}
-                      className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 resize-none transition-colors"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 resize-none transition-colors"
                       placeholder="Adicione notas sobre este deal..."
                     />
                   </div>
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-3 p-6 border-t border-dark-700 bg-dark-900/50">
+                <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
                   <button
                     type="button"
                     onClick={handleClose}
                     disabled={loading}
-                    className="px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-white transition-colors disabled:opacity-50"
+                    className="px-4 py-2.5 rounded-xl bg-white hover:bg-gray-100 text-white transition-colors disabled:opacity-50"
                   >
                     Cancelar
                   </button>

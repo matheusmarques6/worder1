@@ -139,14 +139,14 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   };
 
   return (
-    <div className="fb-toolbar h-14 bg-dark-900 border-b border-dark-700 flex items-center px-2 sm:px-4 gap-2 sm:gap-4">
+    <div className="fb-toolbar h-14 bg-white border-b border-gray-200 flex items-center px-2 sm:px-4 gap-2 sm:gap-4">
       {/* Left Section - Close Button + Name */}
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink-0">
         <button
           onClick={handleClose}
           className={cn(
             'p-2 rounded-lg flex-shrink-0',
-            'hover:bg-dark-700 text-dark-400 hover:text-white',
+            'hover:bg-gray-100 text-gray-500 hover:text-white',
             'transition-colors'
           )}
           title="Fechar"
@@ -166,7 +166,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
               autoFocus
               className={cn(
                 'px-3 py-1.5 rounded-lg',
-                'bg-dark-800 border border-dark-600',
+                'bg-white border border-gray-300',
                 'text-white text-base sm:text-lg font-semibold',
                 'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
                 'w-[150px] sm:w-[200px]'
@@ -175,11 +175,11 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           ) : (
             <button
               onClick={() => setIsEditing(true)}
-              className="flex items-center gap-2 text-base sm:text-lg font-semibold text-white hover:text-primary-400 transition-colors group truncate max-w-[150px] sm:max-w-[250px]"
+              className="flex items-center gap-2 text-base sm:text-lg font-semibold text-gray-900 hover:text-brand-600 transition-colors group truncate max-w-[150px] sm:max-w-[250px]"
               title={automationName}
             >
               <span className="truncate">{automationName}</span>
-              <Pencil className="w-4 h-4 text-dark-400 group-hover:text-primary-400 transition-colors flex-shrink-0" />
+              <Pencil className="w-4 h-4 text-gray-500 group-hover:text-brand-600 transition-colors flex-shrink-0" />
             </button>
           )}
 
@@ -210,7 +210,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onClick={toggleHistoryPanel}
           className={cn(
             'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'hover:bg-dark-700 text-dark-400 hover:text-white',
+            'hover:bg-gray-100 text-gray-500 hover:text-white',
             'transition-colors text-sm'
           )}
           title="Histórico"
@@ -225,7 +225,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           disabled={!valid}
           className={cn(
             'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'bg-dark-700 hover:bg-dark-600',
+            'bg-gray-100 hover:bg-gray-200',
             'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -245,7 +245,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         />
 
         {/* Divider - hidden on small screens */}
-        <div className="hidden sm:block w-px h-8 bg-dark-700" />
+        <div className="hidden sm:block w-px h-8 bg-gray-100" />
 
         {/* Save */}
         <button
@@ -253,7 +253,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           disabled={isSaving}
           className={cn(
             'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'bg-dark-700 hover:bg-dark-600 border border-dark-600',
+            'bg-gray-100 hover:bg-gray-200 border border-gray-300',
             'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -314,13 +314,13 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
         'disabled:opacity-50 disabled:cursor-not-allowed',
         isActive
           ? 'bg-green-500/20 border-green-500/40 hover:bg-green-500/30'
-          : 'bg-dark-700 border-dark-600 hover:bg-dark-600'
+          : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
       )}
     >
       {/* Toggle Track */}
       <div className={cn(
         'relative w-10 h-5 rounded-full transition-colors duration-300',
-        isActive ? 'bg-green-500' : 'bg-dark-500'
+        isActive ? 'bg-green-500' : 'bg-gray-300'
       )}>
         {/* Toggle Thumb */}
         <motion.div
@@ -334,7 +334,7 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
           transition={{ type: 'spring', stiffness: 500, damping: 30 }}
         >
           {isLoading && (
-            <Loader2 className="w-2.5 h-2.5 text-dark-500 animate-spin" />
+            <Loader2 className="w-2.5 h-2.5 text-gray-400 animate-spin" />
           )}
         </motion.div>
       </div>
@@ -342,7 +342,7 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
       {/* Label */}
       <span className={cn(
         'text-sm font-medium',
-        isActive ? 'text-green-400' : 'text-dark-300'
+        isActive ? 'text-green-400' : 'text-gray-600'
       )}>
         {isLoading ? '...' : isActive ? 'Ativo' : 'Inativo'}
       </span>

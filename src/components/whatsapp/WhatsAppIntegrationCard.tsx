@@ -111,12 +111,12 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
 
   if (loading) {
     return (
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6">
+      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-xl bg-green-500/20 animate-pulse" />
           <div className="flex-1 space-y-2">
-            <div className="h-5 w-32 bg-dark-700 rounded animate-pulse" />
-            <div className="h-4 w-48 bg-dark-700/50 rounded animate-pulse" />
+            <div className="h-5 w-32 bg-gray-100 rounded animate-pulse" />
+            <div className="h-4 w-48 bg-gray-100 rounded animate-pulse" />
           </div>
         </div>
       </div>
@@ -128,10 +128,10 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={`
-        relative bg-dark-800/50 border rounded-2xl p-6 transition-all duration-200
+        relative bg-gray-50 border rounded-2xl p-6 transition-all duration-200
         ${connected 
           ? 'border-green-500/30 hover:border-green-500/50' 
-          : 'border-dark-700/50 hover:border-dark-600'
+          : 'border-gray-200 hover:border-gray-300'
         }
       `}
     >
@@ -160,12 +160,12 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
                 Ativo
               </span>
             ) : (
-              <span className="px-2 py-0.5 text-xs font-medium rounded-full border bg-dark-700/50 text-dark-400 border-dark-600">
+              <span className="px-2 py-0.5 text-xs font-medium rounded-full border bg-gray-100 text-gray-500 border-gray-300">
                 Desconectado
               </span>
             )}
           </div>
-          <p className="text-sm text-dark-400">
+          <p className="text-sm text-gray-500">
             {connected 
               ? 'Envie mensagens e gerencie conversas'
               : 'Conecte via API oficial ou QR Code'
@@ -178,12 +178,12 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
               {/* API Oficial */}
               {config && (
                 <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2 text-dark-300">
-                    <Building2 className="w-4 h-4 text-dark-500" />
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Building2 className="w-4 h-4 text-gray-400" />
                     <span>{config.business_name || 'API Oficial'}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-dark-300">
-                    <Phone className="w-4 h-4 text-dark-500" />
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Phone className="w-4 h-4 text-gray-400" />
                     <span>{config.phone_number}</span>
                   </div>
                 </div>
@@ -192,12 +192,12 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
               {/* Instâncias QR Code */}
               {instances.filter(i => i.status === 'connected').map(instance => (
                 <div key={instance.id} className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2 text-dark-300">
-                    <MessageSquare className="w-4 h-4 text-dark-500" />
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <MessageSquare className="w-4 h-4 text-gray-400" />
                     <span>{instance.title || 'QR Code'}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-dark-300">
-                    <Phone className="w-4 h-4 text-dark-500" />
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Phone className="w-4 h-4 text-gray-400" />
                     <span>{instance.phone_number}</span>
                   </div>
                 </div>
@@ -211,7 +211,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
               )}
 
               {config && (
-                <div className="flex items-center gap-2 text-dark-500 text-xs">
+                <div className="flex items-center gap-2 text-gray-400 text-xs">
                   <Clock className="w-3.5 h-3.5" />
                   <span>Conectado em {new Date(config.created_at).toLocaleDateString('pt-BR')}</span>
                 </div>
@@ -227,14 +227,14 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
           <>
             <button
               onClick={handleConfigure}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-xl text-sm text-white transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-white transition-colors"
             >
               <Settings className="w-4 h-4" />
               Configurar
             </button>
             <button
               onClick={fetchStatus}
-              className="p-2.5 rounded-xl bg-dark-700/50 hover:bg-dark-700 text-dark-300 hover:text-white transition-colors"
+              className="p-2.5 rounded-xl bg-gray-100 hover:bg-gray-100 text-gray-600 hover:text-white transition-colors"
               title="Atualizar status"
             >
               <RefreshCw className="w-4 h-4" />
@@ -255,7 +255,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
         ) : (
           <button
             onClick={handleConnect}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-500 hover:bg-green-600 rounded-xl text-sm font-medium text-white transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-500 hover:bg-green-600 rounded-xl text-sm font-medium text-gray-900 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Conectar WhatsApp
@@ -265,29 +265,29 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
 
       {/* Quick Links */}
       {connected && (
-        <div className="mt-4 pt-4 border-t border-dark-700/50">
+        <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="flex items-center gap-3 text-xs">
             <a 
               href="/whatsapp" 
-              className="flex items-center gap-1.5 text-dark-400 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 text-gray-500 hover:text-white transition-colors"
             >
               <MessageSquare className="w-3.5 h-3.5" />
               Inbox
             </a>
-            <span className="text-dark-700">•</span>
+            <span className="text-gray-600">•</span>
             <a 
               href="/whatsapp?tab=campaigns" 
-              className="flex items-center gap-1.5 text-dark-400 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 text-gray-500 hover:text-white transition-colors"
             >
               <MessageSquare className="w-3.5 h-3.5" />
               Campanhas
             </a>
-            <span className="text-dark-700">•</span>
+            <span className="text-gray-600">•</span>
             <a
               href="https://business.facebook.com/settings/whatsapp-business-accounts"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-dark-400 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 text-gray-500 hover:text-white transition-colors"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               Meta Business Suite

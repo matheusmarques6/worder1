@@ -196,7 +196,7 @@ export function Step2Function({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-2 flex items-center gap-2">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2 flex items-center gap-2">
           <Target className="w-5 h-5 text-blue-400" />
           Função do Agente
         </h2>

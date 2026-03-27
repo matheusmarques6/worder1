@@ -237,15 +237,15 @@ export default function InboxPage() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-white mb-2">Selecione uma loja</h2>
-          <p className="text-dark-400">Escolha uma loja no menu para ver as conversas do WhatsApp.</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Selecione uma loja</h2>
+          <p className="text-gray-500">Escolha uma loja no menu para ver as conversas do WhatsApp.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-dark-950 overflow-hidden min-h-0">
+    <div className="flex h-[calc(100vh-4rem)] bg-gray-50 overflow-hidden min-h-0">
       {/* Connect Modal */}
       <AnimatePresence>
         {showConnectModal && (
@@ -259,9 +259,9 @@ export default function InboxPage() {
       </AnimatePresence>
 
       {/* Left Panel - Connection Manager + Conversations */}
-      <div className="w-80 flex-shrink-0 border-r border-dark-800 flex flex-col">
+      <div className="w-80 flex-shrink-0 border-r border-gray-200 flex flex-col">
         {/* Connection Manager */}
-        <div className="p-3 border-b border-dark-800">
+        <div className="p-3 border-b border-gray-200">
           <WhatsAppConnectionManager
             organizationId={organizationId}
             storeId={storeId} // ✅ NOVO: Passar storeId
@@ -272,13 +272,13 @@ export default function InboxPage() {
         </div>
 
         {/* Search */}
-        <div className="p-3 border-b border-dark-800">
+        <div className="p-3 border-b border-gray-200">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Buscar conversas..."
-              className="w-full pl-10 pr-4 py-2 bg-dark-800 border border-dark-700 rounded-lg text-sm text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
               value={filters.search || ''}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
             />
@@ -290,10 +290,10 @@ export default function InboxPage() {
           {/* ✅ CORREÇÃO: Só mostra spinner na PRIMEIRA carga (lista vazia) */}
           {conversationsLoading && conversations.length === 0 ? (
             <div className="flex items-center justify-center h-32">
-              <RefreshCw className="w-6 h-6 text-primary-500 animate-spin" />
+              <RefreshCw className="w-6 h-6 text-brand-500 animate-spin" />
             </div>
           ) : conversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-dark-500">
+            <div className="flex flex-col items-center justify-center h-32 text-gray-400">
               <MessageSquare className="w-8 h-8 mb-2" />
               <p className="text-sm">Nenhuma conversa</p>
               <p className="text-xs mt-1">para esta loja</p>
@@ -326,7 +326,7 @@ export default function InboxPage() {
             showContactPanel={showContactPanel}
           />
         ) : (
-          <div className="flex-1 flex items-center justify-center text-dark-500">
+          <div className="flex-1 flex items-center justify-center text-gray-400">
             <div className="text-center">
               <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
               <p className="text-lg">Selecione uma conversa</p>
@@ -338,7 +338,7 @@ export default function InboxPage() {
 
       {/* Right Panel - Contact Details */}
       {selectedConversation && showContactPanel && (
-        <div className="w-80 lg:w-[380px] flex-shrink-0 border-l border-dark-800 overflow-hidden">
+        <div className="w-80 lg:w-[380px] flex-shrink-0 border-l border-gray-200 overflow-hidden">
           <ContactPanel
             contact={contact}
             conversation={contactConversation || selectedConversation}

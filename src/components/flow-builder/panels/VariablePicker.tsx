@@ -168,16 +168,16 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="absolute z-50 w-80 max-h-96 overflow-hidden rounded-xl bg-[#1a1a1a] border border-white/10 shadow-2xl"
+      className="absolute z-50 w-80 max-h-96 overflow-hidden rounded-xl bg-[#1a1a1a] border border-gray-200 shadow-2xl"
       style={{
         top: anchorRef?.current?.offsetHeight ? anchorRef.current.offsetHeight + 4 : 'auto',
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-white/10">
+      <div className="flex items-center justify-between p-3 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <Variable className="w-4 h-4 text-blue-400" />
-          <span className="text-sm font-medium text-white">
+          <span className="text-sm font-medium text-gray-900">
             {showFilters ? 'Adicionar Filtro' : 'Inserir Variável'}
           </span>
         </div>
@@ -190,7 +190,7 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
       </div>
 
       {/* Search */}
-      <div className="p-2 border-b border-white/10">
+      <div className="p-2 border-b border-gray-200">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
           <input
@@ -200,7 +200,7 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
             placeholder="Buscar variável..."
             className={cn(
               'w-full pl-9 pr-3 py-2 rounded-lg text-sm',
-              'bg-[#0a0a0a] border border-white/10 text-white',
+              'bg-[#0a0a0a] border border-gray-200 text-white',
               'placeholder-white/30',
               'focus:outline-none focus:border-blue-500/50'
             )}
@@ -265,7 +265,7 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
                       expandedGroup === group.id && 'rotate-90'
                     )}
                   />
-                  <span className="text-sm font-medium text-white/80">{group.label}</span>
+                  <span className="text-sm font-medium text-gray-900/80">{group.label}</span>
                   <span className="text-xs text-white/30 ml-auto">
                     {group.variables.length}
                   </span>
@@ -295,7 +295,7 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
                             </div>
                             <span className={cn(
                               'text-xs px-1.5 py-0.5 rounded',
-                              'bg-white/5 text-white/40',
+                              'bg-gray-50 text-white/40',
                               variable.type === 'string' && 'text-green-400',
                               variable.type === 'number' && 'text-blue-400',
                               variable.type === 'date' && 'text-amber-400',
