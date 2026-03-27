@@ -286,6 +286,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 
 -- Colunas que podem faltar se tabela já existia
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key TEXT DEFAULT '';
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key_prefix VARCHAR(20);
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS name VARCHAR(255) DEFAULT 'API Key';
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS user_id UUID;
@@ -293,6 +294,8 @@ ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS scopes JSONB DEFAULT '["read", "write"]'::jsonb;
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_api_keys_org ON api_keys(organization_id);
 CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key);
