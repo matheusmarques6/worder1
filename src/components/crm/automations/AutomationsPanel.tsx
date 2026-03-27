@@ -307,25 +307,25 @@ export function AutomationsPanel() {
         className={`
           p-4 rounded-xl border transition-all
           ${rule.is_enabled
-            ? 'bg-dark-800/50 border-dark-700/50 hover:border-dark-600'
-            : 'bg-dark-900/50 border-dark-800 opacity-60'
+            ? 'bg-gray-50 border-gray-200 hover:border-gray-300'
+            : 'bg-gray-50 border-gray-200 opacity-60'
           }
         `}
       >
         <div className="flex items-start gap-3">
           {/* Status Indicator */}
-          <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${rule.is_enabled ? 'bg-green-500' : 'bg-dark-600'}`} />
+          <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${rule.is_enabled ? 'bg-green-500' : 'bg-gray-200'}`} />
 
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <h4 className="font-medium text-white truncate">{rule.name}</h4>
               {!rule.is_enabled && (
-                <span className="text-xs text-dark-500">(inativo)</span>
+                <span className="text-xs text-gray-400">(inativo)</span>
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-sm text-dark-400">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
               <span>Evento: {rule.trigger_event}</span>
               <ArrowRight className="w-3 h-3" />
               {rule.action_type === 'create_deal' ? (
@@ -345,17 +345,17 @@ export function AutomationsPanel() {
             {rule.filters && Object.keys(rule.filters).length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {rule.filters.min_value && (
-                  <span className="px-2 py-0.5 text-xs bg-dark-700 rounded-full text-dark-300">
+                  <span className="px-2 py-0.5 text-xs bg-gray-100 rounded-full text-gray-600">
                     Valor ≥ R$ {rule.filters.min_value}
                   </span>
                 )}
                 {rule.filters.max_value && (
-                  <span className="px-2 py-0.5 text-xs bg-dark-700 rounded-full text-dark-300">
+                  <span className="px-2 py-0.5 text-xs bg-gray-100 rounded-full text-gray-600">
                     Valor ≤ R$ {rule.filters.max_value}
                   </span>
                 )}
                 {rule.filters.include_tags?.length > 0 && (
-                  <span className="px-2 py-0.5 text-xs bg-dark-700 rounded-full text-dark-300">
+                  <span className="px-2 py-0.5 text-xs bg-gray-100 rounded-full text-gray-600">
                     Tags: {rule.filters.include_tags.join(', ')}
                   </span>
                 )}
@@ -363,7 +363,7 @@ export function AutomationsPanel() {
             )}
 
             {/* Stats */}
-            <div className="mt-2 text-xs text-dark-500">
+            <div className="mt-2 text-xs text-gray-400">
               {rule.action_type === 'create_deal'
                 ? `${rule.deals_created_count || 0} deals criados`
                 : `${rule.deals_moved_count || 0} deals movidos`
@@ -378,7 +378,7 @@ export function AutomationsPanel() {
               className={`p-2 rounded-lg transition-colors ${
                 rule.is_enabled
                   ? 'text-green-400 hover:bg-green-500/20'
-                  : 'text-dark-500 hover:bg-dark-700'
+                  : 'text-gray-400 hover:bg-gray-100'
               }`}
               title={rule.is_enabled ? 'Desativar' : 'Ativar'}
             >
@@ -386,14 +386,14 @@ export function AutomationsPanel() {
             </button>
             <button
               onClick={() => handleEditRule(rule)}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
               title="Editar"
             >
               <Settings className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleDeleteRule(rule)}
-              className="p-2 text-dark-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
               title="Excluir"
             >
               <Trash2 className="w-4 h-4" />
@@ -416,11 +416,11 @@ export function AutomationsPanel() {
     if (!integration?.isConnected) return null
 
     return (
-      <div key={source} className="border border-dark-700/50 rounded-xl overflow-hidden">
+      <div key={source} className="border border-gray-200 rounded-xl overflow-hidden">
         {/* Source Header */}
         <button
           onClick={() => toggleSource(source)}
-          className="w-full flex items-center justify-between p-4 bg-dark-800/30 hover:bg-dark-800/50 transition-colors"
+          className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-50 transition-colors"
         >
           <div className="flex items-center gap-3">
             <div className={`p-2 rounded-lg ${colorClass}`}>
@@ -428,15 +428,15 @@ export function AutomationsPanel() {
             </div>
             <div className="text-left">
               <h4 className="font-medium text-white">{name}</h4>
-              <p className="text-xs text-dark-400">
+              <p className="text-xs text-gray-500">
                 {activeCount} regra{activeCount !== 1 ? 's' : ''} ativa{activeCount !== 1 ? 's' : ''}
               </p>
             </div>
           </div>
           {isExpanded ? (
-            <ChevronDown className="w-5 h-5 text-dark-400" />
+            <ChevronDown className="w-5 h-5 text-gray-500" />
           ) : (
-            <ChevronRight className="w-5 h-5 text-dark-400" />
+            <ChevronRight className="w-5 h-5 text-gray-500" />
           )}
         </button>
 
@@ -448,11 +448,11 @@ export function AutomationsPanel() {
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="border-t border-dark-700/50"
+              className="border-t border-gray-200"
             >
               <div className="p-4 space-y-3">
                 {sourceRules.length === 0 ? (
-                  <p className="text-sm text-dark-500 text-center py-4">
+                  <p className="text-sm text-gray-400 text-center py-4">
                     Nenhuma regra configurada
                   </p>
                 ) : (
@@ -462,7 +462,7 @@ export function AutomationsPanel() {
                 {/* Add Rule Button */}
                 <button
                   onClick={() => handleAddRule(source, actionType)}
-                  className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-dark-700 hover:border-primary-500/50 rounded-xl text-dark-400 hover:text-primary-400 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-gray-200 hover:border-brand-400 rounded-xl text-gray-500 hover:text-brand-600 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Adicionar regra</span>
@@ -482,7 +482,7 @@ export function AutomationsPanel() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <RefreshCw className="w-8 h-8 text-primary-500 animate-spin" />
+        <RefreshCw className="w-8 h-8 text-brand-500 animate-spin" />
       </div>
     )
   }
@@ -497,56 +497,56 @@ export function AutomationsPanel() {
     <div className="space-y-8 pb-8">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-2">Automações</h2>
-        <p className="text-dark-400">Configure como eventos externos criam e movem deals automaticamente</p>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Automações</h2>
+        <p className="text-gray-500">Configure como eventos externos criam e movem deals automaticamente</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary-500/20 rounded-lg">
-              <Zap className="w-5 h-5 text-primary-400" />
+            <div className="p-2 bg-brand-100 rounded-lg">
+              <Zap className="w-5 h-5 text-brand-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-white">{stats.totalRules}</p>
-              <p className="text-xs text-dark-400">Regras totais</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalRules}</p>
+              <p className="text-xs text-gray-500">Regras totais</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-500/20 rounded-lg">
               <Activity className="w-5 h-5 text-green-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-white">{stats.activeRules}</p>
-              <p className="text-xs text-dark-400">Ativas</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.activeRules}</p>
+              <p className="text-xs text-gray-500">Ativas</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-500/20 rounded-lg">
               <TrendingUp className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-white">{stats.dealsCreatedMonth}</p>
-              <p className="text-xs text-dark-400">Deals criados/mês</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.dealsCreatedMonth}</p>
+              <p className="text-xs text-gray-500">Deals criados/mês</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-red-500/20 rounded-lg">
               <AlertCircle className="w-5 h-5 text-red-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-white">{stats.errorsWeek}</p>
-              <p className="text-xs text-dark-400">Erros (7 dias)</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.errorsWeek}</p>
+              <p className="text-xs text-gray-500">Erros (7 dias)</p>
             </div>
           </div>
         </div>
@@ -556,11 +556,11 @@ export function AutomationsPanel() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-              <Target className="w-5 h-5 text-primary-400" />
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Target className="w-5 h-5 text-brand-600" />
               Criar Deals
             </h3>
-            <p className="text-sm text-dark-400">
+            <p className="text-sm text-gray-500">
               Regras que criam deals automaticamente quando eventos acontecem
             </p>
           </div>
@@ -579,15 +579,15 @@ export function AutomationsPanel() {
 
         <div className="space-y-3">
           {connectedSources.length === 0 ? (
-            <div className="p-8 bg-dark-800/30 border border-dark-700/50 rounded-xl text-center">
-              <Zap className="w-12 h-12 text-dark-600 mx-auto mb-3" />
+            <div className="p-8 bg-gray-50 border border-gray-200 rounded-xl text-center">
+              <Zap className="w-12 h-12 text-gray-500 mx-auto mb-3" />
               <h4 className="font-medium text-white mb-2">Nenhuma integração conectada</h4>
-              <p className="text-sm text-dark-400 mb-4">
+              <p className="text-sm text-gray-500 mb-4">
                 Conecte uma integração para configurar automações
               </p>
               <a
                 href="/integrations"
-                className="inline-flex items-center gap-2 text-primary-400 hover:text-primary-300 text-sm"
+                className="inline-flex items-center gap-2 text-brand-600 hover:text-brand-500 text-sm"
               >
                 Ir para Integrações
                 <ExternalLink className="w-4 h-4" />
@@ -603,11 +603,11 @@ export function AutomationsPanel() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <ArrowRight className="w-5 h-5 text-blue-400" />
               Mover Estágios
             </h3>
-            <p className="text-sm text-dark-400">
+            <p className="text-sm text-gray-500">
               Regras que movem deals entre estágios automaticamente
             </p>
           </div>
@@ -626,9 +626,9 @@ export function AutomationsPanel() {
 
         <div className="space-y-3">
           {connectedSources.length === 0 ? (
-            <div className="p-8 bg-dark-800/30 border border-dark-700/50 rounded-xl text-center">
-              <ArrowRight className="w-12 h-12 text-dark-600 mx-auto mb-3" />
-              <p className="text-sm text-dark-400">
+            <div className="p-8 bg-gray-50 border border-gray-200 rounded-xl text-center">
+              <ArrowRight className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+              <p className="text-sm text-gray-500">
                 Configure integrações para mover deals automaticamente
               </p>
             </div>
@@ -641,23 +641,23 @@ export function AutomationsPanel() {
       {/* Recent Logs */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <History className="w-5 h-5 text-amber-400" />
             Logs Recentes
           </h3>
           <button
             onClick={() => setShowLogsModal(true)}
-            className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+            className="text-sm text-brand-600 hover:text-brand-500 transition-colors"
           >
             Ver Todos
           </button>
         </div>
 
-        <div className="bg-dark-800/30 border border-dark-700/50 rounded-xl overflow-hidden">
+        <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
           {recentLogs.length === 0 ? (
             <div className="p-8 text-center">
-              <History className="w-12 h-12 text-dark-600 mx-auto mb-3" />
-              <p className="text-sm text-dark-400">Nenhum log registrado ainda</p>
+              <History className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+              <p className="text-sm text-gray-500">Nenhum log registrado ainda</p>
             </div>
           ) : (
             <div className="divide-y divide-dark-700/50">
@@ -668,17 +668,17 @@ export function AutomationsPanel() {
                 const dateStr = time.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 
                 return (
-                  <div key={log.id} className="flex items-center gap-3 p-3 hover:bg-dark-800/30 transition-colors">
+                  <div key={log.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors">
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
                       log.status === 'success' ? 'bg-green-500' :
                       log.status === 'error' ? 'bg-red-500' :
                       'bg-amber-500'
                     }`} />
-                    <span className="text-xs text-dark-500 w-20 flex-shrink-0">
+                    <span className="text-xs text-gray-400 w-20 flex-shrink-0">
                       {dateStr} {timeStr}
                     </span>
-                    <Icon className="w-4 h-4 text-dark-400 flex-shrink-0" />
-                    <span className="text-sm text-dark-300 truncate flex-1">
+                    <Icon className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-sm text-gray-600 truncate flex-1">
                       {log.message}
                     </span>
                   </div>

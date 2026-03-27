@@ -28,7 +28,7 @@ interface Form {
 const statusLabels: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   draft: { label: 'Rascunho', color: 'text-yellow-400 bg-yellow-500/10', icon: Clock },
   published: { label: 'Publicado', color: 'text-green-400 bg-green-500/10', icon: CheckCircle },
-  archived: { label: 'Arquivado', color: 'text-dark-400 bg-dark-500/10', icon: Archive },
+  archived: { label: 'Arquivado', color: 'text-gray-500 bg-gray-300/10', icon: Archive },
 }
 
 export default function FormsPage() {
@@ -127,8 +127,8 @@ export default function FormsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Formularios</h1>
-          <p className="text-dark-400 mt-1">Crie formularios para captar leads e enviar eventos para suas plataformas de ads</p>
+          <h1 className="text-2xl font-bold text-gray-900">Formularios</h1>
+          <p className="text-gray-500 mt-1">Crie formularios para captar leads e enviar eventos para suas plataformas de ads</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -141,32 +141,32 @@ export default function FormsPage() {
 
       {/* Search */}
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           type="text"
           placeholder="Buscar formularios..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700 rounded-xl text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500"
+          className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
         />
       </div>
 
       {/* Forms Grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
+          <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
         </div>
       ) : filteredForms.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col items-center justify-center py-20 bg-dark-800/40 rounded-2xl border border-dark-700/30 border-dashed"
+          className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-2xl border border-gray-200/30 border-dashed"
         >
-          <div className="w-16 h-16 rounded-2xl bg-dark-700/50 flex items-center justify-center mb-4">
-            <FileText className="w-8 h-8 text-dark-400" />
+          <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+            <FileText className="w-8 h-8 text-gray-500" />
           </div>
-          <h3 className="text-lg font-semibold text-white mb-2">Nenhum formulario criado</h3>
-          <p className="text-dark-400 text-center max-w-md mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum formulario criado</h3>
+          <p className="text-gray-500 text-center max-w-md mb-6">
             Crie seu primeiro formulario para captar leads e enviar eventos para Facebook e Google Ads
           </p>
           <button
@@ -187,7 +187,7 @@ export default function FormsPage() {
                 key={form.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="relative bg-dark-800/60 border border-dark-700/50 rounded-xl p-5 hover:border-dark-600 transition-all group"
+                className="relative bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 transition-all group"
               >
                 {/* Status badge */}
                 <div className="flex items-center justify-between mb-3">
@@ -200,24 +200,24 @@ export default function FormsPage() {
                   <div className="relative">
                     <button
                       onClick={() => setActiveMenu(activeMenu === form.id ? null : form.id)}
-                      className="p-1.5 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors"
+                      className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-gray-100 transition-colors"
                     >
                       <MoreVertical className="w-4 h-4" />
                     </button>
                     {activeMenu === form.id && (
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setActiveMenu(null)} />
-                        <div className="absolute right-0 top-full mt-1 w-44 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 py-1">
+                        <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-xl shadow-xl z-20 py-1">
                           <Link
                             href={`/forms/${form.id}`}
-                            className="flex items-center gap-2 px-3 py-2 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50"
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-white hover:bg-gray-100"
                           >
                             <Settings className="w-4 h-4" />
                             Editar
                           </Link>
                           <Link
                             href={`/forms/${form.id}/submissions`}
-                            className="flex items-center gap-2 px-3 py-2 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50"
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-white hover:bg-gray-100"
                           >
                             <Users className="w-4 h-4" />
                             Submissions
@@ -227,7 +227,7 @@ export default function FormsPage() {
                               href={`/embed/${form.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center gap-2 px-3 py-2 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50"
+                              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-white hover:bg-gray-100"
                             >
                               <ExternalLink className="w-4 h-4" />
                               Visualizar
@@ -235,7 +235,7 @@ export default function FormsPage() {
                           )}
                           <button
                             onClick={() => { duplicateForm(form); setActiveMenu(null) }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-white hover:bg-gray-100"
                           >
                             <Copy className="w-4 h-4" />
                             Duplicar
@@ -255,26 +255,26 @@ export default function FormsPage() {
 
                 {/* Form info */}
                 <Link href={`/forms/${form.id}`} className="block">
-                  <h3 className="text-lg font-semibold text-white mb-1 group-hover:text-primary-400 transition-colors">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1 group-hover:text-brand-600 transition-colors">
                     {form.name}
                   </h3>
                   {form.description && (
-                    <p className="text-sm text-dark-400 line-clamp-2 mb-4">{form.description}</p>
+                    <p className="text-sm text-gray-500 line-clamp-2 mb-4">{form.description}</p>
                   )}
                 </Link>
 
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-dark-700/50">
+                <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-200">
                   <div>
-                    <p className="text-xs text-dark-500">Views</p>
+                    <p className="text-xs text-gray-400">Views</p>
                     <p className="text-lg font-bold text-white">{form.views_count}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-dark-500">Leads</p>
-                    <p className="text-lg font-bold text-primary-400">{form.submissions_count}</p>
+                    <p className="text-xs text-gray-400">Leads</p>
+                    <p className="text-lg font-bold text-brand-600">{form.submissions_count}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-dark-500">Conversao</p>
+                    <p className="text-xs text-gray-400">Conversao</p>
                     <p className="text-lg font-bold text-green-400">{conversionRate(form).toFixed(1)}%</p>
                   </div>
                 </div>
@@ -282,7 +282,7 @@ export default function FormsPage() {
                 {/* Integrations badges */}
                 <div className="flex items-center gap-2 mt-3">
                   {form.pipeline && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-dark-700 text-dark-300">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
                       <Zap className="w-3 h-3" />
                       {form.pipeline.name}
                     </span>
@@ -318,38 +318,38 @@ export default function FormsPage() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative bg-dark-900 rounded-2xl border border-dark-700 p-6 w-full max-w-md"
+              className="relative bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-md"
             >
-              <button onClick={() => setShowCreateModal(false)} className="absolute top-4 right-4 text-dark-400 hover:text-white">
+              <button onClick={() => setShowCreateModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
-              <h3 className="text-lg font-semibold text-white mb-4">Novo Formulario</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Novo Formulario</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-dark-400 mb-2">Nome do Formulario</label>
+                  <label className="block text-sm text-gray-500 mb-2">Nome do Formulario</label>
                   <input
                     type="text"
                     value={newFormName}
                     onChange={(e) => setNewFormName(e.target.value)}
                     placeholder="Ex: Diagnostico Gratuito"
-                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500"
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
                     autoFocus
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-dark-400 mb-2">Descricao (opcional)</label>
+                  <label className="block text-sm text-gray-500 mb-2">Descricao (opcional)</label>
                   <textarea
                     value={newFormDescription}
                     onChange={(e) => setNewFormDescription(e.target.value)}
                     placeholder="Descreva o objetivo do formulario..."
                     rows={3}
-                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500 resize-none"
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500 resize-none"
                   />
                 </div>
                 <button
                   onClick={createForm}
                   disabled={!newFormName.trim() || creating}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 disabled:text-dark-500 text-white rounded-xl font-medium transition-colors"
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 disabled:text-gray-400 text-white rounded-xl font-medium transition-colors"
                 >
                   {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                   {creating ? 'Criando...' : 'Criar Formulario'}

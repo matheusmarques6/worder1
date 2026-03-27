@@ -44,13 +44,13 @@ const TYPE_CONFIG: Record<string, { icon: any; color: string; bgColor: string }>
   email: { icon: Mail, color: 'text-amber-400', bgColor: 'bg-amber-500/10' },
   whatsapp: { icon: MessageSquare, color: 'text-green-400', bgColor: 'bg-green-500/10' },
   meeting: { icon: Video, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
-  task: { icon: CheckSquare, color: 'text-primary-400', bgColor: 'bg-primary-500/10' },
+  task: { icon: CheckSquare, color: 'text-brand-600', bgColor: 'bg-brand-50' },
   followup: { icon: Bell, color: 'text-pink-400', bgColor: 'bg-pink-500/10' },
   payment: { icon: DollarSign, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
 }
 
 const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
-  low: { label: 'Baixa', color: 'text-dark-400' },
+  low: { label: 'Baixa', color: 'text-gray-500' },
   normal: { label: 'Normal', color: 'text-blue-400' },
   high: { label: 'Alta', color: 'text-amber-400' },
   urgent: { label: 'Urgente', color: 'text-error-400' },
@@ -123,12 +123,12 @@ export function TaskCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className={`group relative bg-dark-800/50 border rounded-xl p-4 hover:bg-dark-800 transition-all ${
+      className={`group relative bg-gray-50 border rounded-xl p-4 hover:bg-white transition-all ${
         overdue 
           ? 'border-error-500/30 bg-error-500/5' 
           : isCompleted 
-            ? 'border-dark-700/50 opacity-60' 
-            : 'border-dark-700/50'
+            ? 'border-gray-200 opacity-60' 
+            : 'border-gray-200'
       }`}
     >
       <div className="flex items-start gap-4">
@@ -155,7 +155,7 @@ export function TaskCard({
         <div className="flex-1 min-w-0">
           {/* Title & Priority */}
           <div className="flex items-start justify-between gap-2">
-            <h4 className={`font-medium ${isCompleted ? 'line-through text-dark-500' : 'text-white'}`}>
+            <h4 className={`font-medium ${isCompleted ? 'line-through text-gray-400' : 'text-white'}`}>
               {task.title}
             </h4>
             
@@ -163,13 +163,13 @@ export function TaskCard({
             <div className="relative">
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className="p-1.5 hover:bg-dark-700 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                className="p-1.5 hover:bg-gray-100 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
               >
-                <MoreVertical className="w-4 h-4 text-dark-400" />
+                <MoreVertical className="w-4 h-4 text-gray-500" />
               </button>
 
               {showMenu && (
-                <div className="absolute right-0 top-8 w-36 bg-dark-700 border border-dark-600 rounded-xl shadow-xl overflow-hidden z-10">
+                <div className="absolute right-0 top-8 w-36 bg-gray-100 border border-gray-300 rounded-xl shadow-xl overflow-hidden z-10">
                   {!isCompleted && (
                     <>
                       <button
@@ -177,7 +177,7 @@ export function TaskCard({
                           handleComplete()
                           setShowMenu(false)
                         }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-dark-600"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-200"
                       >
                         <CheckCircle className="w-4 h-4" />
                         Concluir
@@ -188,7 +188,7 @@ export function TaskCard({
                             onEdit(task)
                             setShowMenu(false)
                           }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-dark-600"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-200"
                         >
                           <Pencil className="w-4 h-4" />
                           Editar
@@ -201,7 +201,7 @@ export function TaskCard({
                       handleDelete()
                       setShowMenu(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error-400 hover:bg-dark-600"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error-400 hover:bg-gray-200"
                   >
                     <Trash2 className="w-4 h-4" />
                     Remover
@@ -213,7 +213,7 @@ export function TaskCard({
 
           {/* Description */}
           {task.description && (
-            <p className={`text-sm mt-1 line-clamp-2 ${isCompleted ? 'text-dark-600' : 'text-dark-400'}`}>
+            <p className={`text-sm mt-1 line-clamp-2 ${isCompleted ? 'text-gray-500' : 'text-gray-500'}`}>
               {task.description}
             </p>
           )}
@@ -222,7 +222,7 @@ export function TaskCard({
           <div className="flex flex-wrap items-center gap-3 mt-3 text-xs">
             {/* Date & Time */}
             <span className={`flex items-center gap-1 ${
-              overdue ? 'text-error-400' : 'text-dark-500'
+              overdue ? 'text-error-400' : 'text-gray-400'
             }`}>
               {overdue && <AlertTriangle className="w-3 h-3" />}
               <Calendar className="w-3 h-3" />
@@ -244,7 +244,7 @@ export function TaskCard({
 
             {/* Contact */}
             {task.contact && (
-              <span className="flex items-center gap-1 text-dark-400">
+              <span className="flex items-center gap-1 text-gray-500">
                 <User className="w-3 h-3" />
                 {task.contact.name || task.contact.phone_number}
               </span>
@@ -263,8 +263,8 @@ export function TaskCard({
 
       {/* Loading overlay */}
       {(completing || deleting) && (
-        <div className="absolute inset-0 bg-dark-900/50 rounded-xl flex items-center justify-center">
-          <Loader2 className="w-6 h-6 text-primary-400 animate-spin" />
+        <div className="absolute inset-0 bg-gray-50 rounded-xl flex items-center justify-center">
+          <Loader2 className="w-6 h-6 text-brand-600 animate-spin" />
         </div>
       )}
     </motion.div>

@@ -79,7 +79,7 @@ export default function AdvancedAnalyticsPage() {
         <div className="w-16 h-16 bg-[#1a1a2e] rounded-2xl flex items-center justify-center mb-4">
           <Store className="w-8 h-8 text-gray-400" />
         </div>
-        <h2 className="text-xl font-semibold text-white mb-2">Nenhuma loja selecionada</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Nenhuma loja selecionada</h2>
         <p className="text-gray-400 mb-6 max-w-md">
           Selecione uma loja Shopify no menu lateral para ver as métricas avançadas.
         </p>
@@ -106,7 +106,7 @@ export default function AdvancedAnalyticsPage() {
             <ArrowLeft className="w-5 h-5 text-gray-400" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-white">Métricas Avançadas</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Métricas Avançadas</h1>
             <p className="text-gray-400 mt-1">
               {currentStore?.name || 'Loja Shopify'} • Segmentação e Retenção
             </p>
@@ -127,7 +127,7 @@ export default function AdvancedAnalyticsPage() {
               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
                 isActive
                   ? 'bg-violet-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-50'
               }`}
             >
               <Icon className="w-5 h-5" />

@@ -92,7 +92,7 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-dark-950 flex">
+    <div className="min-h-screen bg-gray-50 flex">
       {/* Left Side - Login Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
         <motion.div
@@ -103,13 +103,13 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="flex flex-col gap-1 mb-8">
             <WorderLogo size="md" />
-            <p className="text-xs text-dark-500">by Convertfy</p>
+            <p className="text-xs text-gray-9000">by Convertfy</p>
           </div>
 
           {/* Welcome Text */}
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-white">Bem-vindo de volta</h2>
-            <p className="text-dark-400 mt-2">
+            <p className="text-gray-500 mt-2">
               Acesse sua conta para gerenciar suas campanhas
             </p>
           </div>
@@ -121,13 +121,13 @@ export default function LoginPage() {
                 Email
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seu@email.com"
-                  className="w-full pl-10 pr-4 py-3 bg-dark-900/50 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-gray-500 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
                 />
               </div>
@@ -138,19 +138,19 @@ export default function LoginPage() {
                 Senha
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-12 py-3 bg-dark-900/50 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-10 pr-12 py-3 bg-gray-500 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -161,11 +161,11 @@ export default function LoginPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded border-dark-700 bg-dark-900 text-primary-500 focus:ring-primary-500/20"
+                  className="w-4 h-4 rounded border-gray-200 bg-white text-primary-500 focus:ring-primary-500/20"
                 />
-                <span className="text-sm text-dark-400">Lembrar de mim</span>
+                <span className="text-sm text-gray-500">Lembrar de mim</span>
               </label>
-              <a href="#" className="text-sm text-primary-400 hover:text-primary-300 transition-colors">
+              <a href="#" className="text-sm text-brand-600 hover:text-brand-500 transition-colors">
                 Esqueceu a senha?
               </a>
             </div>
@@ -194,18 +194,18 @@ export default function LoginPage() {
           </form>
 
           {/* Demo Account */}
-          <div className="mt-6 p-4 bg-dark-900/50 border border-dark-800 rounded-xl">
-            <p className="text-sm text-dark-400 mb-2">Conta demo:</p>
+          <div className="mt-6 p-4 bg-gray-500 border border-gray-200 rounded-xl">
+            <p className="text-sm text-gray-500 mb-2">Conta demo:</p>
             <div className="flex items-center gap-2 text-sm">
-              <code className="px-2 py-1 bg-dark-800 rounded text-dark-300">demo@worder.com</code>
-              <code className="px-2 py-1 bg-dark-800 rounded text-dark-300">demo123</code>
+              <code className="px-2 py-1 bg-white rounded text-gray-600">demo@worder.com</code>
+              <code className="px-2 py-1 bg-white rounded text-gray-600">demo123</code>
             </div>
           </div>
 
           {/* Sign Up Link */}
-          <p className="mt-6 text-center text-dark-400">
+          <p className="mt-6 text-center text-gray-500">
             Não tem uma conta?{' '}
-            <Link href="/signup" className="text-primary-400 hover:text-primary-300 transition-colors font-medium">
+            <Link href="/signup" className="text-brand-600 hover:text-brand-500 transition-colors font-medium">
               Criar conta grátis
             </Link>
           </p>
@@ -216,7 +216,7 @@ export default function LoginPage() {
       <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-dark-900 via-dark-900 to-primary-950/30 items-center justify-center p-12 relative overflow-hidden">
         {/* Background Effects */}
         <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-brand-50 rounded-full blur-3xl" />
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent-500/10 rounded-full blur-3xl" />
           {/* Grid pattern */}
           <div className="absolute inset-0 grid-pattern opacity-30" />
@@ -231,14 +231,14 @@ export default function LoginPage() {
             {/* Large Logo */}
             <div className="mb-8">
               <WorderLogo size="lg" />
-              <p className="text-sm text-dark-500 mt-1">by Convertfy</p>
+              <p className="text-sm text-gray-9000 mt-1">by Convertfy</p>
             </div>
             
             <h2 className="text-3xl font-bold text-white mb-4">
               Transforme dados em{' '}
               <span className="text-gradient-worder">receita</span>
             </h2>
-            <p className="text-lg text-dark-300 mb-8">
+            <p className="text-lg text-gray-600 mb-8">
               Plataforma completa para e-commerce: analytics financeiro, automações, CRM e WhatsApp em um só lugar.
             </p>
           </motion.div>
@@ -250,13 +250,13 @@ export default function LoginPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 + index * 0.1 }}
-                className="p-4 bg-dark-800/30 backdrop-blur-sm border border-dark-700/50 rounded-xl hover:border-primary-500/30 transition-all"
+                className="p-4 bg-gray-50 backdrop-blur-sm border border-gray-200 rounded-xl hover:border-primary-500/30 transition-all"
               >
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center mb-3">
-                  <feature.icon className="w-5 h-5 text-primary-400" />
+                  <feature.icon className="w-5 h-5 text-brand-600" />
                 </div>
                 <h3 className="font-semibold text-white mb-1">{feature.title}</h3>
-                <p className="text-sm text-dark-400">{feature.description}</p>
+                <p className="text-sm text-gray-500">{feature.description}</p>
               </motion.div>
             ))}
           </div>
@@ -275,7 +275,7 @@ export default function LoginPage() {
             ].map((stat) => (
               <div key={stat.label}>
                 <p className="text-2xl font-bold text-white">{stat.value}</p>
-                <p className="text-sm text-dark-400">{stat.label}</p>
+                <p className="text-sm text-gray-500">{stat.label}</p>
               </div>
             ))}
           </motion.div>
@@ -285,7 +285,7 @@ export default function LoginPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.8 }}
-            className="mt-8 p-4 bg-dark-800/30 backdrop-blur-sm border border-dark-700/50 rounded-xl"
+            className="mt-8 p-4 bg-gray-50 backdrop-blur-sm border border-gray-200 rounded-xl"
           >
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
@@ -293,7 +293,7 @@ export default function LoginPage() {
               </div>
               <div>
                 <p className="font-medium text-white">Marina Santos</p>
-                <p className="text-xs text-dark-400">CEO, ModaStyle</p>
+                <p className="text-xs text-gray-500">CEO, ModaStyle</p>
               </div>
               <div className="ml-auto flex items-center gap-0.5">
                 {[...Array(5)].map((_, i) => (
@@ -303,7 +303,7 @@ export default function LoginPage() {
                 ))}
               </div>
             </div>
-            <p className="text-sm text-dark-300">
+            <p className="text-sm text-gray-600">
               "O Worder transformou nossa operação. Aumentamos 65% a receita de email marketing em 3 meses."
             </p>
           </motion.div>

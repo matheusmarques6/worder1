@@ -122,15 +122,15 @@ const MetricCard = ({
       : formatNumber(value)
 
   return (
-    <div className={`bg-dark-800/60 border border-dark-700/50 rounded-xl ${small ? 'p-4' : 'p-5'}`}>
+    <div className={`bg-white border border-gray-200 rounded-xl ${small ? 'p-4' : 'p-5'}`}>
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm text-dark-400 mb-1">{title}</p>
+          <p className="text-sm text-gray-500 mb-1">{title}</p>
           <p className={`font-bold text-white ${small ? 'text-xl' : 'text-2xl'}`}>{formattedValue}</p>
         </div>
         {Icon && (
-          <div className="p-2 rounded-lg bg-dark-700/50">
-            <Icon className="w-5 h-5 text-primary-400" />
+          <div className="p-2 rounded-lg bg-gray-100">
+            <Icon className="w-5 h-5 text-brand-600" />
           </div>
         )}
       </div>
@@ -156,8 +156,8 @@ const DetailRow = ({
   change?: number
   isNegative?: boolean
 }) => (
-  <div className="flex items-center justify-between py-3 border-b border-dark-700/30 last:border-0">
-    <span className={`text-sm ${isNegative ? 'text-red-400' : 'text-dark-300'}`}>{label}</span>
+  <div className="flex items-center justify-between py-3 border-b border-gray-200/30 last:border-0">
+    <span className={`text-sm ${isNegative ? 'text-red-400' : 'text-gray-600'}`}>{label}</span>
     <div className="flex items-center gap-3">
       <span className={`font-medium ${isNegative ? 'text-red-400' : 'text-white'}`}>
         {isNegative ? '-' : ''}{formatCurrency(Math.abs(value))}
@@ -240,7 +240,7 @@ export default function ShopifyAnalyticsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
       </div>
     )
   }
@@ -248,11 +248,11 @@ export default function ShopifyAnalyticsPage() {
   if (!hasStore) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-        <div className="w-16 h-16 bg-dark-800 rounded-2xl flex items-center justify-center mb-4">
-          <ShoppingCart className="w-8 h-8 text-dark-400" />
+        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4">
+          <ShoppingCart className="w-8 h-8 text-gray-500" />
         </div>
-        <h2 className="text-xl font-semibold text-white mb-2">Nenhuma loja conectada</h2>
-        <p className="text-dark-400 mb-6 max-w-md">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Nenhuma loja conectada</h2>
+        <p className="text-gray-500 mb-6 max-w-md">
           Conecte sua loja Shopify para começar a ver seus dados de vendas em tempo real.
         </p>
         <button
@@ -278,11 +278,11 @@ export default function ShopifyAnalyticsPage() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Shopify Analytics</h1>
-          <p className="text-dark-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900">Shopify Analytics</h1>
+          <p className="text-gray-500 mt-1">
             Análise detalhada das vendas da sua loja
             {data?.loja?.nome && (
-              <span className="ml-2 text-xs text-primary-400">
+              <span className="ml-2 text-xs text-brand-600">
                 • {data.loja.nome}
               </span>
             )}
@@ -291,15 +291,15 @@ export default function ShopifyAnalyticsPage() {
 
         <div className="flex items-center gap-3">
           {/* Period Selector */}
-          <div className="flex items-center bg-dark-800/50 border border-dark-700/50 rounded-xl p-1">
+          <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl p-1">
             {periods.map((period) => (
               <button
                 key={period.id}
                 onClick={() => setSelectedPeriod(period.id)}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
                   selectedPeriod === period.id
-                    ? 'bg-dark-700 text-white'
-                    : 'text-dark-400 hover:text-white'
+                    ? 'bg-gray-100 text-white'
+                    : 'text-gray-500 hover:text-white'
                 }`}
               >
                 {period.label}
@@ -348,7 +348,7 @@ export default function ShopifyAnalyticsPage() {
               }
             }}
             id="export-pdf-btn"
-            className="flex items-center gap-2 px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -405,12 +405,12 @@ export default function ShopifyAnalyticsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="lg:col-span-2 p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+          className="lg:col-span-2 p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
         >
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-white">Total de vendas ao longo do tempo</h3>
-              <p className="text-2xl font-bold text-primary-400 mt-1">
+              <h3 className="text-lg font-semibold text-gray-900">Total de vendas ao longo do tempo</h3>
+              <p className="text-2xl font-bold text-brand-600 mt-1">
                 {formatCurrency(data?.totalVendas || 0)}
                 {data?.totalVendasChange !== undefined && (
                   <span className={`text-sm ml-2 ${data.totalVendasChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -463,9 +463,9 @@ export default function ShopifyAnalyticsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+          className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Detalhamento do total de vendas</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Detalhamento do total de vendas</h3>
           
           <div className="space-y-1">
             <DetailRow label="Vendas brutas" value={data?.vendasBrutas || 0} change={data?.vendasBrutasChange} />
@@ -474,7 +474,7 @@ export default function ShopifyAnalyticsPage() {
             <DetailRow label="Vendas líquidas" value={data?.vendasLiquidas || 0} change={data?.vendasLiquidasChange} />
             <DetailRow label="Cobranças de frete" value={data?.totalFrete || 0} change={data?.freteChange} />
             <DetailRow label="Tributos" value={data?.totalTributos || 0} change={data?.tributosChange} />
-            <div className="pt-2 mt-2 border-t border-dark-600">
+            <div className="pt-2 mt-2 border-t border-gray-300">
               <DetailRow label="Total de vendas" value={data?.totalVendas || 0} change={data?.totalVendasChange} />
             </div>
           </div>
@@ -487,9 +487,9 @@ export default function ShopifyAnalyticsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+          className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Total de vendas por canal</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Total de vendas por canal</h3>
           
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -525,7 +525,7 @@ export default function ShopifyAnalyticsPage() {
               <div key={canal.nome} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                  <span className="text-dark-300">{canal.nome}</span>
+                  <span className="text-gray-600">{canal.nome}</span>
                 </div>
                 <span className="text-white font-medium">{formatCurrency(canal.vendas)}</span>
               </div>
@@ -537,11 +537,11 @@ export default function ShopifyAnalyticsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+          className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
         >
-          <h3 className="text-lg font-semibold text-white mb-2">Valor médio do pedido</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Valor médio do pedido</h3>
           <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-bold text-white">{formatCurrency(data?.valorMedioPedido || 0)}</p>
+            <p className="text-3xl font-bold text-gray-900">{formatCurrency(data?.valorMedioPedido || 0)}</p>
             {data?.valorMedioPedidoChange !== undefined && (
               <span className={`text-sm ${data.valorMedioPedidoChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {formatPercent(data.valorMedioPedidoChange)}
@@ -550,13 +550,13 @@ export default function ShopifyAnalyticsPage() {
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-4">
-            <div className="p-4 bg-dark-700/30 rounded-xl">
-              <p className="text-sm text-dark-400">Clientes novos</p>
-              <p className="text-xl font-bold text-white mt-1">{formatNumber(data?.clientesNovos || 0)}</p>
+            <div className="p-4 bg-gray-100/30 rounded-xl">
+              <p className="text-sm text-gray-500">Clientes novos</p>
+              <p className="text-xl font-bold text-gray-900 mt-1">{formatNumber(data?.clientesNovos || 0)}</p>
             </div>
-            <div className="p-4 bg-dark-700/30 rounded-xl">
-              <p className="text-sm text-dark-400">Clientes recorrentes</p>
-              <p className="text-xl font-bold text-white mt-1">{formatNumber(data?.clientesRecorrentes || 0)}</p>
+            <div className="p-4 bg-gray-100/30 rounded-xl">
+              <p className="text-sm text-gray-500">Clientes recorrentes</p>
+              <p className="text-xl font-bold text-gray-900 mt-1">{formatNumber(data?.clientesRecorrentes || 0)}</p>
             </div>
           </div>
         </motion.div>
@@ -565,9 +565,9 @@ export default function ShopifyAnalyticsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+          className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Total de vendas por produto</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Total de vendas por produto</h3>
           
           <div className="space-y-3">
             {(data?.vendasPorProduto || []).slice(0, 5).map((produto: any, index: number) => (
@@ -575,13 +575,13 @@ export default function ShopifyAnalyticsPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-white truncate">{produto.nome}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <div className="flex-1 h-2 bg-dark-700 rounded-full overflow-hidden">
+                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary-500 rounded-full"
                         style={{ width: `${(produto.vendas / (data?.vendasPorProduto?.[0]?.vendas || 1)) * 100}%` }}
                       />
                     </div>
-                    <span className="text-xs text-dark-400">{formatCurrency(produto.vendas)}</span>
+                    <span className="text-xs text-gray-500">{formatCurrency(produto.vendas)}</span>
                   </div>
                 </div>
                 {produto.change !== undefined && (

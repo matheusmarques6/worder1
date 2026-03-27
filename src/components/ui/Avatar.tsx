@@ -29,7 +29,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   const statusColors = {
     online: 'bg-success-500',
-    offline: 'bg-dark-500',
+    offline: 'bg-gray-300',
     busy: 'bg-error-500',
     away: 'bg-warning-500',
   }
@@ -41,7 +41,7 @@ export const Avatar: React.FC<AvatarProps> = ({
           src={src}
           alt={alt}
           className={cn(
-            'rounded-full object-cover bg-dark-700',
+            'rounded-full object-cover bg-gray-100',
             sizes[size]
           )}
         />
@@ -58,7 +58,7 @@ export const Avatar: React.FC<AvatarProps> = ({
       {status && (
         <span
           className={cn(
-            'absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-dark-900',
+            'absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-gray-200',
             statusColors[status]
           )}
         />

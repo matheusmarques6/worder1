@@ -233,23 +233,23 @@ export default function AIAgentConfig({
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white border border-gray-200 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-dark-700">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
               <Bot className="w-5 h-5 text-purple-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Configurar Agente IA</h2>
-              <p className="text-sm text-dark-400">{agentName}</p>
+              <h2 className="text-lg font-semibold text-gray-900">Configurar Agente IA</h2>
+              <p className="text-sm text-gray-500">{agentName}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -259,7 +259,7 @@ export default function AIAgentConfig({
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {loading ? (
             <div className="flex items-center justify-center h-48">
-              <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+              <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
             </div>
           ) : (
             <>
@@ -274,7 +274,7 @@ export default function AIAgentConfig({
               >
                 {/* Provider */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-dark-300 mb-2">Provider</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Provider</label>
                   <div className="grid grid-cols-4 gap-2">
                     {['openai', 'anthropic', 'google', 'groq'].map((provider) => {
                       const hasKey = apiKeys.some(k => k.provider === provider && k.is_valid)
@@ -288,8 +288,8 @@ export default function AIAgentConfig({
                           }))}
                           className={`p-3 rounded-xl border transition-all relative ${
                             config.provider === provider
-                              ? 'border-primary-500 bg-primary-500/10'
-                              : 'border-dark-700/50 hover:border-dark-600'
+                              ? 'border-primary-500 bg-brand-50'
+                              : 'border-gray-200 hover:border-gray-300'
                           }`}
                         >
                           <span className="text-sm text-white capitalize">{provider}</span>
@@ -311,11 +311,11 @@ export default function AIAgentConfig({
 
                 {/* Model */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-dark-300 mb-2">Modelo</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Modelo</label>
                   <select
                     value={config.model}
                     onChange={(e) => setConfig(prev => ({ ...prev, model: e.target.value }))}
-                    className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500/50"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-brand-400"
                   >
                     {availableModels.map((model) => (
                       <option key={model.id} value={model.id}>
@@ -329,8 +329,8 @@ export default function AIAgentConfig({
                 {/* Temperature */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-dark-300">Temperatura</label>
-                    <span className="text-sm text-primary-400">{config.temperature}</span>
+                    <label className="text-sm font-medium text-gray-600">Temperatura</label>
+                    <span className="text-sm text-brand-600">{config.temperature}</span>
                   </div>
                   <input
                     type="range"
@@ -341,7 +341,7 @@ export default function AIAgentConfig({
                     onChange={(e) => setConfig(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
                     className="w-full"
                   />
-                  <div className="flex justify-between text-xs text-dark-500 mt-1">
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
                     <span>Preciso / Consistente</span>
                     <span>Criativo / Variado</span>
                   </div>
@@ -359,7 +359,7 @@ export default function AIAgentConfig({
               >
                 {/* System Prompt */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-dark-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     Instruções do Sistema
                   </label>
                   <textarea
@@ -367,16 +367,16 @@ export default function AIAgentConfig({
                     onChange={(e) => setConfig(prev => ({ ...prev, system_prompt: e.target.value }))}
                     rows={6}
                     placeholder="Descreva como o agente deve se comportar..."
-                    className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 resize-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 resize-none"
                   />
-                  <p className="text-xs text-dark-500 mt-1">
+                  <p className="text-xs text-gray-400 mt-1">
                     Defina a personalidade, tom e comportamento do agente
                   </p>
                 </div>
 
                 {/* Greeting */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-dark-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     Mensagem de Boas-vindas
                   </label>
                   <textarea
@@ -384,13 +384,13 @@ export default function AIAgentConfig({
                     onChange={(e) => setConfig(prev => ({ ...prev, greeting_message: e.target.value }))}
                     rows={2}
                     placeholder="Olá! Como posso ajudar?"
-                    className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 resize-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 resize-none"
                   />
                 </div>
 
                 {/* Away Message */}
                 <div>
-                  <label className="block text-sm font-medium text-dark-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     Mensagem Fora do Horário
                   </label>
                   <textarea
@@ -398,7 +398,7 @@ export default function AIAgentConfig({
                     onChange={(e) => setConfig(prev => ({ ...prev, away_message: e.target.value }))}
                     rows={2}
                     placeholder="No momento não estou disponível..."
-                    className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 resize-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 resize-none"
                   />
                 </div>
               </ConfigSection>
@@ -414,7 +414,7 @@ export default function AIAgentConfig({
               >
                 {/* Transfer Keywords */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-dark-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     Palavras-chave para Transferir
                   </label>
                   <input
@@ -425,30 +425,30 @@ export default function AIAgentConfig({
                       transfer_keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean)
                     }))}
                     placeholder="atendente, humano, pessoa"
-                    className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400"
                   />
-                  <p className="text-xs text-dark-500 mt-1">
+                  <p className="text-xs text-gray-400 mt-1">
                     Separe por vírgula. Cliente será transferido ao usar essas palavras.
                   </p>
                 </div>
 
                 {/* Transfer to Queue */}
-                <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer mb-4">
+                <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer mb-4">
                   <div>
                     <span className="text-sm text-white">Transferir para fila de espera</span>
-                    <p className="text-xs text-dark-500">Adiciona o chat à fila quando transferido</p>
+                    <p className="text-xs text-gray-400">Adiciona o chat à fila quando transferido</p>
                   </div>
                   <input
                     type="checkbox"
                     checked={config.transfer_to_queue}
                     onChange={(e) => setConfig(prev => ({ ...prev, transfer_to_queue: e.target.checked }))}
-                    className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500"
+                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500"
                   />
                 </label>
 
                 {/* Transfer After X Messages */}
                 <div>
-                  <label className="block text-sm font-medium text-dark-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     Transferir após X mensagens sem resolução
                   </label>
                   <input
@@ -457,9 +457,9 @@ export default function AIAgentConfig({
                     max="50"
                     value={config.transfer_after_messages}
                     onChange={(e) => setConfig(prev => ({ ...prev, transfer_after_messages: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500/50"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-brand-400"
                   />
-                  <p className="text-xs text-dark-500 mt-1">
+                  <p className="text-xs text-gray-400 mt-1">
                     0 = nunca transferir automaticamente
                   </p>
                 </div>
@@ -475,39 +475,39 @@ export default function AIAgentConfig({
                 onToggle={() => toggleSection('schedule')}
               >
                 {/* Always Active */}
-                <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer mb-4">
+                <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer mb-4">
                   <div>
                     <span className="text-sm text-white">Sempre ativo (24/7)</span>
-                    <p className="text-xs text-dark-500">Responde a qualquer hora</p>
+                    <p className="text-xs text-gray-400">Responde a qualquer hora</p>
                   </div>
                   <input
                     type="checkbox"
                     checked={config.always_active}
                     onChange={(e) => setConfig(prev => ({ ...prev, always_active: e.target.checked }))}
-                    className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500"
+                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500"
                   />
                 </label>
 
                 {/* Only When No Human */}
-                <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer mb-4">
+                <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer mb-4">
                   <div>
                     <span className="text-sm text-white">Apenas quando não há humanos online</span>
-                    <p className="text-xs text-dark-500">IA para quando agentes humanos estiverem offline</p>
+                    <p className="text-xs text-gray-400">IA para quando agentes humanos estiverem offline</p>
                   </div>
                   <input
                     type="checkbox"
                     checked={config.only_when_no_human}
                     onChange={(e) => setConfig(prev => ({ ...prev, only_when_no_human: e.target.checked }))}
-                    className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500"
+                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500"
                   />
                 </label>
 
                 {/* Schedule (when not always active) */}
                 {!config.always_active && (
-                  <div className="p-4 bg-dark-900/50 rounded-lg space-y-4">
+                  <div className="p-4 bg-gray-50 rounded-lg space-y-4">
                     {/* Days */}
                     <div>
-                      <label className="block text-sm font-medium text-dark-300 mb-2">Dias</label>
+                      <label className="block text-sm font-medium text-gray-600 mb-2">Dias</label>
                       <div className="flex gap-2">
                         {weekDays.map((day) => {
                           const isSelected = config.schedule?.days?.includes(day.id)
@@ -527,7 +527,7 @@ export default function AIAgentConfig({
                               className={`px-3 py-2 rounded-lg text-sm transition-colors ${
                                 isSelected
                                   ? 'bg-primary-500 text-white'
-                                  : 'bg-dark-700/50 text-dark-400 hover:text-white'
+                                  : 'bg-gray-100 text-gray-500 hover:text-white'
                               }`}
                             >
                               {day.label}
@@ -540,7 +540,7 @@ export default function AIAgentConfig({
                     {/* Hours */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-dark-300 mb-2">Início</label>
+                        <label className="block text-sm font-medium text-gray-600 mb-2">Início</label>
                         <input
                           type="time"
                           value={config.schedule?.hours?.start || '08:00'}
@@ -553,11 +553,11 @@ export default function AIAgentConfig({
                               days: prev.schedule?.days || []
                             }
                           }))}
-                          className="w-full px-4 py-3 bg-dark-800 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500/50"
+                          className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-brand-400"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-dark-300 mb-2">Fim</label>
+                        <label className="block text-sm font-medium text-gray-600 mb-2">Fim</label>
                         <input
                           type="time"
                           value={config.schedule?.hours?.end || '18:00'}
@@ -570,7 +570,7 @@ export default function AIAgentConfig({
                               days: prev.schedule?.days || []
                             }
                           }))}
-                          className="w-full px-4 py-3 bg-dark-800 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500/50"
+                          className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-brand-400"
                         />
                       </div>
                     </div>
@@ -588,12 +588,12 @@ export default function AIAgentConfig({
                 onToggle={() => toggleSection('numbers')}
                 badge={`${config.whatsapp_number_ids.length} selecionado${config.whatsapp_number_ids.length !== 1 ? 's' : ''}`}
               >
-                <p className="text-sm text-dark-400 mb-4">
+                <p className="text-sm text-gray-500 mb-4">
                   Selecione em quais números este agente deve atuar:
                 </p>
                 
                 {whatsappNumbers.length === 0 ? (
-                  <p className="text-sm text-dark-500 text-center py-4">
+                  <p className="text-sm text-gray-400 text-center py-4">
                     Nenhum número conectado
                   </p>
                 ) : (
@@ -606,7 +606,7 @@ export default function AIAgentConfig({
                           className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                             isSelected
                               ? 'bg-green-500/10 border border-green-500/30'
-                              : 'bg-dark-900/50 border border-transparent hover:bg-dark-900'
+                              : 'bg-gray-50 border border-transparent hover:bg-white'
                           }`}
                         >
                           <input
@@ -620,13 +620,13 @@ export default function AIAgentConfig({
                                   : [...prev.whatsapp_number_ids, number.id]
                               }))
                             }}
-                            className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-green-500"
+                            className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500"
                           />
                           <div className="flex-1">
                             <p className="text-sm text-white">
                               {number.display_name || number.phone_number}
                             </p>
-                            <p className="text-xs text-dark-500">{number.phone_number}</p>
+                            <p className="text-xs text-gray-400">{number.phone_number}</p>
                           </div>
                           <div className={`w-2 h-2 rounded-full ${
                             number.is_connected ? 'bg-green-400' : 'bg-red-400'
@@ -647,28 +647,28 @@ export default function AIAgentConfig({
                 expanded={expandedSections.knowledge}
                 onToggle={() => toggleSection('knowledge')}
               >
-                <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer mb-4">
+                <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer mb-4">
                   <div>
                     <span className="text-sm text-white">Usar base de conhecimento</span>
-                    <p className="text-xs text-dark-500">O agente consultará documentos para responder</p>
+                    <p className="text-xs text-gray-400">O agente consultará documentos para responder</p>
                   </div>
                   <input
                     type="checkbox"
                     checked={config.use_knowledge_base}
                     onChange={(e) => setConfig(prev => ({ ...prev, use_knowledge_base: e.target.checked }))}
-                    className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500"
+                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500"
                   />
                 </label>
 
                 {config.use_knowledge_base && (
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Selecionar Base
                     </label>
                     {knowledgeBases.length === 0 ? (
                       <div className="text-center py-4">
-                        <p className="text-sm text-dark-500 mb-2">Nenhuma base de conhecimento</p>
-                        <button className="text-sm text-primary-400 hover:text-primary-300">
+                        <p className="text-sm text-gray-400 mb-2">Nenhuma base de conhecimento</p>
+                        <button className="text-sm text-brand-600 hover:text-brand-500">
                           + Criar base
                         </button>
                       </div>
@@ -676,7 +676,7 @@ export default function AIAgentConfig({
                       <select
                         value={config.knowledge_base_id || ''}
                         onChange={(e) => setConfig(prev => ({ ...prev, knowledge_base_id: e.target.value }))}
-                        className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500/50"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-brand-400"
                       >
                         <option value="">Selecione uma base</option>
                         {knowledgeBases.map((kb) => (
@@ -701,10 +701,10 @@ export default function AIAgentConfig({
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-6 border-t border-dark-700">
+        <div className="flex gap-3 p-6 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="flex-1 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+            className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
           >
             Cancelar
           </button>
@@ -752,10 +752,10 @@ function ConfigSection({
   children: React.ReactNode
 }) {
   return (
-    <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-4 hover:bg-dark-700/30 transition-colors"
+        className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 transition-colors"
       >
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center`}>
@@ -763,15 +763,15 @@ function ConfigSection({
           </div>
           <span className="text-white font-medium">{title}</span>
           {badge && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-dark-700 text-dark-300">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
               {badge}
             </span>
           )}
         </div>
         {expanded ? (
-          <ChevronDown className="w-5 h-5 text-dark-400" />
+          <ChevronDown className="w-5 h-5 text-gray-500" />
         ) : (
-          <ChevronRight className="w-5 h-5 text-dark-400" />
+          <ChevronRight className="w-5 h-5 text-gray-500" />
         )}
       </button>
 
@@ -781,7 +781,7 @@ function ConfigSection({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="border-t border-dark-700/50"
+            className="border-t border-gray-200"
           >
             <div className="p-4">{children}</div>
           </motion.div>

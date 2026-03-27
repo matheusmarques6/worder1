@@ -139,12 +139,12 @@ export function Sidebar() {
         href={item.href}
         className={cn(
           'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200',
-          'hover:bg-dark-800',
-          isActive && 'bg-primary-500/10 text-primary-400',
-          !isActive && 'text-dark-400 hover:text-dark-100'
+          'hover:bg-sidebar-hover',
+          isActive && 'bg-sidebar-active text-white border-l-[3px] border-brand-500',
+          !isActive && 'text-gray-400 hover:text-gray-200'
         )}
       >
-        <Icon className={cn('w-5 h-5 flex-shrink-0', isActive && 'text-primary-400')} />
+        <Icon className={cn('w-5 h-5 flex-shrink-0', isActive && 'text-brand-400')} />
         <AnimatePresence>
           {!sidebarCollapsed && (
             <motion.span
@@ -188,7 +188,7 @@ export function Sidebar() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+            className="fixed inset-0 bg-black/30 z-30 lg:hidden"
             onClick={toggleSidebar}
           />
         )}
@@ -199,14 +199,14 @@ export function Sidebar() {
         animate={{ width: sidebarCollapsed ? 80 : 280 }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
         className={cn(
-          "fixed left-0 top-0 bottom-0 z-40 bg-dark-900/80 backdrop-blur-xl border-r border-dark-700/50 flex flex-col",
+          "fixed left-0 top-0 bottom-0 z-40 bg-sidebar border-r border-gray-700/20 flex flex-col",
           // ✅ NOVO: Esconder no mobile quando recolhido
           sidebarCollapsed && "max-lg:-translate-x-full",
           "transition-transform duration-300"
         )}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-dark-700/50">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-gray-700/30">
           <Link href="/dashboard" className="flex flex-col gap-0.5">
             <Image
               src="/logo.png"
@@ -222,7 +222,7 @@ export function Sidebar() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="text-[10px] text-dark-500"
+                  className="text-[10px] text-gray-400"
                 >
                   by Convertfy
                 </motion.span>
@@ -231,7 +231,7 @@ export function Sidebar() {
           </Link>
           <button
             onClick={toggleSidebar}
-            className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-700 flex items-center justify-center text-dark-400 hover:text-dark-100 transition-colors"
+            className="w-8 h-8 rounded-lg bg-sidebar-hover hover:bg-sidebar-active flex items-center justify-center text-gray-400 hover:text-white transition-colors"
           >
             {sidebarCollapsed ? (
               <ChevronRight className="w-4 h-4" />
@@ -246,7 +246,7 @@ export function Sidebar() {
           {/* Main */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-dark-500 uppercase tracking-wider">
+              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Principal
               </p>
             )}
@@ -260,7 +260,7 @@ export function Sidebar() {
           {/* Tools */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-dark-500 uppercase tracking-wider">
+              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Ferramentas
               </p>
             )}
@@ -274,7 +274,7 @@ export function Sidebar() {
           {/* Settings */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-dark-500 uppercase tracking-wider">
+              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Sistema
               </p>
             )}
@@ -287,7 +287,7 @@ export function Sidebar() {
         </nav>
 
         {/* Store Selector Section */}
-        <div className="p-3 border-t border-dark-700/50 relative">
+        <div className="p-3 border-t border-gray-700/30 relative">
           {/* Store Dropdown */}
           <AnimatePresence>
             {storeDropdownOpen && !sidebarCollapsed && (
@@ -296,12 +296,12 @@ export function Sidebar() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.96 }}
                 transition={{ duration: 0.15 }}
-                className="absolute bottom-full left-3 right-3 mb-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-50"
+                className="absolute bottom-full left-3 right-3 mb-2 bg-sidebar border border-gray-700/50 rounded-xl shadow-xl overflow-hidden z-50"
               >
                 {/* Stores List */}
                 {stores.length > 0 && (
-                  <div className="p-2 border-b border-dark-700">
-                    <p className="px-2 py-1 text-xs font-medium text-dark-500 uppercase tracking-wider">
+                  <div className="p-2 border-b border-gray-700/50">
+                    <p className="px-2 py-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Suas Lojas
                     </p>
                     <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
@@ -315,19 +315,19 @@ export function Sidebar() {
                           className={cn(
                             'w-full flex items-center gap-3 p-2 rounded-lg transition-colors',
                             currentStore?.id === store.id
-                              ? 'bg-primary-500/10 text-primary-400'
-                              : 'hover:bg-dark-700/50 text-white'
+                              ? 'bg-brand-500/10 text-brand-400'
+                              : 'hover:bg-sidebar-hover text-white'
                           )}
                         >
-                          <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center text-xs font-bold">
+                          <div className="w-8 h-8 rounded-lg bg-sidebar-hover flex items-center justify-center text-xs font-bold text-gray-300">
                             {getInitials(store.name)}
                           </div>
                           <div className="flex-1 text-left min-w-0">
                             <p className="text-sm font-medium truncate">{store.name}</p>
-                            <p className="text-xs text-dark-400 truncate">{store.domain}</p>
+                            <p className="text-xs text-gray-500 truncate">{store.domain}</p>
                           </div>
                           {currentStore?.id === store.id && (
-                            <Check className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                            <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
                           )}
                         </button>
                       ))}
@@ -342,9 +342,9 @@ export function Sidebar() {
                       setAddStoreModalOpen(true)
                       setStoreDropdownOpen(false)
                     }}
-                    className="w-full flex items-center gap-3 p-2 rounded-lg text-primary-400 hover:bg-primary-500/10 transition-colors"
+                    className="w-full flex items-center gap-3 p-2 rounded-lg text-brand-600 hover:bg-brand-50 transition-colors"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center">
                       <Plus className="w-4 h-4" />
                     </div>
                     <span className="text-sm font-medium">Adicionar Nova Loja</span>
@@ -365,8 +365,8 @@ export function Sidebar() {
             }}
             className={cn(
               'w-full flex items-center gap-3 p-3 rounded-xl transition-all',
-              'bg-dark-800/50 border border-dark-700/50 hover:border-dark-600',
-              storeDropdownOpen && 'border-primary-500/50 bg-dark-800',
+              'bg-gray-50 border border-gray-200 hover:border-gray-300',
+              storeDropdownOpen && 'border-brand-400 bg-white',
               sidebarCollapsed && 'justify-center'
             )}
           >
@@ -383,10 +383,10 @@ export function Sidebar() {
                   exit={{ opacity: 0, width: 0 }}
                   className="flex-1 text-left min-w-0 overflow-hidden"
                 >
-                  <p className="text-sm font-semibold text-white truncate">
+                  <p className="text-sm font-semibold text-gray-900 truncate">
                     {currentStore?.name || 'Selecionar Loja'}
                   </p>
-                  <p className="text-xs text-dark-400 truncate">
+                  <p className="text-xs text-gray-500 truncate">
                     {currentStore?.domain || 'Nenhuma loja conectada'}
                   </p>
                 </motion.div>
@@ -396,7 +396,7 @@ export function Sidebar() {
             {!sidebarCollapsed && (
               <ChevronDown
                 className={cn(
-                  'w-4 h-4 text-dark-400 transition-transform flex-shrink-0',
+                  'w-4 h-4 text-gray-500 transition-transform flex-shrink-0',
                   storeDropdownOpen && 'rotate-180'
                 )}
               />
@@ -649,7 +649,7 @@ export function Header() {
   return (
     <header
       className={cn(
-        'fixed top-0 right-0 h-16 bg-dark-950/80 backdrop-blur-xl border-b border-dark-700/50 z-30 flex items-center justify-between px-4 lg:px-6 transition-all duration-300',
+        'fixed top-0 right-0 h-16 bg-gray-50/80 backdrop-blur-xl border-b border-gray-200 z-30 flex items-center justify-between px-4 lg:px-6 transition-all duration-300',
         // ✅ MODIFICADO: Mobile sempre left-0, desktop depende do sidebar
         'left-0',
         'lg:left-20',
@@ -659,7 +659,7 @@ export function Header() {
       {/* ✅ NOVO: Botão Hamburger (Mobile only) */}
       <button
         onClick={toggleSidebar}
-        className="lg:hidden p-2 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-dark-100 transition-colors mr-2"
+        className="lg:hidden p-2 rounded-lg hover:bg-white text-gray-500 hover:text-gray-800 transition-colors mr-2"
       >
         <Menu className="w-5 h-5" />
       </button>
@@ -670,10 +670,10 @@ export function Header() {
           <input
             type="text"
             placeholder="Buscar em tudo..."
-            className="w-full bg-dark-800/50 border border-dark-700 rounded-xl px-4 py-2.5 pl-10 text-sm text-dark-100 placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 pl-10 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
           />
           <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500"
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -685,7 +685,7 @@ export function Header() {
               d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
             />
           </svg>
-          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dark-500 bg-dark-700 px-2 py-1 rounded">
+          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
             ⌘K
           </kbd>
         </div>
@@ -697,7 +697,7 @@ export function Header() {
         <div className="relative" ref={dropdownRef}>
           <button 
             onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="relative p-2 rounded-xl hover:bg-dark-800 text-dark-400 hover:text-dark-100 transition-colors"
+            className="relative p-2 rounded-xl hover:bg-white text-gray-500 hover:text-gray-800 transition-colors"
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
@@ -714,14 +714,14 @@ export function Header() {
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="absolute right-0 top-full mt-2 w-96 bg-dark-900 border border-dark-700 rounded-xl shadow-2xl z-50 overflow-hidden"
+                className="absolute right-0 top-full mt-2 w-96 bg-white border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden"
               >
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-dark-700">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-white">Notificações</h3>
                     {unreadCount > 0 && (
-                      <span className="px-2 py-0.5 bg-primary-500/20 text-primary-400 text-xs font-medium rounded-full">
+                      <span className="px-2 py-0.5 bg-brand-100 text-brand-600 text-xs font-medium rounded-full">
                         {unreadCount} nova{unreadCount > 1 ? 's' : ''}
                       </span>
                     )}
@@ -729,7 +729,7 @@ export function Header() {
                   {unreadCount > 0 && (
                     <button 
                       onClick={markAllAsRead}
-                      className="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
+                      className="text-xs text-brand-600 hover:text-brand-500 transition-colors flex items-center gap-1"
                     >
                       <CheckCheck className="w-3.5 h-3.5" />
                       Marcar todas
@@ -741,15 +741,15 @@ export function Header() {
                 <div className="max-h-96 overflow-y-auto">
                   {loadingNotifications ? (
                     <div className="flex items-center justify-center py-12">
-                      <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
+                      <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
                     </div>
                   ) : notifications.length === 0 ? (
                     <div className="px-4 py-12 text-center">
-                      <div className="w-12 h-12 bg-dark-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Bell className="w-6 h-6 text-dark-500" />
+                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Bell className="w-6 h-6 text-gray-400" />
                       </div>
-                      <p className="text-sm text-dark-400">Nenhuma notificação</p>
-                      <p className="text-xs text-dark-500 mt-1">
+                      <p className="text-sm text-gray-500">Nenhuma notificação</p>
+                      <p className="text-xs text-gray-400 mt-1">
                         Você será notificado sobre eventos importantes
                       </p>
                     </div>
@@ -758,8 +758,8 @@ export function Header() {
                       <div
                         key={notification.id}
                         className={cn(
-                          'px-4 py-3 border-b border-dark-700/50 hover:bg-dark-800/50 transition-colors',
-                          !notification.read && 'bg-primary-500/5'
+                          'px-4 py-3 border-b border-gray-200 hover:bg-gray-50 transition-colors',
+                          !notification.read && 'bg-brand-50/50'
                         )}
                       >
                         <div className="flex items-start gap-3">
@@ -773,7 +773,7 @@ export function Header() {
                             <div className="flex items-start justify-between gap-2">
                               <p className={cn(
                                 "text-sm font-medium line-clamp-1",
-                                notification.read ? 'text-dark-300' : 'text-white'
+                                notification.read ? 'text-gray-600' : 'text-white'
                               )}>
                                 {notification.title}
                               </p>
@@ -786,7 +786,7 @@ export function Header() {
                                       e.stopPropagation()
                                       markAsRead([notification.id])
                                     }}
-                                    className="p-1 text-dark-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
+                                    className="p-1 text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
                                     title="Marcar como lida"
                                   >
                                     <Check className="w-3.5 h-3.5" />
@@ -797,7 +797,7 @@ export function Header() {
                                     e.stopPropagation()
                                     deleteNotification(notification.id)
                                   }}
-                                  className="p-1 text-dark-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                  className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                                   title="Excluir"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -805,12 +805,12 @@ export function Header() {
                               </div>
                             </div>
                             
-                            <p className="text-xs text-dark-400 mt-0.5 line-clamp-2">
+                            <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
                               {notification.message}
                             </p>
                             
                             <div className="flex items-center justify-between mt-2">
-                              <p className="text-xs text-dark-500">
+                              <p className="text-xs text-gray-400">
                                 {formatDistanceToNow(new Date(notification.created_at), {
                                   addSuffix: true,
                                   locale: ptBR,
@@ -824,7 +824,7 @@ export function Header() {
                                     markAsRead([notification.id])
                                     setNotificationsOpen(false)
                                   }}
-                                  className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1 transition-colors"
+                                  className="text-xs text-brand-600 hover:text-brand-500 flex items-center gap-1 transition-colors"
                                 >
                                   {notification.action_label ?? 'Ver mais'}
                                   <ExternalLink className="w-3 h-3" />
@@ -840,11 +840,11 @@ export function Header() {
 
                 {/* Footer */}
                 {notifications.length > 0 && (
-                  <div className="px-4 py-3 border-t border-dark-700">
+                  <div className="px-4 py-3 border-t border-gray-200">
                     <a 
                       href="/notifications"
                       onClick={() => setNotificationsOpen(false)}
-                      className="w-full text-center text-sm text-primary-400 hover:text-primary-300 transition-colors flex items-center justify-center gap-1"
+                      className="w-full text-center text-sm text-brand-600 hover:text-brand-500 transition-colors flex items-center justify-center gap-1"
                     >
                       Ver todas as notificações
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -857,15 +857,15 @@ export function Header() {
         </div>
 
         {/* User Avatar with Dropdown Menu */}
-        <div className="relative flex items-center gap-3 pl-4 border-l border-dark-700">
+        <div className="relative flex items-center gap-3 pl-4 border-l border-gray-200">
           <button
             ref={buttonRef}
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="flex items-center gap-3 p-1 rounded-lg hover:bg-dark-800/50 transition-colors"
+            className="flex items-center gap-3 p-1 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <div className="text-right">
-              <p className="text-sm font-medium text-white">{userName}</p>
-              <p className="text-xs text-dark-400">{getRoleLabel(userRole)}</p>
+              <p className="text-sm font-medium text-gray-900">{userName}</p>
+              <p className="text-xs text-gray-500">{getRoleLabel(userRole)}</p>
             </div>
             {userAvatar ? (
               <img 
@@ -881,7 +881,7 @@ export function Header() {
               />
             )}
             <ChevronDown className={cn(
-              "w-4 h-4 text-dark-400 transition-transform",
+              "w-4 h-4 text-gray-500 transition-transform",
               userMenuOpen && "rotate-180"
             )} />
           </button>
@@ -901,11 +901,11 @@ export function Header() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.96 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-6 top-16 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-2xl overflow-hidden"
+                className="absolute right-6 top-16 w-72 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* User Info Header */}
-                <div className="p-4 border-b border-dark-700">
+                <div className="p-4 border-b border-gray-200">
                   <div className="flex items-center gap-3">
                     {userAvatar ? (
                       <img 
@@ -919,9 +919,9 @@ export function Header() {
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{userName}</p>
-                      <p className="text-xs text-dark-400 truncate">{user?.email}</p>
-                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-primary-500/20 text-primary-400">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{userName}</p>
+                      <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-brand-100 text-brand-600">
                         {getRoleLabel(userRole)}
                       </span>
                     </div>
@@ -930,17 +930,17 @@ export function Header() {
 
                 {/* Agents Section */}
                 {agents.length > 0 && (
-                  <div className="px-3 py-2 border-b border-dark-700">
+                  <div className="px-3 py-2 border-b border-gray-200">
                     <div className="flex items-center gap-2 px-1 mb-2">
-                      <Users className="w-3.5 h-3.5 text-dark-500" />
-                      <span className="text-[10px] font-semibold text-dark-500 uppercase tracking-wider">
+                      <Users className="w-3.5 h-3.5 text-gray-400" />
+                      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                         Agentes ({agents.filter(a => a.status === 'online').length} online)
                       </span>
                     </div>
                     <div className="space-y-0.5 max-h-32 overflow-y-auto">
                       {loadingAgents ? (
                         <div className="flex items-center justify-center py-2">
-                          <Loader2 className="w-4 h-4 animate-spin text-dark-500" />
+                          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
                         </div>
                       ) : (
                         agents.map((agent) => (
@@ -956,27 +956,27 @@ export function Header() {
                                   className="w-6 h-6 rounded-full object-cover"
                                 />
                               ) : (
-                                <div className="w-6 h-6 rounded-full bg-dark-600 flex items-center justify-center">
-                                  <span className="text-[10px] text-dark-400">
+                                <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center">
+                                  <span className="text-[10px] text-gray-500">
                                     {agent.name?.substring(0, 2).toUpperCase()}
                                   </span>
                                 </div>
                               )}
                               <div className={cn(
-                                'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-dark-800',
+                                'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-gray-200',
                                 agent.status === 'online' && 'bg-green-500',
                                 agent.status === 'away' && 'bg-yellow-500',
                                 agent.status === 'busy' && 'bg-red-500',
-                                agent.status === 'offline' && 'bg-dark-500',
+                                agent.status === 'offline' && 'bg-gray-300',
                               )} />
                             </div>
-                            <span className="text-xs text-dark-300 truncate flex-1">{agent.name}</span>
+                            <span className="text-xs text-gray-600 truncate flex-1">{agent.name}</span>
                             <span className={cn(
                               'text-[10px]',
                               agent.status === 'online' && 'text-green-400',
                               agent.status === 'away' && 'text-yellow-400',
                               agent.status === 'busy' && 'text-red-400',
-                              agent.status === 'offline' && 'text-dark-500',
+                              agent.status === 'offline' && 'text-gray-400',
                             )}>
                               {agent.status === 'online' ? 'Online' : 
                                agent.status === 'away' ? 'Ausente' :
@@ -994,31 +994,31 @@ export function Header() {
                   <Link
                     href="/settings?tab=profile"
                     onClick={() => setUserMenuOpen(false)}
-                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
                   >
-                    <User className="w-4 h-4 text-dark-400" />
-                    <span className="text-sm text-dark-300">Meu Perfil</span>
+                    <User className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm text-gray-600">Meu Perfil</span>
                   </Link>
                   <Link
                     href="/settings?tab=store"
                     onClick={() => setUserMenuOpen(false)}
-                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
                   >
-                    <Building2 className="w-4 h-4 text-dark-400" />
-                    <span className="text-sm text-dark-300">Configurações da Loja</span>
+                    <Building2 className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm text-gray-600">Configurações da Loja</span>
                   </Link>
                   <Link
                     href="/settings?tab=integrations"
                     onClick={() => setUserMenuOpen(false)}
-                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-dark-700/50 transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
                   >
-                    <Settings className="w-4 h-4 text-dark-400" />
-                    <span className="text-sm text-dark-300">Integrações</span>
+                    <Settings className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm text-gray-600">Integrações</span>
                   </Link>
                 </div>
 
                 {/* Logout */}
-                <div className="px-4 py-2 border-t border-dark-700">
+                <div className="px-4 py-2 border-t border-gray-200">
                   <button
                     onClick={handleLogout}
                     disabled={isLoggingOut}

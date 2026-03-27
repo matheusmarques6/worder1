@@ -163,7 +163,7 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
             {template.icon}
           </div>
           <div>
-            <p className="text-sm font-medium text-white">
+            <p className="text-sm font-medium text-gray-900">
               {formData.storeName || 'Seu Agente'}
             </p>
             <p className="text-xs text-zinc-500">

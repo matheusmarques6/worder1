@@ -290,7 +290,7 @@ export function ImportTab({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+        <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
       </div>
     )
   }
@@ -302,39 +302,39 @@ export function ImportTab({
   if (activeJob?.status === 'completed') {
     return (
       <div className="space-y-6">
-        <div className="p-8 bg-dark-800/50 border border-dark-700 rounded-2xl text-center">
+        <div className="p-8 bg-gray-50 border border-gray-200 rounded-2xl text-center">
           <div className="w-16 h-16 mx-auto bg-green-500/20 rounded-full flex items-center justify-center mb-4">
             <CheckCircle className="w-8 h-8 text-green-400" />
           </div>
-          <h3 className="text-xl font-bold text-white mb-2">
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
             Importação Concluída!
           </h3>
-          <p className="text-dark-400 mb-6">
+          <p className="text-gray-500 mb-6">
             {activeJob.processed_count.toLocaleString('pt-BR')} clientes processados
           </p>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-md mx-auto">
-            <div className="p-3 bg-dark-900/50 rounded-xl">
+            <div className="p-3 bg-gray-50 rounded-xl">
               <p className="text-lg font-bold text-green-400">{activeJob.created_count}</p>
-              <p className="text-xs text-dark-400">Criados</p>
+              <p className="text-xs text-gray-500">Criados</p>
             </div>
-            <div className="p-3 bg-dark-900/50 rounded-xl">
+            <div className="p-3 bg-gray-50 rounded-xl">
               <p className="text-lg font-bold text-blue-400">{activeJob.updated_count}</p>
-              <p className="text-xs text-dark-400">Atualizados</p>
+              <p className="text-xs text-gray-500">Atualizados</p>
             </div>
-            <div className="p-3 bg-dark-900/50 rounded-xl">
+            <div className="p-3 bg-gray-50 rounded-xl">
               <p className="text-lg font-bold text-amber-400">{activeJob.skipped_count}</p>
-              <p className="text-xs text-dark-400">Pulados</p>
+              <p className="text-xs text-gray-500">Pulados</p>
             </div>
-            <div className="p-3 bg-dark-900/50 rounded-xl">
+            <div className="p-3 bg-gray-50 rounded-xl">
               <p className="text-lg font-bold text-purple-400">{activeJob.deals_created_count}</p>
-              <p className="text-xs text-dark-400">Deals</p>
+              <p className="text-xs text-gray-500">Deals</p>
             </div>
           </div>
           
           <button
             onClick={() => setActiveJob(null)}
-            className="mt-6 px-6 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+            className="mt-6 px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
           >
             Nova Importação
           </button>
@@ -355,11 +355,11 @@ export function ImportTab({
     return (
       <div className="space-y-6">
         {/* Header com status */}
-        <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
+        <div className="p-5 bg-gray-50 border border-gray-200 rounded-2xl">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               {activeJob.status === 'running' ? (
-                <Loader2 className="w-5 h-5 text-primary-400 animate-spin" />
+                <Loader2 className="w-5 h-5 text-brand-600 animate-spin" />
               ) : (
                 <Clock className="w-5 h-5 text-amber-400" />
               )}
@@ -369,7 +369,7 @@ export function ImportTab({
                   {activeJob.status === 'running' && 'Importando...'}
                   {activeJob.status === 'paused' && 'Pausado'}
                 </h3>
-                <p className="text-sm text-dark-400">
+                <p className="text-sm text-gray-500">
                   {activeJob.processed_count.toLocaleString('pt-BR')} de {activeJob.total_customers.toLocaleString('pt-BR')} clientes
                 </p>
               </div>
@@ -387,10 +387,10 @@ export function ImportTab({
           {/* Barra de progresso */}
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-dark-400">Progresso</span>
-              <span className="text-primary-400 font-medium">{progress}%</span>
+              <span className="text-gray-500">Progresso</span>
+              <span className="text-brand-600 font-medium">{progress}%</span>
             </div>
-            <div className="h-3 bg-dark-700 rounded-full overflow-hidden">
+            <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
               <motion.div
                 className="h-full bg-gradient-to-r from-primary-500 to-accent-500"
                 initial={{ width: 0 }}
@@ -399,7 +399,7 @@ export function ImportTab({
               />
             </div>
             {activeJob.estimatedTimeRemaining && (
-              <p className="text-xs text-dark-500 text-center">
+              <p className="text-xs text-gray-400 text-center">
                 Tempo estimado: {activeJob.estimatedTimeRemaining}
               </p>
             )}
@@ -408,21 +408,21 @@ export function ImportTab({
 
         {/* Stats em tempo real */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
             <p className="text-lg font-bold text-green-400">{activeJob.created_count}</p>
-            <p className="text-xs text-dark-400">Criados</p>
+            <p className="text-xs text-gray-500">Criados</p>
           </div>
-          <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
             <p className="text-lg font-bold text-blue-400">{activeJob.updated_count}</p>
-            <p className="text-xs text-dark-400">Atualizados</p>
+            <p className="text-xs text-gray-500">Atualizados</p>
           </div>
-          <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
             <p className="text-lg font-bold text-amber-400">{activeJob.skipped_count}</p>
-            <p className="text-xs text-dark-400">Pulados</p>
+            <p className="text-xs text-gray-500">Pulados</p>
           </div>
-          <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
             <p className="text-lg font-bold text-red-400">{activeJob.error_count}</p>
-            <p className="text-xs text-dark-400">Erros</p>
+            <p className="text-xs text-gray-500">Erros</p>
           </div>
         </div>
 
@@ -445,48 +445,48 @@ export function ImportTab({
   return (
     <div className="space-y-5">
       {/* Customer Count */}
-      <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
+      <div className="p-5 bg-gray-50 border border-gray-200 rounded-2xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-primary-500/15 rounded-xl">
-              <Users className="w-6 h-6 text-primary-400" />
+              <Users className="w-6 h-6 text-brand-600" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className="text-lg font-semibold text-gray-900">
                 {customerCount.toLocaleString('pt-BR')} clientes
               </h3>
-              <p className="text-sm text-dark-400">
+              <p className="text-sm text-gray-500">
                 encontrados na Shopify
               </p>
             </div>
           </div>
           <button
             onClick={loadInitialData}
-            className="p-2 hover:bg-dark-700 rounded-lg text-dark-400 hover:text-white transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white transition-colors"
           >
             <RefreshCw className="w-5 h-5" />
           </button>
         </div>
         
         <div className="grid grid-cols-2 gap-4 mt-4">
-          <div className="p-3 bg-dark-900/50 rounded-xl text-center">
+          <div className="p-3 bg-gray-50 rounded-xl text-center">
             <p className="text-xl font-bold text-blue-400">{existingCount.toLocaleString('pt-BR')}</p>
-            <p className="text-xs text-dark-400">Já no CRM</p>
+            <p className="text-xs text-gray-500">Já no CRM</p>
           </div>
-          <div className="p-3 bg-dark-900/50 rounded-xl text-center">
+          <div className="p-3 bg-gray-50 rounded-xl text-center">
             <p className="text-xl font-bold text-green-400">{newCount.toLocaleString('pt-BR')}</p>
-            <p className="text-xs text-dark-400">Novos</p>
+            <p className="text-xs text-gray-500">Novos</p>
           </div>
         </div>
       </div>
 
       {/* Filters */}
       {availableTags.length > 0 && (
-        <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
+        <div className="p-5 bg-gray-50 border border-gray-200 rounded-2xl">
           <div className="flex items-center gap-2 mb-3">
-            <Filter className="w-4 h-4 text-primary-400" />
-            <h4 className="text-sm font-medium text-white">Filtrar por Tags da Shopify</h4>
-            {loadingTags && <Loader2 className="w-4 h-4 animate-spin text-dark-400" />}
+            <Filter className="w-4 h-4 text-brand-600" />
+            <h4 className="text-sm font-medium text-gray-900">Filtrar por Tags da Shopify</h4>
+            {loadingTags && <Loader2 className="w-4 h-4 animate-spin text-gray-500" />}
           </div>
           <div className="flex flex-wrap gap-2">
             {availableTags.slice(0, 20).map(({ tag, count }) => (
@@ -495,8 +495,8 @@ export function ImportTab({
                 onClick={() => toggleTag(tag)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
                   selectedTags.includes(tag)
-                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                    : 'bg-dark-700 text-dark-300 border border-dark-600 hover:border-dark-500'
+                    ? 'bg-brand-100 text-brand-600 border border-brand-300'
+                    : 'bg-gray-100 text-gray-600 border border-gray-300 hover:border-gray-300'
                 }`}
               >
                 {selectedTags.includes(tag) && <Check className="w-3 h-3" />}
@@ -508,7 +508,7 @@ export function ImportTab({
           {selectedTags.length > 0 && (
             <button
               onClick={() => setSelectedTags([])}
-              className="mt-2 text-xs text-dark-400 hover:text-white"
+              className="mt-2 text-xs text-gray-500 hover:text-white"
             >
               Limpar filtros
             </button>
@@ -517,22 +517,22 @@ export function ImportTab({
       )}
 
       {/* Import Config */}
-      <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
-        <h4 className="text-sm font-medium text-white mb-4 flex items-center gap-2">
-          <Download className="w-4 h-4 text-primary-400" />
+      <div className="p-5 bg-gray-50 border border-gray-200 rounded-2xl">
+        <h4 className="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
+          <Download className="w-4 h-4 text-brand-600" />
           Configuração da Importação
         </h4>
         
         <div className="space-y-4">
           {/* Contact Type */}
           <div>
-            <label className="block text-sm text-dark-400 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               Tipo do Contato
             </label>
             <select
               value={contactType}
               onChange={(e) => setContactType(e.target.value as any)}
-              className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500"
             >
               <option value="auto">Automático (baseado em pedidos)</option>
               <option value="lead">Todos como Lead</option>
@@ -541,10 +541,10 @@ export function ImportTab({
           </div>
 
           {/* Create Deals Toggle */}
-          <div className="flex items-center justify-between p-3 bg-dark-900/50 rounded-xl">
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
             <div>
               <p className="text-sm text-white">Criar Deals</p>
-              <p className="text-xs text-dark-400">Criar um deal para cada contato importado</p>
+              <p className="text-xs text-gray-500">Criar um deal para cada contato importado</p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -553,7 +553,7 @@ export function ImportTab({
                 onChange={(e) => setCreateDeals(e.target.checked)}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-dark-600 rounded-full peer peer-checked:bg-primary-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+              <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-primary-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
             </label>
           </div>
 
@@ -561,14 +561,14 @@ export function ImportTab({
           {createDeals && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-dark-400 mb-2">Pipeline</label>
+                <label className="block text-sm text-gray-500 mb-2">Pipeline</label>
                 <select
                   value={selectedPipeline}
                   onChange={(e) => {
                     setSelectedPipeline(e.target.value)
                     setSelectedStage('')
                   }}
-                  className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500"
                 >
                   <option value="">Selecione...</option>
                   {pipelines.map(p => (
@@ -577,12 +577,12 @@ export function ImportTab({
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-dark-400 mb-2">Estágio</label>
+                <label className="block text-sm text-gray-500 mb-2">Estágio</label>
                 <select
                   value={selectedStage}
                   onChange={(e) => setSelectedStage(e.target.value)}
                   disabled={!selectedPipeline}
-                  className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50"
                 >
                   <option value="">Selecione...</option>
                   {getStages().map(s => (
@@ -595,14 +595,14 @@ export function ImportTab({
 
           {/* Tags */}
           <div>
-            <label className="block text-sm text-dark-400 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               Tags no CRM
             </label>
             <div className="flex flex-wrap gap-2">
               {importTags.map(tag => (
                 <span
                   key={tag}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-primary-500/20 text-primary-400 rounded-full text-sm"
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-brand-100 text-brand-600 rounded-full text-sm"
                 >
                   {tag}
                   <button

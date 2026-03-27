@@ -317,39 +317,39 @@ export function PipelineAutomationConfig({
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="bg-dark-800 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-dark-700 shadow-2xl"
+          className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-gray-200 shadow-2xl"
         >
           {/* Header */}
-          <div className="p-4 border-b border-dark-700 flex items-center gap-3">
+          <div className="p-4 border-b border-gray-200 flex items-center gap-3">
             <div
               className="w-4 h-4 rounded-full"
               style={{ backgroundColor: pipeline.color || '#f97316' }}
             />
             <div className="flex-1">
-              <h2 className="text-lg font-semibold text-white">
+              <h2 className="text-lg font-semibold text-gray-900">
                 Automações: {pipeline.name}
               </h2>
-              <p className="text-dark-400 text-sm">
+              <p className="text-gray-500 text-sm">
                 Configure quais eventos criam deals automaticamente
               </p>
             </div>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors"
+              className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-100 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="border-b border-dark-700 px-4">
+          <div className="border-b border-gray-200 px-4">
             <div className="flex gap-4">
               <button
                 onClick={() => setActiveTab('automations')}
                 className={`flex items-center gap-2 py-3 border-b-2 transition-colors ${
                   activeTab === 'automations'
                     ? 'border-primary-500 text-white'
-                    : 'border-transparent text-dark-400 hover:text-dark-200'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
                 <Zap className="w-4 h-4" />
@@ -360,7 +360,7 @@ export function PipelineAutomationConfig({
                 className={`flex items-center gap-2 py-3 border-b-2 transition-colors ${
                   activeTab === 'transitions'
                     ? 'border-primary-500 text-white'
-                    : 'border-transparent text-dark-400 hover:text-dark-200'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
                 <ArrowRight className="w-4 h-4" />
@@ -381,7 +381,7 @@ export function PipelineAutomationConfig({
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-white font-medium">Fontes de Dados</h3>
-                    <p className="text-dark-500 text-sm">
+                    <p className="text-gray-400 text-sm">
                       Eventos que criam deals nesta pipeline
                     </p>
                   </div>
@@ -396,10 +396,10 @@ export function PipelineAutomationConfig({
 
                 {/* Integrações conectadas */}
                 {connectedIntegrations.length === 0 ? (
-                  <div className="text-center py-8 bg-dark-900/50 rounded-xl border border-dark-700">
-                    <AlertCircle className="w-12 h-12 text-dark-600 mx-auto mb-3" />
-                    <p className="text-dark-400">Nenhuma integração conectada</p>
-                    <p className="text-dark-500 text-sm mt-1">
+                  <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
+                    <AlertCircle className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+                    <p className="text-gray-500">Nenhuma integração conectada</p>
+                    <p className="text-gray-400 text-sm mt-1">
                       Configure suas integrações na aba Integrações
                     </p>
                   </div>
@@ -415,14 +415,14 @@ export function PipelineAutomationConfig({
                       return (
                         <div
                           key={integration.id}
-                          className="border border-dark-700 rounded-xl overflow-hidden"
+                          className="border border-gray-200 rounded-xl overflow-hidden"
                         >
                           {/* Integration Header */}
                           <div
-                            className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-dark-700/50 transition-colors`}
+                            className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-gray-100 transition-colors`}
                             onClick={() => toggleSource(integration.type)}
                           >
-                            <button className="text-dark-400">
+                            <button className="text-gray-500">
                               {isExpanded ? (
                                 <ChevronDown className="w-4 h-4" />
                               ) : (
@@ -436,7 +436,7 @@ export function PipelineAutomationConfig({
                               {integration.name}
                             </span>
                             {integrationRules.length > 0 && (
-                              <span className="text-dark-500 text-sm">
+                              <span className="text-gray-400 text-sm">
                                 {activeRulesCount}/{integrationRules.length} regra(s) ativa(s)
                               </span>
                             )}
@@ -449,11 +449,11 @@ export function PipelineAutomationConfig({
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
-                                className="border-t border-dark-700 overflow-hidden"
+                                className="border-t border-gray-200 overflow-hidden"
                               >
                                 <div className="p-3 space-y-2">
                                   {integrationRules.length === 0 ? (
-                                    <p className="text-dark-500 text-sm text-center py-3">
+                                    <p className="text-gray-400 text-sm text-center py-3">
                                       Nenhuma regra configurada
                                     </p>
                                   ) : (
@@ -464,7 +464,7 @@ export function PipelineAutomationConfig({
                                       return (
                                         <div
                                           key={rule.id}
-                                          className="flex items-center gap-3 p-3 bg-dark-900/50 rounded-lg group"
+                                          className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg group"
                                         >
                                           <button
                                             onClick={(e) => {
@@ -472,7 +472,7 @@ export function PipelineAutomationConfig({
                                               handleToggleRule(rule)
                                             }}
                                             className={`w-10 h-5 rounded-full transition-colors ${
-                                              rule.is_enabled ? 'bg-green-500' : 'bg-dark-600'
+                                              rule.is_enabled ? 'bg-green-500' : 'bg-gray-200'
                                             }`}
                                           >
                                             <div
@@ -482,17 +482,17 @@ export function PipelineAutomationConfig({
                                             />
                                           </button>
                                           <div className="flex-1 min-w-0">
-                                            <p className={`text-sm truncate ${rule.is_enabled ? 'text-white' : 'text-dark-500'}`}>
+                                            <p className={`text-sm truncate ${rule.is_enabled ? 'text-white' : 'text-gray-400'}`}>
                                               {rule.name}
                                             </p>
-                                            <p className="text-dark-500 text-xs">
+                                            <p className="text-gray-400 text-xs">
                                               {event?.label || rule.trigger_event}
                                               {rule.initial_stage && (
                                                 <span> → {rule.initial_stage.name}</span>
                                               )}
                                             </p>
                                           </div>
-                                          <span className="text-dark-600 text-xs">
+                                          <span className="text-gray-500 text-xs">
                                             {rule.deals_created_count} deals
                                           </span>
                                           <button
@@ -500,7 +500,7 @@ export function PipelineAutomationConfig({
                                               e.stopPropagation()
                                               setEditingRule(rule)
                                             }}
-                                            className="p-1.5 text-dark-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+                                            className="p-1.5 text-gray-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
                                           >
                                             <Settings className="w-4 h-4" />
                                           </button>
@@ -509,7 +509,7 @@ export function PipelineAutomationConfig({
                                               e.stopPropagation()
                                               handleDeleteRule(rule)
                                             }}
-                                            className="p-1.5 text-dark-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                                            className="p-1.5 text-gray-400 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
                                           >
                                             <Trash2 className="w-4 h-4" />
                                           </button>
@@ -520,7 +520,7 @@ export function PipelineAutomationConfig({
 
                                   <button
                                     onClick={() => setNewRuleSource(integration.type)}
-                                    className="w-full py-2 text-sm text-dark-500 hover:text-white border border-dashed border-dark-700 rounded-lg hover:border-dark-500 transition-colors"
+                                    className="w-full py-2 text-sm text-gray-400 hover:text-white border border-dashed border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
                                   >
                                     + Adicionar regra de {integration.name}
                                   </button>
@@ -536,15 +536,15 @@ export function PipelineAutomationConfig({
 
                 {/* Integrações não configuradas */}
                 {notConfiguredIntegrations.length > 0 && (
-                  <div className="pt-4 border-t border-dark-700">
-                    <p className="text-dark-600 text-xs mb-2">
+                  <div className="pt-4 border-t border-gray-200">
+                    <p className="text-gray-500 text-xs mb-2">
                       Integrações não configuradas:
                     </p>
                     <div className="flex gap-2 flex-wrap">
                       {notConfiguredIntegrations.map(int => (
                         <span
                           key={int.type}
-                          className="px-2 py-1 bg-dark-900 border border-dark-800 rounded text-dark-600 text-xs"
+                          className="px-2 py-1 bg-white border border-gray-200 rounded text-gray-500 text-xs"
                         >
                           {int.name}
                         </span>
@@ -555,9 +555,9 @@ export function PipelineAutomationConfig({
               </div>
             ) : (
               <div className="text-center py-12">
-                <ArrowRight className="w-12 h-12 text-dark-600 mx-auto mb-3" />
-                <p className="text-dark-400">Transições automáticas</p>
-                <p className="text-dark-500 text-sm mt-1">
+                <ArrowRight className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+                <p className="text-gray-500">Transições automáticas</p>
+                <p className="text-gray-400 text-sm mt-1">
                   Nenhuma transição automática configurada
                 </p>
               </div>
@@ -565,10 +565,10 @@ export function PipelineAutomationConfig({
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-dark-700 flex justify-end">
+          <div className="p-4 border-t border-gray-200 flex justify-end">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-dark-400 hover:text-white transition-colors"
+              className="px-4 py-2 text-gray-500 hover:text-white transition-colors"
             >
               Fechar
             </button>
@@ -634,20 +634,20 @@ function AddSourceModal({
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-dark-800 rounded-2xl w-full max-w-md border border-dark-700 shadow-2xl"
+        className="bg-white rounded-2xl w-full max-w-md border border-gray-200 shadow-2xl"
       >
-        <div className="p-4 border-b border-dark-700 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Adicionar Regra</h2>
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Adicionar Regra</h2>
           <button
             onClick={onClose}
-            className="p-2 text-dark-400 hover:text-white"
+            className="p-2 text-gray-500 hover:text-white"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="p-4">
-          <p className="text-dark-400 text-sm mb-4">
+          <p className="text-gray-500 text-sm mb-4">
             Selecione uma integração:
           </p>
 
@@ -660,13 +660,13 @@ function AddSourceModal({
                 <button
                   key={integration.id}
                   onClick={() => onSelect(integration.type)}
-                  className="p-4 bg-dark-900 border border-dark-700 rounded-xl hover:border-dark-500 hover:bg-dark-850 transition-all text-left group"
+                  className="p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-dark-850 transition-all text-left group"
                 >
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${colorClass.split(' ')[1]}`}>
                     <Icon className={`w-5 h-5 ${colorClass.split(' ')[0]}`} />
                   </div>
                   <p className="text-white font-medium">{integration.name}</p>
-                  <p className="text-dark-500 text-xs mt-0.5">
+                  <p className="text-gray-400 text-xs mt-0.5">
                     {integration.events.length} eventos
                   </p>
                 </button>
@@ -755,19 +755,19 @@ function RuleConfigModal({
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-dark-800 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col border border-dark-700 shadow-2xl"
+        className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col border border-gray-200 shadow-2xl"
       >
         {/* Header */}
-        <div className="p-4 border-b border-dark-700 flex items-center gap-3">
+        <div className="p-4 border-b border-gray-200 flex items-center gap-3">
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${colorClass.split(' ')[1]}`}>
             <Icon className={`w-4 h-4 ${colorClass.split(' ')[0]}`} />
           </div>
           <div className="flex-1">
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold text-gray-900">
               {rule ? 'Editar' : 'Nova'} Regra - {integration.name}
             </h2>
           </div>
-          <button onClick={onClose} className="p-2 text-dark-400 hover:text-white">
+          <button onClick={onClose} className="p-2 text-gray-500 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -776,7 +776,7 @@ function RuleConfigModal({
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
           {/* Nome */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               Nome da Regra
             </label>
             <input
@@ -784,13 +784,13 @@ function RuleConfigModal({
               value={formData.name}
               onChange={e => setFormData({ ...formData, name: e.target.value })}
               placeholder="Ex: Pedidos pagos acima de R$500"
-              className="w-full px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-white placeholder-dark-500 focus:border-primary-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white placeholder-dark-500 focus:border-primary-500 focus:outline-none"
             />
           </div>
 
           {/* Evento */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               <Zap className="w-4 h-4 inline mr-1" />
               Evento que Dispara
             </label>
@@ -800,8 +800,8 @@ function RuleConfigModal({
                   key={event.id}
                   className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
                     formData.triggerEvent === event.id
-                      ? 'border-primary-500 bg-primary-500/10'
-                      : 'border-dark-700 hover:border-dark-600'
+                      ? 'border-primary-500 bg-brand-50'
+                      : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
                   <input
@@ -813,13 +813,13 @@ function RuleConfigModal({
                     className="sr-only"
                   />
                   <div className="flex-1">
-                    <p className={`text-sm ${formData.triggerEvent === event.id ? 'text-white' : 'text-dark-300'}`}>
+                    <p className={`text-sm ${formData.triggerEvent === event.id ? 'text-white' : 'text-gray-600'}`}>
                       {event.label}
                     </p>
-                    <p className="text-xs text-dark-500">{event.description}</p>
+                    <p className="text-xs text-gray-400">{event.description}</p>
                   </div>
                   {formData.triggerEvent === event.id && (
-                    <CheckCircle className="w-4 h-4 text-primary-400" />
+                    <CheckCircle className="w-4 h-4 text-brand-600" />
                   )}
                 </label>
               ))}
@@ -829,13 +829,13 @@ function RuleConfigModal({
           {/* Filtros */}
           {integration.filters.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Filtros (opcional)
               </label>
-              <div className="space-y-3 p-3 bg-dark-900 rounded-lg border border-dark-700">
+              <div className="space-y-3 p-3 bg-white rounded-lg border border-gray-200">
                 {integration.filters.map(filter => (
                   <div key={filter.id}>
-                    <label className="block text-xs text-dark-500 mb-1">
+                    <label className="block text-xs text-gray-400 mb-1">
                       {filter.label}
                     </label>
                     {filter.type === 'number' ? (
@@ -850,7 +850,7 @@ function RuleConfigModal({
                           },
                         })}
                         placeholder={filter.placeholder}
-                        className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white text-sm focus:border-primary-500 focus:outline-none"
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-white text-sm focus:border-primary-500 focus:outline-none"
                       />
                     ) : filter.type === 'tags' ? (
                       <input
@@ -864,7 +864,7 @@ function RuleConfigModal({
                           },
                         })}
                         placeholder={filter.placeholder}
-                        className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white text-sm placeholder-dark-600 focus:border-primary-500 focus:outline-none"
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-white text-sm placeholder-dark-600 focus:border-primary-500 focus:outline-none"
                       />
                     ) : filter.type === 'boolean' ? (
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -878,9 +878,9 @@ function RuleConfigModal({
                               [filter.id]: e.target.checked,
                             },
                           })}
-                          className="rounded border-dark-600 bg-dark-800 text-primary-500 focus:ring-primary-500"
+                          className="rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500"
                         />
-                        <span className="text-sm text-dark-400">{filter.placeholder || 'Ativar'}</span>
+                        <span className="text-sm text-gray-500">{filter.placeholder || 'Ativar'}</span>
                       </label>
                     ) : (
                       <input
@@ -894,7 +894,7 @@ function RuleConfigModal({
                           },
                         })}
                         placeholder={filter.placeholder}
-                        className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white text-sm placeholder-dark-600 focus:border-primary-500 focus:outline-none"
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-white text-sm placeholder-dark-600 focus:border-primary-500 focus:outline-none"
                       />
                     )}
                   </div>
@@ -905,14 +905,14 @@ function RuleConfigModal({
 
           {/* Estágio inicial */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               <ArrowRight className="w-4 h-4 inline mr-1" />
               Estágio Inicial
             </label>
             <select
               value={formData.initialStageId}
               onChange={e => setFormData({ ...formData, initialStageId: e.target.value })}
-              className="w-full px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-white focus:border-primary-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white focus:border-primary-500 focus:outline-none"
             >
               <option value="">Selecione um estágio</option>
               {stages.map(stage => (
@@ -921,22 +921,22 @@ function RuleConfigModal({
                 </option>
               ))}
             </select>
-            <p className="text-xs text-dark-500 mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               Deals criados entrarão neste estágio
             </p>
           </div>
 
           {/* Toggle ativo */}
-          <label className="flex items-center justify-between p-3 bg-dark-900 rounded-lg border border-dark-700 cursor-pointer">
+          <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 cursor-pointer">
             <div>
               <p className="text-white text-sm font-medium">Regra Ativa</p>
-              <p className="text-dark-500 text-xs">Regras inativas não criam deals</p>
+              <p className="text-gray-400 text-xs">Regras inativas não criam deals</p>
             </div>
             <button
               type="button"
               onClick={() => setFormData({ ...formData, isEnabled: !formData.isEnabled })}
               className={`w-12 h-6 rounded-full transition-colors ${
-                formData.isEnabled ? 'bg-green-500' : 'bg-dark-600'
+                formData.isEnabled ? 'bg-green-500' : 'bg-gray-200'
               }`}
             >
               <div
@@ -949,10 +949,10 @@ function RuleConfigModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-dark-700 flex justify-end gap-3">
+        <div className="p-4 border-t border-gray-200 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-dark-400 hover:text-white transition-colors"
+            className="px-4 py-2 text-gray-500 hover:text-white transition-colors"
           >
             Cancelar
           </button>

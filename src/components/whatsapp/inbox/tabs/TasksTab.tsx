@@ -108,7 +108,7 @@ export function TasksTab({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+        <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
       </div>
     )
   }
@@ -117,18 +117,18 @@ export function TasksTab({
     <div className="p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-white flex items-center gap-2">
-          <CheckSquare className="w-4 h-4 text-primary-400" />
+        <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+          <CheckSquare className="w-4 h-4 text-brand-600" />
           Tarefas
           {tasks.length > 0 && (
-            <span className="px-1.5 py-0.5 text-xs bg-dark-700 rounded-md">
+            <span className="px-1.5 py-0.5 text-xs bg-gray-100 rounded-md">
               {tasks.filter(t => t.status !== 'completed').length}
             </span>
           )}
         </h4>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="p-1.5 text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors"
+          className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" />
         </button>
@@ -173,7 +173,7 @@ export function TasksTab({
       {/* Próximas Tarefas */}
       {upcomingTasks.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs text-dark-400">
+          <div className="flex items-center gap-2 text-xs text-gray-500">
             <Calendar className="w-3.5 h-3.5" />
             <span className="font-medium">Próximas ({upcomingTasks.length})</span>
           </div>
@@ -210,14 +210,14 @@ export function TasksTab({
       {/* Empty State */}
       {tasks.length === 0 && (
         <div className="text-center py-8">
-          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-dark-700/50 
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 
                           flex items-center justify-center">
-            <CheckSquare className="w-6 h-6 text-dark-500" />
+            <CheckSquare className="w-6 h-6 text-gray-400" />
           </div>
-          <p className="text-sm text-dark-400 mb-3">Nenhuma tarefa</p>
+          <p className="text-sm text-gray-500 mb-3">Nenhuma tarefa</p>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="text-sm text-primary-400 hover:text-primary-300 font-medium"
+            className="text-sm text-brand-600 hover:text-brand-500 font-medium"
           >
             Criar tarefa
           </button>
@@ -255,7 +255,7 @@ function TaskCard({
   const Icon = getTaskTypeIcon(task.type)
   
   return (
-    <div className={`p-3 bg-dark-800/50 rounded-xl border transition-all ${
+    <div className={`p-3 bg-gray-50 rounded-xl border transition-all ${
       task.is_overdue ? 'border-red-500/30' : 
       task.is_today ? 'border-yellow-500/30' : 
       'border-transparent'
@@ -268,7 +268,7 @@ function TaskCard({
           className={`mt-0.5 flex-shrink-0 ${
             completed 
               ? 'text-green-400' 
-              : 'text-dark-500 hover:text-primary-400'
+              : 'text-gray-400 hover:text-brand-600'
           } transition-colors`}
         >
           {isCompleting ? (
@@ -283,7 +283,7 @@ function TaskCard({
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <Icon className="w-3.5 h-3.5 text-dark-400" />
+            <Icon className="w-3.5 h-3.5 text-gray-500" />
             <span className={`text-xs ${getPriorityColor(task.priority)} px-1.5 py-0.5 rounded`}>
               {getTaskTypeLabel(task.type)}
             </span>
@@ -293,7 +293,7 @@ function TaskCard({
             {task.title}
           </p>
           
-          <div className="flex items-center gap-3 text-xs text-dark-400">
+          <div className="flex items-center gap-3 text-xs text-gray-500">
             <span className={task.is_overdue ? 'text-red-400' : ''}>
               {formatDate(task.due_date)}
               {task.due_time && ` ${formatTime(task.due_time)}`}
@@ -350,23 +350,23 @@ function CreateTaskModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-dark-800 rounded-2xl w-full max-w-md shadow-xl">
-        <div className="p-4 border-b border-dark-700">
-          <h3 className="text-lg font-semibold text-white">Nova Tarefa</h3>
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+        <div className="p-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Nova Tarefa</h3>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Título */}
           <div>
-            <label className="block text-sm text-dark-400 mb-1">Título *</label>
+            <label className="block text-sm text-gray-500 mb-1">Título *</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Ligar para confirmar pedido"
-              className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg 
-                         text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500"
+              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
+                         text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
               autoFocus
             />
           </div>
@@ -374,11 +374,11 @@ function CreateTaskModal({
           {/* Tipo e Prioridade */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-dark-400 mb-1">Tipo</label>
+              <label className="block text-sm text-gray-500 mb-1">Tipo</label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg 
+                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
                            text-white focus:outline-none focus:border-primary-500"
               >
                 <option value="task">Tarefa</option>
@@ -392,11 +392,11 @@ function CreateTaskModal({
             </div>
 
             <div>
-              <label className="block text-sm text-dark-400 mb-1">Prioridade</label>
+              <label className="block text-sm text-gray-500 mb-1">Prioridade</label>
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
-                className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg 
+                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
                            text-white focus:outline-none focus:border-primary-500"
               >
                 <option value="low">Baixa</option>
@@ -410,23 +410,23 @@ function CreateTaskModal({
           {/* Data e Hora */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-dark-400 mb-1">Data *</label>
+              <label className="block text-sm text-gray-500 mb-1">Data *</label>
               <input
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg 
+                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
                            text-white focus:outline-none focus:border-primary-500"
               />
             </div>
 
             <div>
-              <label className="block text-sm text-dark-400 mb-1">Hora</label>
+              <label className="block text-sm text-gray-500 mb-1">Hora</label>
               <input
                 type="time"
                 value={dueTime}
                 onChange={(e) => setDueTime(e.target.value)}
-                className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg 
+                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
                            text-white focus:outline-none focus:border-primary-500"
               />
             </div>
@@ -434,14 +434,14 @@ function CreateTaskModal({
 
           {/* Descrição */}
           <div>
-            <label className="block text-sm text-dark-400 mb-1">Descrição</label>
+            <label className="block text-sm text-gray-500 mb-1">Descrição</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Detalhes adicionais..."
               rows={3}
-              className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg 
-                         text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500
+              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
+                         text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500
                          resize-none"
             />
           </div>
@@ -451,7 +451,7 @@ function CreateTaskModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors"
+              className="flex-1 px-4 py-2 bg-gray-100 text-white rounded-lg hover:bg-gray-200 transition-colors"
             >
               Cancelar
             </button>

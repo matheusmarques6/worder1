@@ -165,7 +165,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
               <Bot className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Agentes de IA</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Agentes de IA</h2>
               <p className="text-sm text-zinc-500">Gerencie seus assistentes inteligentes</p>
             </div>
           </div>
@@ -195,7 +195,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                   <Bot className="w-4 h-4" />
                   <span className="text-xs">Total de Agentes</span>
                 </div>
-                <p className="text-2xl font-bold text-white">{safeAgents.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{safeAgents.length}</p>
               </motion.div>
 
               <motion.div
@@ -208,7 +208,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                   <Power className="w-4 h-4" />
                   <span className="text-xs">Ativos</span>
                 </div>
-                <p className="text-2xl font-bold text-white">{activeAgents}</p>
+                <p className="text-2xl font-bold text-gray-900">{activeAgents}</p>
               </motion.div>
 
               <motion.div
@@ -221,7 +221,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                   <MessageSquare className="w-4 h-4" />
                   <span className="text-xs">Mensagens</span>
                 </div>
-                <p className="text-2xl font-bold text-white">{formatNumber(totalMessages)}</p>
+                <p className="text-2xl font-bold text-gray-900">{formatNumber(totalMessages)}</p>
               </motion.div>
 
               <motion.div
@@ -234,7 +234,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                   <TrendingUp className="w-4 h-4" />
                   <span className="text-xs">Conversas</span>
                 </div>
-                <p className="text-2xl font-bold text-white">{formatNumber(totalConversations)}</p>
+                <p className="text-2xl font-bold text-gray-900">{formatNumber(totalConversations)}</p>
               </motion.div>
             </div>
           )}

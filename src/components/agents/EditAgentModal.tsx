@@ -285,7 +285,7 @@ export function EditAgentModal({
     { value: 'online', label: 'Online', color: 'bg-green-500' },
     { value: 'away', label: 'Ausente', color: 'bg-yellow-500' },
     { value: 'busy', label: 'Ocupado', color: 'bg-red-500' },
-    { value: 'offline', label: 'Offline', color: 'bg-dark-500' },
+    { value: 'offline', label: 'Offline', color: 'bg-gray-300' },
   ]
 
   // Tabs config
@@ -309,10 +309,10 @@ export function EditAgentModal({
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-dark-800 rounded-2xl w-full max-w-2xl border border-dark-700/50 overflow-hidden max-h-[90vh] flex flex-col"
+        className="bg-white rounded-2xl w-full max-w-2xl border border-gray-200 overflow-hidden max-h-[90vh] flex flex-col"
       >
         {/* Header */}
-        <div className="p-4 border-b border-dark-700/50 flex items-center justify-between flex-shrink-0">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
               agent.type === 'human' ? 'bg-blue-500/20' : 'bg-purple-500/20'
@@ -324,30 +324,30 @@ export function EditAgentModal({
               )}
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">{agent.name}</h2>
-              <p className="text-sm text-dark-400">
+              <h2 className="text-lg font-semibold text-gray-900">{agent.name}</h2>
+              <p className="text-sm text-gray-500">
                 {agent.type === 'human' ? 'Agente Humano' : 'Agente de IA'}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <X className="w-5 h-5 text-dark-400" />
+            <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-dark-700/50 flex-shrink-0">
+        <div className="flex border-b border-gray-200 flex-shrink-0">
           {tabs.filter(t => t.show).map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 py-3 px-4 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
                 activeTab === tab.id
-                  ? 'text-primary-400 border-b-2 border-primary-500 bg-primary-500/5'
-                  : 'text-dark-400 hover:text-white hover:bg-dark-700/50'
+                  ? 'text-brand-600 border-b-2 border-primary-500 bg-brand-50/50'
+                  : 'text-gray-500 hover:text-white hover:bg-gray-100'
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -378,7 +378,7 @@ export function EditAgentModal({
               {/* Status */}
               {agent.type === 'human' && (
                 <div>
-                  <label className="block text-sm font-medium text-dark-300 mb-3">Status</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-3">Status</label>
                   <div className="grid grid-cols-4 gap-2">
                     {statusOptions.map((opt) => (
                       <button
@@ -386,8 +386,8 @@ export function EditAgentModal({
                         onClick={() => setForm({ ...form, status: opt.value as any })}
                         className={`p-3 rounded-xl border transition-all ${
                           form.status === opt.value
-                            ? 'border-primary-500 bg-primary-500/10'
-                            : 'border-dark-700/50 hover:border-dark-600'
+                            ? 'border-primary-500 bg-brand-50'
+                            : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
                         <div className={`w-3 h-3 rounded-full ${opt.color} mx-auto mb-1`} />
@@ -400,25 +400,25 @@ export function EditAgentModal({
 
               {/* Basic Info */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">Nome</label>
+                <label className="block text-sm font-medium text-gray-600 mb-2">Nome</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400"
                 />
               </div>
 
               {agent.type === 'human' && (
                 <div>
-                  <label className="block text-sm font-medium text-dark-300 mb-2">Email</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Email</label>
                   <input
                     type="email"
                     value={form.email}
                     disabled
-                    className="w-full px-4 py-2.5 bg-dark-900/30 border border-dark-700/30 rounded-xl text-dark-400 cursor-not-allowed"
+                    className="w-full px-4 py-2.5 bg-white/30 border border-gray-200/30 rounded-xl text-gray-500 cursor-not-allowed"
                   />
-                  <p className="text-xs text-dark-500 mt-1">O email não pode ser alterado</p>
+                  <p className="text-xs text-gray-400 mt-1">O email não pode ser alterado</p>
                 </div>
               )}
 
@@ -426,7 +426,7 @@ export function EditAgentModal({
               {agent.type === 'human' && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Máx. chats simultâneos
                     </label>
                     <input
@@ -435,7 +435,7 @@ export function EditAgentModal({
                       max="20"
                       value={form.max_concurrent_chats}
                       onChange={(e) => setForm({ ...form, max_concurrent_chats: parseInt(e.target.value) || 5 })}
-                      className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500/50"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-brand-400"
                     />
                   </div>
                   <div className="flex items-end">
@@ -444,24 +444,24 @@ export function EditAgentModal({
                         type="checkbox"
                         checked={form.auto_assign}
                         onChange={(e) => setForm({ ...form, auto_assign: e.target.checked })}
-                        className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                        className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
                       />
-                      <span className="text-sm text-dark-300">Atribuição automática</span>
+                      <span className="text-sm text-gray-600">Atribuição automática</span>
                     </label>
                   </div>
                 </div>
               )}
 
               {/* Info */}
-              <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-dark-400">Criado em:</span>
+                    <span className="text-gray-500">Criado em:</span>
                     <span className="text-white ml-2">{formatDate(agent.created_at)}</span>
                   </div>
                   {agent.last_seen_at && (
                     <div>
-                      <span className="text-dark-400">Último acesso:</span>
+                      <span className="text-gray-500">Último acesso:</span>
                       <span className="text-white ml-2">{formatDate(agent.last_seen_at)}</span>
                     </div>
                   )}
@@ -472,7 +472,7 @@ export function EditAgentModal({
               <button
                 onClick={handleSaveGeneral}
                 disabled={saving}
-                className="w-full py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Salvar Alterações
@@ -485,46 +485,46 @@ export function EditAgentModal({
             <div className="space-y-6">
               {loadingData ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
+                  <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
                 </div>
               ) : (
                 <>
                   {/* Access Level */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-3">Nível de Acesso</label>
+                    <label className="block text-sm font-medium text-gray-600 mb-3">Nível de Acesso</label>
                     <div className="grid grid-cols-2 gap-3">
                       <button
                         type="button"
                         onClick={() => setPermissions({ ...permissions, access_level: 'agent' })}
                         className={`p-4 rounded-xl border transition-all text-left ${
                           permissions.access_level === 'agent'
-                            ? 'border-primary-500 bg-primary-500/10'
-                            : 'border-dark-700/50 hover:border-dark-600'
+                            ? 'border-primary-500 bg-brand-50'
+                            : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
                         <User className="w-5 h-5 text-blue-400 mb-2" />
                         <div className="font-medium text-white">Agente</div>
-                        <div className="text-xs text-dark-400 mt-1">Acesso limitado às permissões definidas</div>
+                        <div className="text-xs text-gray-500 mt-1">Acesso limitado às permissões definidas</div>
                       </button>
                       <button
                         type="button"
                         onClick={() => setPermissions({ ...permissions, access_level: 'admin' })}
                         className={`p-4 rounded-xl border transition-all text-left ${
                           permissions.access_level === 'admin'
-                            ? 'border-primary-500 bg-primary-500/10'
-                            : 'border-dark-700/50 hover:border-dark-600'
+                            ? 'border-primary-500 bg-brand-50'
+                            : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
                         <Shield className="w-5 h-5 text-purple-400 mb-2" />
                         <div className="font-medium text-white">Administrador</div>
-                        <div className="text-xs text-dark-400 mt-1">Acesso completo ao sistema</div>
+                        <div className="text-xs text-gray-500 mt-1">Acesso completo ao sistema</div>
                       </button>
                     </div>
                   </div>
 
                   {/* WhatsApp Numbers */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-3">
+                    <label className="block text-sm font-medium text-gray-600 mb-3">
                       <MessageSquare className="w-4 h-4 inline mr-2" />
                       Números WhatsApp
                     </label>
@@ -538,20 +538,20 @@ export function EditAgentModal({
                           whatsapp_access_all: e.target.checked,
                           whatsapp_number_ids: e.target.checked ? [] : permissions.whatsapp_number_ids
                         })}
-                        className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                        className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
                       />
-                      <span className="text-sm text-dark-300">Acesso a todos os números</span>
+                      <span className="text-sm text-gray-600">Acesso a todos os números</span>
                     </label>
 
                     {!permissions.whatsapp_access_all && (
-                      <div className="space-y-2 max-h-48 overflow-y-auto bg-dark-900/30 rounded-xl p-3">
+                      <div className="space-y-2 max-h-48 overflow-y-auto bg-white/30 rounded-xl p-3">
                         {whatsappNumbers.length === 0 ? (
-                          <p className="text-sm text-dark-500 italic text-center py-2">Nenhum número cadastrado</p>
+                          <p className="text-sm text-gray-400 italic text-center py-2">Nenhum número cadastrado</p>
                         ) : (
                           whatsappNumbers.map((number) => (
                             <label
                               key={number.id}
-                              className="flex items-center gap-3 p-2 rounded-lg hover:bg-dark-800/50 cursor-pointer"
+                              className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
                             >
                               <input
                                 type="checkbox"
@@ -569,15 +569,15 @@ export function EditAgentModal({
                                     })
                                   }
                                 }}
-                                className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                                className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
                               />
                               <div className="flex-1">
                                 <div className="text-sm text-white">{number.phone_number}</div>
                                 {number.display_name && (
-                                  <div className="text-xs text-dark-400">{number.display_name}</div>
+                                  <div className="text-xs text-gray-500">{number.display_name}</div>
                                 )}
                               </div>
-                              <div className={`w-2 h-2 rounded-full ${number.is_connected ? 'bg-green-500' : 'bg-dark-500'}`} />
+                              <div className={`w-2 h-2 rounded-full ${number.is_connected ? 'bg-green-500' : 'bg-gray-300'}`} />
                             </label>
                           ))
                         )}
@@ -587,24 +587,24 @@ export function EditAgentModal({
 
                   {/* Additional Permissions */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-3">
+                    <label className="block text-sm font-medium text-gray-600 mb-3">
                       <Lock className="w-4 h-4 inline mr-2" />
                       Permissões Adicionais
                     </label>
-                    <div className="space-y-2 bg-dark-900/30 rounded-xl p-3">
+                    <div className="space-y-2 bg-white/30 rounded-xl p-3">
                       {[
                         { key: 'can_send_messages', label: 'Pode enviar mensagens' },
                         { key: 'can_transfer_chats', label: 'Pode transferir chats' },
                         { key: 'can_edit_pipeline', label: 'Pode editar pipelines' },
                       ].map((perm) => (
-                        <label key={perm.key} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-dark-800/50 rounded-lg">
+                        <label key={perm.key} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-gray-50 rounded-lg">
                           <input
                             type="checkbox"
                             checked={permissions[perm.key as keyof AgentPermissions] as boolean}
                             onChange={(e) => setPermissions({ ...permissions, [perm.key]: e.target.checked })}
-                            className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                            className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
                           />
-                          <span className="text-sm text-dark-300">{perm.label}</span>
+                          <span className="text-sm text-gray-600">{perm.label}</span>
                         </label>
                       ))}
                     </div>
@@ -614,7 +614,7 @@ export function EditAgentModal({
                   <button
                     onClick={handleSavePermissions}
                     disabled={saving}
-                    className="w-full py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                    className="w-full py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
                   >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Salvar Permissões
@@ -628,18 +628,18 @@ export function EditAgentModal({
           {activeTab === 'security' && agent.type === 'human' && (
             <div className="space-y-6">
               {/* Password */}
-              <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
                 <h3 className="font-medium text-white mb-3 flex items-center gap-2">
                   <Key className="w-4 h-4" />
                   Senha
                 </h3>
-                <p className="text-sm text-dark-400 mb-4">
+                <p className="text-sm text-gray-500 mb-4">
                   Gere uma nova senha temporária para o agente. Ele será solicitado a trocar no próximo login.
                 </p>
                 <button
                   onClick={handleResetPassword}
                   disabled={saving}
-                  className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                   Redefinir Senha
@@ -652,7 +652,7 @@ export function EditAgentModal({
                   <AlertTriangle className="w-4 h-4" />
                   Zona de Perigo
                 </h3>
-                <p className="text-sm text-dark-400 mb-4">
+                <p className="text-sm text-gray-500 mb-4">
                   Esta ação não pode ser desfeita. Todas as conversas atribuídas serão desvinculadas.
                 </p>
                 
@@ -677,7 +677,7 @@ export function EditAgentModal({
                     </button>
                     <button
                       onClick={() => setShowDeleteConfirm(false)}
-                      className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg text-sm transition-colors"
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-lg text-sm transition-colors"
                     >
                       Cancelar
                     </button>
@@ -692,29 +692,29 @@ export function EditAgentModal({
             <div className="space-y-6">
               {/* Stats */}
               <div className="grid grid-cols-3 gap-4">
-                <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-white">{agent.total_conversations || 0}</div>
-                  <div className="text-xs text-dark-400 mt-1">Conversas</div>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-gray-900">{agent.total_conversations || 0}</div>
+                  <div className="text-xs text-gray-500 mt-1">Conversas</div>
                 </div>
-                <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-white">{agent.total_messages || 0}</div>
-                  <div className="text-xs text-dark-400 mt-1">Mensagens</div>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-gray-900">{agent.total_messages || 0}</div>
+                  <div className="text-xs text-gray-500 mt-1">Mensagens</div>
                 </div>
-                <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-white">
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-gray-900">
                     {formatResponseTime(agent.avg_response_time_seconds)}
                   </div>
-                  <div className="text-xs text-dark-400 mt-1">Tempo Resp.</div>
+                  <div className="text-xs text-gray-500 mt-1">Tempo Resp.</div>
                 </div>
               </div>
 
               {/* Timeline - empty state */}
-              <div className="bg-dark-900/50 border border-dark-700/50 rounded-xl p-4">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
                 <h3 className="font-medium text-white mb-4 flex items-center gap-2">
                   <Activity className="w-4 h-4" />
                   Atividade Recente
                 </h3>
-                <div className="text-center py-8 text-dark-500">
+                <div className="text-center py-8 text-gray-400">
                   <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">Nenhuma atividade registrada</p>
                 </div>

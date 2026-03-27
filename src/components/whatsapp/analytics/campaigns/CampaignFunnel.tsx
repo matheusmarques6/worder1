@@ -63,9 +63,9 @@ export function CampaignFunnel({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.3 }}
-      className="bg-dark-800/50 rounded-xl border border-dark-700/50 p-6"
+      className="bg-gray-50 rounded-xl border border-gray-200 p-6"
     >
-      <h3 className="text-lg font-semibold text-white mb-6">Funil de Conversão</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">Funil de Conversão</h3>
 
       <div className="space-y-4">
         {stages.map((stage, index) => {
@@ -74,20 +74,20 @@ export function CampaignFunnel({
           return (
             <div key={stage.stage} className="relative">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-dark-300">{stage.stage}</span>
+                <span className="text-sm text-gray-600">{stage.stage}</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm font-medium text-gray-900">
                     {formatNumber(stage.value)}
                   </span>
                   {index > 0 && (
-                    <span className="text-xs text-dark-400">
+                    <span className="text-xs text-gray-500">
                       ({stage.percent.toFixed(1)}%)
                     </span>
                   )}
                 </div>
               </div>
               
-              <div className="h-10 bg-dark-700/50 rounded-lg overflow-hidden">
+              <div className="h-10 bg-gray-100 rounded-lg overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${widthPercent}%` }}
@@ -96,7 +96,7 @@ export function CampaignFunnel({
                   style={{ backgroundColor: stage.color }}
                 >
                   {widthPercent > 15 && (
-                    <span className="text-sm font-medium text-white/90">
+                    <span className="text-sm font-medium text-gray-900/90">
                       {formatNumber(stage.value)}
                     </span>
                   )}
@@ -105,7 +105,7 @@ export function CampaignFunnel({
 
               {/* Linha conectora */}
               {index < stages.length - 1 && (
-                <div className="absolute left-1/2 -bottom-2 w-0.5 h-4 bg-dark-600" />
+                <div className="absolute left-1/2 -bottom-2 w-0.5 h-4 bg-gray-200" />
               )}
             </div>
           );
@@ -113,7 +113,7 @@ export function CampaignFunnel({
       </div>
 
       {/* Resumo de conversão */}
-      <div className="mt-6 pt-4 border-t border-dark-700/50">
+      <div className="mt-6 pt-4 border-t border-gray-200">
         <div className="grid grid-cols-3 gap-4 text-center">
           <ConversionMetric
             label="Entrega"
@@ -151,7 +151,7 @@ function ConversionMetric({ label, value, color }: ConversionMetricProps) {
 
   return (
     <div>
-      <p className="text-xs text-dark-400 mb-1">{label}</p>
+      <p className="text-xs text-gray-500 mb-1">{label}</p>
       <p className={`text-xl font-bold ${colorClasses[color]}`}>
         {value.toFixed(1)}%
       </p>

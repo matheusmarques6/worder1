@@ -129,14 +129,14 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
           ${isExpanded ? 'rounded-b-none border-b-0' : ''}
         `}>
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary-500/20">
-              <BarChart3 className="w-5 h-5 text-primary-400" />
+            <div className="p-2 rounded-lg bg-brand-100">
+              <BarChart3 className="w-5 h-5 text-brand-600" />
             </div>
             <div className="text-left">
-              <h3 className="text-base font-semibold text-white">
+              <h3 className="text-base font-semibold text-gray-900">
                 Métricas Avançadas
               </h3>
-              <p className="text-sm text-dark-400">
+              <p className="text-sm text-gray-500">
                 Segmentação RFM e Análise de Cohort
               </p>
             </div>
@@ -144,18 +144,18 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
           
           <div className="flex items-center gap-2">
             {data && (
-              <span className="text-xs text-dark-500 hidden sm:block">
+              <span className="text-xs text-gray-400 hidden sm:block">
                 {data.rfm.totalCustomers} clientes analisados
               </span>
             )}
             <div className={`
               p-2 rounded-lg transition-colors
-              ${isExpanded ? 'bg-primary-500/20' : 'bg-dark-700/50 group-hover:bg-primary-500/10'}
+              ${isExpanded ? 'bg-brand-100' : 'bg-gray-100 group-hover:bg-brand-50'}
             `}>
               {isExpanded ? (
-                <ChevronUp className="w-5 h-5 text-primary-400" />
+                <ChevronUp className="w-5 h-5 text-brand-600" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-dark-400 group-hover:text-primary-400" />
+                <ChevronDown className="w-5 h-5 text-gray-500 group-hover:text-brand-600" />
               )}
             </div>
           </div>
@@ -174,13 +174,13 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
           >
             <div className="
               p-6 rounded-b-xl 
-              bg-dark-800/40 border border-t-0 border-primary-500/20
+              bg-gray-50 border border-t-0 border-primary-500/20
             ">
               {/* Loading state */}
               {isLoading && (
                 <div className="flex items-center justify-center py-12">
-                  <div className="flex items-center gap-3 text-dark-400">
-                    <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
+                  <div className="flex items-center gap-3 text-gray-500">
+                    <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
                     <span>Calculando métricas...</span>
                   </div>
                 </div>
@@ -192,7 +192,7 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
                   <p className="text-red-400 mb-4">{error}</p>
                   <button
                     onClick={handleRefresh}
-                    className="flex items-center gap-2 px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-white transition-colors"
                   >
                     <RefreshCw className="w-4 h-4" />
                     Tentar novamente
@@ -205,14 +205,14 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
                 <div className="space-y-6">
                   {/* Tabs */}
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 bg-dark-700/50 p-1 rounded-lg">
+                    <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
                       <button
                         onClick={() => setActiveTab('rfm')}
                         className={`
                           flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
                           ${activeTab === 'rfm' 
                             ? 'bg-primary-500 text-white shadow-glow' 
-                            : 'text-dark-400 hover:text-white hover:bg-dark-600/50'
+                            : 'text-gray-500 hover:text-white hover:bg-gray-200/50'
                           }
                         `}
                       >
@@ -225,7 +225,7 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
                           flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
                           ${activeTab === 'cohort' 
                             ? 'bg-primary-500 text-white shadow-glow' 
-                            : 'text-dark-400 hover:text-white hover:bg-dark-600/50'
+                            : 'text-gray-500 hover:text-white hover:bg-gray-200/50'
                           }
                         `}
                       >
@@ -237,7 +237,7 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
                     <button
                       onClick={handleRefresh}
                       disabled={isLoading}
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-dark-400 hover:text-white bg-dark-700/50 hover:bg-dark-600/50 rounded-lg transition-colors disabled:opacity-50"
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-500 hover:text-white bg-gray-100 hover:bg-gray-200/50 rounded-lg transition-colors disabled:opacity-50"
                     >
                       <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                       Atualizar
@@ -272,8 +272,8 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
                   </AnimatePresence>
 
                   {/* Footer */}
-                  <div className="pt-4 border-t border-dark-700/30 text-center">
-                    <p className="text-xs text-dark-500">
+                  <div className="pt-4 border-t border-gray-200/30 text-center">
+                    <p className="text-xs text-gray-400">
                       Última atualização: {new Date(data.calculatedAt).toLocaleString('pt-BR')}
                     </p>
                   </div>
@@ -283,10 +283,10 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
               {/* Empty state */}
               {!data && !isLoading && !error && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="p-4 rounded-full bg-dark-700/50 mb-4">
-                    <BarChart3 className="w-8 h-8 text-dark-500" />
+                  <div className="p-4 rounded-full bg-gray-100 mb-4">
+                    <BarChart3 className="w-8 h-8 text-gray-400" />
                   </div>
-                  <p className="text-dark-400 mb-4">Nenhum dado disponível</p>
+                  <p className="text-gray-500 mb-4">Nenhum dado disponível</p>
                   <button
                     onClick={handleRefresh}
                     className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg text-white transition-colors"

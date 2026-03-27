@@ -347,7 +347,7 @@ export default function AutomationsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9999] bg-dark-900"
+            className="fixed inset-0 z-[9999] bg-white"
             style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
           >
             <FlowBuilder
@@ -378,8 +378,8 @@ export default function AutomationsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Automações</h1>
-          <p className="text-dark-400 mt-1">Gerencie seus fluxos automatizados</p>
+          <h1 className="text-2xl font-bold text-gray-900">Automações</h1>
+          <p className="text-gray-500 mt-1">Gerencie seus fluxos automatizados</p>
         </div>
         <button
           onClick={() => setShowNewModal(true)}
@@ -400,21 +400,21 @@ export default function AutomationsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+          className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <Zap className="w-5 h-5 text-primary-400" />
+              <Zap className="w-5 h-5 text-brand-600" />
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-100 rounded animate-pulse" />
               ) : (
-                <p className="text-xl font-bold text-white">
+                <p className="text-xl font-bold text-gray-900">
                   {dashboardStats?.activeAutomations || 0}
                 </p>
               )}
-              <p className="text-xs text-dark-400">Automações Ativas</p>
+              <p className="text-xs text-gray-500">Automações Ativas</p>
             </div>
           </div>
         </motion.div>
@@ -424,21 +424,21 @@ export default function AutomationsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+          className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <Mail className="w-5 h-5 text-primary-400" />
+              <Mail className="w-5 h-5 text-brand-600" />
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-100 rounded animate-pulse" />
               ) : (
-                <p className="text-xl font-bold text-white">
+                <p className="text-xl font-bold text-gray-900">
                   {formatNumber(dashboardStats?.processedToday || 0)}
                 </p>
               )}
-              <p className="text-xs text-dark-400">Processados Hoje</p>
+              <p className="text-xs text-gray-500">Processados Hoje</p>
             </div>
           </div>
         </motion.div>
@@ -448,21 +448,21 @@ export default function AutomationsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+          className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <Users className="w-5 h-5 text-primary-400" />
+              <Users className="w-5 h-5 text-brand-600" />
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-100 rounded animate-pulse" />
               ) : (
-                <p className="text-xl font-bold text-white">
+                <p className="text-xl font-bold text-gray-900">
                   {formatNumber(dashboardStats?.conversions30d || 0)}
                 </p>
               )}
-              <p className="text-xs text-dark-400">Conversões (30d)</p>
+              <p className="text-xs text-gray-500">Conversões (30d)</p>
             </div>
           </div>
         </motion.div>
@@ -472,21 +472,21 @@ export default function AutomationsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+          className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <DollarSign className="w-5 h-5 text-primary-400" />
+              <DollarSign className="w-5 h-5 text-brand-600" />
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-100 rounded animate-pulse" />
               ) : (
-                <p className="text-xl font-bold text-white">
+                <p className="text-xl font-bold text-gray-900">
                   {formatCurrency(dashboardStats?.revenue30d || 0)}
                 </p>
               )}
-              <p className="text-xs text-dark-400">Receita (30d)</p>
+              <p className="text-xs text-gray-500">Receita (30d)</p>
             </div>
           </div>
         </motion.div>
@@ -495,7 +495,7 @@ export default function AutomationsPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder="Buscar automações..."
@@ -503,9 +503,9 @@ export default function AutomationsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
               'w-full pl-10 pr-4 py-2.5 rounded-xl',
-              'bg-dark-800/60 border border-dark-700/50',
+              'bg-white border border-gray-200',
               'text-white placeholder-dark-500',
-              'focus:outline-none focus:border-primary-500/50',
+              'focus:outline-none focus:border-brand-400',
               'transition-colors'
             )}
           />
@@ -513,7 +513,7 @@ export default function AutomationsPage() {
 
         <div className="flex items-center gap-2">
           {/* Status Filter */}
-          <div className="flex items-center bg-dark-800/60 border border-dark-700/50 rounded-xl p-1">
+          <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1">
             {(['all', 'active', 'paused', 'draft'] as const).map((status) => (
               <button
                 key={status}
@@ -522,7 +522,7 @@ export default function AutomationsPage() {
                   'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                   statusFilter === status
                     ? 'bg-primary-500 text-white'
-                    : 'text-dark-400 hover:text-white hover:bg-dark-700/50'
+                    : 'text-gray-500 hover:text-white hover:bg-gray-100'
                 )}
               >
                 {status === 'all' && 'Todas'}
@@ -534,7 +534,7 @@ export default function AutomationsPage() {
           </div>
 
           {/* View Toggle */}
-          <div className="flex items-center bg-dark-800/60 border border-dark-700/50 rounded-xl p-1">
+          <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1">
             <button
               onClick={() => setView('list')}
               className={cn(
@@ -564,11 +564,11 @@ export default function AutomationsPage() {
         </div>
       ) : filteredAutomations.length === 0 ? (
         <div className="text-center py-20">
-          <Zap className="w-12 h-12 text-dark-600 mx-auto mb-4" />
-          <p className="text-dark-400">Nenhuma automação encontrada</p>
+          <Zap className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+          <p className="text-gray-500">Nenhuma automação encontrada</p>
           <button
             onClick={() => setShowNewModal(true)}
-            className="mt-4 text-primary-400 hover:text-primary-300 text-sm"
+            className="mt-4 text-brand-600 hover:text-brand-500 text-sm"
           >
             Criar sua primeira automação
           </button>
@@ -622,7 +622,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
   const statusConfig = {
     active: { label: 'Ativa', color: 'bg-success-500/20 text-success-400 border-success-500/30' },
     paused: { label: 'Pausada', color: 'bg-warning-500/20 text-warning-400 border-warning-500/30' },
-    draft: { label: 'Rascunho', color: 'bg-dark-600/50 text-dark-400 border-dark-500/30' },
+    draft: { label: 'Rascunho', color: 'bg-gray-200/50 text-gray-500 border-gray-300/30' },
   };
 
   const { label, color } = statusConfig[automation.status];
@@ -632,8 +632,8 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'bg-dark-800/60 border border-dark-700/50 rounded-xl',
-        'hover:border-dark-600 transition-colors',
+        'bg-white border border-gray-200 rounded-xl',
+        'hover:border-gray-300 transition-colors',
         view === 'list' ? 'p-4' : 'p-5'
       )}
     >
@@ -641,12 +641,12 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
         {/* Info */}
         <div className={cn('flex items-center gap-4', view === 'grid' && 'w-full')}>
           <div className="p-3 bg-primary-500/15 rounded-xl">
-            <Zap className="w-5 h-5 text-primary-400" />
+            <Zap className="w-5 h-5 text-brand-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-white truncate">{automation.name}</h3>
+            <h3 className="font-semibold text-gray-900 truncate">{automation.name}</h3>
             {automation.description && (
-              <p className="text-sm text-dark-400 truncate">{automation.description}</p>
+              <p className="text-sm text-gray-500 truncate">{automation.description}</p>
             )}
           </div>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-medium border', color)}>
@@ -656,7 +656,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
 
         {/* Stats */}
         {view === 'grid' && (
-          <div className="flex items-center gap-4 text-xs text-dark-400">
+          <div className="flex items-center gap-4 text-xs text-gray-500">
             {automation.total_runs !== undefined && (
               <span className="flex items-center gap-1">
                 <Play className="w-3 h-3" />
@@ -679,7 +679,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             disabled={automation.status === 'draft'}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-dark-700/50 text-dark-400 hover:text-white',
+              'hover:bg-gray-100 text-gray-500 hover:text-white',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
@@ -693,7 +693,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             onClick={onEdit}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-dark-700/50 text-dark-400 hover:text-white'
+              'hover:bg-gray-100 text-gray-500 hover:text-white'
             )}
           >
             <Edit className="w-4 h-4" />
@@ -702,7 +702,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             onClick={onDelete}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-error-500/20 text-dark-400 hover:text-error-400'
+              'hover:bg-error-500/20 text-gray-500 hover:text-error-400'
             )}
           >
             <Trash2 className="w-4 h-4" />
@@ -737,14 +737,14 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-dark-900 border border-dark-700/50 rounded-2xl overflow-hidden"
+        className="w-full max-w-2xl bg-white border border-gray-200 rounded-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-dark-700/50">
-          <h2 className="text-lg font-semibold text-white">Nova Automação</h2>
+        <div className="flex items-center justify-between p-5 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Nova Automação</h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -757,27 +757,27 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
             onClick={onSelectBlank}
             className={cn(
               'w-full p-4 rounded-xl text-left',
-              'bg-dark-800/60 border border-dark-700/50',
-              'hover:border-primary-500/50 hover:bg-primary-500/5',
+              'bg-white border border-gray-200',
+              'hover:border-brand-400 hover:bg-brand-50/50',
               'transition-colors group'
             )}
           >
             <div className="flex items-center gap-4">
               <div className="p-3 bg-primary-500/15 rounded-xl">
-                <Plus className="w-5 h-5 text-primary-400" />
+                <Plus className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-white group-hover:text-primary-400 transition-colors">
+                <h3 className="font-semibold text-white group-hover:text-brand-600 transition-colors">
                   Começar do Zero
                 </h3>
-                <p className="text-sm text-dark-400">Criar uma automação em branco</p>
+                <p className="text-sm text-gray-500">Criar uma automação em branco</p>
               </div>
             </div>
           </button>
 
           {/* Templates */}
           <div>
-            <h3 className="text-sm font-medium text-dark-400 mb-3">Ou escolha um template</h3>
+            <h3 className="text-sm font-medium text-gray-500 mb-3">Ou escolha um template</h3>
             <div className="grid grid-cols-2 gap-3">
               {AUTOMATION_TEMPLATES.map((template) => (
                 <button
@@ -785,16 +785,16 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
                   onClick={() => onSelectTemplate(template.id)}
                   className={cn(
                     'p-4 rounded-xl text-left',
-                    'bg-dark-800/60 border border-dark-700/50',
-                    'hover:border-dark-600 hover:bg-dark-700/30',
+                    'bg-white border border-gray-200',
+                    'hover:border-gray-300 hover:bg-gray-100/30',
                     'transition-colors group'
                   )}
                 >
                   <div className="text-2xl mb-2">{template.icon}</div>
-                  <h4 className="font-medium text-white group-hover:text-primary-400 transition-colors">
+                  <h4 className="font-medium text-white group-hover:text-brand-600 transition-colors">
                     {template.name}
                   </h4>
-                  <p className="text-xs text-dark-500 mt-1">{template.description}</p>
+                  <p className="text-xs text-gray-400 mt-1">{template.description}</p>
                 </button>
               ))}
             </div>

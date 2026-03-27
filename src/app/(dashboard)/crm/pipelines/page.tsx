@@ -52,21 +52,21 @@ function SortableStage({ stage, index }: { stage: any; index: number }) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 p-3 bg-dark-900/50 rounded-lg ${isDragging ? 'shadow-lg ring-2 ring-primary-500/50' : ''}`}
+      className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg ${isDragging ? 'shadow-lg ring-2 ring-primary-500/50' : ''}`}
     >
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-dark-700 transition-colors"
+        className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-100 transition-colors"
       >
-        <GripVertical className="w-4 h-4 text-dark-500" />
+        <GripVertical className="w-4 h-4 text-gray-400" />
       </button>
       <div
         className="w-3 h-3 rounded-full flex-shrink-0"
         style={{ backgroundColor: stage.color || '#8b5cf6' }}
       />
       <span className="text-white flex-1">{stage.name}</span>
-      <span className="text-dark-500 text-sm">
+      <span className="text-gray-400 text-sm">
         Posição {index + 1}
       </span>
     </div>
@@ -177,7 +177,7 @@ export default function PipelinesPage() {
     <div className="space-y-6">
       {/* Actions */}
       <div className="flex items-center justify-between">
-        <p className="text-dark-400">
+        <p className="text-gray-500">
           {displayPipelines.length} {displayPipelines.length === 1 ? 'pipeline' : 'pipelines'}
         </p>
         <button
@@ -192,11 +192,11 @@ export default function PipelinesPage() {
       {/* Pipelines List */}
       {displayPipelines.length === 0 ? (
         <div className="text-center py-12">
-          <div className="w-16 h-16 bg-dark-800 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Plus className="w-8 h-8 text-dark-500" />
+          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
+            <Plus className="w-8 h-8 text-gray-400" />
           </div>
           <h3 className="text-lg font-medium text-white mb-2">Nenhuma pipeline ainda</h3>
-          <p className="text-dark-400 mb-4">Crie sua primeira pipeline para começar a gerenciar seus deals</p>
+          <p className="text-gray-500 mb-4">Crie sua primeira pipeline para começar a gerenciar seus deals</p>
           <button
             onClick={() => setShowModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg text-white font-medium transition-colors"
@@ -210,13 +210,13 @@ export default function PipelinesPage() {
           {displayPipelines.map((pipeline) => (
             <div
               key={pipeline.id}
-              className="bg-dark-800/30 border border-dark-700/50 rounded-xl overflow-hidden"
+              className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden"
             >
               {/* Pipeline Header */}
               <div className="flex items-center gap-4 p-4">
                 <button
                   onClick={() => setExpandedPipeline(expandedPipeline === pipeline.id ? null : pipeline.id)}
-                  className="p-1 rounded hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
+                  className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
                 >
                   <ChevronRight className={`w-5 h-5 transition-transform ${expandedPipeline === pipeline.id ? 'rotate-90' : ''}`} />
                 </button>
@@ -228,7 +228,7 @@ export default function PipelinesPage() {
                 
                 <div className="flex-1 min-w-0">
                   <h3 className="text-white font-medium">{pipeline.name}</h3>
-                  <p className="text-dark-400 text-sm mt-1">
+                  <p className="text-gray-500 text-sm mt-1">
                     {pipeline.stages?.length || 0} estágios
                   </p>
                 </div>
@@ -236,13 +236,13 @@ export default function PipelinesPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setEditingPipeline(pipeline)}
-                    className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors"
+                    className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-100 transition-colors"
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => handleDelete(pipeline)}
-                    className="p-2 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -256,10 +256,10 @@ export default function PipelinesPage() {
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="border-t border-dark-700/50 overflow-hidden"
+                    className="border-t border-gray-200 overflow-hidden"
                   >
                     <div className="p-4 space-y-2">
-                      <p className="text-xs text-dark-500 mb-3">
+                      <p className="text-xs text-gray-400 mb-3">
                         ↕️ Arraste para reordenar os estágios
                       </p>
                       <DndContext

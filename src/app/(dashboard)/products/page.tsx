@@ -122,25 +122,25 @@ const DefaultCostModal = ({
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="relative bg-dark-900 rounded-2xl border border-dark-700 p-6 w-full max-w-md"
+        className="relative bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-md"
       >
-        <button onClick={onClose} className="absolute top-4 right-4 text-dark-400 hover:text-white">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white">
           <X className="w-5 h-5" />
         </button>
 
         <div className="flex items-center gap-3 mb-6">
-          <div className="p-3 rounded-xl bg-primary-500/20">
-            <Percent className="w-6 h-6 text-primary-400" />
+          <div className="p-3 rounded-xl bg-brand-100">
+            <Percent className="w-6 h-6 text-brand-600" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-white">Custo Padrão</h2>
-            <p className="text-sm text-dark-400">Configuração para produtos sem custo cadastrado</p>
+            <p className="text-sm text-gray-500">Configuração para produtos sem custo cadastrado</p>
           </div>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-dark-400 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               Porcentagem do preço de venda
             </label>
             <div className="relative">
@@ -151,21 +151,21 @@ const DefaultCostModal = ({
                 step="0.1"
                 value={percentage}
                 onChange={(e) => setPercentage(e.target.value)}
-                className="w-full px-4 py-3 pr-12 bg-dark-800 border border-dark-700 rounded-xl text-white text-lg font-medium focus:outline-none focus:border-primary-500"
+                className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-white text-lg font-medium focus:outline-none focus:border-primary-500"
               />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-dark-400">%</span>
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">%</span>
             </div>
-            <p className="text-xs text-dark-500 mt-2">
+            <p className="text-xs text-gray-400 mt-2">
               Exemplo: Para um produto de R$ 100,00 com {percentage || 0}% de custo, o custo será {formatCurrency(100 * (parseFloat(percentage) || 0) / 100)}
             </p>
           </div>
 
-          <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
+          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm">
                 <p className="text-white font-medium">Importante</p>
-                <p className="text-dark-400 mt-1">
+                <p className="text-gray-500 mt-1">
                   Este valor será usado para calcular automaticamente o custo de produtos que ainda não têm custo cadastrado manualmente.
                 </p>
               </div>
@@ -175,7 +175,7 @@ const DefaultCostModal = ({
           <button
             onClick={handleSave}
             disabled={isSaving || !percentage}
-            className="w-full py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 disabled:text-dark-500 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+            className="w-full py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 disabled:text-gray-400 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
           >
             {isSaving ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -229,9 +229,9 @@ const BulkEditModal = ({
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="relative bg-dark-900 rounded-2xl border border-dark-700 p-6 w-full max-w-md"
+        className="relative bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-md"
       >
-        <button onClick={onClose} className="absolute top-4 right-4 text-dark-400 hover:text-white">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white">
           <X className="w-5 h-5" />
         </button>
 
@@ -241,18 +241,18 @@ const BulkEditModal = ({
           </div>
           <div>
             <h2 className="text-lg font-bold text-white">Edição em Massa</h2>
-            <p className="text-sm text-dark-400">{selectedProducts.length} produto(s) selecionado(s)</p>
+            <p className="text-sm text-gray-500">{selectedProducts.length} produto(s) selecionado(s)</p>
           </div>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-dark-400 mb-2">Custo Unitário</label>
+            <label className="block text-sm text-gray-500 mb-2">Custo Unitário</label>
             <div className="flex gap-2">
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-24 px-3 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                className="w-24 px-3 py-3 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
               >
                 {CURRENCIES.map(c => (
                   <option key={c.code} value={c.code}>{c.code}</option>
@@ -265,36 +265,36 @@ const BulkEditModal = ({
                 value={cost}
                 onChange={(e) => setCost(e.target.value)}
                 placeholder="0.00"
-                className="flex-1 px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
                 autoFocus
               />
             </div>
           </div>
 
-          <label className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl cursor-pointer">
+          <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer">
             <input
               type="checkbox"
               checked={applyToVariants}
               onChange={(e) => setApplyToVariants(e.target.checked)}
-              className="w-5 h-5 rounded border-dark-600 text-primary-500 focus:ring-primary-500"
+              className="w-5 h-5 rounded border-gray-300 text-brand-500 focus:ring-primary-500"
             />
             <div>
               <p className="text-white font-medium">Aplicar a todas as variantes</p>
-              <p className="text-xs text-dark-400">O custo será aplicado a cada variante individualmente</p>
+              <p className="text-xs text-gray-500">O custo será aplicado a cada variante individualmente</p>
             </div>
           </label>
 
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 py-3 bg-dark-800 hover:bg-dark-700 text-white rounded-xl font-medium transition-colors"
+              className="flex-1 py-3 bg-white hover:bg-gray-100 text-white rounded-xl font-medium transition-colors"
             >
               Cancelar
             </button>
             <button
               onClick={handleSave}
               disabled={isSaving || !cost}
-              className="flex-1 py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 disabled:text-dark-500 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+              className="flex-1 py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 disabled:text-gray-400 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
             >
               {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
               Aplicar
@@ -334,7 +334,7 @@ const CostEditor = ({
       <select
         value={currency}
         onChange={(e) => setCurrency(e.target.value)}
-        className="w-16 px-1.5 py-1 bg-dark-700 border border-dark-600 rounded text-white text-xs focus:outline-none focus:border-primary-500"
+        className="w-16 px-1.5 py-1 bg-gray-100 border border-gray-300 rounded text-white text-xs focus:outline-none focus:border-primary-500"
       >
         {CURRENCIES.map(c => (
           <option key={c.code} value={c.code}>{c.code}</option>
@@ -347,7 +347,7 @@ const CostEditor = ({
         value={cost}
         onChange={(e) => setCost(e.target.value)}
         placeholder="0.00"
-        className="w-20 px-2 py-1 bg-dark-700 border border-dark-600 rounded text-white text-sm focus:outline-none focus:border-primary-500"
+        className="w-20 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-white text-sm focus:outline-none focus:border-primary-500"
         autoFocus
         onKeyDown={(e) => {
           if (e.key === 'Enter') handleSave()
@@ -363,7 +363,7 @@ const CostEditor = ({
       </button>
       <button
         onClick={onCancel}
-        className="p-1 bg-dark-700 hover:bg-dark-600 text-dark-400 rounded"
+        className="p-1 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded"
       >
         <X className="w-3.5 h-3.5" />
       </button>
@@ -394,17 +394,17 @@ const ProductRow = ({
 
   return (
     <>
-      <tr className={`border-b border-dark-700/30 hover:bg-dark-700/20 transition-colors ${isSelected ? 'bg-primary-500/5' : ''}`}>
+      <tr className={`border-b border-gray-200/30 hover:bg-gray-100/20 transition-colors ${isSelected ? 'bg-brand-50/50' : ''}`}>
         {/* Checkbox */}
         <td className="px-3 py-3">
           <button
             onClick={() => onSelect(!isSelected)}
-            className="p-1 hover:bg-dark-700 rounded transition-colors"
+            className="p-1 hover:bg-gray-100 rounded transition-colors"
           >
             {isSelected ? (
-              <CheckSquare className="w-5 h-5 text-primary-400" />
+              <CheckSquare className="w-5 h-5 text-brand-600" />
             ) : (
-              <Square className="w-5 h-5 text-dark-500" />
+              <Square className="w-5 h-5 text-gray-400" />
             )}
           </button>
         </td>
@@ -414,12 +414,12 @@ const ProductRow = ({
           {hasMultipleVariants && (
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="p-1 hover:bg-dark-700 rounded transition-colors"
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
             >
               {isExpanded ? (
-                <ChevronDown className="w-4 h-4 text-dark-400" />
+                <ChevronDown className="w-4 h-4 text-gray-500" />
               ) : (
-                <ChevronRight className="w-4 h-4 text-dark-400" />
+                <ChevronRight className="w-4 h-4 text-gray-500" />
               )}
             </button>
           )}
@@ -432,16 +432,16 @@ const ProductRow = ({
               <img
                 src={product.image}
                 alt={product.title}
-                className="w-10 h-10 rounded-lg object-cover bg-dark-700 flex-shrink-0"
+                className="w-10 h-10 rounded-lg object-cover bg-gray-100 flex-shrink-0"
               />
             ) : (
-              <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center flex-shrink-0">
-                <ImageIcon className="w-5 h-5 text-dark-500" />
+              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <ImageIcon className="w-5 h-5 text-gray-400" />
               </div>
             )}
             <div className="min-w-0">
               <p className="font-medium text-white truncate max-w-[250px]">{product.title}</p>
-              <p className="text-xs text-dark-400">
+              <p className="text-xs text-gray-500">
                 {product.variants_count} variante{product.variants_count > 1 ? 's' : ''} • {product.vendor || 'Sem marca'}
               </p>
             </div>
@@ -449,7 +449,7 @@ const ProductRow = ({
         </td>
 
         {/* Price */}
-        <td className="px-3 py-3 text-dark-300 text-sm">
+        <td className="px-3 py-3 text-gray-600 text-sm">
           {product.price_min === product.price_max
             ? formatCurrency(product.price_min)
             : `${formatCurrency(product.price_min)} - ${formatCurrency(product.price_max)}`
@@ -475,13 +475,13 @@ const ProductRow = ({
                   {formatCurrency(product.cost, product.cost_currency)}
                 </span>
               ) : (
-                <span className="text-dark-500 text-sm italic" title={`Estimado: ${formatCurrency(estimatedCost)}`}>
+                <span className="text-gray-400 text-sm italic" title={`Estimado: ${formatCurrency(estimatedCost)}`}>
                   ~{formatCurrency(estimatedCost)}
                 </span>
               )}
               <button
                 onClick={() => setEditingProduct(true)}
-                className="p-1 hover:bg-dark-700 rounded text-dark-400 hover:text-white transition-colors"
+                className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-white transition-colors"
               >
                 <Edit2 className="w-3.5 h-3.5" />
               </button>
@@ -528,22 +528,22 @@ const ProductRow = ({
             exit={{ opacity: 0, height: 0 }}
           >
             <td colSpan={7} className="px-0 py-0">
-              <div className="bg-dark-800/50 border-y border-dark-700/30">
+              <div className="bg-gray-50 border-y border-gray-200/30">
                 <table className="w-full">
                   <tbody>
                     {product.variants.map((variant) => {
                       const variantEstimatedCost = variant.price * (defaultCostPercentage / 100)
                       return (
-                        <tr key={variant.id} className="border-b border-dark-700/20 last:border-0">
+                        <tr key={variant.id} className="border-b border-gray-200/20 last:border-0">
                           <td className="w-10"></td>
                           <td className="w-8"></td>
                           <td className="px-3 py-2">
                             <div className="pl-6">
                               <p className="text-sm text-white">{variant.title}</p>
-                              {variant.sku && <p className="text-xs text-dark-500">SKU: {variant.sku}</p>}
+                              {variant.sku && <p className="text-xs text-gray-400">SKU: {variant.sku}</p>}
                             </div>
                           </td>
-                          <td className="px-3 py-2 text-sm text-dark-300">
+                          <td className="px-3 py-2 text-sm text-gray-600">
                             {formatCurrency(variant.price)}
                           </td>
                           <td className="px-3 py-2">
@@ -564,13 +564,13 @@ const ProductRow = ({
                                     {formatCurrency(variant.cost, variant.cost_currency)}
                                   </span>
                                 ) : (
-                                  <span className="text-sm text-dark-500 italic">
+                                  <span className="text-sm text-gray-400 italic">
                                     ~{formatCurrency(variantEstimatedCost)}
                                   </span>
                                 )}
                                 <button
                                   onClick={() => setEditingVariant(variant.id)}
-                                  className="p-0.5 hover:bg-dark-700 rounded text-dark-400 hover:text-white transition-colors"
+                                  className="p-0.5 hover:bg-gray-100 rounded text-gray-500 hover:text-white transition-colors"
                                 >
                                   <Edit2 className="w-3 h-3" />
                                 </button>
@@ -777,14 +777,14 @@ export default function ProductsPage() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Custos de Produtos</h1>
-          <p className="text-dark-400 mt-1">Gerencie os custos para calcular sua margem de lucro</p>
+          <h1 className="text-2xl font-bold text-gray-900">Custos de Produtos</h1>
+          <p className="text-gray-500 mt-1">Gerencie os custos para calcular sua margem de lucro</p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowDefaultCostModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-600 hover:text-white transition-all"
           >
             <Settings className="w-4 h-4" />
             <span className="hidden sm:inline">Custo Padrão:</span>
@@ -792,7 +792,7 @@ export default function ProductsPage() {
           </button>
           <button
             onClick={fetchProducts}
-            className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-600 hover:text-white transition-all"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -801,62 +801,62 @@ export default function ProductsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/30">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary-500/20">
-              <Package className="w-5 h-5 text-primary-400" />
+            <div className="p-2 rounded-lg bg-brand-100">
+              <Package className="w-5 h-5 text-brand-600" />
             </div>
             <div>
-              <p className="text-xs text-dark-400">Total</p>
-              <p className="text-xl font-bold text-white">{products.length}</p>
+              <p className="text-xs text-gray-500">Total</p>
+              <p className="text-xl font-bold text-gray-900">{products.length}</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/30">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-green-500/20">
               <CheckCircle className="w-5 h-5 text-green-400" />
             </div>
             <div>
-              <p className="text-xs text-dark-400">Cadastrados</p>
-              <p className="text-xl font-bold text-white">{stats.withCost}</p>
+              <p className="text-xs text-gray-500">Cadastrados</p>
+              <p className="text-xl font-bold text-gray-900">{stats.withCost}</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/30">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-yellow-500/20">
               <AlertCircle className="w-5 h-5 text-yellow-400" />
             </div>
             <div>
-              <p className="text-xs text-dark-400">Pendentes</p>
-              <p className="text-xl font-bold text-white">{stats.withoutCost}</p>
+              <p className="text-xs text-gray-500">Pendentes</p>
+              <p className="text-xl font-bold text-gray-900">{stats.withoutCost}</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/30">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-blue-500/20">
               <Percent className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <p className="text-xs text-dark-400">Progresso</p>
-              <p className="text-xl font-bold text-white">{stats.percentage}%</p>
+              <p className="text-xs text-gray-500">Progresso</p>
+              <p className="text-xl font-bold text-gray-900">{stats.percentage}%</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Progress Bar */}
-      <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
+      <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/30">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm text-dark-400">Produtos com custo cadastrado</p>
-          <p className="text-sm font-medium text-white">{stats.withCost} de {products.length}</p>
+          <p className="text-sm text-gray-500">Produtos com custo cadastrado</p>
+          <p className="text-sm font-medium text-gray-900">{stats.withCost} de {products.length}</p>
         </div>
-        <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-500"
             style={{ width: `${stats.percentage}%` }}
@@ -867,22 +867,22 @@ export default function ProductsPage() {
       {/* Filters & Bulk Actions */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
           <input
             type="text"
             placeholder="Buscar produto..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
           />
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-dark-800/50 border border-dark-700/50 rounded-xl p-1">
+          <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl p-1">
             <button
               onClick={() => setFilter('all')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                filter === 'all' ? 'bg-dark-700 text-white' : 'text-dark-400 hover:text-white'
+                filter === 'all' ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
               }`}
             >
               Todos
@@ -890,7 +890,7 @@ export default function ProductsPage() {
             <button
               onClick={() => setFilter('with')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                filter === 'with' ? 'bg-dark-700 text-white' : 'text-dark-400 hover:text-white'
+                filter === 'with' ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
               }`}
             >
               Com Custo
@@ -898,7 +898,7 @@ export default function ProductsPage() {
             <button
               onClick={() => setFilter('without')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                filter === 'without' ? 'bg-dark-700 text-white' : 'text-dark-400 hover:text-white'
+                filter === 'without' ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
               }`}
             >
               Sem Custo
@@ -918,30 +918,30 @@ export default function ProductsPage() {
       </div>
 
       {/* Products Table */}
-      <div className="bg-dark-800/40 rounded-2xl border border-dark-700/30 overflow-hidden">
+      <div className="bg-gray-50 rounded-2xl border border-gray-200/30 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
+            <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
-            <Package className="w-12 h-12 text-dark-500 mb-4" />
-            <p className="text-dark-400">Nenhum produto encontrado</p>
+            <Package className="w-12 h-12 text-gray-400 mb-4" />
+            <p className="text-gray-500">Nenhum produto encontrado</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="text-left text-xs text-dark-400 border-b border-dark-700/50 bg-dark-800/50">
+                <tr className="text-left text-xs text-gray-500 border-b border-gray-200 bg-gray-50">
                   <th className="px-3 py-3 font-medium w-10">
                     <button
                       onClick={handleSelectAll}
-                      className="p-1 hover:bg-dark-700 rounded transition-colors"
+                      className="p-1 hover:bg-gray-100 rounded transition-colors"
                     >
                       {selectedIds.size === filteredProducts.length ? (
-                        <CheckSquare className="w-5 h-5 text-primary-400" />
+                        <CheckSquare className="w-5 h-5 text-brand-600" />
                       ) : (
-                        <Square className="w-5 h-5 text-dark-500" />
+                        <Square className="w-5 h-5 text-gray-400" />
                       )}
                     </button>
                   </th>

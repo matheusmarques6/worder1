@@ -142,7 +142,7 @@ export function Step4PromptPreview({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-2 flex items-center gap-2">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2 flex items-center gap-2">
           <FileText className="w-5 h-5 text-purple-400" />
           Preview do Prompt
         </h2>
