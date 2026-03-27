@@ -51,7 +51,7 @@ export function AIAgentCard({ agent, onClick, delay = 0 }: AIAgentCardProps) {
             : 'bg-gray-200 text-gray-500'
         }`}>
           <div className={`w-1.5 h-1.5 rounded-full ${
-            agent.is_active ? 'bg-emerald-400 animate-pulse' : 'bg-dark-400'
+            agent.is_active ? 'bg-emerald-400 animate-pulse' : 'bg-gray-200'
           }`} />
           {agent.is_active ? 'Ativo' : 'Inativo'}
         </div>

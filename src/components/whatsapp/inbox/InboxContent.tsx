@@ -307,8 +307,14 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
       <div className="flex items-center justify-center h-full bg-white">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Selecione uma loja</h2>
-          <p className="text-gray-500">Escolha uma loja no menu para ver as conversas do WhatsApp.</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            {!storeId ? 'Selecione uma loja' : 'Erro de autenticação'}
+          </h2>
+          <p className="text-gray-500">
+            {!storeId
+              ? 'Escolha uma loja no menu para ver as conversas do WhatsApp.'
+              : 'Não foi possível identificar sua organização. Faça login novamente.'}
+          </p>
         </div>
       </div>
     )

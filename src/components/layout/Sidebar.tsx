@@ -40,6 +40,11 @@ import {
   Menu,
   Image as ImageIcon,
   Ticket,
+  Mail,
+  TrendingUp,
+  Target,
+  RefreshCcw,
+  BarChart3,
 } from 'lucide-react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
@@ -86,11 +91,24 @@ const mainNavItems: NavItem[] = [
   { title: 'Produtos', href: '/products', icon: Package },
   { title: 'CRM', href: '/crm', icon: Users },
   { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
+  { title: 'Email', href: '/email/campaigns', icon: Mail },
 ]
 
 const toolsNavItems: NavItem[] = [
   { title: 'Formulários', href: '/forms', icon: FileText },
   { title: 'Automações', href: '/automations', icon: Zap },
+  { title: 'Segmentos', href: '/segments', icon: Target },
+  { title: 'Recuperação', href: '/recovery', icon: RefreshCcw },
+]
+
+const analyticsNavItems: NavItem[] = [
+  { title: 'Vendas/CRM', href: '/analytics/sales', icon: TrendingUp },
+  { title: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
+  { title: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
+  { title: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
+  { title: 'Facebook Ads', href: '/analytics/facebook', icon: BarChart3 },
+  { title: 'Google Ads', href: '/analytics/google', icon: BarChart3 },
+  { title: 'TikTok Ads', href: '/analytics/tiktok', icon: BarChart3 },
 ]
 
 const contentNavItems: NavItem[] = [
@@ -281,12 +299,26 @@ export function Sidebar() {
           {/* Content */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-dark-500 uppercase tracking-wider">
+              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Conteúdo
               </p>
             )}
             <div className="space-y-1">
               {contentNavItems.map((item) => (
+                <NavLink key={item.href} item={item} />
+              ))}
+            </div>
+          </div>
+
+          {/* Analytics / Forecast */}
+          <div>
+            {!sidebarCollapsed && (
+              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Forecast
+              </p>
+            )}
+            <div className="space-y-1">
+              {analyticsNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>

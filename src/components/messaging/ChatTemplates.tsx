@@ -73,7 +73,7 @@ function TemplateCard({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group bg-dark-800/50 border border-dark-700/50 rounded-xl p-4 hover:border-dark-600 transition-colors"
+      className="group bg-white border border-gray-200 rounded-xl p-4 hover:border-gray-200 transition-colors"
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
@@ -83,7 +83,7 @@ function TemplateCard({
           </div>
           <div>
             <h3 className="font-medium text-white">{template.name}</h3>
-            <p className="text-xs text-dark-400">
+            <p className="text-xs text-gray-500">
               {CATEGORY_LABELS[template.category] || template.category}
             </p>
           </div>
@@ -93,7 +93,7 @@ function TemplateCard({
           className={`p-1.5 rounded-lg transition-colors ${
             template.is_favorite
               ? 'text-amber-400 bg-amber-500/10'
-              : 'text-dark-500 hover:text-amber-400 hover:bg-amber-500/10'
+              : 'text-gray-500 hover:text-amber-400 hover:bg-amber-500/10'
           }`}
         >
           {template.is_favorite ? (
@@ -106,7 +106,7 @@ function TemplateCard({
 
       {/* Preview */}
       <div className="relative">
-        <p className="text-sm text-dark-300 line-clamp-3 mb-3">{template.content}</p>
+        <p className="text-sm text-gray-600 line-clamp-3 mb-3">{template.content}</p>
         {template.content.length > 150 && (
           <button
             onClick={() => setShowPreview(true)}
@@ -132,20 +132,20 @@ function TemplateCard({
       )}
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-3 border-t border-dark-700/50">
-        <span className="text-xs text-dark-500">
+      <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+        <span className="text-xs text-gray-500">
           {template.usage_count} {template.usage_count === 1 ? 'uso' : 'usos'}
         </span>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={() => onEdit(template)}
-            className="p-1.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+            className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
           >
             <Pencil className="w-4 h-4" />
           </button>
           <button
             onClick={() => onDelete(template)}
-            className="p-1.5 text-dark-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+            className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -173,17 +173,17 @@ function TemplateCard({
               initial={{ scale: 0.95 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
-              className="relative bg-dark-800 border border-dark-700 rounded-2xl p-6 max-w-lg w-full"
+              className="relative bg-white border border-gray-200 rounded-2xl p-6 max-w-lg w-full"
               onClick={(e) => e.stopPropagation()}
             >
               <button
                 onClick={() => setShowPreview(false)}
-                className="absolute top-4 right-4 p-1 text-dark-400 hover:text-white"
+                className="absolute top-4 right-4 p-1 text-gray-500 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
               <h3 className="text-lg font-semibold text-white mb-4">{template.name}</h3>
-              <p className="text-dark-300 whitespace-pre-wrap">{template.content}</p>
+              <p className="text-gray-600 whitespace-pre-wrap">{template.content}</p>
             </motion.div>
           </motion.div>
         )}
@@ -251,16 +251,16 @@ function TemplateModal({ isOpen, template, onClose, onSave }: TemplateModalProps
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="relative bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-2xl overflow-hidden"
+        className="relative bg-white border border-gray-200 rounded-2xl w-full max-w-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-dark-700">
+        <div className="flex items-center justify-between p-5 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-white">
             {template ? 'Editar Template' : 'Novo Template'}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+            className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -270,23 +270,23 @@ function TemplateModal({ isOpen, template, onClose, onSave }: TemplateModalProps
         <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Nome</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Nome</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Boas-vindas"
-              className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
 
           {/* Category */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Categoria</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Categoria</label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -299,9 +299,9 @@ function TemplateModal({ isOpen, template, onClose, onSave }: TemplateModalProps
           {/* Content */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-dark-300">Mensagem</label>
+              <label className="text-sm font-medium text-gray-600">Mensagem</label>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-dark-500">Variáveis:</span>
+                <span className="text-xs text-gray-500">Variáveis:</span>
                 {['nome', 'produto', 'valor', 'link'].map((v) => (
                   <button
                     key={v}
@@ -318,19 +318,19 @@ function TemplateModal({ isOpen, template, onClose, onSave }: TemplateModalProps
               onChange={(e) => setContent(e.target.value)}
               placeholder="Digite a mensagem do template..."
               rows={6}
-              className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
             />
-            <p className="text-xs text-dark-500 mt-1">
+            <p className="text-xs text-gray-500 mt-1">
               Use {`{{variavel}}`} para criar campos dinâmicos
             </p>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-5 border-t border-dark-700">
+        <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-dark-400 hover:text-white transition-colors"
+            className="px-4 py-2 text-gray-500 hover:text-white transition-colors"
           >
             Cancelar
           </button>
@@ -428,7 +428,7 @@ export function ChatTemplates({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white">Templates de Mensagem</h2>
-          <p className="text-dark-400 text-sm mt-1">
+          <p className="text-gray-500 text-sm mt-1">
             Respostas rápidas com campos dinâmicos
           </p>
         </div>
@@ -448,13 +448,13 @@ export function ChatTemplates({
       <div className="flex items-center gap-4">
         {/* Search */}
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar templates..."
-            className="w-full pl-10 pr-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
 
@@ -465,7 +465,7 @@ export function ChatTemplates({
             className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
               selectedCategory === 'all'
                 ? 'bg-primary-500 text-white'
-                : 'bg-dark-800 text-dark-400 hover:text-white'
+                : 'bg-white text-gray-500 hover:text-white'
             }`}
           >
             Todos
@@ -477,7 +477,7 @@ export function ChatTemplates({
               className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                 selectedCategory === cat.name
                   ? 'bg-primary-500 text-white'
-                  : 'bg-dark-800 text-dark-400 hover:text-white'
+                  : 'bg-white text-gray-500 hover:text-white'
               }`}
             >
               {CATEGORY_LABELS[cat.name] || cat.name} ({cat.count})
@@ -547,8 +547,8 @@ export function ChatTemplates({
             </div>
           ) : filteredTemplates.length === 0 ? (
             <div className="text-center py-12">
-              <MessageSquare className="w-12 h-12 text-dark-600 mx-auto mb-4" />
-              <p className="text-dark-400">Nenhum template encontrado</p>
+              <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500">Nenhum template encontrado</p>
               <button
                 onClick={() => {
                   setEditingTemplate(null)

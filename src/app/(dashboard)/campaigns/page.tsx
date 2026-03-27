@@ -44,7 +44,7 @@ const channelIcons: Record<string, React.ReactNode> = {
 const statusColors: Record<string, string> = {
   'Enviada': 'bg-green-500/10 text-green-400',
   'Ativa': 'bg-blue-500/10 text-blue-400',
-  'Rascunho': 'bg-dark-700 text-dark-400',
+  'Rascunho': 'bg-gray-100 text-gray-500',
   'Agendada': 'bg-amber-500/10 text-amber-400',
 }
 
@@ -57,7 +57,7 @@ export default function CampaignsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold font-display text-white">Campanhas</h1>
-          <p className="text-sm text-dark-400 mt-1">Crie e gerencie campanhas multicanal</p>
+          <p className="text-sm text-gray-500 mt-1">Crie e gerencie campanhas multicanal</p>
         </div>
         <Link href="/campaigns/create" className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20">
           <Plus className="w-4 h-4" weight="bold" />
@@ -78,7 +78,7 @@ export default function CampaignsPage() {
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-dark-400 font-medium">{kpi.title}</p>
+                  <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
                   <p className="text-2xl font-bold text-white mt-1 font-display">{kpi.value}</p>
                   {kpi.change && (
                     <div className="flex items-center gap-1 mt-2">
@@ -99,16 +99,16 @@ export default function CampaignsPage() {
       {/* Filters */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+          <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             type="text"
             placeholder="Buscar campanhas..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
           />
         </div>
-        <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-dark-400 hover:text-white hover:border-white/[0.12] transition-colors">
+        <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-500 hover:text-white hover:border-white/[0.12] transition-colors">
           <FunnelSimple className="w-4 h-4" />
           Filtros
         </button>
@@ -119,14 +119,14 @@ export default function CampaignsPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-[#111111]">
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Campanha</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Canal</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Status</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Envios</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Abertura</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Cliques</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Receita</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Data</th>
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Campanha</th>
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Canal</th>
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Status</th>
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Envios</th>
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Abertura</th>
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Cliques</th>
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Receita</th>
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Data</th>
             </tr>
           </thead>
           <tbody>
@@ -139,11 +139,11 @@ export default function CampaignsPage() {
                     {campaign.status}
                   </span>
                 </td>
-                <td className="px-5 py-4 text-sm text-dark-300">{campaign.sent}</td>
-                <td className="px-5 py-4 text-sm text-dark-300">{campaign.opened}</td>
-                <td className="px-5 py-4 text-sm text-dark-300">{campaign.clicked}</td>
+                <td className="px-5 py-4 text-sm text-gray-600">{campaign.sent}</td>
+                <td className="px-5 py-4 text-sm text-gray-600">{campaign.opened}</td>
+                <td className="px-5 py-4 text-sm text-gray-600">{campaign.clicked}</td>
                 <td className="px-5 py-4 text-sm font-medium text-white">{campaign.revenue}</td>
-                <td className="px-5 py-4 text-sm text-dark-400">{campaign.date}</td>
+                <td className="px-5 py-4 text-sm text-gray-500">{campaign.date}</td>
               </tr>
             ))}
           </tbody>

@@ -159,7 +159,7 @@ export function UserMenu() {
           </div>
           {/* Status indicator for agents */}
           {isAgent && (
-            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${currentStatus.color} rounded-full border-2 border-dark-950`} />
+            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${currentStatus.color} rounded-full border-2 border-gray-300`} />
           )}
         </div>
 

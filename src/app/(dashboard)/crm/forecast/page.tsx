@@ -146,7 +146,7 @@ function StageFunnel({ stages }: { stages: ForecastData['byStage'] }) {
   // ✅ CORREÇÃO: Verificar se stages existe e tem itens antes de Math.max
   if (!stages || stages.length === 0) {
     return (
-      <div className="text-center py-8 text-dark-400">
+      <div className="text-center py-8 text-gray-500">
         Nenhum estágio configurado
       </div>
     )

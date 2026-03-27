@@ -246,13 +246,13 @@ export default function ChatPage() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'sent':
-        return <Check className="w-3 h-3 text-dark-500" />
+        return <Check className="w-3 h-3 text-gray-500" />
       case 'delivered':
-        return <CheckCheck className="w-3 h-3 text-dark-500" />
+        return <CheckCheck className="w-3 h-3 text-gray-500" />
       case 'read':
         return <CheckCheck className="w-3 h-3 text-blue-400" />
       case 'pending':
-        return <Clock className="w-3 h-3 text-dark-500" />
+        return <Clock className="w-3 h-3 text-gray-500" />
       case 'failed':
         return <AlertCircle className="w-3 h-3 text-red-500" />
       default:
@@ -263,18 +263,18 @@ export default function ChatPage() {
   return (
     <div className="h-[calc(100vh-64px)] flex">
       {/* Sidebar - Conversations List */}
-      <div className="w-80 lg:w-96 border-r border-dark-700 flex flex-col bg-dark-900/50">
+      <div className="w-80 lg:w-96 border-r border-gray-200 flex flex-col bg-white/50">
         {/* Header */}
-        <div className="p-4 border-b border-dark-700">
+        <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-white">Chat</h1>
-            <button className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-              <Settings className="w-5 h-5 text-dark-400" />
+            <button className="p-2 hover:bg-white rounded-lg transition-colors">
+              <Settings className="w-5 h-5 text-gray-500" />
             </button>
           </div>
 
           {/* Channel Tabs */}
-          <div className="flex gap-1 p-1 bg-dark-800 rounded-lg mb-3">
+          <div className="flex gap-1 p-1 bg-white rounded-lg mb-3">
             {channels.map((channel) => {
               const Icon = channel.icon
               return (
@@ -284,8 +284,8 @@ export default function ChatPage() {
                   className={cn(
                     'flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-sm font-medium transition-all',
                     activeChannel === channel.id
-                      ? 'bg-dark-700 text-white'
-                      : 'text-dark-400 hover:text-dark-200'
+                      ? 'bg-gray-100 text-white'
+                      : 'text-gray-500 hover:text-gray-700'
                   )}
                 >
                   <Icon className={cn('w-4 h-4', activeChannel === channel.id && channel.color)} />
@@ -297,13 +297,13 @@ export default function ChatPage() {
 
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               type="text"
               placeholder="Buscar conversas..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-dark-800 border border-dark-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50"
+              className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50"
             />
           </div>
 
@@ -317,7 +317,7 @@ export default function ChatPage() {
                   'px-3 py-1 text-xs font-medium rounded-full transition-colors',
                   statusFilter === status
                     ? 'bg-primary-500/20 text-primary-400'
-                    : 'bg-dark-800 text-dark-400 hover:text-dark-200'
+                    : 'bg-white text-gray-500 hover:text-gray-700'
                 )}
               >
                 {status === 'open' ? 'Abertos' : status === 'closed' ? 'Fechados' : 'Todos'}
@@ -330,13 +330,13 @@ export default function ChatPage() {
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <RefreshCw className="w-6 h-6 animate-spin text-dark-500" />
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-500" />
             </div>
           ) : conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <MessageSquare className="w-12 h-12 text-dark-600 mb-3" />
-              <p className="text-dark-400 font-medium">Nenhuma conversa</p>
-              <p className="text-dark-500 text-sm mt-1">
+              <MessageSquare className="w-12 h-12 text-gray-400 mb-3" />
+              <p className="text-gray-500 font-medium">Nenhuma conversa</p>
+              <p className="text-gray-500 text-sm mt-1">
                 As conversas aparecerao aqui quando voce receber mensagens
               </p>
             </div>
@@ -350,8 +350,8 @@ export default function ChatPage() {
                     handleMarkAsRead(conversation)
                   }}
                   className={cn(
-                    'w-full p-4 flex items-start gap-3 hover:bg-dark-800/50 transition-colors text-left',
-                    selectedConversation?.id === conversation.id && 'bg-dark-800'
+                    'w-full p-4 flex items-start gap-3 hover:bg-white transition-colors text-left',
+                    selectedConversation?.id === conversation.id && 'bg-white'
                   )}
                 >
                   {/* Avatar */}
@@ -363,12 +363,12 @@ export default function ChatPage() {
                         className="w-12 h-12 rounded-full object-cover"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-dark-700 flex items-center justify-center">
-                        <User className="w-6 h-6 text-dark-400" />
+                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                        <User className="w-6 h-6 text-gray-500" />
                       </div>
                     )}
                     {/* Channel Badge */}
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-dark-900 flex items-center justify-center">
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white flex items-center justify-center">
                       {getChannelIcon(conversation.type)}
                     </div>
                   </div>
@@ -378,11 +378,11 @@ export default function ChatPage() {
                     <div className="flex items-center justify-between mb-1">
                       <span className={cn(
                         'font-medium truncate',
-                        conversation.unread_count > 0 ? 'text-white' : 'text-dark-200'
+                        conversation.unread_count > 0 ? 'text-white' : 'text-gray-700'
                       )}>
                         {conversation.contact_name || conversation.username || 'Usuario'}
                       </span>
-                      <span className="text-xs text-dark-500 flex-shrink-0 ml-2">
+                      <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
                         {conversation.last_message_at &&
                           formatDistanceToNow(new Date(conversation.last_message_at), {
                             addSuffix: false,
@@ -393,11 +393,11 @@ export default function ChatPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       {conversation.last_message_direction === 'outbound' && (
-                        <CheckCheck className="w-3.5 h-3.5 text-dark-500 flex-shrink-0" />
+                        <CheckCheck className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
                       )}
                       <p className={cn(
                         'text-sm truncate',
-                        conversation.unread_count > 0 ? 'text-dark-200' : 'text-dark-500'
+                        conversation.unread_count > 0 ? 'text-gray-700' : 'text-gray-500'
                       )}>
                         {conversation.last_message_preview || 'Sem mensagens'}
                       </p>
@@ -416,11 +416,11 @@ export default function ChatPage() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col bg-dark-950">
+      <div className="flex-1 flex flex-col bg-gray-50">
         {selectedConversation ? (
           <>
             {/* Chat Header */}
-            <div className="h-16 px-4 flex items-center justify-between border-b border-dark-700 bg-dark-900/50">
+            <div className="h-16 px-4 flex items-center justify-between border-b border-gray-200 bg-white/50">
               <div className="flex items-center gap-3">
                 <div className="relative">
                   {selectedConversation.profile_picture_url ? (
@@ -430,11 +430,11 @@ export default function ChatPage() {
                       className="w-10 h-10 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-dark-700 flex items-center justify-center">
-                      <User className="w-5 h-5 text-dark-400" />
+                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                      <User className="w-5 h-5 text-gray-500" />
                     </div>
                   )}
-                  <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-dark-900 flex items-center justify-center">
+                  <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-white flex items-center justify-center">
                     {getChannelIcon(selectedConversation.type)}
                   </div>
                 </div>
@@ -442,7 +442,7 @@ export default function ChatPage() {
                   <h2 className="font-semibold text-white">
                     {selectedConversation.contact_name || selectedConversation.username}
                   </h2>
-                  <p className="text-xs text-dark-400">
+                  <p className="text-xs text-gray-500">
                     {selectedConversation.type === 'whatsapp'
                       ? selectedConversation.contact_phone
                       : `@${selectedConversation.username}`
@@ -457,17 +457,17 @@ export default function ChatPage() {
                     Janela expirada
                   </span>
                 )}
-                <button className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-                  <Phone className="w-5 h-5 text-dark-400" />
+                <button className="p-2 hover:bg-white rounded-lg transition-colors">
+                  <Phone className="w-5 h-5 text-gray-500" />
                 </button>
-                <button className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-                  <Video className="w-5 h-5 text-dark-400" />
+                <button className="p-2 hover:bg-white rounded-lg transition-colors">
+                  <Video className="w-5 h-5 text-gray-500" />
                 </button>
-                <button className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-                  <Info className="w-5 h-5 text-dark-400" />
+                <button className="p-2 hover:bg-white rounded-lg transition-colors">
+                  <Info className="w-5 h-5 text-gray-500" />
                 </button>
-                <button className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-                  <MoreVertical className="w-5 h-5 text-dark-400" />
+                <button className="p-2 hover:bg-white rounded-lg transition-colors">
+                  <MoreVertical className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
             </div>
@@ -485,7 +485,7 @@ export default function ChatPage() {
                     {/* Date Separator */}
                     {showDate && (
                       <div className="flex items-center justify-center my-4">
-                        <span className="px-3 py-1 bg-dark-800 text-dark-400 text-xs rounded-full">
+                        <span className="px-3 py-1 bg-white text-gray-500 text-xs rounded-full">
                           {format(new Date(message.timestamp), "d 'de' MMMM", { locale: ptBR })}
                         </span>
                       </div>
@@ -498,7 +498,7 @@ export default function ChatPage() {
                           'max-w-[70%] rounded-2xl px-4 py-2',
                           isOutbound
                             ? 'bg-primary-500 text-white rounded-br-sm'
-                            : 'bg-dark-800 text-white rounded-bl-sm'
+                            : 'bg-white text-white rounded-bl-sm'
                         )}
                       >
                         {/* Media */}
@@ -542,7 +542,7 @@ export default function ChatPage() {
                         )}>
                           <span className={cn(
                             'text-[10px]',
-                            isOutbound ? 'text-white/70' : 'text-dark-500'
+                            isOutbound ? 'text-white/70' : 'text-gray-500'
                           )}>
                             {format(new Date(message.timestamp), 'HH:mm')}
                           </span>
@@ -557,7 +557,7 @@ export default function ChatPage() {
             </div>
 
             {/* Input Area */}
-            <div className="p-4 border-t border-dark-700 bg-dark-900/50">
+            <div className="p-4 border-t border-gray-200 bg-white/50">
               {selectedConversation.type === 'instagram' && !selectedConversation.is_window_open ? (
                 <div className="flex items-center justify-center gap-2 py-3 px-4 bg-amber-500/10 rounded-xl text-amber-400 text-sm">
                   <AlertCircle className="w-4 h-4" />
@@ -565,11 +565,11 @@ export default function ChatPage() {
                 </div>
               ) : (
                 <div className="flex items-end gap-3">
-                  <button className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-                    <Paperclip className="w-5 h-5 text-dark-400" />
+                  <button className="p-2 hover:bg-white rounded-lg transition-colors">
+                    <Paperclip className="w-5 h-5 text-gray-500" />
                   </button>
-                  <button className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-                    <ImageIcon className="w-5 h-5 text-dark-400" />
+                  <button className="p-2 hover:bg-white rounded-lg transition-colors">
+                    <ImageIcon className="w-5 h-5 text-gray-500" />
                   </button>
 
                   <div className="flex-1 relative">
@@ -584,12 +584,12 @@ export default function ChatPage() {
                       }}
                       placeholder="Digite sua mensagem..."
                       rows={1}
-                      className="w-full bg-dark-800 border border-dark-700 rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50 resize-none max-h-32"
+                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 resize-none max-h-32"
                     />
                   </div>
 
-                  <button className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-                    <Smile className="w-5 h-5 text-dark-400" />
+                  <button className="p-2 hover:bg-white rounded-lg transition-colors">
+                    <Smile className="w-5 h-5 text-gray-500" />
                   </button>
 
                   <button
@@ -599,7 +599,7 @@ export default function ChatPage() {
                       'p-3 rounded-xl transition-colors',
                       newMessage.trim()
                         ? 'bg-primary-500 text-white hover:bg-primary-600'
-                        : 'bg-dark-800 text-dark-500'
+                        : 'bg-white text-gray-500'
                     )}
                   >
                     <Send className="w-5 h-5" />
@@ -611,24 +611,24 @@ export default function ChatPage() {
         ) : (
           /* Empty State */
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-            <div className="w-20 h-20 rounded-full bg-dark-800 flex items-center justify-center mb-4">
-              <MessageSquare className="w-10 h-10 text-dark-600" />
+            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center mb-4">
+              <MessageSquare className="w-10 h-10 text-gray-400" />
             </div>
             <h2 className="text-xl font-semibold text-white mb-2">Selecione uma conversa</h2>
-            <p className="text-dark-400 max-w-md">
+            <p className="text-gray-500 max-w-md">
               Escolha uma conversa da lista para comecar a responder mensagens do WhatsApp e Instagram Direct
             </p>
             <div className="flex gap-3 mt-6">
               <a
                 href="/integrations/whatsapp"
-                className="flex items-center gap-2 px-4 py-2 bg-dark-800 hover:bg-dark-700 rounded-lg text-sm text-dark-300 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-100 rounded-lg text-sm text-gray-600 transition-colors"
               >
                 <MessageSquare className="w-4 h-4 text-green-400" />
                 Conectar WhatsApp
               </a>
               <a
                 href="/integrations/instagram-direct"
-                className="flex items-center gap-2 px-4 py-2 bg-dark-800 hover:bg-dark-700 rounded-lg text-sm text-dark-300 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-100 rounded-lg text-sm text-gray-600 transition-colors"
               >
                 <Instagram className="w-4 h-4 text-pink-400" />
                 Conectar Instagram

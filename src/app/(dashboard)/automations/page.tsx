@@ -411,7 +411,7 @@ export default function AutomationsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9999] bg-dark-900"
+            className="fixed inset-0 z-[9999] bg-white"
             style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
           >
             <FlowBuilder
@@ -443,7 +443,7 @@ export default function AutomationsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Automações</h1>
-          <p className="text-dark-400 mt-1">Gerencie seus fluxos automatizados</p>
+          <p className="text-gray-500 mt-1">Gerencie seus fluxos automatizados</p>
         </div>
         <button
           onClick={() => setShowNewModal(true)}
@@ -559,7 +559,7 @@ export default function AutomationsPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             type="text"
             placeholder="Buscar automações..."
@@ -567,7 +567,7 @@ export default function AutomationsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
               'w-full pl-10 pr-4 py-2.5 rounded-xl',
-              'bg-dark-800/60 border border-dark-700/50',
+              'bg-white/60 border border-gray-200',
               'text-white placeholder-dark-500',
               'focus:outline-none focus:border-primary-500/50',
               'transition-colors'
@@ -577,7 +577,7 @@ export default function AutomationsPage() {
 
         <div className="flex items-center gap-2">
           {/* Status Filter */}
-          <div className="flex items-center bg-dark-800/60 border border-dark-700/50 rounded-xl p-1">
+          <div className="flex items-center bg-white/60 border border-gray-200 rounded-xl p-1">
             {(['all', 'active', 'paused', 'draft'] as const).map((status) => (
               <button
                 key={status}
@@ -586,7 +586,7 @@ export default function AutomationsPage() {
                   'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                   statusFilter === status
                     ? 'bg-primary-500 text-white'
-                    : 'text-dark-400 hover:text-white hover:bg-dark-700/50'
+                    : 'text-gray-500 hover:text-white hover:bg-gray-100'
                 )}
               >
                 {status === 'all' && 'Todas'}
@@ -598,7 +598,7 @@ export default function AutomationsPage() {
           </div>
 
           {/* View Toggle */}
-          <div className="flex items-center bg-dark-800/60 border border-dark-700/50 rounded-xl p-1">
+          <div className="flex items-center bg-white/60 border border-gray-200 rounded-xl p-1">
             <button
               onClick={() => setView('list')}
               className={cn(
@@ -628,8 +628,8 @@ export default function AutomationsPage() {
         </div>
       ) : filteredAutomations.length === 0 ? (
         <div className="text-center py-20">
-          <Zap className="w-12 h-12 text-dark-600 mx-auto mb-4" />
-          <p className="text-dark-400">Nenhuma automação encontrada</p>
+          <Zap className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-500">Nenhuma automação encontrada</p>
           <button
             onClick={() => setShowNewModal(true)}
             className="mt-4 text-primary-400 hover:text-primary-300 text-sm"
@@ -696,8 +696,8 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'bg-dark-800/60 border border-dark-700/50 rounded-xl',
-        'hover:border-dark-600 transition-colors',
+        'bg-white/60 border border-gray-200 rounded-xl',
+        'hover:border-gray-200 transition-colors',
         view === 'list' ? 'p-4' : 'p-5'
       )}
     >
@@ -710,7 +710,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-white truncate">{automation.name}</h3>
             {automation.description && (
-              <p className="text-sm text-dark-400 truncate">{automation.description}</p>
+              <p className="text-sm text-gray-500 truncate">{automation.description}</p>
             )}
           </div>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-medium border', color)}>
@@ -720,7 +720,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
 
         {/* Stats */}
         {view === 'grid' && (
-          <div className="flex items-center gap-4 text-xs text-dark-400">
+          <div className="flex items-center gap-4 text-xs text-gray-500">
             {automation.total_runs !== undefined && (
               <span className="flex items-center gap-1">
                 <Play className="w-3 h-3" />
@@ -743,7 +743,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             disabled={automation.status === 'draft'}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-dark-700/50 text-dark-400 hover:text-white',
+              'hover:bg-gray-100 text-gray-500 hover:text-white',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
@@ -757,7 +757,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             onClick={onEdit}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-dark-700/50 text-dark-400 hover:text-white'
+              'hover:bg-gray-100 text-gray-500 hover:text-white'
             )}
           >
             <Edit className="w-4 h-4" />
@@ -766,7 +766,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             onClick={onDelete}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-error-500/20 text-dark-400 hover:text-error-400'
+              'hover:bg-error-500/20 text-gray-500 hover:text-error-400'
             )}
           >
             <Trash2 className="w-4 h-4" />
@@ -801,14 +801,14 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-dark-900 border border-dark-700/50 rounded-2xl overflow-hidden"
+        className="w-full max-w-2xl bg-white border border-gray-200 rounded-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-dark-700/50">
+        <div className="flex items-center justify-between p-5 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-white">Nova Automação</h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -821,7 +821,7 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
             onClick={onSelectBlank}
             className={cn(
               'w-full p-4 rounded-xl text-left',
-              'bg-dark-800/60 border border-dark-700/50',
+              'bg-white/60 border border-gray-200',
               'hover:border-primary-500/50 hover:bg-primary-500/5',
               'transition-colors group'
             )}
@@ -834,14 +834,14 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
                 <h3 className="font-semibold text-white group-hover:text-primary-400 transition-colors">
                   Começar do Zero
                 </h3>
-                <p className="text-sm text-dark-400">Criar uma automação em branco</p>
+                <p className="text-sm text-gray-500">Criar uma automação em branco</p>
               </div>
             </div>
           </button>
 
           {/* Templates */}
           <div>
-            <h3 className="text-sm font-medium text-dark-400 mb-3">Ou escolha um template</h3>
+            <h3 className="text-sm font-medium text-gray-500 mb-3">Ou escolha um template</h3>
             <div className="grid grid-cols-2 gap-3">
               {AUTOMATION_TEMPLATES.map((template) => (
                 <button

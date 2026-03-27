@@ -107,12 +107,12 @@ function MetricCard({
     >
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-dark-400 text-sm font-medium">{title}</p>
+          <p className="text-gray-500 text-sm font-medium">{title}</p>
           <p className={`font-bold text-white mt-1 ${size === 'lg' ? 'text-3xl' : 'text-2xl'}`}>
             {value}
           </p>
           {subtitle && (
-            <p className="text-dark-500 text-xs mt-1">{subtitle}</p>
+            <p className="text-gray-500 text-xs mt-1">{subtitle}</p>
           )}
           {trend && (
             <div className="flex items-center gap-1 mt-2">
@@ -124,11 +124,11 @@ function MetricCard({
               <span className={trend.value >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                 {trend.value >= 0 ? '+' : ''}{trend.value}%
               </span>
-              <span className="text-dark-500 text-xs">{trend.label}</span>
+              <span className="text-gray-500 text-xs">{trend.label}</span>
             </div>
           )}
         </div>
-        <div className={`p-3 rounded-xl bg-dark-800/50 ${iconColorClasses[color]}`}>
+        <div className={`p-3 rounded-xl bg-white ${iconColorClasses[color]}`}>
           {icon}
         </div>
       </div>
@@ -175,13 +175,13 @@ function FunnelChart({ data }: FunnelChartProps) {
                 <span className="text-sm font-medium text-white">{stage.stage}</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm text-dark-400">{stage.count} negócios</span>
+                <span className="text-sm text-gray-500">{stage.count} negócios</span>
                 <span className="text-sm font-medium text-emerald-400">
                   {formatCurrency(stage.value)}
                 </span>
               </div>
             </div>
-            <div className="h-8 bg-dark-800 rounded-lg overflow-hidden">
+            <div className="h-8 bg-white rounded-lg overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${width}%` }}
@@ -222,12 +222,12 @@ function StageMetricsTable({ stages }: StageMetricsTableProps) {
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="border-b border-dark-700">
-            <th className="text-left py-3 px-4 text-xs font-medium text-dark-400 uppercase">Etapa</th>
-            <th className="text-right py-3 px-4 text-xs font-medium text-dark-400 uppercase">Negócios</th>
-            <th className="text-right py-3 px-4 text-xs font-medium text-dark-400 uppercase">Valor</th>
-            <th className="text-right py-3 px-4 text-xs font-medium text-dark-400 uppercase">Conversão</th>
-            <th className="text-right py-3 px-4 text-xs font-medium text-dark-400 uppercase">Tempo Médio</th>
+          <tr className="border-b border-gray-200">
+            <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Etapa</th>
+            <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Negócios</th>
+            <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Valor</th>
+            <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Conversão</th>
+            <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Tempo Médio</th>
           </tr>
         </thead>
         <tbody>
@@ -236,7 +236,7 @@ function StageMetricsTable({ stages }: StageMetricsTableProps) {
               key={stage.id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="border-b border-dark-800 hover:bg-dark-800/50"
+              className="border-b border-gray-200 hover:bg-white"
             >
               <td className="py-3 px-4">
                 <div className="flex items-center gap-2">
@@ -248,7 +248,7 @@ function StageMetricsTable({ stages }: StageMetricsTableProps) {
                 </div>
               </td>
               <td className="py-3 px-4 text-right">
-                <span className="text-sm text-dark-300">{stage.deals_count}</span>
+                <span className="text-sm text-gray-600">{stage.deals_count}</span>
               </td>
               <td className="py-3 px-4 text-right">
                 <span className="text-sm font-medium text-emerald-400">
@@ -256,10 +256,10 @@ function StageMetricsTable({ stages }: StageMetricsTableProps) {
                 </span>
               </td>
               <td className="py-3 px-4 text-right">
-                <span className="text-sm text-dark-300">{stage.conversion_rate}%</span>
+                <span className="text-sm text-gray-600">{stage.conversion_rate}%</span>
               </td>
               <td className="py-3 px-4 text-right">
-                <span className="text-sm text-dark-400">{stage.avg_time_formatted}</span>
+                <span className="text-sm text-gray-500">{stage.avg_time_formatted}</span>
               </td>
             </motion.tr>
           ))}
@@ -292,26 +292,26 @@ function AgentLeaderboard({ agents }: AgentLeaderboardProps) {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: index * 0.1 }}
-          className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"
+          className="flex items-center gap-3 p-3 bg-white rounded-xl"
         >
           <div className={`
             w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
             ${index === 0 ? 'bg-amber-500/20 text-amber-400' :
               index === 1 ? 'bg-gray-400/20 text-gray-300' :
               index === 2 ? 'bg-orange-600/20 text-orange-400' :
-              'bg-dark-700 text-dark-400'}
+              'bg-gray-100 text-gray-500'}
           `}>
             {index + 1}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white truncate">{agent.name}</p>
-            <p className="text-xs text-dark-400">{agent.deals_count} negócios</p>
+            <p className="text-xs text-gray-500">{agent.deals_count} negócios</p>
           </div>
           <div className="text-right">
             <p className="text-sm font-medium text-emerald-400">
               {formatCurrency(agent.won_value)}
             </p>
-            <p className="text-xs text-dark-400">{agent.conversion_rate}% conv.</p>
+            <p className="text-xs text-gray-500">{agent.conversion_rate}% conv.</p>
           </div>
         </motion.div>
       ))}
@@ -362,9 +362,9 @@ function SourceBreakdown({ sources }: SourceBreakdownProps) {
           >
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm text-white capitalize">{source.source}</span>
-              <span className="text-xs text-dark-400">{source.deals_count} ({percentage.toFixed(0)}%)</span>
+              <span className="text-xs text-gray-500">{source.deals_count} ({percentage.toFixed(0)}%)</span>
             </div>
-            <div className="h-2 bg-dark-800 rounded-full overflow-hidden">
+            <div className="h-2 bg-white rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${percentage}%` }}
@@ -413,7 +413,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
       <div className="flex items-center justify-center py-20">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-dark-400">Carregando analytics...</p>
+          <p className="text-gray-500">Carregando analytics...</p>
         </div>
       </div>
     )
@@ -425,7 +425,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
         <div className="text-center">
           <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
           <p className="text-white font-medium">Erro ao carregar dados</p>
-          <p className="text-dark-400 text-sm mt-1">{error}</p>
+          <p className="text-gray-500 text-sm mt-1">{error}</p>
           <button
             onClick={refresh}
             className="mt-4 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
@@ -445,7 +445,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Dashboard CRM</h1>
-          <p className="text-dark-400 mt-1">
+          <p className="text-gray-500 mt-1">
             Métricas de {data.period.label === '7d' ? '7 dias' :
               data.period.label === '30d' ? '30 dias' :
               data.period.label === '90d' ? '90 dias' : '1 ano'}
@@ -454,7 +454,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
 
         <div className="flex items-center gap-3">
           {/* Period Selector */}
-          <div className="flex items-center gap-1 p-1 bg-dark-800 rounded-xl">
+          <div className="flex items-center gap-1 p-1 bg-white rounded-xl">
             {(['7d', '30d', '90d', '1y'] as const).map((period) => (
               <button
                 key={period}
@@ -462,7 +462,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
                 className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                   selectedPeriod === period
                     ? 'bg-primary-500 text-white'
-                    : 'text-dark-400 hover:text-white'
+                    : 'text-gray-500 hover:text-white'
                 }`}
               >
                 {period === '7d' ? '7D' : period === '30d' ? '30D' : period === '90d' ? '90D' : '1A'}
@@ -475,7 +475,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
             <select
               value={selectedPipeline || ''}
               onChange={(e) => handlePipelineChange(e.target.value || null)}
-              className="px-3 py-2 bg-dark-800 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="">Todas as pipelines</option>
               {data.pipelines.map((pipeline) => (
@@ -490,7 +490,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
           <button
             onClick={refresh}
             disabled={isLoading}
-            className="p-2 bg-dark-800 hover:bg-dark-700 rounded-xl text-dark-400 hover:text-white transition-colors"
+            className="p-2 bg-white hover:bg-gray-100 rounded-xl text-gray-500 hover:text-white transition-colors"
           >
             <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -532,24 +532,24 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
 
       {/* KPIs Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="p-4 bg-dark-800/50 border border-dark-700 rounded-xl">
-          <p className="text-dark-400 text-sm">Taxa de Conversão</p>
+        <div className="p-4 bg-white border border-gray-200 rounded-xl">
+          <p className="text-gray-500 text-sm">Taxa de Conversão</p>
           <p className="text-2xl font-bold text-white mt-1">{data.summary.conversion_rate}%</p>
         </div>
-        <div className="p-4 bg-dark-800/50 border border-dark-700 rounded-xl">
-          <p className="text-dark-400 text-sm">Ticket Médio</p>
+        <div className="p-4 bg-white border border-gray-200 rounded-xl">
+          <p className="text-gray-500 text-sm">Ticket Médio</p>
           <p className="text-2xl font-bold text-white mt-1">
             {formatCurrency(parseFloat(data.summary.avg_deal_value as string) || 0)}
           </p>
         </div>
-        <div className="p-4 bg-dark-800/50 border border-dark-700 rounded-xl">
-          <p className="text-dark-400 text-sm">LTV Médio</p>
+        <div className="p-4 bg-white border border-gray-200 rounded-xl">
+          <p className="text-gray-500 text-sm">LTV Médio</p>
           <p className="text-2xl font-bold text-white mt-1">
             {formatCurrency(data.ltv.average)}
           </p>
         </div>
-        <div className="p-4 bg-dark-800/50 border border-dark-700 rounded-xl">
-          <p className="text-dark-400 text-sm">Clientes com LTV</p>
+        <div className="p-4 bg-white border border-gray-200 rounded-xl">
+          <p className="text-gray-500 text-sm">Clientes com LTV</p>
           <p className="text-2xl font-bold text-white mt-1">
             {data.ltv.total_customers}
           </p>
@@ -559,25 +559,25 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Funnel Chart */}
-        <div className="bg-dark-800/30 border border-dark-700 rounded-2xl p-6">
+        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-white">Gráfico de Funil</h2>
-            <BarChart3 className="w-5 h-5 text-dark-400" />
+            <BarChart3 className="w-5 h-5 text-gray-500" />
           </div>
           <FunnelChart data={data.funnel} />
         </div>
 
         {/* Stage Metrics */}
-        <div className="bg-dark-800/30 border border-dark-700 rounded-2xl p-6">
+        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-white">Métricas por Etapa</h2>
-            <Clock className="w-5 h-5 text-dark-400" />
+            <Clock className="w-5 h-5 text-gray-500" />
           </div>
           <StageMetricsTable stages={data.stages} />
         </div>
 
         {/* Agent Leaderboard */}
-        <div className="bg-dark-800/30 border border-dark-700 rounded-2xl p-6">
+        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-white">Top Vendedores</h2>
             <Trophy className="w-5 h-5 text-amber-400" />
@@ -585,20 +585,20 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
           {data.agents.length > 0 ? (
             <AgentLeaderboard agents={data.agents} />
           ) : (
-            <p className="text-dark-400 text-center py-8">Nenhum vendedor com negócios</p>
+            <p className="text-gray-500 text-center py-8">Nenhum vendedor com negócios</p>
           )}
         </div>
 
         {/* Source Breakdown */}
-        <div className="bg-dark-800/30 border border-dark-700 rounded-2xl p-6">
+        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-white">Origem dos Leads</h2>
-            <PieChart className="w-5 h-5 text-dark-400" />
+            <PieChart className="w-5 h-5 text-gray-500" />
           </div>
           {data.sources.length > 0 ? (
             <SourceBreakdown sources={data.sources} />
           ) : (
-            <p className="text-dark-400 text-center py-8">Nenhuma origem identificada</p>
+            <p className="text-gray-500 text-center py-8">Nenhuma origem identificada</p>
           )}
         </div>
       </div>

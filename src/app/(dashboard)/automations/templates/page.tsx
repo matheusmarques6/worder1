@@ -167,17 +167,17 @@ export default function AutomationTemplatesPage() {
       <div className="flex items-center gap-4">
         <button
           onClick={() => router.push('/automations')}
-          className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-dark-400 hover:text-white transition-colors"
+          className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-gray-500 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-5 h-5" weight="bold" />
         </button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold font-display text-white">Templates de Automação</h1>
-          <p className="text-sm text-dark-400 mt-0.5">Escolha um template para criar sua automação rapidamente</p>
+          <p className="text-sm text-gray-500 mt-0.5">Escolha um template para criar sua automação rapidamente</p>
         </div>
         <button
           onClick={() => router.push('/automations')}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white/[0.06] border border-white/[0.06] text-dark-300 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 bg-white/[0.06] border border-white/[0.06] text-gray-600 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors"
         >
           <Plus className="w-4 h-4" weight="bold" />
           Criar do Zero
@@ -193,12 +193,12 @@ export default function AutomationTemplatesPage() {
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
               activeCategory === cat.id
                 ? 'bg-white/[0.08] text-white'
-                : 'text-dark-400 hover:text-dark-200 hover:bg-white/[0.04]'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-white/[0.04]'
             }`}
           >
             {cat.label}
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-              activeCategory === cat.id ? 'bg-[#F26B2A]/15 text-[#F26B2A]' : 'bg-white/[0.06] text-dark-500'
+              activeCategory === cat.id ? 'bg-[#F26B2A]/15 text-[#F26B2A]' : 'bg-white/[0.06] text-gray-500'
             }`}>
               {cat.count}
             </span>
@@ -208,13 +208,13 @@ export default function AutomationTemplatesPage() {
 
       {/* Search */}
       <div className="relative max-w-sm">
-        <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+        <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
         <input
           type="text"
           placeholder="Buscar templates..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+          className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
         />
       </div>
 
@@ -247,17 +247,17 @@ export default function AutomationTemplatesPage() {
             </div>
 
             <h3 className="text-sm font-semibold text-white font-display">{template.name}</h3>
-            <p className="text-xs text-dark-400 mt-1 line-clamp-2">{template.description}</p>
+            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description}</p>
 
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.04]">
-              <span className="text-[10px] text-dark-500">Trigger: {template.trigger}</span>
+              <span className="text-[10px] text-gray-500">Trigger: {template.trigger}</span>
               <div className="flex items-center gap-1">
                 <Star className="w-3 h-3 text-[#F5A623]" weight="fill" />
-                <span className="text-[10px] font-medium text-dark-400">{template.popularity}%</span>
+                <span className="text-[10px] font-medium text-gray-500">{template.popularity}%</span>
               </div>
             </div>
 
-            <button className="w-full mt-3 px-4 py-2 bg-white/[0.04] hover:bg-[#F26B2A]/10 text-sm font-medium text-dark-300 hover:text-[#F26B2A] rounded-xl transition-all">
+            <button className="w-full mt-3 px-4 py-2 bg-white/[0.04] hover:bg-[#F26B2A]/10 text-sm font-medium text-gray-600 hover:text-[#F26B2A] rounded-xl transition-all">
               Usar Template
             </button>
           </motion.div>

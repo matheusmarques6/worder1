@@ -324,7 +324,7 @@ export function MergeContactsModal({
                       <button
                         key={idx}
                         onClick={() => handleSelectGroup(group)}
-                        className="w-full p-4 bg-white hover:bg-dark-750 rounded-xl border border-gray-200 hover:border-gray-300 transition-all group text-left"
+                        className="w-full p-4 bg-white hover:bg-gray-100 rounded-xl border border-gray-200 hover:border-gray-300 transition-all group text-left"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">

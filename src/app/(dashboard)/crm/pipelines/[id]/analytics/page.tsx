@@ -228,16 +228,16 @@ function KPICard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5"
+      className="bg-white border border-gray-200 rounded-2xl p-5"
     >
       <div className={`w-10 h-10 rounded-xl ${colorClasses[color]} flex items-center justify-center mb-3`}>
         <Icon className="w-5 h-5" />
       </div>
       <div className="text-2xl font-bold text-white mb-1">{formatValue()}</div>
-      <div className="text-sm text-dark-400 mb-2">{label}</div>
+      <div className="text-sm text-gray-400 mb-2">{label}</div>
       {(subtext || variation !== undefined) && (
         <div className="flex items-center gap-2">
-          {subtext && <span className="text-xs text-dark-500">{subtext}</span>}
+          {subtext && <span className="text-xs text-gray-500">{subtext}</span>}
           {variation !== undefined && variation !== 0 && (
             <span className={`text-xs flex items-center gap-1 ${variation > 0 ? 'text-green-400' : 'text-red-400'}`}>
               {variation > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -255,9 +255,9 @@ function KPICard({
 function SalesFunnel({ data }: { data: PipelineAnalyticsData['funnel'] }) {
   if (!data || data.length === 0) {
     return (
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+      <div className="bg-white border border-gray-200 rounded-2xl p-5">
         <h3 className="text-lg font-semibold text-white mb-4">Funil de Vendas</h3>
-        <div className="text-center text-dark-400 py-8">Sem dados de funil</div>
+        <div className="text-center text-gray-400 py-8">Sem dados de funil</div>
       </div>
     )
   }
@@ -268,7 +268,7 @@ function SalesFunnel({ data }: { data: PipelineAnalyticsData['funnel'] }) {
   const lostStage = data.find(s => s.isLost)
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <h3 className="text-lg font-semibold text-white mb-6">Grafico de funil</h3>
 
       {/* Funnel Visualization */}
@@ -314,7 +314,7 @@ function SalesFunnel({ data }: { data: PipelineAnalyticsData['funnel'] }) {
                 </div>
 
                 <div className="w-24 text-right flex-shrink-0">
-                  <div className="text-xs text-dark-400">Tempo medio</div>
+                  <div className="text-xs text-gray-400">Tempo medio</div>
                   <div className="text-sm text-white">
                     {stage.avgTimeInStage > 24
                       ? `${(stage.avgTimeInStage / 24).toFixed(1)} dias`
@@ -330,7 +330,7 @@ function SalesFunnel({ data }: { data: PipelineAnalyticsData['funnel'] }) {
       </div>
 
       {/* Won/Lost Summary */}
-      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-dark-700/50">
+      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200/50">
         {wonStage && (
           <div className="flex items-center gap-3 p-3 bg-green-500/10 rounded-xl">
             <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
@@ -339,7 +339,7 @@ function SalesFunnel({ data }: { data: PipelineAnalyticsData['funnel'] }) {
             <div>
               <div className="text-sm text-green-400 font-medium">{wonStage.name}</div>
               <div className="text-lg font-bold text-white">{formatCurrency(wonStage.value)}</div>
-              <div className="text-xs text-dark-400">{wonStage.count} negocios</div>
+              <div className="text-xs text-gray-400">{wonStage.count} negocios</div>
             </div>
           </div>
         )}
@@ -352,7 +352,7 @@ function SalesFunnel({ data }: { data: PipelineAnalyticsData['funnel'] }) {
             <div>
               <div className="text-sm text-red-400 font-medium">{lostStage.name}</div>
               <div className="text-lg font-bold text-white">{formatCurrency(lostStage.value)}</div>
-              <div className="text-xs text-dark-400">{lostStage.count} negocios</div>
+              <div className="text-xs text-gray-400">{lostStage.count} negocios</div>
             </div>
           </div>
         )}
@@ -366,7 +366,7 @@ function StageConversionFlow({ data, stages }: { data: PipelineAnalyticsData['st
   if (!data || data.length === 0) return null
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <h3 className="text-lg font-semibold text-white mb-4">Taxa de Conversao entre Estagios</h3>
       <div className="space-y-4">
         {data.map((conv, index) => (
@@ -380,7 +380,7 @@ function StageConversionFlow({ data, stages }: { data: PipelineAnalyticsData['st
             </div>
 
             <div className="flex-1 relative">
-              <div className="h-2 bg-dark-700 rounded-full">
+              <div className="h-2 bg-gray-200 rounded-full">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${conv.conversionRate}%` }}
@@ -388,12 +388,12 @@ function StageConversionFlow({ data, stages }: { data: PipelineAnalyticsData['st
                   className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500"
                 />
               </div>
-              <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-dark-400">
+              <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-gray-400">
                 {conv.conversionRate.toFixed(0)}%
               </div>
             </div>
 
-            <ArrowRight className="w-4 h-4 text-dark-500" />
+            <ArrowRight className="w-4 h-4 text-gray-500" />
 
             <div className="flex items-center gap-2 w-32">
               <div
@@ -403,7 +403,7 @@ function StageConversionFlow({ data, stages }: { data: PipelineAnalyticsData['st
               <span className="text-sm text-white truncate">{conv.to.name}</span>
             </div>
 
-            <div className="text-xs text-dark-400 w-16 text-right">
+            <div className="text-xs text-gray-400 w-16 text-right">
               {conv.transitions} trans.
             </div>
           </div>
@@ -417,9 +417,9 @@ function StageConversionFlow({ data, stages }: { data: PipelineAnalyticsData['st
 function VelocitySection({ data }: { data: PipelineAnalyticsData['velocity'] }) {
   if (!data || data.length === 0) {
     return (
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+      <div className="bg-white border border-gray-200 rounded-2xl p-5">
         <h3 className="text-lg font-semibold text-white mb-4">Velocidade por Estagio</h3>
-        <div className="flex flex-col items-center justify-center py-8 text-dark-400">
+        <div className="flex flex-col items-center justify-center py-8 text-gray-400">
           <Clock className="w-8 h-8 mb-2 opacity-50" />
           <p className="text-sm">Sem dados de velocidade ainda</p>
         </div>
@@ -430,16 +430,16 @@ function VelocitySection({ data }: { data: PipelineAnalyticsData['velocity'] }) 
   const maxDays = Math.max(...data.map(v => v.avgDays))
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <h3 className="text-lg font-semibold text-white mb-4">Velocidade por Estagio</h3>
       <div className="space-y-3">
         {data.map((stage, index) => (
           <div key={stage.stageId}>
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm text-white">{stage.stageName}</span>
-              <span className="text-sm font-medium text-dark-300">{stage.avgDays.toFixed(1)} dias</span>
+              <span className="text-sm font-medium text-gray-600">{stage.avgDays.toFixed(1)} dias</span>
             </div>
-            <div className="h-2 bg-dark-700/50 rounded-full overflow-hidden">
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: maxDays > 0 ? `${(stage.avgDays / maxDays) * 100}%` : '0%' }}
@@ -459,7 +459,7 @@ function TimelineChart({ data }: { data: PipelineAnalyticsData['timeline'] }) {
   if (!data || data.length === 0) return null
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <h3 className="text-lg font-semibold text-white mb-4">Evolucao de Negocios</h3>
       <ResponsiveContainer width="100%" height={250}>
         <AreaChart data={data}>
@@ -491,11 +491,11 @@ function TimelineChart({ data }: { data: PipelineAnalyticsData['timeline'] }) {
       <div className="flex items-center justify-center gap-6 mt-4">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-green-500" />
-          <span className="text-xs text-dark-400">Valor Ganho</span>
+          <span className="text-xs text-gray-400">Valor Ganho</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-red-500" />
-          <span className="text-xs text-dark-400">Valor Perdido</span>
+          <span className="text-xs text-gray-400">Valor Perdido</span>
         </div>
       </div>
     </div>
@@ -516,7 +516,7 @@ function DealsBySource({ data }: { data: PipelineAnalyticsData['dealsBySource'] 
   }))
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <h3 className="text-lg font-semibold text-white mb-4">Negocios por Origem</h3>
       <ResponsiveContainer width="100%" height={200}>
         <RechartsPieChart>
@@ -552,9 +552,9 @@ function DealsByOwner({ data }: { data: PipelineAnalyticsData['dealsByOwner'] })
   const totalDeals = data.reduce((sum, d) => sum + d.count, 0)
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <h3 className="text-lg font-semibold text-white mb-4">Atendimentos por atendentes</h3>
-      <p className="text-xs text-dark-400 mb-4">Atendimento iniciados por atendentes no periodo</p>
+      <p className="text-xs text-gray-400 mb-4">Atendimento iniciados por atendentes no periodo</p>
 
       <div className="flex gap-6">
         {/* Pie Chart */}
@@ -595,7 +595,7 @@ function DealsByOwner({ data }: { data: PipelineAnalyticsData['dealsByOwner'] })
                   <span className="text-sm text-white truncate max-w-[120px]">{owner.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-dark-400">
+                  <span className="text-xs text-gray-400">
                     Atendimentos: {owner.count}
                   </span>
                   <span className="text-sm font-medium text-white">{percentage}%</span>
@@ -612,17 +612,17 @@ function DealsByOwner({ data }: { data: PipelineAnalyticsData['dealsByOwner'] })
 // Top Deals
 function TopDeals({ data }: { data: PipelineAnalyticsData['topDeals'] }) {
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-4">
         <Award className="w-5 h-5 text-amber-400" />
         <h3 className="text-lg font-semibold text-white">Top 10 Negocios em Aberto</h3>
       </div>
       {data.length === 0 ? (
-        <div className="text-center text-dark-400 py-6 text-sm">Nenhum negocio em aberto</div>
+        <div className="text-center text-gray-400 py-6 text-sm">Nenhum negocio em aberto</div>
       ) : (
         <div className="space-y-3">
           {data.map((deal, index) => (
-            <div key={deal.id} className="flex items-center gap-3 p-3 bg-dark-700/30 rounded-xl">
+            <div key={deal.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
               <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold">
                 {index + 1}
               </div>
@@ -630,18 +630,18 @@ function TopDeals({ data }: { data: PipelineAnalyticsData['topDeals'] }) {
                 <div className="text-sm font-medium text-white truncate">{deal.title}</div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: deal.stageColor }} />
-                  <span className="text-xs text-dark-400">{deal.stageName}</span>
+                  <span className="text-xs text-gray-400">{deal.stageName}</span>
                   {deal.contactName && (
                     <>
-                      <span className="text-xs text-dark-500">-</span>
-                      <span className="text-xs text-dark-400">{deal.contactName}</span>
+                      <span className="text-xs text-gray-500">-</span>
+                      <span className="text-xs text-gray-400">{deal.contactName}</span>
                     </>
                   )}
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-sm font-semibold text-white">{formatCurrency(deal.value)}</div>
-                <div className="text-xs text-dark-400">{deal.probability}% prob.</div>
+                <div className="text-xs text-gray-400">{deal.probability}% prob.</div>
               </div>
             </div>
           ))}
@@ -654,13 +654,13 @@ function TopDeals({ data }: { data: PipelineAnalyticsData['topDeals'] }) {
 // Deals at Risk
 function DealsAtRisk({ data }: { data: PipelineAnalyticsData['dealsAtRisk'] }) {
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-4">
         <AlertTriangle className="w-5 h-5 text-red-400" />
         <h3 className="text-lg font-semibold text-white">Negocios em Risco</h3>
       </div>
       {data.length === 0 ? (
-        <div className="text-center text-dark-400 py-6 text-sm">
+        <div className="text-center text-gray-400 py-6 text-sm">
           <span className="text-green-400">OK</span> Nenhum negocio parado
         </div>
       ) : (
@@ -671,8 +671,8 @@ function DealsAtRisk({ data }: { data: PipelineAnalyticsData['dealsAtRisk'] }) {
                 <div className="text-sm font-medium text-white truncate">{deal.title}</div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-xs text-red-400">{deal.daysSinceUpdate} dias parado</span>
-                  <span className="text-xs text-dark-500">-</span>
-                  <span className="text-xs text-dark-400">{deal.stageName}</span>
+                  <span className="text-xs text-gray-500">-</span>
+                  <span className="text-xs text-gray-400">{deal.stageName}</span>
                 </div>
               </div>
               <div className="text-sm font-semibold text-white">{formatCurrency(deal.value)}</div>
@@ -696,14 +696,14 @@ function ForecastSection({ data }: { data: PipelineAnalyticsData['forecast'] }) 
   const maxValue = Math.max(...items.map(i => i.value))
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <h3 className="text-lg font-semibold text-white mb-4">Previsao (Forecast)</h3>
       <div className="grid grid-cols-4 gap-4">
         {items.map((item) => (
           <div key={item.label} className="text-center">
             <div className="text-2xl font-bold text-white mb-1">{formatCurrency(item.value)}</div>
-            <div className="text-xs text-dark-400 mb-2">{item.label}</div>
-            <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+            <div className="text-xs text-gray-400 mb-2">{item.label}</div>
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full ${item.color}`}
                 style={{ width: maxValue > 0 ? `${(item.value / maxValue) * 100}%` : '0%' }}
@@ -733,7 +733,7 @@ function InsightsSection({ insights }: { insights: PipelineAnalyticsData['insigh
   }
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-4">
         <Lightbulb className="w-5 h-5 text-amber-400" />
         <h3 className="text-lg font-semibold text-white">Insights</h3>
@@ -817,7 +817,7 @@ export default function PipelineAnalyticsPage() {
         </div>
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-dark-400 hover:text-white transition-colors"
+          className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Voltar
@@ -833,7 +833,7 @@ export default function PipelineAnalyticsPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.back()}
-            className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-800 transition-colors"
+            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -847,7 +847,7 @@ export default function PipelineAnalyticsPage() {
               )}
               <h1 className="text-2xl font-bold text-white">{data?.pipeline.name}</h1>
             </div>
-            <p className="text-dark-400 mt-1">Dashboard de Analytics - {data?.period.label}</p>
+            <p className="text-gray-400 mt-1">Dashboard de Analytics - {data?.period.label}</p>
           </div>
         </div>
 
@@ -856,11 +856,11 @@ export default function PipelineAnalyticsPage() {
           <div className="relative">
             <button
               onClick={() => setShowPeriodDropdown(!showPeriodDropdown)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white hover:bg-dark-800 transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white hover:bg-white transition-colors"
             >
               <span className="font-medium">{periods.find((p) => p.value === period)?.label}</span>
               <ChevronDown
-                className={`w-4 h-4 text-dark-400 transition-transform ${showPeriodDropdown ? 'rotate-180' : ''}`}
+                className={`w-4 h-4 text-gray-400 transition-transform ${showPeriodDropdown ? 'rotate-180' : ''}`}
               />
             </button>
 
@@ -872,7 +872,7 @@ export default function PipelineAnalyticsPage() {
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="absolute right-0 top-full mt-2 w-48 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
+                    className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-20 overflow-hidden"
                   >
                     {periods.map((p) => (
                       <button
@@ -884,7 +884,7 @@ export default function PipelineAnalyticsPage() {
                         className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
                           period === p.value
                             ? 'bg-primary-500/20 text-primary-400'
-                            : 'text-white hover:bg-dark-700/50'
+                            : 'text-white hover:bg-gray-100'
                         }`}
                       >
                         {p.label}
@@ -900,7 +900,7 @@ export default function PipelineAnalyticsPage() {
           <button
             onClick={fetchData}
             disabled={loading}
-            className="p-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-dark-400 hover:text-white hover:bg-dark-800 transition-colors disabled:opacity-50"
+            className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-400 hover:text-white hover:bg-white transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -911,25 +911,25 @@ export default function PipelineAnalyticsPage() {
         <div className="space-y-6">
           {/* KPIs Row 1 - Summary Cards */}
           <div className="grid grid-cols-4 gap-4">
-            <div className="bg-dark-800/50 border-2 border-primary-500/50 rounded-2xl p-5">
-              <div className="text-xs text-dark-400 mb-1">Total negocios</div>
+            <div className="bg-white/50 border-2 border-primary-500/50 rounded-2xl p-5">
+              <div className="text-xs text-gray-400 mb-1">Total negocios</div>
               <div className="text-2xl font-bold text-white">{formatCurrency(data.kpis.totalValue)}</div>
-              <div className="text-sm text-dark-400 mt-1">{data.kpis.totalDeals} negocios</div>
+              <div className="text-sm text-gray-400 mt-1">{data.kpis.totalDeals} negocios</div>
             </div>
-            <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
-              <div className="text-xs text-dark-400 mb-1">Total ganhos</div>
+            <div className="bg-white border border-gray-200 rounded-2xl p-5">
+              <div className="text-xs text-gray-400 mb-1">Total ganhos</div>
               <div className="text-2xl font-bold text-green-400">{formatCurrency(data.kpis.wonValue)}</div>
-              <div className="text-sm text-dark-400 mt-1">{data.kpis.wonDeals} negocios</div>
+              <div className="text-sm text-gray-400 mt-1">{data.kpis.wonDeals} negocios</div>
             </div>
-            <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
-              <div className="text-xs text-dark-400 mb-1">Total perdidos</div>
+            <div className="bg-white border border-gray-200 rounded-2xl p-5">
+              <div className="text-xs text-gray-400 mb-1">Total perdidos</div>
               <div className="text-2xl font-bold text-red-400">{formatCurrency(data.kpis.lostValue)}</div>
-              <div className="text-sm text-dark-400 mt-1">{data.kpis.lostDeals} negocios</div>
+              <div className="text-sm text-gray-400 mt-1">{data.kpis.lostDeals} negocios</div>
             </div>
-            <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
-              <div className="text-xs text-dark-400 mb-1">Total em aberto</div>
+            <div className="bg-white border border-gray-200 rounded-2xl p-5">
+              <div className="text-xs text-gray-400 mb-1">Total em aberto</div>
               <div className="text-2xl font-bold text-white">{formatCurrency(data.kpis.openValue)}</div>
-              <div className="text-sm text-dark-400 mt-1">{data.kpis.openDeals} negocios</div>
+              <div className="text-sm text-gray-400 mt-1">{data.kpis.openDeals} negocios</div>
             </div>
           </div>
 

@@ -253,7 +253,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
             {connectedAccounts.map((account) => (
               <div
                 key={account.id}
-                className="flex items-center gap-4 p-4 bg-dark-800 rounded-xl border border-dark-700"
+                className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200"
               >
                 {account.profile_picture_url ? (
                   <img
@@ -276,8 +276,8 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-dark-400">@{account.username}</p>
-                  <div className="flex items-center gap-4 mt-1 text-xs text-dark-500">
+                  <p className="text-sm text-gray-500">@{account.username}</p>
+                  <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
                     <span className="flex items-center gap-1">
                       <Users className="w-3.5 h-3.5" />
                       {account.followers_count?.toLocaleString()} seguidores
@@ -293,7 +293,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
                   <button
                     onClick={() => disconnectAccount(account.id)}
                     disabled={isLoading}
-                    className="p-2 text-dark-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                    className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>
@@ -304,21 +304,21 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
 
           {/* Quick Stats */}
           <div className="grid grid-cols-3 gap-4 mt-6">
-            <div className="p-4 bg-dark-800 rounded-xl text-center">
+            <div className="p-4 bg-white rounded-xl text-center">
               <p className="text-2xl font-bold text-white">
                 {connectedAccounts.reduce((sum, a) => sum + (a.messages_received_today || 0), 0)}
               </p>
-              <p className="text-xs text-dark-400 mt-1">Mensagens hoje</p>
+              <p className="text-xs text-gray-500 mt-1">Mensagens hoje</p>
             </div>
-            <div className="p-4 bg-dark-800 rounded-xl text-center">
+            <div className="p-4 bg-white rounded-xl text-center">
               <p className="text-2xl font-bold text-white">
                 {connectedAccounts.reduce((sum, a) => sum + (a.total_messages_received || 0), 0)}
               </p>
-              <p className="text-xs text-dark-400 mt-1">Total de mensagens</p>
+              <p className="text-xs text-gray-500 mt-1">Total de mensagens</p>
             </div>
-            <div className="p-4 bg-dark-800 rounded-xl text-center">
+            <div className="p-4 bg-white rounded-xl text-center">
               <p className="text-2xl font-bold text-white">{connectedAccounts.length}</p>
-              <p className="text-xs text-dark-400 mt-1">Contas conectadas</p>
+              <p className="text-xs text-gray-500 mt-1">Contas conectadas</p>
             </div>
           </div>
         </div>
@@ -328,7 +328,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
       {step === 'selecting' && (
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-white">Selecione uma conta</h3>
-          <p className="text-sm text-dark-400">
+          <p className="text-sm text-gray-500">
             Escolha qual conta do Instagram Business voce deseja conectar
           </p>
 
@@ -341,7 +341,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
                   'w-full flex items-center gap-4 p-4 rounded-xl border transition-all text-left',
                   selectedAccount?.instagram_business_id === account.instagram_business_id
                     ? 'bg-primary-500/10 border-primary-500/50'
-                    : 'bg-dark-800 border-dark-700 hover:border-dark-600'
+                    : 'bg-white border-gray-200 hover:border-gray-200'
                 )}
               >
                 {account.instagram_profile_picture ? (
@@ -358,8 +358,8 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
 
                 <div className="flex-1 min-w-0">
                   <h4 className="font-semibold text-white">{account.instagram_name}</h4>
-                  <p className="text-sm text-dark-400">@{account.instagram_username}</p>
-                  <p className="text-xs text-dark-500 mt-1">
+                  <p className="text-sm text-gray-500">@{account.instagram_username}</p>
+                  <p className="text-xs text-gray-500 mt-1">
                     {account.instagram_followers?.toLocaleString()} seguidores
                   </p>
                 </div>
@@ -380,7 +380,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
                 setAvailableAccounts([])
                 setSelectedAccount(null)
               }}
-              className="px-4 py-2 text-dark-300 hover:text-white transition-colors"
+              className="px-4 py-2 text-gray-600 hover:text-white transition-colors"
             >
               Cancelar
             </button>
@@ -410,7 +410,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
           </div>
 
           <h3 className="text-xl font-bold text-white mb-2">Conecte seu Instagram</h3>
-          <p className="text-dark-400 mb-6 max-w-md mx-auto">
+          <p className="text-gray-500 mb-6 max-w-md mx-auto">
             Receba e responda mensagens do Direct diretamente na plataforma. Configure automacoes para mover leads para pipelines especificos.
           </p>
 
@@ -421,7 +421,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
               </div>
               <div>
                 <p className="text-sm font-medium text-white">Inbox unificada</p>
-                <p className="text-xs text-dark-400">Todas as mensagens em um so lugar</p>
+                <p className="text-xs text-gray-500">Todas as mensagens em um so lugar</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -430,7 +430,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
               </div>
               <div>
                 <p className="text-sm font-medium text-white">Automacoes inteligentes</p>
-                <p className="text-xs text-dark-400">Crie gatilhos para seu pipeline de vendas</p>
+                <p className="text-xs text-gray-500">Crie gatilhos para seu pipeline de vendas</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -439,7 +439,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
               </div>
               <div>
                 <p className="text-sm font-medium text-white">Responda stories</p>
-                <p className="text-xs text-dark-400">Veja e responda mencoes e respostas aos seus stories</p>
+                <p className="text-xs text-gray-500">Veja e responda mencoes e respostas aos seus stories</p>
               </div>
             </div>
           </div>
@@ -459,7 +459,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
             )}
           </button>
 
-          <p className="text-xs text-dark-500 mt-4">
+          <p className="text-xs text-gray-500 mt-4">
             Requer conta Instagram Business conectada a uma Pagina do Facebook
           </p>
         </div>

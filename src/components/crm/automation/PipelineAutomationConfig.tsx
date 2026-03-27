@@ -660,7 +660,7 @@ function AddSourceModal({
                 <button
                   key={integration.id}
                   onClick={() => onSelect(integration.type)}
-                  className="p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-dark-850 transition-all text-left group"
+                  className="p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-white transition-all text-left group"
                 >
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${colorClass.split(' ')[1]}`}>
                     <Icon className={`w-5 h-5 ${colorClass.split(' ')[0]}`} />

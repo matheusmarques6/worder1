@@ -238,7 +238,7 @@ export default function PipelinesPage() {
                 <div className="flex items-center gap-2">
                   <Link
                     href={`/crm/pipelines/${pipeline.id}/analytics`}
-                    className="p-2 rounded-lg text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 transition-colors"
+                    className="p-2 rounded-lg text-gray-500 hover:text-primary-400 hover:bg-primary-500/10 transition-colors"
                     title="Ver Analytics"
                   >
                     <BarChart3 className="w-4 h-4" />

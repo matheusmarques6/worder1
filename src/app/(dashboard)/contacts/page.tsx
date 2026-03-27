@@ -63,12 +63,12 @@ export default function ContactsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold font-display text-white">Contatos</h1>
-          <p className="text-sm text-dark-400 mt-1">Gerencie sua base de contatos e segmentos</p>
+          <p className="text-sm text-gray-500 mt-1">Gerencie sua base de contatos e segmentos</p>
         </div>
         <div className="flex items-center gap-3">
           <Link
             href="/contacts/import"
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-dark-300 hover:text-white hover:border-white/[0.12] transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-600 hover:text-white hover:border-white/[0.12] transition-colors"
           >
             <Upload className="w-4 h-4" weight="bold" />
             Importar
@@ -98,7 +98,7 @@ export default function ContactsPage() {
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-dark-400 font-medium">{kpi.title}</p>
+                  <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
                   <p className="text-2xl font-bold text-white mt-1 font-display">{values[i]}</p>
                 </div>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${kpi.color}15` }}>
@@ -115,7 +115,7 @@ export default function ContactsPage() {
         <button className="px-4 py-2 rounded-lg text-sm font-medium bg-white/[0.08] text-white">
           Todos os Contatos
         </button>
-        <Link href="/contacts/lists" className="px-4 py-2 rounded-lg text-sm font-medium text-dark-400 hover:text-dark-200 hover:bg-white/[0.04] transition-colors">
+        <Link href="/contacts/lists" className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-white/[0.04] transition-colors">
           Listas & Segmentos
         </Link>
       </div>
@@ -123,20 +123,20 @@ export default function ContactsPage() {
       {/* Search & Filters */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+          <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             type="text"
             placeholder="Buscar contatos..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
           />
         </div>
-        <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-dark-400 hover:text-white transition-colors">
+        <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
           <FunnelSimple className="w-4 h-4" />
           Filtros
         </button>
-        <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-dark-400 hover:text-white transition-colors">
+        <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
           <Download className="w-4 h-4" weight="bold" />
           Exportar
         </button>
@@ -146,27 +146,27 @@ export default function ContactsPage() {
       <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <ArrowsClockwise className="w-6 h-6 animate-spin text-dark-400" />
+            <ArrowsClockwise className="w-6 h-6 animate-spin text-gray-500" />
           </div>
         ) : filteredContacts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-16 h-16 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-4">
-              <UsersThree className="w-8 h-8 text-dark-600" weight="duotone" />
+              <UsersThree className="w-8 h-8 text-gray-400" weight="duotone" />
             </div>
-            <p className="text-dark-400 font-medium">Nenhum contato encontrado</p>
-            <p className="text-dark-500 text-sm mt-1">Importe ou adicione contatos para começar</p>
+            <p className="text-gray-500 font-medium">Nenhum contato encontrado</p>
+            <p className="text-gray-500 text-sm mt-1">Importe ou adicione contatos para começar</p>
           </div>
         ) : (
           <table className="w-full">
             <thead>
               <tr className="bg-[#111111]">
-                <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Contato</th>
-                <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">E-mail</th>
-                <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Telefone</th>
-                <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Tags</th>
-                <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">LTV</th>
-                <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Última Atividade</th>
-                <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Ações</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Contato</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">E-mail</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Telefone</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Tags</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">LTV</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Última Atividade</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -184,39 +184,39 @@ export default function ContactsPage() {
                       </div>
                     </Link>
                   </td>
-                  <td className="px-5 py-4 text-sm text-dark-300">{contact.email || '-'}</td>
-                  <td className="px-5 py-4 text-sm text-dark-300">{contact.phone || '-'}</td>
+                  <td className="px-5 py-4 text-sm text-gray-600">{contact.email || '-'}</td>
+                  <td className="px-5 py-4 text-sm text-gray-600">{contact.phone || '-'}</td>
                   <td className="px-5 py-4">
                     {contact.tags?.length > 0 ? (
                       <div className="flex items-center gap-1">
                         {contact.tags.slice(0, 2).map((tag: string) => (
-                          <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-dark-400">
+                          <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-gray-500">
                             {tag}
                           </span>
                         ))}
                         {contact.tags.length > 2 && (
-                          <span className="text-[10px] text-dark-500">+{contact.tags.length - 2}</span>
+                          <span className="text-[10px] text-gray-500">+{contact.tags.length - 2}</span>
                         )}
                       </div>
                     ) : (
-                      <span className="text-sm text-dark-600">-</span>
+                      <span className="text-sm text-gray-400">-</span>
                     )}
                   </td>
                   <td className="px-5 py-4 text-sm font-medium text-white">
                     {contact.ltv ? `R$ ${contact.ltv.toFixed(2)}` : '-'}
                   </td>
-                  <td className="px-5 py-4 text-sm text-dark-400">
+                  <td className="px-5 py-4 text-sm text-gray-500">
                     {contact.updated_at ? new Date(contact.updated_at).toLocaleDateString('pt-BR') : '-'}
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1.5 rounded-lg hover:bg-blue-500/10 text-dark-400 hover:text-blue-400 transition-colors" title="E-mail">
+                      <button className="p-1.5 rounded-lg hover:bg-blue-500/10 text-gray-500 hover:text-blue-400 transition-colors" title="E-mail">
                         <EnvelopeSimple className="w-4 h-4" weight="fill" />
                       </button>
-                      <button className="p-1.5 rounded-lg hover:bg-[#25D366]/10 text-dark-400 hover:text-[#25D366] transition-colors" title="WhatsApp">
+                      <button className="p-1.5 rounded-lg hover:bg-[#25D366]/10 text-gray-500 hover:text-[#25D366] transition-colors" title="WhatsApp">
                         <WhatsappLogo className="w-4 h-4" weight="fill" />
                       </button>
-                      <button className="p-1.5 rounded-lg hover:bg-white/[0.06] text-dark-400 hover:text-white transition-colors" title="Mais">
+                      <button className="p-1.5 rounded-lg hover:bg-white/[0.06] text-gray-500 hover:text-white transition-colors" title="Mais">
                         <DotsThree className="w-4 h-4" weight="bold" />
                       </button>
                     </div>
@@ -230,21 +230,21 @@ export default function ContactsPage() {
         {/* Pagination */}
         {filteredContacts.length > 25 && (
           <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.06]">
-            <p className="text-xs text-dark-500">
+            <p className="text-xs text-gray-500">
               {(page - 1) * 25 + 1}–{Math.min(page * 25, filteredContacts.length)} de {filteredContacts.length}
             </p>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="p-1.5 rounded-lg hover:bg-white/[0.06] text-dark-400 disabled:opacity-30 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-white/[0.06] text-gray-500 disabled:opacity-30 transition-colors"
               >
                 <CaretLeft className="w-4 h-4" weight="bold" />
               </button>
               <button
                 onClick={() => setPage(p => p + 1)}
                 disabled={page * 25 >= filteredContacts.length}
-                className="p-1.5 rounded-lg hover:bg-white/[0.06] text-dark-400 disabled:opacity-30 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-white/[0.06] text-gray-500 disabled:opacity-30 transition-colors"
               >
                 <CaretRight className="w-4 h-4" weight="bold" />
               </button>

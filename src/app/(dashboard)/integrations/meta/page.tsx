@@ -110,7 +110,7 @@ export default function MetaIntegrationsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Integracoes Meta</h1>
-          <p className="text-dark-400 mt-1">WhatsApp Business API e Instagram Messaging</p>
+          <p className="text-gray-500 mt-1">WhatsApp Business API e Instagram Messaging</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
@@ -122,13 +122,13 @@ export default function MetaIntegrationsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 bg-dark-800/50 p-1 rounded-xl w-fit">
+      <div className="flex gap-2 bg-white p-1 rounded-xl w-fit">
         <button
           onClick={() => setActiveTab('whatsapp')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === 'whatsapp'
               ? 'bg-green-500 text-white'
-              : 'text-dark-400 hover:text-white'
+              : 'text-gray-500 hover:text-white'
           }`}
         >
           <MessageCircle className="w-5 h-5" />
@@ -139,7 +139,7 @@ export default function MetaIntegrationsPage() {
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === 'instagram'
               ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
-              : 'text-dark-400 hover:text-white'
+              : 'text-gray-500 hover:text-white'
           }`}
         >
           <Instagram className="w-5 h-5" />
@@ -148,7 +148,7 @@ export default function MetaIntegrationsPage() {
       </div>
 
       {/* Setup Instructions */}
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6">
+      <div className="bg-white border border-gray-200 rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <Settings className="w-5 h-5 text-primary-400" />
           Configuracao do Webhook
@@ -157,14 +157,14 @@ export default function MetaIntegrationsPage() {
         <div className="space-y-4">
           {/* Webhook URL */}
           <div>
-            <label className="text-sm text-dark-400 mb-2 block">Webhook URL</label>
+            <label className="text-sm text-gray-500 mb-2 block">Webhook URL</label>
             <div className="flex items-center gap-2">
-              <div className="flex-1 bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white font-mono text-sm">
+              <div className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-3 text-white font-mono text-sm">
                 {webhookUrl}
               </div>
               <button
                 onClick={() => copyToClipboard(webhookUrl)}
-                className="p-3 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-400 hover:text-white transition-colors"
+                className="p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-500 hover:text-white transition-colors"
               >
                 <Copy className="w-5 h-5" />
               </button>
@@ -173,20 +173,20 @@ export default function MetaIntegrationsPage() {
 
           {/* Verify Token */}
           <div>
-            <label className="text-sm text-dark-400 mb-2 block">Verify Token (use no Meta Developer)</label>
+            <label className="text-sm text-gray-500 mb-2 block">Verify Token (use no Meta Developer)</label>
             <div className="flex items-center gap-2">
-              <div className="flex-1 bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white font-mono text-sm flex items-center justify-between">
+              <div className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-3 text-white font-mono text-sm flex items-center justify-between">
                 <span>{showTokens ? (process.env.NEXT_PUBLIC_WEBHOOK_VERIFY_TOKEN || 'Defina WEBHOOK_VERIFY_TOKEN no .env') : '••••••••••••••••'}</span>
                 <button
                   onClick={() => setShowTokens(!showTokens)}
-                  className="text-dark-400 hover:text-white"
+                  className="text-gray-500 hover:text-white"
                 >
                   {showTokens ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
               <button
                 onClick={() => copyToClipboard(process.env.NEXT_PUBLIC_WEBHOOK_VERIFY_TOKEN || '')}
-                className="p-3 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-400 hover:text-white transition-colors"
+                className="p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-500 hover:text-white transition-colors"
               >
                 <Copy className="w-5 h-5" />
               </button>
@@ -196,12 +196,12 @@ export default function MetaIntegrationsPage() {
           {/* Instructions */}
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mt-4">
             <h3 className="text-sm font-medium text-blue-400 mb-2">Instrucoes de Configuracao</h3>
-            <ol className="text-sm text-dark-300 space-y-2 list-decimal list-inside">
+            <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside">
               <li>Acesse o <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Meta for Developers</a></li>
               <li>Crie ou selecione seu App</li>
               <li>Adicione os produtos <strong>WhatsApp</strong> e/ou <strong>Instagram</strong></li>
               <li>Configure o Webhook usando a URL e o Token acima</li>
-              <li>Inscreva-se nos campos: <code className="bg-dark-700 px-1 rounded">messages</code>, <code className="bg-dark-700 px-1 rounded">messaging_postbacks</code></li>
+              <li>Inscreva-se nos campos: <code className="bg-gray-100 px-1 rounded">messages</code>, <code className="bg-gray-100 px-1 rounded">messaging_postbacks</code></li>
               <li>Gere um Access Token permanente e adicione abaixo</li>
             </ol>
           </div>
@@ -209,8 +209,8 @@ export default function MetaIntegrationsPage() {
       </div>
 
       {/* Accounts List */}
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-dark-700/50">
+      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-white">
             {activeTab === 'whatsapp' ? 'Contas WhatsApp Conectadas' : 'Contas Instagram Conectadas'}
           </h2>
@@ -244,14 +244,14 @@ export default function MetaIntegrationsPage() {
       </div>
 
       {/* Environment Variables Info */}
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6">
+      <div className="bg-white border border-gray-200 rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <Key className="w-5 h-5 text-amber-400" />
           Variaveis de Ambiente Necessarias
         </h2>
 
-        <div className="bg-dark-900 rounded-xl p-4 font-mono text-sm">
-          <pre className="text-dark-300 whitespace-pre-wrap">
+        <div className="bg-white rounded-xl p-4 font-mono text-sm">
+          <pre className="text-gray-600 whitespace-pre-wrap">
 {`# Meta App Configuration
 META_APP_ID=your_app_id
 META_APP_SECRET=your_app_secret
@@ -295,14 +295,14 @@ function EmptyState({ type, onAdd }: { type: 'whatsapp' | 'instagram'; onAdd: ()
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
       {type === 'whatsapp' ? (
-        <MessageCircle className="w-12 h-12 text-dark-500 mb-4" />
+        <MessageCircle className="w-12 h-12 text-gray-500 mb-4" />
       ) : (
-        <Instagram className="w-12 h-12 text-dark-500 mb-4" />
+        <Instagram className="w-12 h-12 text-gray-500 mb-4" />
       )}
       <h3 className="text-lg font-medium text-white mb-2">
         Nenhuma conta {type === 'whatsapp' ? 'WhatsApp' : 'Instagram'} conectada
       </h3>
-      <p className="text-dark-400 mb-4 max-w-md">
+      <p className="text-gray-500 mb-4 max-w-md">
         Conecte sua conta {type === 'whatsapp' ? 'WhatsApp Business' : 'Instagram Business'} para comecar a receber e enviar mensagens.
       </p>
       <button
@@ -344,9 +344,9 @@ function WhatsAppAccountRow({ account }: { account: WhatsAppAccount }) {
           </span>
         </div>
         <div className="flex items-center gap-4 mt-1">
-          <span className="text-dark-400 text-sm">{account.phone_number}</span>
-          <span className="text-dark-500 text-sm">ID: {account.phone_number_id}</span>
-          <span className={`text-sm ${qualityColors[account.quality_rating as keyof typeof qualityColors] || 'text-dark-400'}`}>
+          <span className="text-gray-500 text-sm">{account.phone_number}</span>
+          <span className="text-gray-500 text-sm">ID: {account.phone_number_id}</span>
+          <span className={`text-sm ${qualityColors[account.quality_rating as keyof typeof qualityColors] || 'text-gray-500'}`}>
             Quality: {account.quality_rating}
           </span>
         </div>
@@ -355,11 +355,11 @@ function WhatsAppAccountRow({ account }: { account: WhatsAppAccount }) {
       <div className="flex items-center gap-6 flex-shrink-0">
         <div className="text-center">
           <div className="text-lg font-bold text-white">{account.messages_sent_today}</div>
-          <div className="text-xs text-dark-400">Enviadas hoje</div>
+          <div className="text-xs text-gray-500">Enviadas hoje</div>
         </div>
         <div className="text-center">
           <div className="text-lg font-bold text-white">{account.messages_received_today}</div>
-          <div className="text-xs text-dark-400">Recebidas hoje</div>
+          <div className="text-xs text-gray-500">Recebidas hoje</div>
         </div>
         <div className="flex items-center gap-2">
           {account.webhook_configured ? (
@@ -371,7 +371,7 @@ function WhatsAppAccountRow({ account }: { account: WhatsAppAccount }) {
               <AlertTriangle className="w-5 h-5 text-amber-400" />
             </span>
           )}
-          <button className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors">
+          <button className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-100 transition-colors">
             <Settings className="w-5 h-5" />
           </button>
         </div>
@@ -412,15 +412,15 @@ function InstagramAccountRow({ account }: { account: InstagramAccount }) {
           </span>
         </div>
         <div className="flex items-center gap-4 mt-1">
-          <span className="text-dark-400 text-sm">@{account.username}</span>
-          <span className="text-dark-500 text-sm">{account.followers_count?.toLocaleString()} seguidores</span>
+          <span className="text-gray-500 text-sm">@{account.username}</span>
+          <span className="text-gray-500 text-sm">{account.followers_count?.toLocaleString()} seguidores</span>
         </div>
       </div>
 
       <div className="flex items-center gap-6 flex-shrink-0">
         <div className="text-center">
           <div className="text-lg font-bold text-white">{account.messages_received_today}</div>
-          <div className="text-xs text-dark-400">Mensagens hoje</div>
+          <div className="text-xs text-gray-500">Mensagens hoje</div>
         </div>
         <div className="flex items-center gap-2">
           {account.webhook_configured ? (
@@ -432,7 +432,7 @@ function InstagramAccountRow({ account }: { account: InstagramAccount }) {
               <AlertTriangle className="w-5 h-5 text-amber-400" />
             </span>
           )}
-          <button className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors">
+          <button className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-100 transition-colors">
             <Settings className="w-5 h-5" />
           </button>
         </div>
@@ -500,9 +500,9 @@ function AddAccountModal({
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-md"
+        className="bg-white border border-gray-200 rounded-2xl w-full max-w-md"
       >
-        <div className="px-6 py-4 border-b border-dark-700">
+        <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-white">
             Conectar {type === 'whatsapp' ? 'WhatsApp Business' : 'Instagram'}
           </h2>
@@ -510,7 +510,7 @@ function AddAccountModal({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               Access Token
             </label>
             <input
@@ -518,7 +518,7 @@ function AddAccountModal({
               value={formData.accessToken}
               onChange={(e) => setFormData({ ...formData, accessToken: e.target.value })}
               placeholder="EAAxxxxxxxxx..."
-              className="w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white placeholder:text-dark-500 focus:border-primary-500 focus:outline-none"
+              className="w-full bg-white border border-gray-200 rounded-lg px-4 py-3 text-white placeholder:text-gray-500 focus:border-primary-500 focus:outline-none"
               required
             />
           </div>
@@ -526,7 +526,7 @@ function AddAccountModal({
           {type === 'whatsapp' ? (
             <>
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   Phone Number ID
                 </label>
                 <input
@@ -534,12 +534,12 @@ function AddAccountModal({
                   value={formData.phoneNumberId}
                   onChange={(e) => setFormData({ ...formData, phoneNumberId: e.target.value })}
                   placeholder="1234567890"
-                  className="w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white placeholder:text-dark-500 focus:border-primary-500 focus:outline-none"
+                  className="w-full bg-white border border-gray-200 rounded-lg px-4 py-3 text-white placeholder:text-gray-500 focus:border-primary-500 focus:outline-none"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   WABA ID (WhatsApp Business Account ID)
                 </label>
                 <input
@@ -547,14 +547,14 @@ function AddAccountModal({
                   value={formData.wabaId}
                   onChange={(e) => setFormData({ ...formData, wabaId: e.target.value })}
                   placeholder="1234567890"
-                  className="w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white placeholder:text-dark-500 focus:border-primary-500 focus:outline-none"
+                  className="w-full bg-white border border-gray-200 rounded-lg px-4 py-3 text-white placeholder:text-gray-500 focus:border-primary-500 focus:outline-none"
                   required
                 />
               </div>
             </>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Instagram Business Account ID
               </label>
               <input
@@ -562,7 +562,7 @@ function AddAccountModal({
                 value={formData.igUserId}
                 onChange={(e) => setFormData({ ...formData, igUserId: e.target.value })}
                 placeholder="17841400000000000"
-                className="w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white placeholder:text-dark-500 focus:border-primary-500 focus:outline-none"
+                className="w-full bg-white border border-gray-200 rounded-lg px-4 py-3 text-white placeholder:text-gray-500 focus:border-primary-500 focus:outline-none"
                 required
               />
             </div>
@@ -572,7 +572,7 @@ function AddAccountModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-3 border border-dark-600 rounded-lg text-white font-medium hover:bg-dark-700 transition-colors"
+              className="flex-1 px-4 py-3 border border-gray-200 rounded-lg text-white font-medium hover:bg-gray-100 transition-colors"
             >
               Cancelar
             </button>

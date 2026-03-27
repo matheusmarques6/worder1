@@ -79,7 +79,7 @@ function StepChannel({ onNext, selectedChannel, setSelectedChannel }: { onNext: 
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-white font-display">Escolha o Canal</h2>
-        <p className="text-sm text-dark-400 mt-1">Selecione por qual canal deseja enviar a campanha</p>
+        <p className="text-sm text-gray-500 mt-1">Selecione por qual canal deseja enviar a campanha</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -105,7 +105,7 @@ function StepChannel({ onNext, selectedChannel, setSelectedChannel }: { onNext: 
                 <Icon className="w-6 h-6" style={{ color: channel.color }} weight="fill" />
               </div>
               <h3 className="text-lg font-semibold text-white font-display">{channel.name}</h3>
-              <p className="text-sm text-dark-400 mt-1">{channel.description}</p>
+              <p className="text-sm text-gray-500 mt-1">{channel.description}</p>
               <p className="text-xs font-medium mt-3" style={{ color: channel.color }}>{channel.stats}</p>
             </button>
           )
@@ -150,17 +150,17 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-white font-display">Defina o Público</h2>
-        <p className="text-sm text-dark-400 mt-1">Selecione uma lista ou segmento para receber a campanha</p>
+        <p className="text-sm text-gray-500 mt-1">Selecione uma lista ou segmento para receber a campanha</p>
       </div>
 
       <div className="relative max-w-sm">
-        <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+        <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
         <input
           type="text"
           placeholder="Buscar segmentos..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+          className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
         />
       </div>
 
@@ -182,18 +182,18 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
                   isSelected ? 'bg-[#F26B2A]/15' : 'bg-white/[0.06]'
                 }`}>
                   {segment.type === 'Lista'
-                    ? <UsersThree className={`w-5 h-5 ${isSelected ? 'text-[#F26B2A]' : 'text-dark-400'}`} weight="duotone" />
-                    : <FunnelSimple className={`w-5 h-5 ${isSelected ? 'text-[#F26B2A]' : 'text-dark-400'}`} weight="duotone" />
+                    ? <UsersThree className={`w-5 h-5 ${isSelected ? 'text-[#F26B2A]' : 'text-gray-500'}`} weight="duotone" />
+                    : <FunnelSimple className={`w-5 h-5 ${isSelected ? 'text-[#F26B2A]' : 'text-gray-500'}`} weight="duotone" />
                   }
                 </div>
                 <div className="text-left">
                   <p className="text-sm font-medium text-white">{segment.name}</p>
-                  <p className="text-xs text-dark-500">{segment.type}</p>
+                  <p className="text-xs text-gray-500">{segment.type}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-white">{segment.count.toLocaleString()}</span>
-                <span className="text-xs text-dark-500">contatos</span>
+                <span className="text-xs text-gray-500">contatos</span>
                 {isSelected && (
                   <div className="w-5 h-5 rounded-full bg-[#F26B2A] flex items-center justify-center">
                     <Check className="w-3 h-3 text-white" weight="bold" />
@@ -206,7 +206,7 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
       </div>
 
       <div className="flex justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-white/[0.06] text-dark-300 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-white/[0.06] text-gray-600 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors">
           <ArrowLeft className="w-4 h-4" weight="bold" />
           Voltar
         </button>
@@ -236,41 +236,41 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-white font-display">Monte o Conteúdo</h2>
-        <p className="text-sm text-dark-400 mt-1">Configure o conteúdo da campanha</p>
+        <p className="text-sm text-gray-500 mt-1">Configure o conteúdo da campanha</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Config */}
         <div className="space-y-4">
           <div>
-            <label className="block text-xs text-dark-400 mb-1.5 font-medium">Nome da Campanha</label>
+            <label className="block text-xs text-gray-500 mb-1.5 font-medium">Nome da Campanha</label>
             <input
               type="text"
               placeholder="Ex: Promoção de Março"
               value={campaignName}
               onChange={(e) => setCampaignName(e.target.value)}
-              className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+              className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
             />
           </div>
 
           {channel === 'email' && (
             <>
               <div>
-                <label className="block text-xs text-dark-400 mb-1.5 font-medium">Assunto do E-mail</label>
+                <label className="block text-xs text-gray-500 mb-1.5 font-medium">Assunto do E-mail</label>
                 <input
                   type="text"
                   placeholder="Ex: 🔥 Promoção exclusiva para você!"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+                  className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-xs text-dark-400 mb-1.5 font-medium">Preview Text</label>
+                <label className="block text-xs text-gray-500 mb-1.5 font-medium">Preview Text</label>
                 <input
                   type="text"
                   placeholder="Texto que aparece ao lado do assunto na caixa de entrada"
-                  className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+                  className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
                 />
               </div>
             </>
@@ -278,7 +278,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
 
           {channel === 'whatsapp' && (
             <div>
-              <label className="block text-xs text-dark-400 mb-1.5 font-medium">Template Aprovado</label>
+              <label className="block text-xs text-gray-500 mb-1.5 font-medium">Template Aprovado</label>
               <select className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#F26B2A]/40 transition-colors">
                 <option value="">Selecionar template...</option>
                 <option value="promo">promocao_mensal</option>
@@ -290,12 +290,12 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
 
           {channel === 'sms' && (
             <div>
-              <label className="block text-xs text-dark-400 mb-1.5 font-medium">Mensagem SMS</label>
+              <label className="block text-xs text-gray-500 mb-1.5 font-medium">Mensagem SMS</label>
               <textarea
                 placeholder="Até 160 caracteres..."
                 maxLength={160}
                 rows={4}
-                className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors resize-none"
+                className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors resize-none"
               />
             </div>
           )}
@@ -303,7 +303,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
           {/* Template Selector for Email */}
           {channel === 'email' && (
             <div>
-              <label className="block text-xs text-dark-400 mb-1.5 font-medium">Template</label>
+              <label className="block text-xs text-gray-500 mb-1.5 font-medium">Template</label>
               <div className="grid grid-cols-2 gap-3">
                 {['Começar do Zero', 'Promoção', 'Boas-vindas', 'Win-back'].map((tpl) => (
                   <button
@@ -312,11 +312,11 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
                   >
                     <div className="h-16 bg-[#111111] rounded-lg mb-2 flex items-center justify-center">
                       {tpl === 'Começar do Zero'
-                        ? <PencilSimple className="w-5 h-5 text-dark-600" weight="duotone" />
-                        : <EnvelopeSimple className="w-5 h-5 text-dark-600" weight="duotone" />
+                        ? <PencilSimple className="w-5 h-5 text-gray-400" weight="duotone" />
+                        : <EnvelopeSimple className="w-5 h-5 text-gray-400" weight="duotone" />
                       }
                     </div>
-                    <p className="text-xs font-medium text-dark-300">{tpl}</p>
+                    <p className="text-xs font-medium text-gray-600">{tpl}</p>
                   </button>
                 ))}
               </div>
@@ -325,12 +325,12 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
 
           {/* Merge Tags */}
           <div>
-            <label className="block text-xs text-dark-400 mb-1.5 font-medium">Variáveis Disponíveis</label>
+            <label className="block text-xs text-gray-500 mb-1.5 font-medium">Variáveis Disponíveis</label>
             <div className="flex flex-wrap gap-2">
               {['{{ first_name }}', '{{ product.name }}', '{{ coupon.code }}', '{{ order.total }}'].map((tag) => (
                 <button
                   key={tag}
-                  className="px-3 py-1.5 bg-[#1A1A1A] border border-white/[0.06] rounded-lg text-xs text-dark-400 hover:text-[#F26B2A] hover:border-[#F26B2A]/30 font-mono transition-colors"
+                  className="px-3 py-1.5 bg-[#1A1A1A] border border-white/[0.06] rounded-lg text-xs text-gray-500 hover:text-[#F26B2A] hover:border-[#F26B2A]/30 font-mono transition-colors"
                 >
                   {tag}
                 </button>
@@ -343,19 +343,19 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
         <div>
           <div className="bg-[#1A1A1A] border border-white/[0.06] rounded-2xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-              <span className="text-xs font-medium text-dark-400">Preview</span>
+              <span className="text-xs font-medium text-gray-500">Preview</span>
               <div className="flex items-center gap-2">
                 <button className="px-2.5 py-1 rounded-lg bg-white/[0.08] text-[10px] font-medium text-white">Desktop</button>
-                <button className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-dark-500 hover:text-dark-300 transition-colors">Mobile</button>
+                <button className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-gray-500 hover:text-gray-600 transition-colors">Mobile</button>
               </div>
             </div>
             <div className="p-6 min-h-[400px] bg-[#111111] flex items-center justify-center">
               <div className="text-center">
                 <div className="w-16 h-16 rounded-2xl bg-white/[0.04] flex items-center justify-center mx-auto mb-4">
-                  <Eye className="w-8 h-8 text-dark-600" weight="duotone" />
+                  <Eye className="w-8 h-8 text-gray-400" weight="duotone" />
                 </div>
-                <p className="text-dark-400 font-medium">Preview do conteúdo</p>
-                <p className="text-dark-500 text-sm mt-1">Edite o conteúdo à esquerda para ver o preview aqui</p>
+                <p className="text-gray-500 font-medium">Preview do conteúdo</p>
+                <p className="text-gray-500 text-sm mt-1">Edite o conteúdo à esquerda para ver o preview aqui</p>
               </div>
             </div>
           </div>
@@ -363,7 +363,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
       </div>
 
       <div className="flex justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-white/[0.06] text-dark-300 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-white/[0.06] text-gray-600 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors">
           <ArrowLeft className="w-4 h-4" weight="bold" />
           Voltar
         </button>
@@ -405,25 +405,25 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-white font-display">Revisar e Enviar</h2>
-        <p className="text-sm text-dark-400 mt-1">Confirme os detalhes da campanha antes de enviar</p>
+        <p className="text-sm text-gray-500 mt-1">Confirme os detalhes da campanha antes de enviar</p>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] p-5">
-          <p className="text-xs text-dark-500 font-medium uppercase tracking-wider mb-3">Detalhes</p>
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-3">Detalhes</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-dark-400">Nome</span>
+              <span className="text-sm text-gray-500">Nome</span>
               <span className="text-sm font-medium text-white">{campaignName || 'Sem nome'}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-dark-400">Canal</span>
+              <span className="text-sm text-gray-500">Canal</span>
               <span className="text-sm font-medium text-white">{channelLabel}</span>
             </div>
             {subject && (
               <div className="flex items-center justify-between">
-                <span className="text-sm text-dark-400">Assunto</span>
+                <span className="text-sm text-gray-500">Assunto</span>
                 <span className="text-sm font-medium text-white truncate ml-4">{subject}</span>
               </div>
             )}
@@ -431,14 +431,14 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
         </div>
 
         <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] p-5">
-          <p className="text-xs text-dark-500 font-medium uppercase tracking-wider mb-3">Público</p>
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-3">Público</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-dark-400">Segmento</span>
+              <span className="text-sm text-gray-500">Segmento</span>
               <span className="text-sm font-medium text-white">{audienceData?.name || '-'}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-dark-400">Destinatários</span>
+              <span className="text-sm text-gray-500">Destinatários</span>
               <span className="text-sm font-medium text-white">{audienceData?.count.toLocaleString() || '0'}</span>
             </div>
           </div>
@@ -447,12 +447,12 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
 
       {/* Schedule */}
       <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] p-5">
-        <p className="text-xs text-dark-500 font-medium uppercase tracking-wider mb-3">Agendamento</p>
+        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-3">Agendamento</p>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setScheduleMode('now')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
-              scheduleMode === 'now' ? 'border-[#F26B2A] bg-[#F26B2A]/5 text-white' : 'border-white/[0.06] text-dark-400 hover:border-white/[0.12]'
+              scheduleMode === 'now' ? 'border-[#F26B2A] bg-[#F26B2A]/5 text-white' : 'border-white/[0.06] text-gray-500 hover:border-white/[0.12]'
             }`}
           >
             <Rocket className="w-4 h-4" weight={scheduleMode === 'now' ? 'fill' : 'regular'} />
@@ -461,14 +461,14 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
           <button
             onClick={() => setScheduleMode('scheduled')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
-              scheduleMode === 'scheduled' ? 'border-[#F26B2A] bg-[#F26B2A]/5 text-white' : 'border-white/[0.06] text-dark-400 hover:border-white/[0.12]'
+              scheduleMode === 'scheduled' ? 'border-[#F26B2A] bg-[#F26B2A]/5 text-white' : 'border-white/[0.06] text-gray-500 hover:border-white/[0.12]'
             }`}
           >
             <CalendarBlank className="w-4 h-4" weight={scheduleMode === 'scheduled' ? 'fill' : 'regular'} />
             Agendar
           </button>
           <button
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-white/[0.06] text-sm font-medium text-dark-400 hover:border-white/[0.12] transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-white/[0.06] text-sm font-medium text-gray-500 hover:border-white/[0.12] transition-all"
           >
             <Sparkle className="w-4 h-4" weight="duotone" />
             Smart Send
@@ -490,7 +490,7 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
       </div>
 
       <div className="flex justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-white/[0.06] text-dark-300 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-white/[0.06] text-gray-600 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors">
           <ArrowLeft className="w-4 h-4" weight="bold" />
           Voltar
         </button>
@@ -537,13 +537,13 @@ export default function CreateCampaignPage() {
       <div className="flex items-center gap-4">
         <button
           onClick={() => router.push('/campaigns')}
-          className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-dark-400 hover:text-white transition-colors"
+          className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-gray-500 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-5 h-5" weight="bold" />
         </button>
         <div>
           <h1 className="text-2xl font-bold font-display text-white">Criar Campanha</h1>
-          <p className="text-sm text-dark-400 mt-0.5">Passo {currentStep} de 4</p>
+          <p className="text-sm text-gray-500 mt-0.5">Passo {currentStep} de 4</p>
         </div>
       </div>
 
@@ -558,13 +558,13 @@ export default function CreateCampaignPage() {
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                   isCompleted ? 'bg-[#F26B2A] text-white' :
                   isActive ? 'bg-[#F26B2A]/15 text-[#F26B2A] ring-2 ring-[#F26B2A]/30' :
-                  'bg-white/[0.06] text-dark-500'
+                  'bg-white/[0.06] text-gray-500'
                 }`}>
                   {isCompleted ? <Check className="w-4 h-4" weight="bold" /> : step.id}
                 </div>
                 <div className="hidden sm:block">
-                  <p className={`text-xs font-medium ${isActive || isCompleted ? 'text-white' : 'text-dark-500'}`}>{step.label}</p>
-                  <p className="text-[10px] text-dark-600">{step.description}</p>
+                  <p className={`text-xs font-medium ${isActive || isCompleted ? 'text-white' : 'text-gray-500'}`}>{step.label}</p>
+                  <p className="text-[10px] text-gray-400">{step.description}</p>
                 </div>
               </div>
               {i < steps.length - 1 && (
