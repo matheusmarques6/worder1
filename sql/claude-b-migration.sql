@@ -55,6 +55,16 @@ CREATE TABLE IF NOT EXISTS coupons (
   UNIQUE(organization_id, code)
 );
 
+-- Colunas que podem faltar se tabela já existia de execução anterior
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS type VARCHAR(20);
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS value NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS min_purchase NUMERIC(10,2);
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS max_uses INTEGER;
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS uses_count INTEGER DEFAULT 0;
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+
 CREATE INDEX IF NOT EXISTS idx_coupons_org ON coupons(organization_id);
 CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(organization_id, code);
 CREATE INDEX IF NOT EXISTS idx_coupons_active ON coupons(organization_id, is_active);
@@ -84,6 +94,19 @@ CREATE TABLE IF NOT EXISTS media_files (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Colunas que podem faltar se tabela já existia
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS name VARCHAR(500);
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS url TEXT DEFAULT '';
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS size BIGINT DEFAULT 0;
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'image';
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS mime_type VARCHAR(100);
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS base64_data TEXT;
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS width INTEGER;
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS height INTEGER;
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS alt_text VARCHAR(500);
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS folder VARCHAR(255) DEFAULT '';
+ALTER TABLE media_files ADD COLUMN IF NOT EXISTS uploaded_by UUID;
 
 CREATE INDEX IF NOT EXISTS idx_media_files_org ON media_files(organization_id);
 CREATE INDEX IF NOT EXISTS idx_media_files_type ON media_files(organization_id, type);
@@ -131,6 +154,35 @@ CREATE TABLE IF NOT EXISTS email_campaigns (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Colunas que podem faltar se tabela já existia
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS subject VARCHAR(500);
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS from_name VARCHAR(255);
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS from_email VARCHAR(255);
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS reply_to VARCHAR(255);
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS html_content TEXT;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS text_content TEXT;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS template_id UUID;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS list_id UUID;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS segment_id UUID;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'draft';
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS total_recipients INTEGER DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS total_sent INTEGER DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS total_delivered INTEGER DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS total_opened INTEGER DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS total_clicked INTEGER DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS total_bounced INTEGER DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS total_unsubscribed INTEGER DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS total_complained INTEGER DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS open_rate NUMERIC(5,2) DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS click_rate NUMERIC(5,2) DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS bounce_rate NUMERIC(5,2) DEFAULT 0;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS created_by UUID;
+
 CREATE INDEX IF NOT EXISTS idx_email_campaigns_org ON email_campaigns(organization_id);
 CREATE INDEX IF NOT EXISTS idx_email_campaigns_status ON email_campaigns(organization_id, status);
 CREATE INDEX IF NOT EXISTS idx_email_campaigns_sent ON email_campaigns(sent_at DESC);
@@ -175,6 +227,32 @@ CREATE TABLE IF NOT EXISTS email_sends (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Colunas que podem faltar se tabela já existia
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS campaign_id UUID;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS contact_id UUID;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS subject VARCHAR(500);
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS from_email VARCHAR(255);
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'queued';
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS clicked_at TIMESTAMPTZ;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS bounced_at TIMESTAMPTZ;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS failed_at TIMESTAMPTZ;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMPTZ;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS complained_at TIMESTAMPTZ;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS open_count INTEGER DEFAULT 0;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS click_count INTEGER DEFAULT 0;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS bounce_type VARCHAR(50);
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS bounce_message TEXT;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS error_message TEXT;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS provider VARCHAR(50);
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS provider_message_id VARCHAR(255);
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50);
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS user_agent TEXT;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_email_sends_org ON email_sends(organization_id);
 CREATE INDEX IF NOT EXISTS idx_email_sends_campaign ON email_sends(campaign_id);
@@ -243,6 +321,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Colunas que podem faltar se tabela já existia
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_email VARCHAR(255);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS action VARCHAR(255);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource_type VARCHAR(100);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource_id UUID;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_audit_logs_org ON audit_logs(organization_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
@@ -271,6 +360,18 @@ CREATE TABLE IF NOT EXISTS form_submissions (
   referrer TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Colunas que podem faltar se tabela já existia
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS form_id UUID;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS contact_id UUID;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS source VARCHAR(100);
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50);
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS user_agent TEXT;
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS referrer TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_form_submissions_org ON form_submissions(organization_id);
 CREATE INDEX IF NOT EXISTS idx_form_submissions_form ON form_submissions(form_id);
