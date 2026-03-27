@@ -1,181 +1,263 @@
-'use client'
+'use client';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Image as ImageIcon, Upload, Trash2, Copy, RefreshCw, X } from 'lucide-react';
 
-import { useState } from 'react'
-import { motion } from 'framer-motion'
-import Link from 'next/link'
-import {
-  Image as ImageIcon,
-  Plus,
-  MagnifyingGlass,
-  Trash,
-  Copy,
-  Download,
-  Upload,
-  ArrowLeft,
-  File,
-  VideoCamera,
-  FileText,
-  FolderOpen,
-  CheckCircle,
-  DotsThree,
-} from '@phosphor-icons/react'
-
-const mediaItems = [
-  { id: '1', name: 'banner-blackfriday.jpg', type: 'image', size: '245 KB', dimensions: '1200x628', folder: 'Campanhas', date: '12 Mar', uses: 8 },
-  { id: '2', name: 'logo-loja.png', type: 'image', size: '42 KB', dimensions: '512x512', folder: 'Marca', date: '01 Mar', uses: 24 },
-  { id: '3', name: 'produto-camiseta.jpg', type: 'image', size: '180 KB', dimensions: '800x800', folder: 'Produtos', date: '10 Mar', uses: 3 },
-  { id: '4', name: 'video-lancamento.mp4', type: 'video', size: '4.2 MB', dimensions: '1080x1920', folder: 'Campanhas', date: '08 Mar', uses: 2 },
-  { id: '5', name: 'banner-verao.jpg', type: 'image', size: '312 KB', dimensions: '1200x628', folder: 'Campanhas', date: '05 Mar', uses: 5 },
-  { id: '6', name: 'icone-pix.png', type: 'image', size: '18 KB', dimensions: '256x256', folder: 'Ícones', date: '15 Feb', uses: 12 },
-  { id: '7', name: 'catalogo-marco.pdf', type: 'document', size: '1.8 MB', dimensions: '—', folder: 'Documentos', date: '01 Mar', uses: 1 },
-  { id: '8', name: 'hero-email.jpg', type: 'image', size: '520 KB', dimensions: '600x400', folder: 'E-mail', date: '09 Mar', uses: 6 },
-  { id: '9', name: 'thumb-stories.jpg', type: 'image', size: '98 KB', dimensions: '1080x1920', folder: 'Social', date: '11 Mar', uses: 4 },
-  { id: '10', name: 'produto-tenis.jpg', type: 'image', size: '210 KB', dimensions: '800x800', folder: 'Produtos', date: '07 Mar', uses: 7 },
-  { id: '11', name: 'banner-cupom.jpg', type: 'image', size: '156 KB', dimensions: '1200x628', folder: 'Campanhas', date: '06 Mar', uses: 9 },
-  { id: '12', name: 'depoimento-cliente.mp4', type: 'video', size: '8.1 MB', dimensions: '1920x1080', folder: 'Social', date: '04 Mar', uses: 1 },
-]
-
-const folders = ['Todos', 'Campanhas', 'Produtos', 'Marca', 'E-mail', 'Social', 'Ícones', 'Documentos']
-
-const typeIcons: Record<string, React.ComponentType<any>> = {
-  image: ImageIcon,
-  video: VideoCamera,
-  document: FileText,
+interface MediaFile {
+  id: string;
+  name: string;
+  url: string;
+  size: number;
+  type: string;
+  base64_data?: string;
+  created_at: string;
 }
 
-const typeColors: Record<string, string> = {
-  image: 'text-blue-400 bg-blue-500/10',
-  video: 'text-purple-400 bg-purple-500/10',
-  document: 'text-yellow-400 bg-yellow-500/10',
+function formatBytes(bytes: number): string {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-export default function MediaLibraryPage() {
-  const [search, setSearch] = useState('')
-  const [folder, setFolder] = useState('Todos')
-  const [selected, setSelected] = useState<string[]>([])
+function formatDate(date: string): string {
+  return new Date(date).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
 
-  const filtered = mediaItems.filter((m) => {
-    const matchSearch = !search || m.name.toLowerCase().includes(search.toLowerCase())
-    const matchFolder = folder === 'Todos' || m.folder === folder
-    return matchSearch && matchFolder
-  })
+export default function MediaPage() {
+  const [files, setFiles] = useState<MediaFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id])
-  }
+  const fetchFiles = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/content/media');
+      if (res.ok) {
+        const data = await res.json();
+        setFiles(data.files || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const totalSize = mediaItems.reduce((acc, m) => {
-    const num = parseFloat(m.size)
-    return acc + (m.size.includes('MB') ? num * 1024 : num)
-  }, 0)
+  useEffect(() => {
+    fetchFiles();
+  }, [fetchFiles]);
+
+  const handleUpload = useCallback(async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(fileList)) {
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const res = await fetch('/api/content/media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            base64,
+          }),
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          setFiles((prev) => [saved, ...prev]);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  const handleDelete = useCallback(async (id: string) => {
+    setDeletingId(id);
+    try {
+      const res = await fetch('/api/content/media', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        setFiles((prev) => prev.filter((f) => f.id !== id));
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDeletingId(null);
+    }
+  }, []);
+
+  const handleCopyUrl = useCallback((file: MediaFile) => {
+    const urlToCopy = file.url || file.base64_data || '';
+    navigator.clipboard.writeText(urlToCopy).catch(() => {});
+    setCopiedId(file.id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      handleUpload(e.dataTransfer.files);
+    },
+    [handleUpload]
+  );
+
+  const getThumbnail = (file: MediaFile): string | null => {
+    if (file.base64_data) return file.base64_data;
+    if (file.url) return file.url;
+    return null;
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/content" className="p-2 rounded-lg hover:bg-zinc-800 transition-colors">
-            <ArrowLeft size={18} className="text-zinc-400" />
-          </Link>
-          <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
-            <ImageIcon size={22} className="text-purple-400" weight="fill" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold font-display text-white">Biblioteca de Mídia</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">{mediaItems.length} arquivos · {(totalSize / 1024).toFixed(1)} MB usado</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Biblioteca de Mídia</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Gerencie imagens e arquivos para suas campanhas
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          {selected.length > 0 && (
-            <button className="flex items-center gap-2 px-3 py-2 bg-red-500/10 text-red-400 rounded-lg text-xs font-medium hover:bg-red-500/20 transition-colors">
-              <Trash size={14} />
-              Excluir ({selected.length})
-            </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {uploading ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : (
+            <Upload className="w-4 h-4" />
           )}
-          <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium">
-            <Upload size={16} />
-            Upload
-          </button>
-        </div>
+          {uploading ? 'Enviando...' : 'Upload'}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*,video/*,application/pdf"
+          className="hidden"
+          onChange={(e) => handleUpload(e.target.files)}
+        />
       </div>
 
-      {/* Upload Zone */}
-      <div className="border-2 border-dashed border-zinc-700 rounded-xl p-8 flex flex-col items-center justify-center hover:border-zinc-600 transition-colors cursor-pointer">
-        <Upload size={32} className="text-zinc-600 mb-2" />
-        <p className="text-sm text-zinc-400">Arraste arquivos aqui ou clique para fazer upload</p>
-        <p className="text-xs text-zinc-600 mt-1">PNG, JPG, GIF, MP4, PDF — Máximo 10MB</p>
+      {/* Drop Zone */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+          dragging
+            ? 'border-orange-400 bg-orange-50'
+            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+        }`}
+      >
+        <Upload className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+        <p className="text-sm text-gray-500">
+          Arraste arquivos aqui ou{' '}
+          <span className="text-orange-500 font-medium">clique para selecionar</span>
+        </p>
+        <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF, MP4, PDF até 10MB</p>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 max-w-sm">
-          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Buscar arquivos..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-800/50 border border-zinc-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#F26B2A]"
-          />
+      {/* Content */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
         </div>
-        <div className="flex gap-1 overflow-x-auto">
-          {folders.map((f) => (
-            <button
-              key={f}
-              onClick={() => setFolder(f)}
-              className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
-                folder === f ? 'bg-[#F26B2A] text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'
-              }`}
-            >
-              {f}
-            </button>
-          ))}
+      ) : files.length === 0 ? (
+        <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
+          <ImageIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma mídia</h3>
+          <p className="text-sm text-gray-500">
+            Faça upload da sua primeira imagem usando o botão acima
+          </p>
         </div>
-      </div>
-
-      {/* Media Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-        {filtered.map((item, i) => {
-          const TypeIcon = typeIcons[item.type] || File
-          const isSelected = selected.includes(item.id)
-          return (
-            <motion.div
-              key={item.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.02 }}
-              onClick={() => toggleSelect(item.id)}
-              className={`bg-zinc-900/50 border rounded-xl overflow-hidden cursor-pointer group transition-all ${
-                isSelected ? 'border-[#F26B2A] ring-1 ring-[#F26B2A]/30' : 'border-zinc-800 hover:border-zinc-700'
-              }`}
-            >
-              <div className="h-28 bg-zinc-800/30 flex items-center justify-center relative">
-                <TypeIcon size={28} className="text-zinc-600" weight="duotone" />
-                {isSelected && (
-                  <div className="absolute top-2 left-2">
-                    <CheckCircle size={18} className="text-[#F26B2A]" weight="fill" />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {files.map((file) => {
+            const thumb = getThumbnail(file);
+            return (
+              <div
+                key={file.id}
+                className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow group"
+              >
+                {/* Thumbnail */}
+                <div className="relative aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
+                  {thumb && file.type.startsWith('image') ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={thumb}
+                      alt={file.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon className="w-10 h-10 text-gray-300" />
+                  )}
+                  {/* Overlay actions */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <button
+                      onClick={() => handleCopyUrl(file)}
+                      title="Copiar URL"
+                      className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors"
+                    >
+                      {copiedId === file.id ? (
+                        <X className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-gray-700" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(file.id)}
+                      disabled={deletingId === file.id}
+                      title="Excluir"
+                      className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      {deletingId === file.id ? (
+                        <RefreshCw className="w-4 h-4 text-gray-400 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      )}
+                    </button>
                   </div>
-                )}
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={(e) => { e.stopPropagation() }} className="p-1 bg-zinc-800/80 rounded">
-                    <DotsThree size={14} className="text-zinc-400" />
-                  </button>
                 </div>
-                <span className={`absolute bottom-2 right-2 text-[10px] px-1.5 py-0.5 rounded font-medium ${typeColors[item.type]}`}>
-                  {item.type === 'image' ? 'IMG' : item.type === 'video' ? 'VID' : 'DOC'}
-                </span>
-              </div>
-              <div className="p-2.5">
-                <p className="text-xs text-white truncate font-medium">{item.name}</p>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-[10px] text-zinc-600">{item.size}</span>
-                  <span className="text-[10px] text-zinc-600">{item.date}</span>
+
+                {/* Info */}
+                <div className="p-3">
+                  <p className="text-xs font-medium text-gray-800 truncate" title={file.name}>
+                    {file.name}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {formatBytes(file.size)} · {file.created_at ? formatDate(file.created_at) : ''}
+                  </p>
                 </div>
               </div>
-            </motion.div>
-          )
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
-  )
+  );
 }

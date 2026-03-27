@@ -6,7 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
-import { nanoid } from 'nanoid';
+import crypto from 'crypto';
+const nanoid = (size = 21) => crypto.randomBytes(size).toString('hex').slice(0, size);
 export const dynamic = 'force-dynamic';
 
 // =============================================

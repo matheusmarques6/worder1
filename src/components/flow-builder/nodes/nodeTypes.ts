@@ -163,6 +163,46 @@ export const triggerTypes: NodeTypeDefinition[] = [
     category: 'trigger',
     color: '#10b981',
   },
+  {
+    type: 'trigger_list_added',
+    label: 'Adicionado à Lista',
+    description: 'Dispara quando contato é adicionado a uma lista',
+    icon: Users,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_order_fulfilled',
+    label: 'Pedido Entregue',
+    description: 'Dispara quando pedido é marcado como entregue',
+    icon: ShoppingBag,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_order_pending',
+    label: 'Pedido Pendente',
+    description: 'Dispara quando pedido fica pendente (boleto/PIX)',
+    icon: CreditCard,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_inactivity',
+    label: 'Inatividade',
+    description: 'Dispara após período de inatividade do contato',
+    icon: Clock,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_viewed_product',
+    label: 'Visualizou Produto',
+    description: 'Dispara quando contato visualiza um produto',
+    icon: Target,
+    category: 'trigger',
+    color: '#10b981',
+  },
 ];
 
 // ============================================
@@ -360,7 +400,12 @@ export const nodeTypes: Record<string, any> = {
   trigger_segment: TriggerNode,
   trigger_webhook: TriggerNode,
   trigger_whatsapp: TriggerNode,
-  
+  trigger_list_added: TriggerNode,
+  trigger_order_fulfilled: TriggerNode,
+  trigger_order_pending: TriggerNode,
+  trigger_inactivity: TriggerNode,
+  trigger_viewed_product: TriggerNode,
+
   // Actions
   action_whatsapp: ActionNode,
   action_email: ActionNode,

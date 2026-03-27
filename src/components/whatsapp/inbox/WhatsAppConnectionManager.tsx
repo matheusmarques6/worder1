@@ -1,15 +1,23 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
   Check,
   ChevronDown,
   Smartphone,
+  Cloud,
+  Wifi,
+  WifiOff,
   Loader2,
+  Settings,
   Trash2,
+  RefreshCw,
+  AlertCircle,
+  MessageSquare,
   MoreVertical,
+  QrCode,
   Power,
   PowerOff
 } from 'lucide-react'
@@ -43,30 +51,18 @@ export default function WhatsAppConnectionManager({
   const [isOpen, setIsOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [qrCode, setQrCode] = useState<string | null>(null)
-  const [reconnectingId, setReconnectingId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   // =============================================
   // FETCH INSTANCES - COM STORE_ID
   // =============================================
 
-  // ✅ Debounce: evita chamadas simultâneas
-  const isFetchingRef = useRef(false)
-
-  const fetchInstances = useCallback(async () => {
+  const fetchInstances = async () => {
     // ✅ CRÍTICO: Não buscar sem storeId
     if (!storeId) {
       setInstances([])
       setLoading(false)
       return
     }
-
-    // ✅ Debounce: ignora chamadas enquanto outra está em andamento
-    if (isFetchingRef.current) {
-      return
-    }
-    isFetchingRef.current = true
 
     try {
       // ✅ CRÍTICO: Passar store_id na requisição
@@ -100,9 +96,8 @@ export default function WhatsAppConnectionManager({
       console.error('Error fetching instances:', error)
     } finally {
       setLoading(false)
-      isFetchingRef.current = false
     }
-  }, [organizationId, storeId, selectedInstance, onSelectInstance])
+  }
 
   // ✅ CORREÇÃO: Refetch quando storeId mudar
   useEffect(() => {
@@ -114,32 +109,13 @@ export default function WhatsAppConnectionManager({
     }
   }, [organizationId, storeId])
   
-  // Auto-refresh (pauses during reconnect since reconnect has its own faster polling)
+  // Auto-refresh
   useEffect(() => {
-    if (!organizationId || !storeId || reconnectingId) return
-
+    if (!organizationId || !storeId) return
+    
     const interval = setInterval(fetchInstances, 5000)
     return () => clearInterval(interval)
-  }, [organizationId, storeId, reconnectingId])
-
-  // Faster polling during reconnect
-  useEffect(() => {
-    if (!reconnectingId) return
-
-    const interval = setInterval(fetchInstances, 3000)
-    return () => clearInterval(interval)
-  }, [reconnectingId])
-
-  // Reactive check: detect when reconnecting instance becomes connected
-  useEffect(() => {
-    if (!reconnectingId) return
-
-    const instance = instances.find((i) => i.id === reconnectingId)
-    if (instance && (instance.status === 'connected' || instance.status === 'ACTIVE')) {
-      setQrCode(null)
-      setReconnectingId(null)
-    }
-  }, [reconnectingId, instances])
+  }, [organizationId, storeId])
 
   // =============================================
   // ACTIONS
@@ -162,43 +138,12 @@ export default function WhatsAppConnectionManager({
     }
   }
 
-  const handleReconnect = async (instanceId: string) => {
-    setActionLoading(instanceId)
-    setMenuOpen(null)
-    setError(null)
-    try {
-      const response = await fetch('/api/whatsapp/instances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'connect', instance_id: instanceId })
-      })
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        throw new Error(data.error || `Erro do servidor: ${response.status}`)
-      }
-
-      const qr = data.qrcode?.base64 || data.qrcode?.code || data.base64 || data.code
-      if (qr) {
-        setQrCode(qr)
-        setReconnectingId(instanceId)
-      } else {
-        setError('Não foi possível gerar o QR Code. Tente novamente.')
-      }
-    } catch (err) {
-      console.error('Error reconnecting:', err)
-      setError(err instanceof Error ? err.message : 'Erro ao reconectar. Tente novamente.')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
   const handleDelete = async (instanceId: string) => {
     if (!confirm('Tem certeza que deseja excluir esta conexão?')) return
     
     setActionLoading(instanceId)
     try {
-      await fetch(`/api/whatsapp/instances?id=${instanceId}&organization_id=${organizationId}`, { method: 'DELETE' })
+      await fetch(`/api/whatsapp/instances?id=${instanceId}`, { method: 'DELETE' })
       if (selectedInstance?.id === instanceId) {
         onSelectInstance(null)
       }
@@ -245,8 +190,8 @@ export default function WhatsAppConnectionManager({
   // ✅ NOVO: Mostrar mensagem se não tiver loja
   if (!storeId) {
     return (
-      <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-        <p className="text-sm text-yellow-500 text-center">
+      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <p className="text-sm text-amber-700 text-center">
           Selecione uma loja para ver as conexões
         </p>
       </div>
@@ -258,21 +203,21 @@ export default function WhatsAppConnectionManager({
       {/* Current Selection */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center gap-3 p-2 bg-gray-50 hover:bg-white border border-gray-200 rounded-lg transition-colors"
+        className="w-full flex items-center gap-3 p-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
       >
         {loading ? (
-          <Loader2 className="w-5 h-5 text-gray-500 animate-spin" />
+          <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
         ) : selectedInstance ? (
           <>
             <div className="relative">
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                selectedInstance.status === 'connected' ? 'bg-green-500/20' : 'bg-gray-100'
+                selectedInstance.status === 'connected' ? 'bg-green-100' : 'bg-gray-100'
               }`}>
                 <Smartphone className={`w-5 h-5 ${
-                  selectedInstance.status === 'connected' ? 'text-green-400' : 'text-gray-500'
+                  selectedInstance.status === 'connected' ? 'text-green-600' : 'text-gray-400'
                 }`} />
               </div>
-              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-gray-200 ${
+              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
                 getStatusColor(selectedInstance.status)
               }`} />
             </div>
@@ -288,7 +233,7 @@ export default function WhatsAppConnectionManager({
         ) : instances.length === 0 ? (
           <>
             <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-              <Plus className="w-5 h-5 text-gray-500" />
+              <Plus className="w-5 h-5 text-gray-400" />
             </div>
             <div className="flex-1 text-left">
               <p className="text-sm font-medium text-gray-900">Conectar WhatsApp</p>
@@ -298,7 +243,7 @@ export default function WhatsAppConnectionManager({
         ) : (
           <>
             <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-              <Smartphone className="w-5 h-5 text-gray-500" />
+              <Smartphone className="w-5 h-5 text-gray-400" />
             </div>
             <div className="flex-1 text-left">
               <p className="text-sm font-medium text-gray-900">Selecione um número</p>
@@ -306,7 +251,7 @@ export default function WhatsAppConnectionManager({
             </div>
           </>
         )}
-        <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown */}
@@ -316,7 +261,7 @@ export default function WhatsAppConnectionManager({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+            className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
           >
             {/* Instance List */}
             <div className="max-h-64 overflow-y-auto">
@@ -330,8 +275,8 @@ export default function WhatsAppConnectionManager({
                 instances.map((instance) => (
                   <div
                     key={instance.id}
-                    className={`flex items-center gap-3 p-3 hover:bg-gray-100 cursor-pointer ${
-                      selectedInstance?.id === instance.id ? 'bg-brand-50' : ''
+                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${
+                      selectedInstance?.id === instance.id ? 'bg-orange-50' : ''
                     }`}
                   >
                     <div
@@ -343,13 +288,13 @@ export default function WhatsAppConnectionManager({
                     >
                       <div className="relative">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                          instance.status === 'connected' ? 'bg-green-500/20' : 'bg-gray-100'
+                          instance.status === 'connected' ? 'bg-green-100' : 'bg-gray-100'
                         }`}>
                           <Smartphone className={`w-4 h-4 ${
-                            instance.status === 'connected' ? 'text-green-400' : 'text-gray-500'
+                            instance.status === 'connected' ? 'text-green-600' : 'text-gray-400'
                           }`} />
                         </div>
-                        <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-gray-200 ${
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
                           getStatusColor(instance.status)
                         }`} />
                       </div>
@@ -362,7 +307,7 @@ export default function WhatsAppConnectionManager({
                         </p>
                       </div>
                       {selectedInstance?.id === instance.id && (
-                        <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
+                        <Check className="w-4 h-4 text-orange-500 flex-shrink-0" />
                       )}
                     </div>
 
@@ -375,16 +320,16 @@ export default function WhatsAppConnectionManager({
                         }}
                         className="p-1 hover:bg-gray-200 rounded"
                       >
-                        <MoreVertical className="w-4 h-4 text-gray-500" />
+                        <MoreVertical className="w-4 h-4 text-gray-400" />
                       </button>
 
                       {menuOpen === instance.id && (
-                        <div className="absolute right-0 mt-1 w-40 bg-gray-100 border border-gray-300 rounded-lg shadow-xl z-10">
+                        <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
                           {instance.status === 'connected' && (
                             <button
                               onClick={() => handleDisconnect(instance.id)}
                               disabled={actionLoading === instance.id}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-yellow-400 hover:bg-gray-200"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-amber-600 hover:bg-gray-50"
                             >
                               {actionLoading === instance.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -394,24 +339,10 @@ export default function WhatsAppConnectionManager({
                               Desconectar
                             </button>
                           )}
-                          {instance.status !== 'connected' && instance.status !== 'ACTIVE' && (
-                            <button
-                              onClick={() => handleReconnect(instance.id)}
-                              disabled={actionLoading === instance.id}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-400 hover:bg-dark-600"
-                            >
-                              {actionLoading === instance.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Power className="w-4 h-4" />
-                              )}
-                              Reconectar
-                            </button>
-                          )}
                           <button
                             onClick={() => handleDelete(instance.id)}
                             disabled={actionLoading === instance.id}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-gray-200"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-gray-50"
                           >
                             {actionLoading === instance.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -435,7 +366,7 @@ export default function WhatsAppConnectionManager({
                   setIsOpen(false)
                   onConnectClick()
                 }}
-                className="w-full flex items-center justify-center gap-2 p-2 text-sm text-brand-600 hover:bg-gray-100 rounded-lg"
+                className="w-full flex items-center justify-center gap-2 p-2 text-sm text-orange-600 hover:bg-orange-50 rounded-lg"
               >
                 <Plus className="w-4 h-4" />
                 Conectar novo WhatsApp
@@ -444,48 +375,6 @@ export default function WhatsAppConnectionManager({
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Error Message */}
-      {error && (
-        <div className="mt-2 flex items-center gap-2 p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
-          <p className="text-xs text-red-400 flex-1">{error}</p>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300 p-0.5">
-            &times;
-          </button>
-        </div>
-      )}
-
-      {/* QR Code Modal */}
-      {qrCode && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-dark-800 border border-dark-700 rounded-2xl p-8 max-w-md w-full mx-4 text-center">
-            <h3 className="text-xl font-semibold text-white mb-4">Escaneie o QR Code</h3>
-            <p className="text-dark-400 mb-6">
-              Abra o WhatsApp no seu celular, vá em Configurações → Aparelhos Conectados → Conectar
-            </p>
-            <div className="bg-white p-4 rounded-xl inline-block mb-6">
-              <img
-                src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
-                alt="QR Code"
-                className="w-64 h-64"
-              />
-            </div>
-            <div className="flex items-center justify-center gap-2 text-sm text-dark-400 mb-6">
-              <Loader2 className="w-4 h-4 animate-spin text-green-500" />
-              Aguardando conexão...
-            </div>
-            <button
-              onClick={() => {
-                setQrCode(null)
-                setReconnectingId(null)
-              }}
-              className="px-5 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -76,7 +76,7 @@ function KPICard({ title, value, change, icon: Icon, color, format = 'number', d
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
-      className={`relative bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 transition-all group`}
+      className={`relative bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:border-gray-300 hover:shadow-md transition-all group`}
     >
       <div className="flex items-start justify-between">
         <div className={`p-2.5 rounded-lg ${colors.bg}`}>
@@ -191,7 +191,7 @@ export function CampaignRateCards({
   avgReadTime,
 }: RateCardsProps) {
   return (
-    <div className="bg-gray-50 rounded-xl border border-gray-200 p-6">
+    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">Taxas Gerais</h3>
       
       <div className="space-y-4">

@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
 
     // Buscar runs que estão em 'waiting' e já passaram do tempo
     // JUNTO com a automação para verificar status
+    const supabase = getSupabase();
     const { data: runs, error } = await supabase
       .from('automation_runs')
       .select('id, automation_id, current_node_id, waiting_until, automations!inner(id, status)')

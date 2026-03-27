@@ -39,14 +39,6 @@ import {
   X,
   DollarSign,
   User,
-  Phone,
-  Mail,
-  Building2,
-  Briefcase,
-  Star,
-  ShoppingBag,
-  TrendingUp,
-  MapPin,
 } from 'lucide-react'
 import { useDeals, usePipelines } from '@/hooks'
 import { useCRMStore, useAuthStore } from '@/stores'
@@ -87,111 +79,8 @@ const customCollisionDetection: CollisionDetection = (args) => {
 }
 
 // ==========================================
-// DEAL CARD COMPONENT - Design inspirado Pipedrive/Kommo
+// DEAL CARD COMPONENT
 // ==========================================
-
-const avatarColors = [
-  'from-blue-500 to-blue-600',
-  'from-purple-500 to-purple-600',
-  'from-emerald-500 to-emerald-600',
-  'from-orange-500 to-orange-600',
-  'from-pink-500 to-pink-600',
-  'from-cyan-500 to-cyan-600',
-  'from-amber-500 to-amber-600',
-  'from-rose-500 to-rose-600',
-]
-
-function getAvatarColor(name: string) {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return avatarColors[Math.abs(hash) % avatarColors.length]
-}
-
-function getRelativeTime(date: string) {
-  const now = new Date()
-  const d = new Date(date)
-  const diffMs = now.getTime() - d.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMins / 60)
-  const diffDays = Math.floor(diffHours / 24)
-  if (diffMins < 1) return 'agora'
-  if (diffMins < 60) return `${diffMins}min`
-  if (diffHours < 24) return `${diffHours}h`
-  if (diffDays < 7) return `${diffDays}d`
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-}
-
-// Tag color helper
-const TAG_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'inbound': { bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30' },
-  'ads facebook': { bg: 'bg-indigo-500/15', text: 'text-indigo-400', border: 'border-indigo-500/30' },
-  'ads google': { bg: 'bg-red-500/15', text: 'text-red-400', border: 'border-red-500/30' },
-  'tráfego pago': { bg: 'bg-orange-500/15', text: 'text-orange-400', border: 'border-orange-500/30' },
-  'youtube': { bg: 'bg-rose-500/15', text: 'text-rose-400', border: 'border-rose-500/30' },
-  'tiktok ads': { bg: 'bg-pink-500/15', text: 'text-pink-400', border: 'border-pink-500/30' },
-  'site principal': { bg: 'bg-emerald-500/15', text: 'text-emerald-400', border: 'border-emerald-500/30' },
-  'outbound': { bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/30' },
-  'social selling': { bg: 'bg-cyan-500/15', text: 'text-cyan-400', border: 'border-cyan-500/30' },
-}
-
-function getTagColors(tag: string) {
-  const key = tag.toLowerCase()
-  return TAG_COLORS[key] || { bg: 'bg-dark-700/60', text: 'text-dark-300', border: 'border-dark-600/40' }
-}
-
-// Helper to detect calendly/booking URLs from custom_fields
-function extractBookingUrl(deal: Deal): string | null {
-  const customFields = (deal as any).custom_fields || {}
-  const formResponses = customFields.form_responses || []
-
-  for (const response of formResponses) {
-    const value = String(response.value || '')
-    if (value.includes('calendly.com') || value.includes('cal.com') || value.includes('booking')) {
-      return value
-    }
-  }
-  return null
-}
-
-// Helper to extract contact info from form_responses as fallback
-function extractFormContactData(deal: Deal): { email?: string; phone?: string; name?: string } {
-  const customFields = (deal as any).custom_fields || {}
-  const formResponses = customFields.form_responses || []
-  const result: { email?: string; phone?: string; name?: string } = {}
-
-  for (const response of formResponses) {
-    const label = (response.label || '').toLowerCase()
-    const value = response.value
-    const type = (response.type || '').toLowerCase()
-
-    if (!value) continue
-
-    // Email detection
-    if (!result.email) {
-      if (type === 'email' || label.includes('email') || label.includes('e-mail')) {
-        result.email = String(value)
-      } else if (typeof value === 'string' && value.includes('@') && value.includes('.')) {
-        result.email = value
-      }
-    }
-
-    // Phone detection
-    if (!result.phone) {
-      if (type === 'phone' || type === 'tel' || label.includes('telefone') || label.includes('celular') || label.includes('whatsapp') || label.includes('phone')) {
-        result.phone = String(value)
-      }
-    }
-
-    // Name detection
-    if (!result.name) {
-      if (label.includes('nome') || label.includes('name') || label === 'nome completo' || label === 'seu nome') {
-        result.name = String(value)
-      }
-    }
-  }
-
-  return result
-}
 
 interface DealCardProps {
   deal: Deal
@@ -200,59 +89,26 @@ interface DealCardProps {
 }
 
 function DealCard({ deal, isDragging, onClick }: DealCardProps) {
-  const contact = deal.contact as any
-
-  // Extract from custom_fields
-  const customFields = (deal as any).custom_fields || {}
-  const formName = customFields.form_name
-  const formResponses = customFields.form_responses || []
-  const bookingUrl = extractBookingUrl(deal)
-  const assignedUser = deal.assigned_user
-  const dealId = deal.id.split('-')[0]
-
-  // Extract data from form_responses as fallback
-  const formData = extractFormContactData(deal)
-
-  // Use contact data OR fallback to form data
-  const email = contact?.email || formData.email
-  const phone = contact?.whatsapp || contact?.phone || formData.phone
-  const contactName = contact
-    ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email
-    : formData.name || deal.title
-  const displayName = contactName || deal.title
-
-  // UTM data
-  const utmSource = customFields.utm_source
-  const utmMedium = customFields.utm_medium
-  const utmCampaign = customFields.utm_campaign
-  const hasUtm = utmSource || utmMedium || utmCampaign
-
-  // Contact metrics
-  const lifetimeValue = contact?.lifetime_value || contact?.total_spent || 0
-  const totalOrders = contact?.total_orders || 0
-  const score = contact?.score || 0
-  const position = contact?.position
-  const city = contact?.city
-  const country = contact?.country
-  const company = contact?.company
-  const hasCustomerHistory = lifetimeValue > 0 || totalOrders > 0
+  const contactName = deal.contact
+    ? `${deal.contact.first_name || ''} ${deal.contact.last_name || ''}`.trim() || deal.contact.email
+    : null
 
   return (
     <div
       onClick={onClick}
       className={`
-        p-4 bg-white border border-gray-200 rounded-xl cursor-pointer
-        hover:border-gray-300 hover:bg-white transition-all group
-        ${isDragging ? 'opacity-50 scale-105 shadow-xl shadow-primary-500/10 rotate-2' : ''}
+        p-4 bg-white border border-gray-200 rounded-lg cursor-pointer
+        hover:border-gray-300 hover:shadow-md transition-all group shadow-sm
+        ${isDragging ? 'opacity-50 scale-105 shadow-xl shadow-orange-500/10 rotate-2' : ''}
       `}
     >
       <div className="flex items-start justify-between mb-3">
-        <h4 className="text-sm font-medium text-gray-900 line-clamp-2 group-hover:text-brand-500 transition-colors">
+        <h4 className="text-sm font-medium text-gray-900 line-clamp-2 group-hover:text-orange-600 transition-colors">
           {deal.title}
         </h4>
-        <button 
+        <button
           onClick={(e) => e.stopPropagation()}
-          className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+          className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100"
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
@@ -266,7 +122,7 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
             </span>
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-white truncate">{contactName}</p>
+            <p className="text-xs text-gray-800 truncate">{contactName}</p>
             {deal.contact.company && (
               <p className="text-[10px] text-gray-500 truncate">{deal.contact.company}</p>
             )}
@@ -275,11 +131,11 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
       )}
 
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-success-400">{formatCurrency(deal.value)}</span>
+        <span className="text-sm font-semibold text-green-600">{formatCurrency(deal.value)}</span>
         <div className="flex items-center gap-1">
-          <div className="w-12 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-            <div 
-              className="h-full rounded-full bg-gradient-to-r from-primary-500 to-accent-500 transition-all duration-300"
+          <div className="w-12 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-orange-500 transition-all duration-300"
               style={{ width: `${deal.probability}%` }}
             />
           </div>
@@ -293,7 +149,7 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
           {deal.tags.slice(0, 2).map((tag, i) => (
             <span
               key={i}
-              className="px-2 py-0.5 rounded-full bg-brand-100 text-brand-600 text-[10px]"
+              className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[10px]"
             >
               {tag}
             </span>
@@ -313,159 +169,6 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
           <span>{new Date(deal.expected_close_date).toLocaleDateString('pt-BR')}</span>
         </div>
       )}
-
-      <div className="p-3">
-        {/* Top row: Avatar + Name + ID */}
-        <div className="flex items-start gap-2.5">
-          <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${getAvatarColor(displayName)} flex items-center justify-center flex-shrink-0`}>
-            <span className="text-[11px] font-bold text-white">
-              {getInitials(contact?.first_name || deal.title?.split(' ')[0], contact?.last_name || deal.title?.split(' ')[1])}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="text-[13px] font-semibold text-white truncate leading-tight">
-                {displayName}
-              </h4>
-              <span className="text-[9px] text-dark-600 flex-shrink-0 font-mono">
-                #{dealId}
-              </span>
-            </div>
-
-            {/* Position row */}
-            {position && (
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className="flex items-center gap-1 text-[10px] text-dark-500 truncate">
-                  <Briefcase className="w-3 h-3 flex-shrink-0" />
-                  {position}
-                </span>
-              </div>
-            )}
-
-            {/* Form origin */}
-            {formName && (
-              <p className="text-[10px] text-primary-400 truncate mt-0.5">{formName}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Contact Info - Always visible (from contact OR form_responses) */}
-        <div className="mt-2 pl-[46px] space-y-1">
-          {email && (
-            <div className="flex items-center gap-1.5 text-[10px] text-dark-300">
-              <Mail className="w-3 h-3 text-blue-400" />
-              <span className="truncate">{email}</span>
-            </div>
-          )}
-          {phone && (
-            <div className="flex items-center gap-1.5 text-[10px] text-dark-300">
-              <Phone className="w-3 h-3 text-emerald-400" />
-              <span>{phone}</span>
-            </div>
-          )}
-          {company && (
-            <div className="flex items-center gap-1.5 text-[10px] text-dark-400">
-              <Building2 className="w-3 h-3 text-dark-500" />
-              <span className="truncate">{company}</span>
-            </div>
-          )}
-          {(city || country) && (
-            <div className="flex items-center gap-1.5 text-[10px] text-dark-500">
-              <MapPin className="w-3 h-3" />
-              <span className="truncate">{[city, country].filter(Boolean).join(', ')}</span>
-            </div>
-          )}
-        </div>
-
-        {/* UTM Info - Show source/campaign */}
-        {hasUtm && (
-          <div className="mt-1.5 pl-[46px] flex flex-wrap gap-1">
-            {utmSource && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-500/15 text-purple-400 border border-purple-500/30">
-                {utmSource}
-              </span>
-            )}
-            {utmMedium && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
-                {utmMedium}
-              </span>
-            )}
-            {utmCampaign && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 truncate max-w-[120px]">
-                {utmCampaign}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Value & Time row */}
-        <div className="flex items-center justify-between mt-2.5 pl-[46px]">
-          <span className={`text-[13px] font-bold ${deal.value > 0 ? 'text-emerald-400' : 'text-dark-500'}`}>
-            {formatCurrency(deal.value)}
-          </span>
-          <div className="flex items-center gap-1 text-dark-500 text-[10px]">
-            <Clock className="w-3 h-3" />
-            <span>{getRelativeTime(deal.updated_at || deal.created_at)}</span>
-          </div>
-        </div>
-
-        {/* Assigned User */}
-        {assignedUser && (
-          <div className="flex items-center gap-1 mt-1.5 pl-[46px] text-[10px] text-dark-400">
-            <User className="w-3 h-3" />
-            <span className="truncate">{assignedUser.name || assignedUser.email}</span>
-          </div>
-        )}
-
-        {/* Tags row */}
-        {deal.tags && deal.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2 pl-[46px]">
-            {deal.tags.slice(0, 3).map((tag, i) => {
-              const colors = getTagColors(tag)
-              return (
-                <span
-                  key={i}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
-                >
-                  {tag}
-                </span>
-              )
-            })}
-            {deal.tags.length > 3 && (
-              <span className="text-[9px] text-dark-500 py-0.5">+{deal.tags.length - 3}</span>
-            )}
-          </div>
-        )}
-
-        {/* Quick actions - Always visible */}
-        {(phone || email) && (
-          <div className="flex items-center gap-1.5 mt-2.5 pl-[46px]">
-            {phone && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  window.open(`https://wa.me/${phone.replace(/\D/g, '')}`)
-                }}
-                className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors text-[10px] font-medium"
-                title="WhatsApp"
-              >
-                <Phone className="w-3 h-3" />
-                WhatsApp
-              </button>
-            )}
-            {email && (
-              <button
-                onClick={(e) => { e.stopPropagation(); window.open(`mailto:${email}`) }}
-                className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 transition-colors text-[10px] font-medium"
-                title="E-mail"
-              >
-                <Mail className="w-3 h-3" />
-                E-mail
-              </button>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   )
 }
@@ -515,70 +218,60 @@ interface KanbanColumnProps {
 
 function KanbanColumn({ stage, deals, onAddDeal, onDealClick, onEditStage }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
-
+  
+  // ✅ PROTEÇÃO: Garantir que deals é array antes de usar reduce
   const safeDeals = Array.isArray(deals) ? deals : []
   const totalValue = safeDeals.reduce((sum, deal) => sum + (deal.value || 0), 0)
+  const weightedValue = safeDeals.reduce((sum, deal) => sum + ((deal.value || 0) * (deal.probability || 0) / 100), 0)
 
   return (
-    <div className="flex-shrink-0 w-[300px]">
+    <div className="flex-shrink-0 w-80">
       <div
         ref={setNodeRef}
         className={`
-          h-full flex flex-col bg-white/30 rounded-2xl border transition-all duration-200
-          ${isOver ? 'border-brand-400 bg-brand-50/50 scale-[1.02]' : 'border-gray-200'}
+          h-full flex flex-col bg-gray-50 rounded-lg border transition-all duration-200
+          ${isOver ? 'border-orange-400 bg-orange-50 scale-[1.02]' : 'border-gray-200'}
         `}
       >
         {/* Column Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-2">
-            <button 
+            <button
               onClick={() => onEditStage(stage)}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity group min-w-0"
-              title="Editar estágio"
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity group"
+              title="Clique para editar este estágio"
             >
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
-              <h3 className="font-semibold text-white group-hover:text-brand-500 transition-colors">{stage.name}</h3>
-              <span className="px-2 py-0.5 rounded-full bg-gray-50 text-xs text-gray-500">
+              <h3 className="text-sm font-semibold text-gray-700 group-hover:text-orange-500 transition-colors">{stage.name}</h3>
+              <span className="px-2 py-0.5 rounded-full bg-gray-200 text-xs text-gray-500">
                 {safeDeals.length}
               </span>
               <Pencil className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
-            <button 
+            <button
               onClick={onAddDeal}
-              className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 hover:text-white transition-colors"
+              className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-700 transition-colors"
               title="Adicionar deal"
             >
               <Plus className="w-4 h-4" />
             </button>
-            <div className="flex items-center gap-1">
-              {totalValue > 0 && (
-                <span className="text-[11px] text-dark-500 font-medium mr-1">{formatCurrency(totalValue)}</span>
-              )}
-              <button
-                onClick={onAddDeal}
-                className="p-1 rounded hover:bg-dark-800 text-dark-500 hover:text-white transition-colors"
-                title="Adicionar deal"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            </div>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-success-400 font-medium">{formatCurrency(totalValue)}</span>
-            <span className="text-gray-400 text-xs">
+            <span className="text-green-600 font-medium">{formatCurrency(totalValue)}</span>
+            <span className="text-gray-500 text-xs">
               Ponderado: {formatCurrency(weightedValue)}
             </span>
           </div>
         </div>
 
         {/* Deals */}
-        <div className="flex-1 px-1 space-y-1.5 overflow-y-auto custom-scrollbar min-h-[200px]">
+        <div className="flex-1 p-2 space-y-2 overflow-y-auto custom-scrollbar min-h-[200px]">
           <SortableContext items={safeDeals.map(d => d.id)} strategy={verticalListSortingStrategy}>
             {safeDeals.map(deal => (
               <SortableDeal key={deal.id} deal={deal} onDealClick={onDealClick} />
             ))}
           </SortableContext>
-
+          
           {safeDeals.length === 0 && (
             <div className="p-4 text-center">
               <p className="text-sm text-gray-400">Arraste deals para cá</p>
@@ -590,10 +283,10 @@ function KanbanColumn({ stage, deals, onAddDeal, onDealClick, onEditStage }: Kan
         <div className="p-2 border-t border-gray-200">
           <button
             onClick={onAddDeal}
-            className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-50 transition-colors"
+            className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-gray-500 hover:text-orange-600 hover:bg-orange-50 transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="text-[12px]">Adicionar</span>
+            <Plus className="w-4 h-4" />
+            <span className="text-sm">Adicionar</span>
           </button>
         </div>
       </div>
@@ -609,7 +302,7 @@ function LoadingState() {
   return (
     <div className="h-[calc(100vh-120px)] flex items-center justify-center">
       <div className="text-center">
-        <div className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
         <p className="text-gray-500">Carregando CRM...</p>
       </div>
     </div>
@@ -631,7 +324,7 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
         <p className="text-gray-500 mb-4 max-w-sm">{error.message}</p>
         <button
           onClick={onRetry}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg text-white transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 rounded-lg text-white transition-colors"
         >
           <RefreshCw className="w-4 h-4" />
           Tentar novamente
@@ -649,8 +342,8 @@ function EmptyState({ onCreatePipeline }: { onCreatePipeline: () => void }) {
   return (
     <div className="h-[calc(100vh-120px)] flex items-center justify-center">
       <div className="text-center max-w-md">
-        <div className="w-20 h-20 bg-brand-50 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Settings className="w-10 h-10 text-brand-500" />
+        <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Settings className="w-10 h-10 text-orange-500" />
         </div>
         <h3 className="text-xl font-semibold text-gray-900 mb-2">Nenhum pipeline encontrado</h3>
         <p className="text-gray-500 mb-6">
@@ -658,7 +351,7 @@ function EmptyState({ onCreatePipeline }: { onCreatePipeline: () => void }) {
         </p>
         <button
           onClick={onCreatePipeline}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-primary-500/20"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-orange-500/20"
         >
           <Plus className="w-5 h-5" />
           Criar Pipeline
@@ -1040,23 +733,24 @@ export default function CRMPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-140px)] flex flex-col">
-      {/* Top Bar - Compact */}
-      <div className="flex items-center gap-2 mb-4">
+    <div className="h-[calc(100vh-200px)] flex flex-col">
+      {/* Controls */}
+      <div className="flex items-center gap-3 mb-6">
         {/* Pipeline Selector */}
         <div className="relative">
-          <button
+          <button 
             onClick={() => setShowPipelineDropdown(!showPipelineDropdown)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white hover:bg-white transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 hover:bg-gray-50 transition-colors shadow-sm"
           >
             <span className="font-medium">{activePipeline?.name || 'Selecionar'}</span>
-            <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showPipelineDropdown ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPipelineDropdown ? 'rotate-180' : ''}`} />
           </button>
-
+          
+          {/* Dropdown */}
           <AnimatePresence>
             {showPipelineDropdown && (
               <motion.div
-                initial={{ opacity: 0, y: -4 }}
+                initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 className="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-20 overflow-hidden"
@@ -1067,8 +761,8 @@ export default function CRMPage() {
                         key={pipeline.id}
                         className={`flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors group ${
                           activePipeline?.id === pipeline.id
-                            ? 'bg-brand-100'
-                            : 'hover:bg-gray-100'
+                            ? 'bg-orange-50'
+                            : 'hover:bg-gray-50'
                         }`}
                       >
                         <button
@@ -1080,12 +774,12 @@ export default function CRMPage() {
                             style={{ backgroundColor: pipeline.color || '#f97316' }}
                           />
                           <span className={`flex-1 text-left truncate ${
-                            activePipeline?.id === pipeline.id ? 'text-brand-600' : 'text-gray-600'
+                            activePipeline?.id === pipeline.id ? 'text-orange-600' : 'text-gray-700'
                           }`}>
                             {pipeline.name}
                           </span>
                           {activePipeline?.id === pipeline.id && (
-                            <span className="text-xs text-brand-600 flex-shrink-0">Ativo</span>
+                            <span className="text-xs text-orange-500 flex-shrink-0">Ativo</span>
                           )}
                         </button>
                         
@@ -1096,7 +790,7 @@ export default function CRMPage() {
                               e.stopPropagation()
                               handleEditPipeline(pipeline)
                             }}
-                            className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-gray-200 transition-colors"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors"
                             title="Editar pipeline"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -1106,7 +800,7 @@ export default function CRMPage() {
                               e.stopPropagation()
                               handleDeletePipeline(pipeline)
                             }}
-                            className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                             title="Excluir pipeline"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1122,7 +816,7 @@ export default function CRMPage() {
                         setEditingPipeline(null)
                         setShowPipelineModal(true)
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-brand-600 hover:bg-brand-50 transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-orange-500 hover:bg-orange-50 transition-colors"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Novo Pipeline</span>
@@ -1135,38 +829,37 @@ export default function CRMPage() {
           
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Buscar deals..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400 w-64 transition-colors"
+              className="pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-orange-400 w-64 transition-colors shadow-sm"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
                 <X className="w-4 h-4" />
               </button>
             )}
-          </AnimatePresence>
-        </div>
+          </div>
 
           {/* Filter */}
           <div className="relative">
             <button 
               onClick={() => setShowFilterDropdown(!showFilterDropdown)}
               className={`p-2.5 rounded-xl border transition-all ${
-                hasActiveFilters 
-                  ? 'bg-brand-100 border-brand-400 text-brand-600' 
-                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-white hover:bg-white'
+                hasActiveFilters
+                  ? 'bg-orange-100 border-orange-300 text-orange-600'
+                  : 'bg-white border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-50 shadow-sm'
               }`}
             >
               <Filter className="w-5 h-5" />
               {hasActiveFilters && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary-500 rounded-full" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full" />
               )}
             </button>
             
@@ -1178,19 +871,19 @@ export default function CRMPage() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -10, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-full mt-2 w-80 bg-white/95 backdrop-blur-xl border border-gray-200 rounded-2xl shadow-2xl shadow-black/20 z-20 overflow-hidden"
+                  className="absolute right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-2xl shadow-2xl z-20 overflow-hidden"
                 >
                   {/* Header */}
-                  <div className="px-5 py-4 border-b border-gray-200 bg-white/30">
+                  <div className="px-5 py-4 border-b border-gray-200 bg-gray-50">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-brand-600" />
+                        <Filter className="w-4 h-4 text-orange-500" />
                         <h3 className="text-sm font-semibold text-gray-900">Filtros</h3>
                       </div>
                       {hasActiveFilters && (
                         <button
                           onClick={clearFilters}
-                          className="text-xs text-gray-500 hover:text-white transition-colors flex items-center gap-1"
+                          className="text-xs text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1"
                         >
                           <X className="w-3 h-3" />
                           Limpar
@@ -1203,7 +896,7 @@ export default function CRMPage() {
                   <div className="p-5 space-y-5">
                     {/* Status Filter */}
                     <div>
-                      <label className="flex items-center gap-2 text-xs font-medium text-gray-600 mb-3">
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-3">
                         📊 Status do Deal
                       </label>
                       <div className="grid grid-cols-4 gap-2">
@@ -1211,7 +904,7 @@ export default function CRMPage() {
                           { value: 'open', label: 'Abertos', color: 'bg-yellow-500' },
                           { value: 'won', label: 'Ganhos', color: 'bg-green-500' },
                           { value: 'lost', label: 'Perdidos', color: 'bg-red-500' },
-                          { value: 'all', label: 'Todos', color: 'bg-gray-300' },
+                          { value: 'all', label: 'Todos', color: 'bg-gray-500' },
                         ].map(option => (
                           <button
                             key={option.value}
@@ -1219,7 +912,7 @@ export default function CRMPage() {
                             className={`px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
                               filters.status === option.value
                                 ? `${option.color} text-white shadow-lg`
-                                : 'bg-white/80 text-gray-500 border border-gray-300/50 hover:border-gray-300 hover:text-gray-600'
+                                : 'bg-gray-50 text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
                             }`}
                           >
                             {option.label}
@@ -1230,7 +923,7 @@ export default function CRMPage() {
                     
                     {/* Value Range */}
                     <div>
-                      <label className="flex items-center gap-2 text-xs font-medium text-gray-600 mb-3">
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-3">
                         <DollarSign className="w-3.5 h-3.5" />
                         Valor do Deal
                       </label>
@@ -1242,7 +935,7 @@ export default function CRMPage() {
                             placeholder="0"
                             value={filters.minValue}
                             onChange={(e) => setFilters(f => ({ ...f, minValue: e.target.value }))}
-                            className="w-full pl-9 pr-3 py-2.5 bg-white/80 border border-gray-300/50 rounded-xl text-white text-sm placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                            className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
                           />
                         </div>
                         <div className="text-gray-400 text-sm font-medium">até</div>
@@ -1253,7 +946,7 @@ export default function CRMPage() {
                             placeholder="∞"
                             value={filters.maxValue}
                             onChange={(e) => setFilters(f => ({ ...f, maxValue: e.target.value }))}
-                            className="w-full pl-9 pr-3 py-2.5 bg-white/80 border border-gray-300/50 rounded-xl text-white text-sm placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                            className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
                           />
                         </div>
                       </div>
@@ -1261,7 +954,7 @@ export default function CRMPage() {
                     
                     {/* Has Contact */}
                     <div>
-                      <label className="flex items-center gap-2 text-xs font-medium text-gray-600 mb-3">
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-3">
                         <User className="w-3.5 h-3.5" />
                         Contato Vinculado
                       </label>
@@ -1276,8 +969,8 @@ export default function CRMPage() {
                             onClick={() => setFilters(f => ({ ...f, hasContact: option.value as any }))}
                             className={`px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
                               filters.hasContact === option.value
-                                ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/25'
-                                : 'bg-white/80 text-gray-500 border border-gray-300/50 hover:border-gray-300 hover:text-gray-600'
+                                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/25'
+                                : 'bg-gray-50 text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
                             }`}
                           >
                             <span className="mr-1">{option.icon}</span>
@@ -1289,19 +982,19 @@ export default function CRMPage() {
                   </div>
                   
                   {/* Footer */}
-                  <div className="px-5 py-4 border-t border-gray-200 bg-white/30 flex gap-3">
+                  <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex gap-3">
                     <button
                       onClick={() => {
                         clearFilters()
                         setShowFilterDropdown(false)
                       }}
-                      className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-gray-600 text-sm font-medium transition-colors"
+                      className="flex-1 px-4 py-2.5 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-600 text-sm font-medium transition-colors"
                     >
                       Cancelar
                     </button>
                     <button
                       onClick={() => setShowFilterDropdown(false)}
-                      className="flex-1 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 rounded-xl text-white text-sm font-medium transition-colors shadow-lg shadow-primary-500/25"
+                      className="flex-1 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 rounded-xl text-white text-sm font-medium transition-colors shadow-lg shadow-orange-500/25"
                     >
                       Aplicar
                     </button>
@@ -1317,7 +1010,7 @@ export default function CRMPage() {
                 handleAddDealToStage(stages[0].id)
               }
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-primary-500/20"
+            className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-orange-500/20"
           >
             <Plus className="w-5 h-5" />
             <span>Novo Deal</span>
@@ -1325,149 +1018,38 @@ export default function CRMPage() {
       </div>
 
       {/* Pipeline Stats */}
-      <div className="flex items-center gap-6 mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+      <div className="flex items-center gap-6 mb-6 p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
         <div>
           <p className="text-sm text-gray-500">Valor Ponderado</p>
-          <p className="text-xl font-bold text-success-400">{formatCurrency(pipelineStats.weightedValue)}</p>
+          <p className="text-xl font-bold text-green-600">{formatCurrency(pipelineStats.weightedValue)}</p>
         </div>
-        <div className="w-px h-10 bg-gray-100" />
+        <div className="w-px h-10 bg-gray-200" />
         <div>
           <p className="text-sm text-gray-500">Contatos na Pipeline</p>
           <p className="text-xl font-bold text-gray-900">{pipelineStats.totalContacts}</p>
         </div>
-        <div className="w-px h-10 bg-gray-100" />
+        <div className="w-px h-10 bg-gray-200" />
         <div>
           <p className="text-sm text-gray-500">Deals Abertos</p>
           <p className="text-xl font-bold text-gray-900">{pipelineStats.totalDeals}</p>
         </div>
-        <div className="w-px h-10 bg-gray-100" />
+        <div className="w-px h-10 bg-gray-200" />
         <div>
           <p className="text-sm text-gray-500">Estágios</p>
           <p className="text-xl font-bold text-gray-900">{stages.length}</p>
         </div>
-        
+
         {/* Refresh Button */}
         <div className="ml-auto">
           <button
             onClick={() => refetch()}
             disabled={loading}
-            className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
             title="Atualizar"
           >
-            <Filter className="w-3.5 h-3.5" />
-            <span>Filtros</span>
-            {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-primary-400" />}
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-
-          <AnimatePresence>
-            {showFilterDropdown && (
-              <motion.div
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.1 }}
-                className="absolute left-0 top-full mt-1 w-72 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-20"
-              >
-                <div className="p-3 space-y-3">
-                  {/* Status */}
-                  <div>
-                    <label className="text-[11px] font-medium text-dark-400 uppercase tracking-wider mb-2 block">Status</label>
-                    <div className="flex gap-1">
-                      {[
-                        { value: 'open', label: 'Abertos' },
-                        { value: 'won', label: 'Ganhos' },
-                        { value: 'lost', label: 'Perdidos' },
-                        { value: 'all', label: 'Todos' },
-                      ].map(option => (
-                        <button
-                          key={option.value}
-                          onClick={() => setFilters(f => ({ ...f, status: option.value as any }))}
-                          className={`flex-1 px-2 py-1.5 rounded text-[11px] font-medium transition-all ${
-                            filters.status === option.value
-                              ? 'bg-primary-500 text-white'
-                              : 'bg-dark-900/60 text-dark-400 hover:text-dark-300'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Value */}
-                  <div>
-                    <label className="text-[11px] font-medium text-dark-400 uppercase tracking-wider mb-2 block">Valor</label>
-                    <div className="flex items-center gap-2">
-                      <input type="number" placeholder="Min" value={filters.minValue} onChange={(e) => setFilters(f => ({ ...f, minValue: e.target.value }))} className="flex-1 px-2 py-1.5 bg-dark-900/60 border border-dark-600/40 rounded text-sm text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50" />
-                      <span className="text-dark-500 text-xs">-</span>
-                      <input type="number" placeholder="Max" value={filters.maxValue} onChange={(e) => setFilters(f => ({ ...f, maxValue: e.target.value }))} className="flex-1 px-2 py-1.5 bg-dark-900/60 border border-dark-600/40 rounded text-sm text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50" />
-                    </div>
-                  </div>
-
-                  {/* Contact */}
-                  <div>
-                    <label className="text-[11px] font-medium text-dark-400 uppercase tracking-wider mb-2 block">Contato</label>
-                    <div className="flex gap-1">
-                      {[
-                        { value: 'all', label: 'Todos' },
-                        { value: 'yes', label: 'Com contato' },
-                        { value: 'no', label: 'Sem contato' },
-                      ].map(option => (
-                        <button
-                          key={option.value}
-                          onClick={() => setFilters(f => ({ ...f, hasContact: option.value as any }))}
-                          className={`flex-1 px-2 py-1.5 rounded text-[11px] font-medium transition-all ${
-                            filters.hasContact === option.value
-                              ? 'bg-primary-500 text-white'
-                              : 'bg-dark-900/60 text-dark-400 hover:text-dark-300'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {hasActiveFilters && (
-                  <div className="border-t border-dark-700 p-2">
-                    <button onClick={() => { clearFilters(); setShowFilterDropdown(false) }} className="w-full text-center text-xs text-dark-400 hover:text-white py-1 transition-colors">
-                      Limpar filtros
-                    </button>
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
-
-        {/* Spacer + Stats inline */}
-        <div className="flex-1" />
-
-        <div className="hidden md:flex items-center gap-4 text-[12px] text-dark-500 mr-2">
-          <span><span className="text-emerald-400 font-semibold">{formatCurrency(pipelineStats.weightedValue)}</span> ponderado</span>
-          <span className="text-dark-700">|</span>
-          <span><span className="text-white font-medium">{pipelineStats.totalDeals}</span> deals</span>
-          <span className="text-dark-700">|</span>
-          <span><span className="text-white font-medium">{pipelineStats.totalContacts}</span> contatos</span>
-        </div>
-
-        <button
-          onClick={() => refetch()}
-          disabled={loading}
-          className="p-2 rounded-lg text-dark-500 hover:text-white hover:bg-dark-800 transition-colors disabled:opacity-50"
-          title="Atualizar"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
-
-        <button
-          onClick={() => { if (stages.length > 0) handleAddDealToStage(stages[0].id) }}
-          className="flex items-center gap-1.5 px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg text-sm text-white font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Deal</span>
-        </button>
       </div>
 
       {/* Kanban Board */}
@@ -1497,7 +1079,7 @@ export default function CRMPage() {
                 setEditingPipeline(activePipeline)
                 setShowPipelineModal(true)
               }}
-              className="flex-shrink-0 w-80 h-full min-h-[400px] flex flex-col items-center justify-center gap-2 bg-white/20 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 hover:text-brand-600 hover:border-brand-300 transition-all"
+              className="flex-shrink-0 w-80 h-full min-h-[400px] flex flex-col items-center justify-center gap-2 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg text-gray-400 hover:text-orange-500 hover:border-orange-300 transition-all"
             >
               <Plus className="w-6 h-6" />
               <span className="text-sm font-medium">Editar Estágios</span>

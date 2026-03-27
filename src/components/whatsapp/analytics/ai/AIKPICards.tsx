@@ -67,7 +67,7 @@ function AIKPICard({ title, value, change, icon: Icon, color, delay = 0, inverse
   const colors = colorMap[color];
   
   const getTrendColor = (val: number, inverse: boolean): string => {
-    if (val === 0) return 'text-gray-500';
+    if (val === 0) return 'text-gray-400';
     const isPositive = inverse ? val < 0 : val > 0;
     return isPositive ? 'text-emerald-400' : 'text-red-400';
   };
@@ -82,7 +82,7 @@ function AIKPICard({ title, value, change, icon: Icon, color, delay = 0, inverse
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
-      className={`relative bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 transition-all group`}
+      className={`relative bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:border-gray-300 hover:shadow-md transition-all group`}
     >
       <div className="flex items-start justify-between">
         <div className={`p-2.5 rounded-lg ${colors.bg}`}>

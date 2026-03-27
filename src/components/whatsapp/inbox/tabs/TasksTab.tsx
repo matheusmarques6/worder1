@@ -70,11 +70,11 @@ const getTaskTypeLabel = (type: string) => {
 
 const getPriorityColor = (priority: string) => {
   switch (priority) {
-    case 'urgent': return 'text-red-400 bg-red-500/10'
-    case 'high': return 'text-orange-400 bg-orange-500/10'
-    case 'normal': return 'text-blue-400 bg-blue-500/10'
-    case 'low': return 'text-gray-400 bg-gray-500/10'
-    default: return 'text-gray-400 bg-gray-500/10'
+    case 'urgent': return 'text-red-600 bg-red-100'
+    case 'high': return 'text-orange-600 bg-orange-100'
+    case 'normal': return 'text-blue-600 bg-blue-100'
+    case 'low': return 'text-gray-500 bg-gray-100'
+    default: return 'text-gray-500 bg-gray-100'
   }
 }
 
@@ -108,7 +108,7 @@ export function TasksTab({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
+        <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
       </div>
     )
   }
@@ -118,17 +118,17 @@ export function TasksTab({
       {/* Header */}
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2">
-          <CheckSquare className="w-4 h-4 text-brand-600" />
+          <CheckSquare className="w-4 h-4 text-orange-500" />
           Tarefas
           {tasks.length > 0 && (
-            <span className="px-1.5 py-0.5 text-xs bg-gray-100 rounded-md">
+            <span className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-md">
               {tasks.filter(t => t.status !== 'completed').length}
             </span>
           )}
         </h4>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+          className="p-1.5 text-orange-500 hover:bg-orange-50 rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" />
         </button>
@@ -137,7 +137,7 @@ export function TasksTab({
       {/* Tarefas Atrasadas */}
       {overdueTasks.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs text-red-400">
+          <div className="flex items-center gap-2 text-xs text-red-600">
             <AlertTriangle className="w-3.5 h-3.5" />
             <span className="font-medium">Atrasadas ({overdueTasks.length})</span>
           </div>
@@ -155,7 +155,7 @@ export function TasksTab({
       {/* Tarefas de Hoje */}
       {todayTasks.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs text-yellow-400">
+          <div className="flex items-center gap-2 text-xs text-amber-600">
             <Clock className="w-3.5 h-3.5" />
             <span className="font-medium">Hoje ({todayTasks.length})</span>
           </div>
@@ -191,7 +191,7 @@ export function TasksTab({
       {/* Concluídas Recentes */}
       {completedTasks.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs text-green-400">
+          <div className="flex items-center gap-2 text-xs text-green-600">
             <CheckCircle className="w-3.5 h-3.5" />
             <span className="font-medium">Concluídas</span>
           </div>
@@ -210,14 +210,14 @@ export function TasksTab({
       {/* Empty State */}
       {tasks.length === 0 && (
         <div className="text-center py-8">
-          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100
                           flex items-center justify-center">
             <CheckSquare className="w-6 h-6 text-gray-400" />
           </div>
           <p className="text-sm text-gray-500 mb-3">Nenhuma tarefa</p>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="text-sm text-brand-600 hover:text-brand-500 font-medium"
+            className="text-sm text-orange-500 hover:text-orange-600 font-medium"
           >
             Criar tarefa
           </button>
@@ -256,9 +256,9 @@ function TaskCard({
   
   return (
     <div className={`p-3 bg-gray-50 rounded-xl border transition-all ${
-      task.is_overdue ? 'border-red-500/30' : 
-      task.is_today ? 'border-yellow-500/30' : 
-      'border-transparent'
+      task.is_overdue ? 'border-red-200' :
+      task.is_today ? 'border-amber-200' :
+      'border-gray-200'
     } ${completed ? 'opacity-60' : ''}`}>
       <div className="flex items-start gap-3">
         {/* Checkbox */}
@@ -266,9 +266,9 @@ function TaskCard({
           onClick={() => !completed && onComplete(task.id)}
           disabled={isCompleting || completed}
           className={`mt-0.5 flex-shrink-0 ${
-            completed 
-              ? 'text-green-400' 
-              : 'text-gray-400 hover:text-brand-600'
+            completed
+              ? 'text-green-500'
+              : 'text-gray-400 hover:text-orange-500'
           } transition-colors`}
         >
           {isCompleting ? (
@@ -283,22 +283,22 @@ function TaskCard({
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <Icon className="w-3.5 h-3.5 text-gray-500" />
+            <Icon className="w-3.5 h-3.5 text-gray-400" />
             <span className={`text-xs ${getPriorityColor(task.priority)} px-1.5 py-0.5 rounded`}>
               {getTaskTypeLabel(task.type)}
             </span>
           </div>
-          
-          <p className={`text-sm text-white mb-1 ${completed ? 'line-through' : ''}`}>
+
+          <p className={`text-sm text-gray-900 mb-1 ${completed ? 'line-through text-gray-400' : ''}`}>
             {task.title}
           </p>
-          
-          <div className="flex items-center gap-3 text-xs text-gray-500">
-            <span className={task.is_overdue ? 'text-red-400' : ''}>
+
+          <div className="flex items-center gap-3 text-xs text-gray-400">
+            <span className={task.is_overdue ? 'text-red-500' : ''}>
               {formatDate(task.due_date)}
               {task.due_time && ` ${formatTime(task.due_time)}`}
             </span>
-            
+
             {task.assigned_to_name && (
               <span className="flex items-center gap-1">
                 <User className="w-3 h-3" />
@@ -351,7 +351,7 @@ function CreateTaskModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl border border-gray-200">
         <div className="p-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Nova Tarefa</h3>
         </div>
@@ -359,14 +359,14 @@ function CreateTaskModal({
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Título */}
           <div>
-            <label className="block text-sm text-gray-500 mb-1">Título *</label>
+            <label className="block text-sm text-gray-600 mb-1">Título *</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Ligar para confirmar pedido"
-              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
-                         text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
+                         text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-orange-400"
               autoFocus
             />
           </div>
@@ -374,12 +374,12 @@ function CreateTaskModal({
           {/* Tipo e Prioridade */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Tipo</label>
+              <label className="block text-sm text-gray-600 mb-1">Tipo</label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
-                           text-white focus:outline-none focus:border-primary-500"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
+                           text-gray-900 focus:outline-none focus:border-orange-400"
               >
                 <option value="task">Tarefa</option>
                 <option value="call">Ligação</option>
@@ -392,12 +392,12 @@ function CreateTaskModal({
             </div>
 
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Prioridade</label>
+              <label className="block text-sm text-gray-600 mb-1">Prioridade</label>
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
-                           text-white focus:outline-none focus:border-primary-500"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
+                           text-gray-900 focus:outline-none focus:border-orange-400"
               >
                 <option value="low">Baixa</option>
                 <option value="normal">Normal</option>
@@ -410,38 +410,38 @@ function CreateTaskModal({
           {/* Data e Hora */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Data *</label>
+              <label className="block text-sm text-gray-600 mb-1">Data *</label>
               <input
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
-                           text-white focus:outline-none focus:border-primary-500"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
+                           text-gray-900 focus:outline-none focus:border-orange-400"
               />
             </div>
 
             <div>
-              <label className="block text-sm text-gray-500 mb-1">Hora</label>
+              <label className="block text-sm text-gray-600 mb-1">Hora</label>
               <input
                 type="time"
                 value={dueTime}
                 onChange={(e) => setDueTime(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
-                           text-white focus:outline-none focus:border-primary-500"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
+                           text-gray-900 focus:outline-none focus:border-orange-400"
               />
             </div>
           </div>
 
           {/* Descrição */}
           <div>
-            <label className="block text-sm text-gray-500 mb-1">Descrição</label>
+            <label className="block text-sm text-gray-600 mb-1">Descrição</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Detalhes adicionais..."
               rows={3}
-              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
-                         text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
+                         text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-orange-400
                          resize-none"
             />
           </div>
@@ -451,15 +451,15 @@ function CreateTaskModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 bg-gray-100 text-white rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={!title.trim() || isSubmitting}
-              className="flex-1 px-4 py-2 bg-primary-500 text-white rounded-lg 
-                         hover:bg-primary-600 transition-colors disabled:opacity-50
+              className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg
+                         hover:bg-orange-600 transition-colors disabled:opacity-50
                          flex items-center justify-center gap-2"
             >
               {isSubmitting ? (

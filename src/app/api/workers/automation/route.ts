@@ -8,23 +8,25 @@ export const dynamic = 'force-dynamic';
 // ENVIRONMENT
 // ============================================
 
-let supabase: any;
-function getSupabase() {
-  if (!supabase) {
-    supabase = createClient(
+let _supabase: any = null;
+function getDb() {
+  if (!_supabase) {
+    _supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
   }
-  return supabase;
+  return _supabase;
 }
+const supabase = new Proxy({} as any, {
+  get(_, prop) { return (getDb() as any)[prop]; }
+});
 
 // ============================================
 // POST - Process automation execution
 // ============================================
 
 export async function POST(request: NextRequest) {
-  getSupabase();
   // Verify QStash signature or internal request
   const isInternal = request.headers.get('X-Internal-Request') === 'true';
   const hasQStashSig = request.headers.has('upstash-signature');
