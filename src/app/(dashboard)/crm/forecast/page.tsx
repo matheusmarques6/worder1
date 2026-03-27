@@ -143,6 +143,14 @@ function KPICard({
 }
 
 function StageFunnel({ stages }: { stages: ForecastData['byStage'] }) {
+  // ✅ CORREÇÃO: Verificar se stages existe e tem itens antes de Math.max
+  if (!stages || stages.length === 0) {
+    return (
+      <div className="text-center py-8 text-dark-400">
+        Nenhum estágio configurado
+      </div>
+    )
+  }
   const maxValue = Math.max(...stages.map(s => s.value), 1)
   
   return (

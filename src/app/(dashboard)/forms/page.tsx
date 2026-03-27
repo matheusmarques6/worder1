@@ -9,6 +9,7 @@ import {
   CheckCircle, Clock, Archive, MoreVertical,
   Zap, Globe, X,
 } from 'lucide-react'
+import { useStoreStore } from '@/stores'
 
 interface Form {
   id: string
@@ -32,6 +33,7 @@ const statusLabels: Record<string, { label: string; color: string; icon: React.E
 }
 
 export default function FormsPage() {
+  const { currentStore } = useStoreStore()
   const [forms, setForms] = useState<Form[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -44,7 +46,11 @@ export default function FormsPage() {
   const fetchForms = useCallback(async () => {
     try {
       setIsLoading(true)
-      const res = await fetch('/api/forms')
+      const params = new URLSearchParams()
+      if (currentStore?.id) {
+        params.append('storeId', currentStore.id)
+      }
+      const res = await fetch(`/api/forms?${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         setForms(data.forms || [])
@@ -54,7 +60,7 @@ export default function FormsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [currentStore])
 
   useEffect(() => {
     fetchForms()
@@ -67,7 +73,11 @@ export default function FormsPage() {
       const res = await fetch('/api/forms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newFormName, description: newFormDescription }),
+        body: JSON.stringify({
+          name: newFormName,
+          description: newFormDescription,
+          store_id: currentStore?.id || null,
+        }),
       })
       if (res.ok) {
         const data = await res.json()
@@ -102,7 +112,11 @@ export default function FormsPage() {
       const res = await fetch('/api/forms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: `${form.name} (cópia)`, description: form.description }),
+        body: JSON.stringify({
+          name: `${form.name} (cópia)`,
+          description: form.description,
+          store_id: currentStore?.id || null,
+        }),
       })
       if (res.ok) {
         fetchForms()

@@ -4,21 +4,36 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
-  Edit2,
-  Trash2,
   Phone,
   Mail,
-  Calendar,
+  Building2,
+  DollarSign,
+  Tag,
+  FileText,
+  Pencil,
+  Trash2,
+  MessageSquare,
   Clock,
   Check,
-  MessageSquare,
-  Building2,
-  Trophy,
+  Globe,
+  Target,
+  Megaphone,
+  Link2,
+  Plus,
+  Calendar,
   XCircle,
-  RotateCcw,
-  AlertTriangle,
+  Briefcase,
+  MapPin,
+  ShoppingBag,
+  TrendingUp,
+  Star,
+  User,
+  CreditCard,
+  Activity,
+  BadgeCheck,
+  MailCheck,
+  MessageCircle,
 } from 'lucide-react'
-import { ContactSelector } from './ContactSelector'
 import { DealTimeline } from './DealTimeline'
 import type { Deal, PipelineStage } from '@/types'
 
@@ -38,40 +53,74 @@ const formatCurrency = (value: number) => {
   }).format(value)
 }
 
-const formatDate = (dateStr: string) => {
+const formatDateTime = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   })
+}
+
+// Avatar colors
+const avatarColors = [
+  'from-blue-500 to-blue-600',
+  'from-purple-500 to-purple-600',
+  'from-emerald-500 to-emerald-600',
+  'from-orange-500 to-orange-600',
+  'from-pink-500 to-pink-600',
+  'from-cyan-500 to-cyan-600',
+]
+
+function getAvatarColor(name: string) {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  return avatarColors[Math.abs(hash) % avatarColors.length]
+}
+
+// Tag colors - matching DataCrazy CRM style
+const TAG_COLORS: Record<string, string> = {
+  // Standard tags
+  cliente: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  vip: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  lead: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  prospect: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  // Source tags
+  inbound: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  'ads facebook': 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
+  'ads google': 'bg-red-500/20 text-red-400 border-red-500/30',
+  'tráfego pago': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  youtube: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+  'tiktok ads': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+  'site principal': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  outbound: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  'social selling': 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  // Default
+  default: 'bg-dark-600/50 text-dark-300 border-dark-500/30',
 }
 
 export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDrawerProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedDeal, setEditedDeal] = useState<Partial<Deal>>({})
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showLostReasonModal, setShowLostReasonModal] = useState(false)
+  const [showLostModal, setShowLostModal] = useState(false)
   const [lostReason, setLostReason] = useState('')
   const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [statusChanging, setStatusChanging] = useState(false)
+  const [newTag, setNewTag] = useState('')
+  const [showTagInput, setShowTagInput] = useState(false)
 
   useEffect(() => {
     if (deal) {
       setEditedDeal({
         title: deal.title,
         value: deal.value,
-        probability: deal.probability,
-        expected_close_date: deal.expected_close_date,
         notes: deal.notes,
         contact_id: deal.contact_id,
-        commit_level: deal.commit_level || 'pipeline',
       })
       setIsEditing(false)
       setShowDeleteConfirm(false)
-      setShowLostReasonModal(false)
+      setShowLostModal(false)
       setLostReason('')
     }
   }, [deal])
@@ -79,126 +128,169 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
   if (!deal) return null
 
   const currentStage = stages.find(s => s.id === deal.stage_id)
+  const contact = deal.contact
+
+  // Extract UTM and source info from custom_fields
+  const customFields = (deal as any).custom_fields || {}
+  const utmSource = customFields.utm_source
+  const utmMedium = customFields.utm_medium
+  const utmCampaign = customFields.utm_campaign
+  const utmTerm = customFields.utm_term
+  const utmContent = customFields.utm_content
+  const source = customFields.source || (deal as any).source
+  const formName = customFields.form_name || customFields.formName
+  const formId = customFields.form_id || customFields.formId
+  const formResponses = customFields.form_responses || []
+  const referrer = customFields.referrer
+  const submittedAt = customFields.submitted_at
+  const hasUtms = utmSource || utmMedium || utmCampaign || utmTerm || utmContent
+  const hasOrigin = hasUtms || source || formName || formId
+  const hasFormResponses = Array.isArray(formResponses) && formResponses.length > 0
+
+  // Extract contact data from form_responses as fallback
+  const extractFormData = () => {
+    const result: { email?: string; phone?: string; name?: string } = {}
+    for (const response of formResponses) {
+      const label = (response.label || '').toLowerCase()
+      const value = response.value
+      const type = (response.type || '').toLowerCase()
+      if (!value) continue
+      if (!result.email && (type === 'email' || label.includes('email') || label.includes('e-mail') || (typeof value === 'string' && value.includes('@')))) {
+        result.email = String(value)
+      }
+      if (!result.phone && (type === 'phone' || type === 'tel' || label.includes('telefone') || label.includes('celular') || label.includes('whatsapp') || label.includes('phone'))) {
+        result.phone = String(value)
+      }
+      if (!result.name && (label.includes('nome') || label.includes('name'))) {
+        result.name = String(value)
+      }
+    }
+    return result
+  }
+  const formData = extractFormData()
+
+  // Use contact data OR form data as fallback
+  const contactEmail = contact?.email || formData.email
+  const contactPhone = contact?.whatsapp || contact?.phone || formData.phone
+  const contactName = contact
+    ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email || 'Contato'
+    : formData.name || deal.title
+  const contactInitials = contact
+    ? `${contact.first_name?.[0] || ''}${contact.last_name?.[0] || ''}`.toUpperCase() || '?'
+    : (formData.name || deal.title)?.substring(0, 2).toUpperCase() || '?'
+
+  // Check if we have any contact info
+  const hasContactInfo = contactEmail || contactPhone || contact?.company
+
+  // Helper to detect if value is a URL
+  const isUrl = (value: any): boolean => {
+    if (typeof value !== 'string') return false
+    return value.startsWith('http://') || value.startsWith('https://') || value.includes('calendly.com') || value.includes('cal.com')
+  }
+
+  // Helper to render form response value
+  const renderFormValue = (value: any, type: string) => {
+    if (isUrl(value)) {
+      return (
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary-400 hover:text-primary-300 underline break-all"
+        >
+          {value.length > 50 ? value.substring(0, 50) + '...' : value}
+        </a>
+      )
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'Sim' : 'Não'
+    }
+    if (Array.isArray(value)) {
+      return value.join(', ')
+    }
+    return String(value)
+  }
+
+  // Tags
+  const dealTags = deal.tags || []
 
   const handleSave = async () => {
     setSaving(true)
     try {
       await onUpdate(deal.id, editedDeal)
       setIsEditing(false)
-    } catch (error) {
-      console.error('Erro ao salvar:', error)
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async () => {
-    setDeleting(true)
+    setSaving(true)
     try {
       await onDelete(deal.id)
       onClose()
-    } catch (error) {
-      console.error('Erro ao deletar:', error)
     } finally {
-      setDeleting(false)
+      setSaving(false)
     }
   }
 
   const handleStageChange = async (stageId: string) => {
-    try {
-      await onUpdate(deal.id, { stage_id: stageId } as Partial<Deal>)
-    } catch (error) {
-      console.error('Erro ao mudar estágio:', error)
-    }
+    await onUpdate(deal.id, { stage_id: stageId } as Partial<Deal>)
   }
 
-  // ==========================================
-  // STATUS CHANGE HANDLERS
-  // ==========================================
-  
   const handleMarkAsWon = async () => {
-    setStatusChanging(true)
+    setSaving(true)
     try {
-      await onUpdate(deal.id, { 
-        status: 'won',
-        won_at: new Date().toISOString(),
-        probability: 100,
-      } as Partial<Deal>)
-    } catch (error) {
-      console.error('Erro ao marcar como ganho:', error)
+      await onUpdate(deal.id, { status: 'won', won_at: new Date().toISOString() } as Partial<Deal>)
     } finally {
-      setStatusChanging(false)
+      setSaving(false)
     }
   }
 
   const handleMarkAsLost = async () => {
-    setStatusChanging(true)
+    setSaving(true)
     try {
-      const updateData: Partial<Deal> = { 
-        status: 'lost',
-        lost_at: new Date().toISOString(),
-        probability: 0,
-      }
-      if (lostReason.trim()) {
-        updateData.notes = deal.notes 
-          ? `${deal.notes}\n\n📌 Motivo da perda: ${lostReason}`
-          : `📌 Motivo da perda: ${lostReason}`
-      }
-      await onUpdate(deal.id, updateData as Partial<Deal>)
-      setShowLostReasonModal(false)
-      setLostReason('')
-    } catch (error) {
-      console.error('Erro ao marcar como perdido:', error)
+      const notes = lostReason ? (deal.notes ? `${deal.notes}\n\nMotivo: ${lostReason}` : `Motivo: ${lostReason}`) : deal.notes
+      await onUpdate(deal.id, { status: 'lost', lost_at: new Date().toISOString(), notes } as Partial<Deal>)
+      setShowLostModal(false)
     } finally {
-      setStatusChanging(false)
+      setSaving(false)
     }
   }
 
-  const handleReopenDeal = async () => {
-    setStatusChanging(true)
+  const handleReopen = async () => {
+    setSaving(true)
     try {
-      await onUpdate(deal.id, { 
-        status: 'open',
-        won_at: undefined,
-        lost_at: undefined,
-      } as Partial<Deal>)
-    } catch (error) {
-      console.error('Erro ao reabrir deal:', error)
+      await onUpdate(deal.id, { status: 'open', won_at: undefined, lost_at: undefined } as Partial<Deal>)
     } finally {
-      setStatusChanging(false)
+      setSaving(false)
     }
   }
 
-  const getContactInitials = () => {
-    const first = deal.contact?.first_name?.[0] || ''
-    const last = deal.contact?.last_name?.[0] || ''
-    return (first + last).toUpperCase() || '?'
+  const handleAddTag = async (tag: string) => {
+    const trimmedTag = tag.trim().toLowerCase()
+    if (!trimmedTag || dealTags.includes(trimmedTag)) return
+
+    const newTags = [...dealTags, trimmedTag]
+    await onUpdate(deal.id, { tags: newTags } as Partial<Deal>)
+    setNewTag('')
+    setShowTagInput(false)
   }
 
-  const getContactName = () => {
-    if (deal.contact?.first_name || deal.contact?.last_name) {
-      return `${deal.contact.first_name || ''} ${deal.contact.last_name || ''}`.trim()
-    }
-    return deal.contact?.email || 'Sem nome'
+  const handleRemoveTag = async (tagToRemove: string) => {
+    const newTags = dealTags.filter(t => t !== tagToRemove)
+    await onUpdate(deal.id, { tags: newTags } as Partial<Deal>)
   }
 
-  const getCycleTime = () => {
-    if (deal.status === 'won' && deal.won_at && deal.created_at) {
-      const days = Math.floor(
-        (new Date(deal.won_at).getTime() - new Date(deal.created_at).getTime()) / 
-        (1000 * 60 * 60 * 24)
-      )
-      return days
-    }
-    return null
+  const getTagColor = (tag: string) => {
+    return TAG_COLORS[tag.toLowerCase()] || TAG_COLORS.default
   }
-
-  const cycleTime = getCycleTime()
 
   return (
     <AnimatePresence>
       {deal && (
         <>
+          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -207,6 +299,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
           />
 
+          {/* Drawer */}
           <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -237,6 +330,9 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                       {deal.status === 'won' ? '🎉 Deal Ganho' : '❌ Deal Perdido'}
                     </p>
                   )}
+                  <button onClick={onClose} className="p-1.5 rounded-md text-dark-400 hover:text-white hover:bg-dark-800 transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -283,6 +379,12 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                         </p>
                         {cycleTime !== null && <p className="text-xs text-gray-400 mt-1">Ciclo de vendas: {cycleTime} dias</p>}
                       </div>
+                      <a
+                        href={`mailto:${contactEmail}`}
+                        className="px-2 py-1 rounded-md bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 text-xs font-medium transition-colors"
+                      >
+                        Enviar
+                      </a>
                     </div>
                     <button onClick={handleReopenDeal} disabled={statusChanging} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white hover:bg-gray-100 text-gray-600 hover:text-white transition-colors disabled:opacity-50">
                       {statusChanging ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <RotateCcw className="w-4 h-4" />}
@@ -312,24 +414,15 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                   <h3 className="text-xl font-bold text-gray-900">{deal.title}</h3>
                 )}
               </div>
-
-              {/* Stage Selector */}
-              {deal.status === 'open' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-2">Estágio</label>
-                  <div className="flex flex-wrap gap-2">
-                    {stages.map((stage) => (
-                      <button key={stage.id} onClick={() => handleStageChange(stage.id)} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${deal.stage_id === stage.id ? 'text-white shadow-lg' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`} style={deal.stage_id === stage.id ? { backgroundColor: stage.color } : undefined}>
                         {stage.name}
-                        {stage.probability !== undefined && <span className="ml-1 opacity-70">({stage.probability}%)</span>}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Value & Probability */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Origin Info - Form + UTM + Source */}
+              {hasOrigin && (
                 <div>
                   <label className="block text-sm font-medium text-gray-500 mb-2">Valor</label>
                   {isEditing ? (
@@ -446,7 +539,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                     <p className="text-gray-600">{formatDate(deal.updated_at)}</p>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Timeline */}
               <div className="pt-4 border-t border-gray-200">
@@ -455,7 +548,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
               </div>
             </div>
 
-            {/* LOST REASON MODAL */}
+            {/* Lost Modal */}
             <AnimatePresence>
               {showLostReasonModal && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-10">
@@ -481,7 +574,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
               )}
             </AnimatePresence>
 
-            {/* DELETE MODAL */}
+            {/* Delete Modal */}
             <AnimatePresence>
               {showDeleteConfirm && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-10">

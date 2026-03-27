@@ -10,35 +10,49 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useUIStore, useStoreStore, useAuthStore } from '@/stores'
 import {
-  LayoutDashboard,
-  Users,
-  MessageSquare,
-  Zap,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  Store,
-  HelpCircle,
-  LogOut,
-  Bell,
-  ChevronDown,
-  Check,
-  CheckCheck,
+  ChartLineUp,
+  ChatCircleDots,
+  UsersThree,
+  Megaphone,
+  Lightning,
+  ShoppingCartSimple,
+  Globe,
+  Folder,
+  ChartBar,
+  Plugs,
+  GearSix,
+  CaretLeft,
+  CaretRight,
+  CaretDown,
+  Storefront,
   Plus,
-  ShoppingBag,
-  ShoppingCart,
-  Package,
-  Trash2,
-  AlertCircle,
-  AlertTriangle,
+  Check,
+  SignOut,
+  Bell,
+  CheckCircle,
+  Trash,
+  ArrowSquareOut,
+  Warning,
+  WarningCircle,
   Info,
-  ExternalLink,
-  FileText,
-  Loader2,
   User,
-  Building2,
-  Menu,
-} from 'lucide-react'
+  Buildings,
+  List,
+  Spinner,
+  ShoppingBag,
+  ChatCircle,
+  Question,
+  WhatsappLogo,
+  DeviceMobileSpeaker,
+  EnvelopeSimple,
+  Image as ImageIcon,
+  Tag,
+  Upload,
+  ListBullets,
+  Code,
+  ShieldCheck,
+  Key,
+} from '@phosphor-icons/react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
 import { formatDistanceToNow } from 'date-fns'
@@ -51,8 +65,10 @@ import { ptBR } from 'date-fns/locale'
 interface NavItem {
   title: string
   href: string
-  icon: React.ComponentType<{ className?: string }>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  icon: React.ComponentType<any>
   badge?: number
+  children?: NavItem[]
 }
 
 interface NotificationData {
@@ -75,25 +91,50 @@ interface Notification {
 }
 
 // ============================================
-// Navigation Items
+// Navigation Items — Estrutura conforme Arquitetura Worder
 // ============================================
 
 const mainNavItems: NavItem[] = [
-  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: 'Pedidos', href: '/orders', icon: ShoppingCart },
-  { title: 'Produtos', href: '/products', icon: Package },
-  { title: 'CRM', href: '/crm', icon: Users },
-  { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
+  { title: 'Dashboard', href: '/dashboard', icon: ChartLineUp },
+  { title: 'Inbox', href: '/inbox', icon: ChatCircleDots, badge: 0 },
+  { title: 'Contatos', href: '/contacts', icon: UsersThree, children: [
+    { title: 'Todos', href: '/contacts', icon: UsersThree },
+    { title: 'Listas', href: '/contacts/lists', icon: ListBullets },
+    { title: 'Importar', href: '/contacts/import', icon: Upload },
+  ]},
+  { title: 'Campanhas', href: '/campaigns', icon: Megaphone },
+  { title: 'Automações', href: '/automations', icon: Lightning },
+  { title: 'Recuperação', href: '/recovery', icon: ShoppingCartSimple },
+  { title: 'WhatsApp', href: '/whatsapp', icon: WhatsappLogo, children: [
+    { title: 'Inbox', href: '/whatsapp/inbox', icon: ChatCircleDots },
+    { title: 'Campanhas', href: '/whatsapp/campaigns', icon: Megaphone },
+    { title: 'Broadcast', href: '/whatsapp/broadcast', icon: WhatsappLogo },
+    { title: 'Phonebooks', href: '/whatsapp/phonebooks', icon: UsersThree },
+  ]},
+  { title: 'SMS', href: '/sms', icon: DeviceMobileSpeaker },
 ]
 
 const toolsNavItems: NavItem[] = [
-  { title: 'Formulários', href: '/forms', icon: FileText },
-  { title: 'Automações', href: '/automations', icon: Zap },
+  { title: 'Site', href: '/site', icon: Globe },
+  { title: 'Conteúdo', href: '/content', icon: Folder, children: [
+    { title: 'Templates E-mail', href: '/content/templates', icon: EnvelopeSimple },
+    { title: 'Templates WhatsApp', href: '/content/templates/whatsapp', icon: WhatsappLogo },
+    { title: 'Produtos', href: '/content/products', icon: ShoppingBag },
+    { title: 'Mídia', href: '/content/media', icon: ImageIcon },
+    { title: 'Cupons', href: '/content/coupons', icon: Tag },
+  ]},
+  { title: 'Analytics', href: '/analytics', icon: ChartBar },
+  { title: 'Integrações', href: '/integrations', icon: Plugs },
 ]
 
-const settingsNavItems: NavItem[] = [
-  { title: 'Configurações', href: '/settings', icon: Settings },
-  { title: 'Ajuda', href: '/help', icon: HelpCircle },
+const systemNavItems: NavItem[] = [
+  { title: 'Configurações', href: '/settings', icon: GearSix, children: [
+    { title: 'Geral', href: '/settings', icon: GearSix },
+    { title: 'API', href: '/settings/api', icon: Code },
+    { title: 'LGPD', href: '/settings/lgpd', icon: ShieldCheck },
+    { title: 'Credenciais', href: '/settings/credentials', icon: Key },
+  ]},
+  { title: 'Ajuda', href: '/help', icon: Question },
 ]
 
 // ============================================
@@ -105,11 +146,10 @@ export function Sidebar() {
   const router = useRouter()
   const { sidebarCollapsed, toggleSidebar } = useUIStore()
   const { stores, currentStore, setCurrentStore, addStore } = useStoreStore()
-  
+
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false)
   const [addStoreModalOpen, setAddStoreModalOpen] = useState(false)
 
-  // Get store initials for avatar
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -130,19 +170,42 @@ export function Sidebar() {
     setAddStoreModalOpen(false)
   }
 
+  const [expandedItems, setExpandedItems] = useState<string[]>([])
+
+  const toggleExpand = (href: string) => {
+    setExpandedItems(prev => prev.includes(href) ? prev.filter(h => h !== href) : [...prev, href])
+  }
+
+  // Auto-expand parent if child is active
+  useEffect(() => {
+    const allItems = [...mainNavItems, ...toolsNavItems, ...systemNavItems]
+    allItems.forEach(item => {
+      if (item.children) {
+        const childActive = item.children.some(c => pathname === c.href || pathname.startsWith(c.href + '/'))
+        if (childActive && !expandedItems.includes(item.href)) {
+          setExpandedItems(prev => [...prev, item.href])
+        }
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
+
   const NavLink = ({ item }: { item: NavItem }) => {
-    const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+    const isExactActive = pathname === item.href
+    const isActive = isExactActive || pathname.startsWith(item.href + '/')
+    const hasChildren = item.children && item.children.length > 0
+    const isExpanded = expandedItems.includes(item.href)
     const Icon = item.icon
 
-    const content = (
-      <Link
-        href={item.href}
+    const linkContent = (
+      <div
         className={cn(
           'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200',
           'hover:bg-sidebar-hover',
           isActive && 'bg-sidebar-active text-white border-l-[3px] border-brand-500',
           !isActive && 'text-gray-400 hover:text-gray-200'
         )}
+        onClick={hasChildren && !sidebarCollapsed ? (e: React.MouseEvent) => { e.preventDefault(); toggleExpand(item.href) } : undefined}
       >
         <Icon className={cn('w-5 h-5 flex-shrink-0', isActive && 'text-brand-400')} />
         <AnimatePresence>
@@ -151,37 +214,89 @@ export function Sidebar() {
               initial={{ opacity: 0, width: 0 }}
               animate={{ opacity: 1, width: 'auto' }}
               exit={{ opacity: 0, width: 0 }}
-              className="font-medium whitespace-nowrap overflow-hidden"
+              className="text-sm font-medium whitespace-nowrap overflow-hidden flex-1"
             >
               {item.title}
             </motion.span>
           )}
         </AnimatePresence>
-        {item.badge && !sidebarCollapsed && (
-          <span className="ml-auto bg-primary-500 text-white text-xs px-2 py-0.5 rounded-full">
-            {item.badge}
+        {hasChildren && !sidebarCollapsed && (
+          <CaretDown
+            className={cn('w-3.5 h-3.5 text-dark-500 transition-transform', isExpanded && 'rotate-180')}
+            weight="bold"
+          />
+        )}
+        {item.badge !== undefined && item.badge > 0 && !sidebarCollapsed && (
+          <span className="ml-auto bg-[#F26B2A] text-white text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
+            {item.badge > 99 ? '99+' : item.badge}
           </span>
         )}
-        {item.badge && sidebarCollapsed && (
-          <span className="absolute top-2 right-2 w-2 h-2 bg-primary-500 rounded-full" />
+        {item.badge !== undefined && item.badge > 0 && sidebarCollapsed && (
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#F26B2A] rounded-full ring-2 ring-[#1A1A1A]" />
         )}
-      </Link>
+      </div>
+    )
+
+    const wrappedLink = hasChildren && !sidebarCollapsed ? (
+      <div>{linkContent}</div>
+    ) : (
+      <Link href={item.href}>{linkContent}</Link>
     )
 
     if (sidebarCollapsed) {
       return (
         <Tooltip content={item.title} side="right">
-          <div className="relative">{content}</div>
+          <div className="relative">
+            <Link href={item.href}>{linkContent}</Link>
+          </div>
         </Tooltip>
       )
     }
 
-    return content
+    return (
+      <div>
+        {wrappedLink}
+        {hasChildren && (
+          <AnimatePresence>
+            {isExpanded && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="ml-4 pl-3 border-l border-white/[0.06] mt-1 space-y-0.5">
+                  {item.children!.map((child) => {
+                    const ChildIcon = child.icon
+                    const isChildActive = pathname === child.href || (child.href !== item.href && pathname.startsWith(child.href + '/'))
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={cn(
+                          'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-all duration-200',
+                          'hover:bg-white/[0.06]',
+                          isChildActive ? 'text-[#F26B2A] bg-white/[0.04]' : 'text-dark-400 hover:text-dark-200'
+                        )}
+                      >
+                        <ChildIcon className="w-4 h-4 flex-shrink-0" weight={isChildActive ? 'fill' : 'regular'} />
+                        <span className="font-medium">{child.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+      </div>
+    )
   }
 
   return (
     <>
-      {/* ✅ NOVO: Overlay para mobile (quando sidebar está aberta) */}
+      {/* Mobile overlay */}
       <AnimatePresence>
         {!sidebarCollapsed && (
           <motion.div
@@ -196,8 +311,8 @@ export function Sidebar() {
 
       <motion.aside
         initial={false}
-        animate={{ width: sidebarCollapsed ? 80 : 280 }}
-        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        animate={{ width: sidebarCollapsed ? 72 : 260 }}
+        transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         className={cn(
           "fixed left-0 top-0 bottom-0 z-40 bg-sidebar border-r border-gray-700/20 flex flex-col",
           // ✅ NOVO: Esconder no mobile quando recolhido
@@ -211,8 +326,8 @@ export function Sidebar() {
             <Image
               src="/logo.png"
               alt="Worder"
-              width={sidebarCollapsed ? 40 : 110}
-              height={sidebarCollapsed ? 8 : 21}
+              width={sidebarCollapsed ? 32 : 100}
+              height={sidebarCollapsed ? 7 : 19}
               className="object-contain"
               priority
             />
@@ -234,52 +349,52 @@ export function Sidebar() {
             className="w-8 h-8 rounded-lg bg-sidebar-hover hover:bg-sidebar-active flex items-center justify-center text-gray-400 hover:text-white transition-colors"
           >
             {sidebarCollapsed ? (
-              <ChevronRight className="w-4 h-4" />
+              <CaretRight className="w-3.5 h-3.5" weight="bold" />
             ) : (
-              <ChevronLeft className="w-4 h-4" />
+              <CaretLeft className="w-3.5 h-3.5" weight="bold" />
             )}
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
-          {/* Main */}
+        <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+          {/* Principal */}
           <div>
             {!sidebarCollapsed && (
               <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Principal
               </p>
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {mainNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>
           </div>
 
-          {/* Tools */}
+          {/* Ferramentas */}
           <div>
             {!sidebarCollapsed && (
               <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Ferramentas
               </p>
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {toolsNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>
           </div>
 
-          {/* Settings */}
+          {/* Sistema */}
           <div>
             {!sidebarCollapsed && (
               <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Sistema
               </p>
             )}
-            <div className="space-y-1">
-              {settingsNavItems.map((item) => (
+            <div className="space-y-0.5">
+              {systemNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>
@@ -298,13 +413,12 @@ export function Sidebar() {
                 transition={{ duration: 0.15 }}
                 className="absolute bottom-full left-3 right-3 mb-2 bg-sidebar border border-gray-700/50 rounded-xl shadow-xl overflow-hidden z-50"
               >
-                {/* Stores List */}
                 {stores.length > 0 && (
                   <div className="p-2 border-b border-gray-700/50">
                     <p className="px-2 py-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Suas Lojas
                     </p>
-                    <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
+                    <div className="space-y-0.5 mt-1 max-h-48 overflow-y-auto">
                       {stores.map((store) => (
                         <button
                           key={store.id}
@@ -313,7 +427,7 @@ export function Sidebar() {
                             setStoreDropdownOpen(false)
                           }}
                           className={cn(
-                            'w-full flex items-center gap-3 p-2 rounded-lg transition-colors',
+                            'w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200',
                             currentStore?.id === store.id
                               ? 'bg-brand-500/10 text-brand-400'
                               : 'hover:bg-sidebar-hover text-white'
@@ -335,7 +449,6 @@ export function Sidebar() {
                   </div>
                 )}
 
-                {/* Add Store Button */}
                 <div className="p-2">
                   <button
                     onClick={() => {
@@ -370,9 +483,8 @@ export function Sidebar() {
               sidebarCollapsed && 'justify-center'
             )}
           >
-            {/* Store Avatar */}
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-              {currentStore ? getInitials(currentStore.name) : <Store className="w-5 h-5" />}
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center text-white font-bold text-xs flex-shrink-0 shadow-lg shadow-[#F26B2A]/20">
+              {currentStore ? getInitials(currentStore.name) : <Storefront className="w-4 h-4" weight="fill" />}
             </div>
 
             <AnimatePresence>
@@ -394,11 +506,12 @@ export function Sidebar() {
             </AnimatePresence>
 
             {!sidebarCollapsed && (
-              <ChevronDown
+              <CaretDown
                 className={cn(
                   'w-4 h-4 text-gray-500 transition-transform flex-shrink-0',
                   storeDropdownOpen && 'rotate-180'
                 )}
+                weight="bold"
               />
             )}
           </button>
@@ -416,31 +529,28 @@ export function Sidebar() {
 }
 
 // ============================================
-// Header Component (com Notificações Reais)
+// Header Component
 // ============================================
 
-const POLLING_INTERVAL = 30000 // 30 segundos
+const POLLING_INTERVAL = 30000
 
 export function Header() {
   const router = useRouter()
-  const { sidebarCollapsed, toggleSidebar } = useUIStore() // ✅ MODIFICADO: Adicionar toggleSidebar
+  const { sidebarCollapsed, toggleSidebar } = useUIStore()
   const { currentStore } = useStoreStore()
   const { user, signOut } = useAuthStore()
-  
-  // Notifications state
+
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loadingNotifications, setLoadingNotifications] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // User data
   const userName = user?.name || user?.email?.split('@')[0] || 'Usuário'
-  const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+  const userInitials = userName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
   const userRole = user?.role || 'admin'
   const userAvatar = user?.avatar_url
 
-  // User menu state
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [agents, setAgents] = useState<Array<{
@@ -454,12 +564,10 @@ export function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
-  // Set mounted on client side (required for Portal)
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Fetch agents when menu opens
   const fetchAgents = useCallback(async () => {
     if (!user?.organization_id) return
     setLoadingAgents(true)
@@ -476,7 +584,6 @@ export function Header() {
     }
   }, [user?.organization_id])
 
-  // Handle logout
   const handleLogout = async () => {
     setIsLoggingOut(true)
     try {
@@ -494,7 +601,6 @@ export function Header() {
     }
   }
 
-  // Get role label
   const getRoleLabel = (role?: string) => {
     switch (role) {
       case 'admin': return 'Administrador'
@@ -504,7 +610,6 @@ export function Header() {
     }
   }
 
-  // Close user menu on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -515,24 +620,16 @@ export function Header() {
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
-  // Fetch agents when menu opens
   useEffect(() => {
     if (userMenuOpen && user?.organization_id) {
       fetchAgents()
     }
   }, [userMenuOpen, user?.organization_id, fetchAgents])
 
-  // ============================================
-  // Load notifications from API
-  // ============================================
   const loadNotifications = useCallback(async () => {
     if (!user?.organization_id) return
-    
     try {
-      const res = await fetch(
-        `/api/notifications?limit=15`
-      )
-      
+      const res = await fetch(`/api/notifications?limit=15`)
       if (res.ok) {
         const data = await res.json()
         setNotifications(data.notifications ?? [])
@@ -543,18 +640,15 @@ export function Header() {
     }
   }, [user?.organization_id])
 
-  // Initial load + polling
   useEffect(() => {
     if (user?.organization_id) {
       setLoadingNotifications(true)
       loadNotifications().finally(() => setLoadingNotifications(false))
-      
       const interval = setInterval(loadNotifications, POLLING_INTERVAL)
       return () => clearInterval(interval)
     }
   }, [user?.organization_id, loadNotifications])
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -565,24 +659,15 @@ export function Header() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // ============================================
-  // Notification actions
-  // ============================================
   const markAsRead = async (ids: string[]) => {
     if (!user?.organization_id || ids.length === 0) return
-    
     try {
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          notificationIds: ids,
-        }),
+        body: JSON.stringify({ notificationIds: ids }),
       })
-      
-      setNotifications(prev => 
-        prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n)
-      )
+      setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n))
       setUnreadCount(prev => Math.max(0, prev - ids.length))
     } catch (err) {
       console.error('Error marking as read:', err)
@@ -591,16 +676,12 @@ export function Header() {
 
   const markAllAsRead = async () => {
     if (!user?.organization_id) return
-    
     try {
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          markAllRead: true,
-        }),
+        body: JSON.stringify({ markAllRead: true }),
       })
-      
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       setUnreadCount(0)
     } catch (err) {
@@ -623,26 +704,21 @@ export function Header() {
     }
   }
 
-  // ============================================
-  // Helper functions
-  // ============================================
   const getNotificationIcon = (notification: Notification) => {
     const type = notification.data?.integration_type
-    
     if (type === 'shopify') {
-      return <ShoppingBag className="w-4 h-4 text-[#95BF47]" />
+      return <ShoppingBag className="w-4 h-4 text-[#95BF47]" weight="fill" />
     }
     if (type === 'whatsapp') {
-      return <MessageSquare className="w-4 h-4 text-[#25D366]" />
+      return <ChatCircle className="w-4 h-4 text-[#25D366]" weight="fill" />
     }
-    
     switch (notification.priority) {
       case 'urgent':
-        return <AlertCircle className="w-4 h-4 text-red-500" />
+        return <WarningCircle className="w-4 h-4 text-red-500" weight="fill" />
       case 'high':
-        return <AlertTriangle className="w-4 h-4 text-amber-500" />
+        return <Warning className="w-4 h-4 text-amber-500" weight="fill" />
       default:
-        return <Info className="w-4 h-4 text-blue-500" />
+        return <Info className="w-4 h-4 text-blue-500" weight="fill" />
     }
   }
 
@@ -652,16 +728,16 @@ export function Header() {
         'fixed top-0 right-0 h-16 bg-gray-50/80 backdrop-blur-xl border-b border-gray-200 z-30 flex items-center justify-between px-4 lg:px-6 transition-all duration-300',
         // ✅ MODIFICADO: Mobile sempre left-0, desktop depende do sidebar
         'left-0',
-        'lg:left-20',
-        !sidebarCollapsed && 'lg:left-[280px]'
+        'lg:left-[72px]',
+        !sidebarCollapsed && 'lg:left-[260px]'
       )}
     >
-      {/* ✅ NOVO: Botão Hamburger (Mobile only) */}
+      {/* Mobile hamburger */}
       <button
         onClick={toggleSidebar}
         className="lg:hidden p-2 rounded-lg hover:bg-white text-gray-500 hover:text-gray-800 transition-colors mr-2"
       >
-        <Menu className="w-5 h-5" />
+        <List className="w-5 h-5" weight="bold" />
       </button>
 
       {/* Search */}
@@ -678,12 +754,7 @@ export function Header() {
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
             ⌘K
@@ -692,16 +763,16 @@ export function Header() {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         {/* Notifications */}
         <div className="relative" ref={dropdownRef}>
-          <button 
+          <button
             onClick={() => setNotificationsOpen(!notificationsOpen)}
             className="relative p-2 rounded-xl hover:bg-white text-gray-500 hover:text-gray-800 transition-colors"
           >
-            <Bell className="w-5 h-5" />
+            <Bell className="w-5 h-5" weight={notificationsOpen ? 'fill' : 'regular'} />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-primary-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-[#F26B2A] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
@@ -719,7 +790,7 @@ export function Header() {
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-white">Notificações</h3>
+                    <h3 className="font-semibold text-white font-display">Notificações</h3>
                     {unreadCount > 0 && (
                       <span className="px-2 py-0.5 bg-brand-100 text-brand-600 text-xs font-medium rounded-full">
                         {unreadCount} nova{unreadCount > 1 ? 's' : ''}
@@ -727,17 +798,17 @@ export function Header() {
                     )}
                   </div>
                   {unreadCount > 0 && (
-                    <button 
+                    <button
                       onClick={markAllAsRead}
                       className="text-xs text-brand-600 hover:text-brand-500 transition-colors flex items-center gap-1"
                     >
-                      <CheckCheck className="w-3.5 h-3.5" />
+                      <CheckCircle className="w-3.5 h-3.5" weight="fill" />
                       Marcar todas
                     </button>
                   )}
                 </div>
 
-                {/* Notifications List */}
+                {/* List */}
                 <div className="max-h-96 overflow-y-auto">
                   {loadingNotifications ? (
                     <div className="flex items-center justify-center py-12">
@@ -763,12 +834,9 @@ export function Header() {
                         )}
                       >
                         <div className="flex items-start gap-3">
-                          {/* Icon */}
                           <div className="flex-shrink-0 mt-0.5">
                             {getNotificationIcon(notification)}
                           </div>
-                          
-                          {/* Content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
                               <p className={cn(
@@ -777,8 +845,6 @@ export function Header() {
                               )}>
                                 {notification.title}
                               </p>
-                              
-                              {/* Actions */}
                               <div className="flex items-center gap-1 flex-shrink-0">
                                 {!notification.read && (
                                   <button
@@ -789,7 +855,7 @@ export function Header() {
                                     className="p-1 text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
                                     title="Marcar como lida"
                                   >
-                                    <Check className="w-3.5 h-3.5" />
+                                    <Check className="w-3.5 h-3.5" weight="bold" />
                                   </button>
                                 )}
                                 <button
@@ -800,7 +866,7 @@ export function Header() {
                                   className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                                   title="Excluir"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash className="w-3.5 h-3.5" weight="bold" />
                                 </button>
                               </div>
                             </div>
@@ -816,7 +882,6 @@ export function Header() {
                                   locale: ptBR,
                                 })}
                               </p>
-                              
                               {notification.action_url && (
                                 <a
                                   href={notification.action_url}
@@ -827,7 +892,7 @@ export function Header() {
                                   className="text-xs text-brand-600 hover:text-brand-500 flex items-center gap-1 transition-colors"
                                 >
                                   {notification.action_label ?? 'Ver mais'}
-                                  <ExternalLink className="w-3 h-3" />
+                                  <ArrowSquareOut className="w-3 h-3" weight="bold" />
                                 </a>
                               )}
                             </div>
@@ -847,7 +912,7 @@ export function Header() {
                       className="w-full text-center text-sm text-brand-600 hover:text-brand-500 transition-colors flex items-center justify-center gap-1"
                     >
                       Ver todas as notificações
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      <ArrowSquareOut className="w-3.5 h-3.5" weight="bold" />
                     </a>
                   </div>
                 )}
@@ -868,17 +933,9 @@ export function Header() {
               <p className="text-xs text-gray-500">{getRoleLabel(userRole)}</p>
             </div>
             {userAvatar ? (
-              <img 
-                src={userAvatar} 
-                alt={userName}
-                className="w-9 h-9 rounded-lg object-cover"
-              />
+              <img src={userAvatar} alt={userName} className="w-9 h-9 rounded-lg object-cover" />
             ) : (
-              <Avatar
-                fallback={userInitials}
-                size="sm"
-                status="online"
-              />
+              <Avatar fallback={userInitials} size="sm" status="online" />
             )}
             <ChevronDown className={cn(
               "w-4 h-4 text-gray-500 transition-transform",
@@ -886,15 +943,10 @@ export function Header() {
             )} />
           </button>
 
-          {/* User Menu Dropdown - Rendered via Portal */}
+          {/* User Menu Dropdown */}
           {mounted && userMenuOpen && createPortal(
             <div className="fixed inset-0 z-[9999]">
-              {/* Backdrop */}
-              <div 
-                className="absolute inset-0" 
-                onClick={() => setUserMenuOpen(false)} 
-              />
-              {/* Menu */}
+              <div className="absolute inset-0" onClick={() => setUserMenuOpen(false)} />
               <motion.div
                 ref={userMenuRef}
                 initial={{ opacity: 0, y: -10, scale: 0.96 }}
@@ -908,13 +960,9 @@ export function Header() {
                 <div className="p-4 border-b border-gray-200">
                   <div className="flex items-center gap-3">
                     {userAvatar ? (
-                      <img 
-                        src={userAvatar} 
-                        alt={userName}
-                        className="w-12 h-12 rounded-xl object-cover"
-                      />
+                      <img src={userAvatar} alt={userName} className="w-12 h-12 rounded-xl object-cover" />
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center">
                         <span className="text-white font-bold text-lg">{userInitials}</span>
                       </div>
                     )}
@@ -928,7 +976,7 @@ export function Header() {
                   </div>
                 </div>
 
-                {/* Agents Section */}
+                {/* Agents */}
                 {agents.length > 0 && (
                   <div className="px-3 py-2 border-b border-gray-200">
                     <div className="flex items-center gap-2 px-1 mb-2">
@@ -944,17 +992,10 @@ export function Header() {
                         </div>
                       ) : (
                         agents.map((agent) => (
-                          <div
-                            key={agent.id}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
-                          >
+                          <div key={agent.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg">
                             <div className="relative">
                               {agent.avatar_url ? (
-                                <img 
-                                  src={agent.avatar_url} 
-                                  alt={agent.name}
-                                  className="w-6 h-6 rounded-full object-cover"
-                                />
+                                <img src={agent.avatar_url} alt={agent.name} className="w-6 h-6 rounded-full object-cover" />
                               ) : (
                                 <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center">
                                   <span className="text-[10px] text-gray-500">
@@ -978,7 +1019,7 @@ export function Header() {
                               agent.status === 'busy' && 'text-red-400',
                               agent.status === 'offline' && 'text-gray-400',
                             )}>
-                              {agent.status === 'online' ? 'Online' : 
+                              {agent.status === 'online' ? 'Online' :
                                agent.status === 'away' ? 'Ausente' :
                                agent.status === 'busy' ? 'Ocupado' : 'Offline'}
                             </span>
@@ -1024,7 +1065,7 @@ export function Header() {
                     disabled={isLoggingOut}
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-red-500/10 transition-colors text-red-400 disabled:opacity-50"
                   >
-                    <LogOut className="w-4 h-4" />
+                    <SignOut className="w-4 h-4" weight="bold" />
                     <span className="text-sm">{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
                   </button>
                 </div>

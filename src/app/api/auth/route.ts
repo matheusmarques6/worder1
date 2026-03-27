@@ -309,19 +309,22 @@ async function handleGetOrCreateOrg(supabase: SupabaseClient, request: NextReque
           .eq('id', authUser.id)
           .single();
 
+        // ✅ CORREÇÃO: Não usar 'default-org' - usar null se não tiver organization
+        const orgId = profile?.organization?.id || profile?.organization_id || authUser.user_metadata?.organization_id || null;
+
         return NextResponse.json({
-          organization: profile?.organization || { id: authUser.user_metadata?.organization_id || 'default-org' },
+          organization: profile?.organization || (orgId ? { id: orgId } : null),
           user: {
             id: authUser.id,
             email: authUser.email,
-            name: profile?.first_name && profile?.last_name 
-              ? `${profile.first_name} ${profile.last_name}` 
+            name: profile?.first_name && profile?.last_name
+              ? `${profile.first_name} ${profile.last_name}`
               : authUser.user_metadata?.name || profile?.first_name || 'User',
             first_name: profile?.first_name || authUser.user_metadata?.name?.split(' ')[0],
             last_name: profile?.last_name || '',
             avatar_url: profile?.avatar_url || authUser.user_metadata?.avatar_url,
             role: profile?.role || 'user',
-            organization_id: profile?.organization_id || authUser.user_metadata?.organization_id,
+            organization_id: orgId,
             user_metadata: authUser.user_metadata,
           },
         });
@@ -359,16 +362,11 @@ async function handleGetOrCreateOrg(supabase: SupabaseClient, request: NextReque
 
     if (createError) {
       console.error('Error creating organization:', createError);
-      // Return a default org ID even if creation fails
-      return NextResponse.json({
-        organization: { id: 'default-org', name: 'Default Organization' },
-        user: {
-          id: 'default-user',
-          email: 'demo@worder.com',
-          first_name: 'Demo',
-          last_name: 'User',
-        },
-      });
+      // ✅ CORREÇÃO: Retornar erro em vez de ID inválido
+      return NextResponse.json(
+        { error: 'Failed to create organization', details: createError.message },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
@@ -380,18 +378,13 @@ async function handleGetOrCreateOrg(supabase: SupabaseClient, request: NextReque
         last_name: 'User',
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in handleGetOrCreateOrg:', error);
-    // Return a default org ID as fallback
-    return NextResponse.json({
-      organization: { id: 'default-org', name: 'Default Organization' },
-      user: {
-        id: 'default-user',
-        email: 'demo@worder.com',
-        first_name: 'Demo',
-        last_name: 'User',
-      },
-    });
+    // ✅ CORREÇÃO: Retornar erro em vez de ID inválido
+    return NextResponse.json(
+      { error: 'Error getting or creating organization', details: error?.message },
+      { status: 500 }
+    );
   }
 }
 

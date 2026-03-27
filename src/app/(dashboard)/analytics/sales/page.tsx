@@ -556,7 +556,8 @@ function SalesFunnel({ data }: { data: FunnelStage[] }) {
     )
   }
 
-  const maxValue = Math.max(...safeData.map(s => s.value || 0))
+  // ✅ CORREÇÃO: Garantir valor mínimo de 1 para evitar divisão por zero
+  const maxValue = Math.max(...safeData.map(s => s.value || 0), 1)
 
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">

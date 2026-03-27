@@ -94,12 +94,14 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching automations:', error);
-      return NextResponse.json({ automations: [] });
+      // ✅ CORREÇÃO: Retornar erro real em vez de array vazio
+      return NextResponse.json({ error: error.message, automations: [] }, { status: 500 });
     }
     return NextResponse.json({ automations: data || [] });
   } catch (error: any) {
     console.error('Automation GET error:', error);
-    return NextResponse.json({ automations: [] });
+    // ✅ CORREÇÃO: Retornar erro real
+    return NextResponse.json({ error: error.message, automations: [] }, { status: 500 });
   }
 }
 

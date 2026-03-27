@@ -8,10 +8,12 @@ export const dynamic = 'force-dynamic';
 // Route: /api/webhooks/flow/[token]
 // ============================================
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // ============================================
 // POST - Receive webhook
@@ -21,6 +23,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { token: string } }
 ) {
+  const supabase = getSupabase();
   const token = params.token;
 
   if (!token) {
@@ -175,6 +178,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { token: string } }
 ) {
+  const supabase = getSupabase();
   const token = params.token;
   const searchParams = request.nextUrl.searchParams;
 

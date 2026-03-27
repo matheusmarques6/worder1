@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chunkText } from '@/lib/ai/processors/text-processor'
 import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
@@ -24,11 +25,18 @@ export async function POST(
   { params }: { params: { id: string; integrationId: string } }
 ) {
   try {
+    // ✅ CORREÇÃO: Validar autenticação
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
     const supabase = getSupabase()
     const { id: agentId, integrationId } = params
     const body = await request.json()
 
-    const { organization_id } = body
+    // ✅ CORREÇÃO: Usar organization_id do usuário autenticado
+    const organization_id = auth.user.organization_id
 
     if (!organization_id) {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })

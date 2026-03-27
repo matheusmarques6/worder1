@@ -184,9 +184,34 @@ async function handleMessage(instance: any, body: any) {
   const pushName = data.pushName || null;
   
   // Extrair conteúdo
-  const { content, messageType, mediaUrl, mediaMimetype } = extractMessageContent(message);
+  const { content, messageType, mediaUrl: originalMediaUrl, mediaMimetype, mediaFilename } = extractMessageContent(message);
 
   console.log('[Webhook] 📨 Message:', messageType, '|', content?.substring(0, 50), '| Phone:', phoneNumber);
+
+  // Download e upload de mídia para Supabase Storage (URLs persistentes)
+  let persistentMediaUrl = null;
+  let mediaStoragePath = null;
+
+  if (originalMediaUrl && messageType !== 'text') {
+    try {
+      const mediaResult = await downloadAndStoreMedia(
+        instance,
+        key.id,
+        originalMediaUrl,
+        mediaMimetype,
+        mediaFilename,
+        orgId
+      );
+      if (mediaResult) {
+        persistentMediaUrl = mediaResult.url;
+        mediaStoragePath = mediaResult.storagePath;
+        console.log('[Webhook] ✅ Media stored:', mediaStoragePath);
+      }
+    } catch (mediaError) {
+      console.error('[Webhook] ⚠️ Media download failed, using original URL:', mediaError);
+      persistentMediaUrl = originalMediaUrl;
+    }
+  }
 
   // =====================================================
   // BUSCAR/CRIAR CONTATO
@@ -230,8 +255,10 @@ const messagePayload = {
   message_type: messageType,
   content: typeof content === 'string' ? { text: content } : content,
   text_body: typeof content === 'string' ? content : null,
-  media_url: mediaUrl,
+  media_url: persistentMediaUrl || originalMediaUrl,
   media_mime_type: mediaMimetype,
+  media_filename: mediaFilename,
+  media_storage_path: mediaStoragePath,
   status: 'received',
   timestamp: new Date().toISOString(),
 };
@@ -390,39 +417,45 @@ async function findOrCreateConversation(
 // =============================================
 
 function extractMessageContent(message: any) {
-  let content = message.conversation || 
+  let content = message.conversation ||
                 message.extendedTextMessage?.text ||
                 message.imageMessage?.caption ||
                 message.videoMessage?.caption ||
                 '';
-                
+
   let messageType = 'text';
   let mediaUrl = null;
   let mediaMimetype = null;
-  
+  let mediaFilename = null;
+
   if (message.imageMessage) {
     messageType = 'image';
     mediaUrl = message.imageMessage.url;
     mediaMimetype = message.imageMessage.mimetype;
+    mediaFilename = `image_${Date.now()}.${message.imageMessage.mimetype?.split('/')[1] || 'jpg'}`;
   } else if (message.videoMessage) {
     messageType = 'video';
     mediaUrl = message.videoMessage.url;
     mediaMimetype = message.videoMessage.mimetype;
+    mediaFilename = `video_${Date.now()}.${message.videoMessage.mimetype?.split('/')[1] || 'mp4'}`;
   } else if (message.audioMessage) {
     messageType = message.audioMessage.ptt ? 'ptt' : 'audio';
     mediaUrl = message.audioMessage.url;
     mediaMimetype = message.audioMessage.mimetype;
+    mediaFilename = `audio_${Date.now()}.${message.audioMessage.mimetype?.split('/')[1] || 'ogg'}`;
   } else if (message.documentMessage) {
     messageType = 'document';
     mediaUrl = message.documentMessage.url;
     mediaMimetype = message.documentMessage.mimetype;
+    mediaFilename = message.documentMessage.fileName || `doc_${Date.now()}`;
   } else if (message.stickerMessage) {
     messageType = 'sticker';
     mediaUrl = message.stickerMessage.url;
     mediaMimetype = message.stickerMessage.mimetype;
+    mediaFilename = `sticker_${Date.now()}.webp`;
   }
 
-  return { content, messageType, mediaUrl, mediaMimetype };
+  return { content, messageType, mediaUrl, mediaMimetype, mediaFilename };
 }
 
 async function findOrCreateContact(
@@ -493,6 +526,98 @@ async function findOrCreateUnifiedContact(
   }
   
   return unifiedContact;
+}
+
+// =============================================
+// DOWNLOAD E STORE MEDIA
+// =============================================
+async function downloadAndStoreMedia(
+  instance: any,
+  messageId: string,
+  originalUrl: string,
+  mimetype: string | null,
+  filename: string | null,
+  orgId: string
+): Promise<{ url: string; storagePath: string } | null> {
+  const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL;
+  const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
+
+  const apiUrl = instance?.api_url || instance?.server_url || EVOLUTION_API_URL;
+  const apiKey = instance?.api_key || EVOLUTION_API_KEY;
+
+  if (!apiUrl || !apiKey) {
+    console.log('[Webhook] ⚠️ No Evolution API config for media download');
+    return null;
+  }
+
+  const instanceName = instance.unique_id || instance.instance_name || instance.instance_id;
+
+  try {
+    // Tentar baixar via Evolution API endpoint
+    const downloadUrl = `${apiUrl}/chat/getBase64FromMediaMessage/${instanceName}`;
+
+    const response = await fetch(downloadUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': apiKey,
+      },
+      body: JSON.stringify({
+        message: { key: { id: messageId } },
+        convertToMp4: false,
+      }),
+    });
+
+    if (!response.ok) {
+      console.log('[Webhook] ⚠️ Media download API returned:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const base64 = data.base64;
+
+    if (!base64) {
+      console.log('[Webhook] ⚠️ No base64 in media response');
+      return null;
+    }
+
+    // Upload para Supabase Storage
+    const buffer = Buffer.from(base64, 'base64');
+    const ext = filename?.split('.').pop() || mimetype?.split('/')[1] || 'bin';
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const storagePath = `${orgId}/inbound/${uniqueId}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('whatsapp-media')
+      .upload(storagePath, buffer, {
+        contentType: mimetype || 'application/octet-stream',
+        upsert: false,
+        cacheControl: '31536000', // 1 ano
+      });
+
+    if (uploadError) {
+      console.error('[Webhook] ❌ Storage upload error:', uploadError);
+      return null;
+    }
+
+    // Gerar signed URL (válida por 1 ano)
+    const { data: signedData, error: signedError } = await supabase.storage
+      .from('whatsapp-media')
+      .createSignedUrl(storagePath, 31536000); // 1 ano
+
+    if (signedError || !signedData?.signedUrl) {
+      // Fallback para URL pública
+      const { data: publicData } = supabase.storage
+        .from('whatsapp-media')
+        .getPublicUrl(storagePath);
+      return { url: publicData?.publicUrl || '', storagePath };
+    }
+
+    return { url: signedData.signedUrl, storagePath };
+  } catch (error) {
+    console.error('[Webhook] ❌ Media download error:', error);
+    return null;
+  }
 }
 
 async function triggerAIProcessing(

@@ -2,7 +2,9 @@
 // META WHATSAPP BUSINESS API CLIENT
 // =============================================
 
-const META_API_VERSION = 'v18.0';
+// API Version atualizada para v21.0 (Março 2026)
+// Documentação: https://developers.facebook.com/docs/whatsapp/cloud-api
+const META_API_VERSION = 'v21.0';
 const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 interface SendMessageParams {

@@ -12,8 +12,42 @@ function extractContactData(answers: Record<string, any>, fields: any[]) {
   const contactData: Record<string, any> = {}
 
   for (const field of fields) {
-    if (field.map_to_contact_field && answers[field.id] !== undefined) {
-      contactData[field.map_to_contact_field] = answers[field.id]
+    const value = answers[field.id]
+    if (value === undefined || value === '') continue
+
+    // 1. Use explicit mapping if defined
+    if (field.map_to_contact_field) {
+      // Map 'name' to 'first_name' for compatibility
+      const mappedField = field.map_to_contact_field === 'name' ? 'first_name' : field.map_to_contact_field
+      contactData[mappedField] = value
+      continue
+    }
+
+    // 2. Auto-detect by field type
+    if (field.field_type === 'email' && !contactData.email) {
+      contactData.email = value
+    } else if (field.field_type === 'phone' && !contactData.phone) {
+      contactData.phone = value
+    }
+
+    // 3. Auto-detect by label (common patterns)
+    const label = (field.label || '').toLowerCase()
+    if (!contactData.first_name && (label.includes('nome') || label.includes('name'))) {
+      // If it's a full name, try to split
+      const parts = String(value).trim().split(' ')
+      contactData.first_name = parts[0] || value
+      if (parts.length > 1) {
+        contactData.last_name = parts.slice(1).join(' ')
+      }
+    }
+    if (!contactData.email && (label.includes('email') || label.includes('e-mail'))) {
+      contactData.email = value
+    }
+    if (!contactData.phone && (label.includes('telefone') || label.includes('phone') || label.includes('whatsapp') || label.includes('celular'))) {
+      contactData.phone = value
+    }
+    if (!contactData.company && (label.includes('empresa') || label.includes('company'))) {
+      contactData.company = value
     }
   }
 
@@ -161,50 +195,82 @@ export async function POST(
     // 3. Extrair dados de contato
     const contactData = extractContactData(answers, form.fields || [])
 
-    // 4. Criar ou encontrar contato
+    // 4. Criar ou encontrar contato (sempre criar se tiver algum dado)
     let contactId: string | null = null
-    if (contactData.email || contactData.phone) {
-      // Tentar encontrar contato existente
-      let contactQuery = supabase
-        .from('contacts')
-        .select('id')
-        .eq('organization_id', form.organization_id)
+    const hasContactData = contactData.email || contactData.phone || contactData.first_name
 
+    console.log('[Form Submit] Contact data extracted:', contactData)
+    console.log('[Form Submit] Pipeline ID:', form.pipeline_id)
+
+    if (hasContactData) {
+      // Tentar encontrar contato existente por email
       if (contactData.email) {
-        contactQuery = contactQuery.eq('email', contactData.email)
+        const { data: existingContact } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('organization_id', form.organization_id)
+          .eq('email', contactData.email)
+          .maybeSingle()
+
+        if (existingContact) {
+          contactId = existingContact.id
+          // Atualizar contato com novos dados
+          await supabase
+            .from('contacts')
+            .update({
+              first_name: contactData.first_name || undefined,
+              last_name: contactData.last_name || undefined,
+              phone: contactData.phone || undefined,
+              company: contactData.company || undefined,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', contactId)
+          console.log('[Form Submit] Updated existing contact:', contactId)
+        }
       }
 
-      const { data: existingContact } = await contactQuery.maybeSingle()
-
-      if (existingContact) {
-        contactId = existingContact.id
-        // Atualizar contato com novos dados
-        await supabase
-          .from('contacts')
-          .update({
-            name: contactData.name || undefined,
-            phone: contactData.phone || undefined,
-            company: contactData.company || undefined,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', contactId)
-      } else {
-        // Criar novo contato
-        const { data: newContact } = await supabase
+      // Se não encontrou, criar novo
+      if (!contactId) {
+        const { data: newContact, error: contactError } = await supabase
           .from('contacts')
           .insert({
             organization_id: form.organization_id,
-            name: contactData.name || contactData.email || 'Lead sem nome',
+            store_id: form.store_id || null,
+            first_name: contactData.first_name || contactData.email || contactData.phone || 'Lead',
+            last_name: contactData.last_name || null,
             email: contactData.email || null,
             phone: contactData.phone || null,
             company: contactData.company || null,
             source: 'form',
-            status: 'lead',
           })
           .select('id')
           .single()
 
+        if (contactError) {
+          console.error('[Form Submit] Error creating contact:', contactError)
+        } else {
+          contactId = newContact?.id || null
+          console.log('[Form Submit] Created new contact:', contactId)
+        }
+      }
+    } else {
+      // Sem dados de contato extraídos - criar contato genérico para não perder o lead
+      const { data: newContact, error: contactError } = await supabase
+        .from('contacts')
+        .insert({
+          organization_id: form.organization_id,
+          store_id: form.store_id || null,
+          first_name: 'Lead do formulário',
+          source: 'form',
+        })
+        .select('id')
+        .single()
+
+      if (contactError) {
+        console.error('[Form Submit] Error creating generic contact:', contactError)
+      } else {
         contactId = newContact?.id || null
+        console.log('[Form Submit] Created generic contact:', contactId)
       }
     }
 
@@ -212,11 +278,12 @@ export async function POST(
     let dealId: string | null = null
     if (form.pipeline_id && contactId) {
       const stageId = form.stage_id
+      console.log('[Form Submit] Creating deal - Pipeline:', form.pipeline_id, 'Stage configured:', stageId)
 
       // Se não tem stage específico, pegar o primeiro estágio
       let targetStageId = stageId
       if (!targetStageId) {
-        const { data: firstStage } = await supabase
+        const { data: firstStage, error: stageError } = await supabase
           .from('pipeline_stages')
           .select('id')
           .eq('pipeline_id', form.pipeline_id)
@@ -224,27 +291,106 @@ export async function POST(
           .limit(1)
           .single()
 
+        if (stageError) {
+          console.error('[Form Submit] Error fetching first stage:', stageError)
+        }
         targetStageId = firstStage?.id
+        console.log('[Form Submit] Using first stage:', targetStageId)
       }
 
       if (targetStageId) {
-        const { data: deal } = await supabase
+        // Build UTM data for custom_fields
+        const utmData: Record<string, string> = {}
+        if (utm_source) utmData.utm_source = utm_source
+        if (utm_medium) utmData.utm_medium = utm_medium
+        if (utm_campaign) utmData.utm_campaign = utm_campaign
+        if (utm_term) utmData.utm_term = utm_term
+        if (utm_content) utmData.utm_content = utm_content
+
+        // Build form responses with labels for display
+        const formResponses: Array<{ label: string; value: any; type: string }> = []
+        for (const field of (form.fields || [])) {
+          const value = answers[field.id]
+          if (value !== undefined && value !== '') {
+            formResponses.push({
+              label: field.label || field.id,
+              value: value,
+              type: field.field_type || 'text',
+            })
+          }
+        }
+
+        // Detect source tags based on UTM
+        const sourceTags: string[] = []
+        if (utm_source) {
+          const source = utm_source.toLowerCase()
+          if (source.includes('facebook') || source.includes('fb') || source.includes('ig') || source.includes('instagram')) {
+            sourceTags.push('Ads Facebook')
+          } else if (source.includes('google') || source.includes('gads') || source.includes('gclid')) {
+            sourceTags.push('Ads Google')
+          } else if (source.includes('tiktok')) {
+            sourceTags.push('TikTok Ads')
+          } else if (source.includes('youtube')) {
+            sourceTags.push('YouTube')
+          }
+        }
+        if (utm_medium) {
+          const medium = utm_medium.toLowerCase()
+          if (medium === 'cpc' || medium === 'ppc' || medium === 'paid') {
+            if (!sourceTags.some(t => t.includes('Ads'))) sourceTags.push('Tráfego Pago')
+          } else if (medium === 'organic' || medium === 'social') {
+            sourceTags.push('Inbound')
+          }
+        }
+        if (sourceTags.length === 0) {
+          sourceTags.push('Inbound')
+        }
+
+        const dealTitle = contactData.first_name
+          ? `${contactData.first_name}${contactData.last_name ? ' ' + contactData.last_name : ''}`
+          : (contactData.email || 'Novo Lead')
+
+        const { data: deal, error: dealError } = await supabase
           .from('deals')
           .insert({
             organization_id: form.organization_id,
             pipeline_id: form.pipeline_id,
             stage_id: targetStageId,
             contact_id: contactId,
-            title: contactData.name || contactData.email || 'Novo Lead',
+            title: dealTitle,
             value: 0,
-            source: 'form',
+            status: 'open',
             position: 0,
+            tags: sourceTags,
+            custom_fields: {
+              source: 'form',
+              form_id: formId,
+              form_name: form.name || 'Formulário',
+              form_responses: formResponses,
+              referrer: request.headers.get('referer') || null,
+              ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+              user_agent: request.headers.get('user-agent') || null,
+              submitted_at: new Date().toISOString(),
+              ...utmData,
+            },
+            notes: Object.keys(utmData).length > 0
+              ? `Lead via formulário: ${form.name || 'Sem nome'}\n\nUTMs:\n${Object.entries(utmData).map(([k, v]) => `• ${k}: ${v}`).join('\n')}`
+              : `Lead via formulário: ${form.name || 'Sem nome'}`,
           })
           .select('id')
           .single()
 
-        dealId = deal?.id || null
+        if (dealError) {
+          console.error('[Form Submit] Error creating deal:', dealError)
+        } else {
+          dealId = deal?.id || null
+          console.log('[Form Submit] Deal created:', dealId)
+        }
+      } else {
+        console.error('[Form Submit] No stage found for pipeline:', form.pipeline_id)
       }
+    } else {
+      console.log('[Form Submit] Skipping deal creation - Pipeline:', form.pipeline_id, 'Contact:', contactId)
     }
 
     // 6. Criar submission

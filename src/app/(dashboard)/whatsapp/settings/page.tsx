@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useStoreStore } from '@/stores'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Settings, Smartphone, Key, QrCode, Check, X, Loader2, Eye, EyeOff,
@@ -32,6 +33,7 @@ interface Instance {
 }
 
 export default function WhatsAppSettingsPage() {
+  const { currentStore } = useStoreStore()
   const [activeTab, setActiveTab] = useState<'meta' | 'instances'>('meta')
   
   // Meta API State
@@ -120,6 +122,7 @@ export default function WhatsAppSettingsPage() {
         body: JSON.stringify({
           action: 'create',
           organization_id: 'default',
+          store_id: currentStore?.id,
           title: newInstanceTitle,
           api_type: 'EVOLUTION',
           api_url: evolutionUrl,
@@ -144,7 +147,7 @@ export default function WhatsAppSettingsPage() {
       const res = await fetch('/api/whatsapp/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'qr', id: instanceId })
+        body: JSON.stringify({ action: 'qr', instance_id: instanceId })
       })
       const data = await res.json()
       
@@ -168,7 +171,7 @@ export default function WhatsAppSettingsPage() {
     if (!confirm('Tem certeza que deseja excluir esta instância?')) return
 
     try {
-      await fetch(`/api/whatsapp/instances?id=${instanceId}`, { method: 'DELETE' })
+      await fetch(`/api/whatsapp/instances?id=${instanceId}&organization_id=default`, { method: 'DELETE' })
       setInstances(instances.filter(i => i.id !== instanceId))
     } catch (e) {
       console.error('Error deleting instance:', e)

@@ -2,10 +2,14 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Worder - Email Marketing Analytics & CRM',
-  description: 'Track your email marketing ROI, manage customers, and automate communications',
+  title: 'Worder - CRM Inteligente para E-commerce',
+  description: 'Plataforma all-in-one de CRM inteligente para e-commerce. Unifique dados, comunicação, automações e IA.',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/logo.svg', type: 'image/svg+xml' },
+      { url: '/logo.png', type: 'image/png' },
+    ],
+    apple: '/logo.png',
   },
 }
 

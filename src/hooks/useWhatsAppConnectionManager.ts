@@ -93,8 +93,8 @@ interface ConnectionStatusResult {
 // HOOK
 // =============================================
 
-// ✅ CORREÇÃO: Recebe storeId como parâmetro
-export function useWhatsAppConnection(organizationId: string, storeId?: string | null): UseWhatsAppConnectionReturn {
+// ✅ CORREÇÃO: Recebe storeId e organizationId (ambos podem ser null)
+export function useWhatsAppConnection(organizationId: string | null, storeId?: string | null): UseWhatsAppConnectionReturn {
   const [instances, setInstances] = useState<WhatsAppInstance[]>([])
   const [selectedInstance, setSelectedInstance] = useState<WhatsAppInstance | null>(null)
   const [loading, setLoading] = useState(true)
@@ -105,13 +105,16 @@ export function useWhatsAppConnection(organizationId: string, storeId?: string |
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // ✅ Debounce: evita chamadas simultâneas
+  const isFetchingRef = useRef(false)
+
   // =============================================
   // FETCH INSTANCES - FILTRADO POR STORE_ID
   // =============================================
 
   const fetchInstances = useCallback(async () => {
     if (!organizationId) return
-    
+
     // ✅ CRÍTICO: Não buscar se não tiver storeId
     if (!storeId) {
       console.log('[WhatsAppConnection] No storeId, clearing instances')
@@ -120,7 +123,13 @@ export function useWhatsAppConnection(organizationId: string, storeId?: string |
       setLoading(false)
       return
     }
-    
+
+    // ✅ Debounce: ignora chamadas enquanto outra está em andamento
+    if (isFetchingRef.current) {
+      return
+    }
+    isFetchingRef.current = true
+
     try {
       setLoading(true)
       setError(null)
@@ -150,6 +159,7 @@ export function useWhatsAppConnection(organizationId: string, storeId?: string |
       console.error('fetchInstances error:', err)
     } finally {
       setLoading(false)
+      isFetchingRef.current = false
     }
   }, [organizationId, storeId, selectedInstance])
 
@@ -160,28 +170,33 @@ export function useWhatsAppConnection(organizationId: string, storeId?: string |
     fetchInstances()
   }, [organizationId, storeId])
 
-  // Auto-refresh quando conectando
+  // Auto-refresh quando conectando - usando ref para evitar re-criação do interval
   const statusPollingRef = useRef<NodeJS.Timeout | null>(null)
-  
+  const fetchInstancesRef = useRef(fetchInstances)
+
+  useEffect(() => {
+    fetchInstancesRef.current = fetchInstances
+  }, [fetchInstances])
+
   useEffect(() => {
     if (statusPollingRef.current) {
       clearInterval(statusPollingRef.current)
       statusPollingRef.current = null
     }
-    
+
     if (connectionStatus === 'connecting' || connectionStatus === 'generating') {
       console.log('[WhatsAppConnection] Starting status polling...')
       statusPollingRef.current = setInterval(() => {
-        fetchInstances()
+        fetchInstancesRef.current()
       }, 3000)
     }
-    
+
     return () => {
       if (statusPollingRef.current) {
         clearInterval(statusPollingRef.current)
       }
     }
-  }, [connectionStatus, fetchInstances])
+  }, [connectionStatus])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -398,7 +413,7 @@ export function useWhatsAppConnection(organizationId: string, storeId?: string |
 
   const deleteInstance = useCallback(async (instanceId: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/whatsapp/instances?id=${instanceId}`, {
+      const response = await fetch(`/api/whatsapp/instances?id=${instanceId}&organization_id=${organizationId}`, {
         method: 'DELETE',
       })
 
