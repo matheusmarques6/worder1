@@ -12,8 +12,8 @@ interface CardProps extends HTMLMotionProps<'div'> {
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
   ({ className, variant = 'default', hoverable = false, children, ...props }, ref) => {
     const variants = {
-      default: 'bg-white border border-gray-200',
-      glass: 'bg-gray-50 backdrop-blur-xl border border-gray-200',
+      default: 'bg-white border border-gray-200 shadow-sm',
+      glass: 'bg-white/80 backdrop-blur-xl border border-gray-200',
       gradient: 'gradient-border bg-white',
     }
 
@@ -23,7 +23,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
         className={cn(
           'rounded-2xl p-6',
           variants[variant],
-          hoverable && 'transition-all duration-300 hover:border-brand-300 hover:shadow-glow cursor-pointer',
+          hoverable && 'transition-all duration-300 hover:shadow-md hover:border-gray-300 cursor-pointer',
           className
         )}
         {...props}

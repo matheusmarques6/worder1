@@ -9,7 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Brand palette - Worder Orange (Klaviyo style)
+        // Brand palette - Klaviyo-style orange
         brand: {
           50: '#FFF7ED',
           100: '#FFEDD5',
@@ -22,21 +22,28 @@ const config: Config = {
           800: '#9A3412',
           900: '#7C2D12',
         },
-        // Keep primary as alias for backward compat
+        // Sidebar - dark sidebar
+        sidebar: {
+          DEFAULT: '#1A1D21',
+          hover: '#2C3035',
+          active: '#35393E',
+          border: '#3f3f46',
+        },
+        // Primary palette - Worder Orange
         primary: {
-          50: '#FFF7ED',
-          100: '#FFEDD5',
-          200: '#FED7AA',
-          300: '#FDBA74',
-          400: '#FB923C',
-          500: '#F97316',
-          600: '#EA580C',
-          700: '#C2410C',
-          800: '#9A3412',
-          900: '#7C2D12',
+          50: '#fff7ed',
+          100: '#ffedd5',
+          200: '#fed7aa',
+          300: '#fdba74',
+          400: '#fb923c',
+          500: '#f97316',
+          600: '#ea580c',
+          700: '#c2410c',
+          800: '#9a3412',
+          900: '#7c2d12',
           950: '#431407',
         },
-        // Accent - Worder Yellow/Gold (keep for compat)
+        // Accent - Worder Yellow/Gold
         accent: {
           50: '#fefce8',
           100: '#fef9c3',
@@ -50,14 +57,7 @@ const config: Config = {
           900: '#713f12',
           950: '#422006',
         },
-        // Sidebar - Dark like Klaviyo
-        sidebar: {
-          DEFAULT: '#1A1D21',
-          hover: '#2C3035',
-          active: '#35393E',
-          border: '#3f3f46',
-        },
-        // Keep dark palette for sidebar/overlay backward compat
+        // Background - Deep dark
         dark: {
           50: '#fafafa',
           100: '#f4f4f5',
@@ -101,9 +101,20 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['"DM Sans"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        sans: [
+          '"DM Sans"',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'sans-serif',
+        ],
         mono: ['JetBrains Mono', 'Consolas', 'monospace'],
-        display: ['"DM Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+        display: [
+          '"DM Sans"',
+          'system-ui',
+          '-apple-system',
+          'sans-serif',
+        ],
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
@@ -164,8 +175,8 @@ const config: Config = {
         'glow-lg': '0 0 40px rgba(249, 115, 22, 0.4)',
         'glow-accent': '0 0 20px rgba(234, 179, 8, 0.3)',
         'inner-glow': 'inset 0 0 20px rgba(249, 115, 22, 0.1)',
-        'card': '0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06)',
-        'card-hover': '0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06)',
+        'card': '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)',
+        'card-hover': '0 4px 12px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06)',
       },
       backdropBlur: {
         xs: '2px',

@@ -156,7 +156,7 @@ export default function SignupPage() {
           {/* Logo */}
           <div className="flex flex-col gap-1 mb-8">
             <WorderLogo size="md" />
-            <p className="text-xs text-gray-9000">by Convertfy</p>
+            <p className="text-xs text-gray-400">by Convertfy</p>
           </div>
 
           {/* Welcome Text */}
@@ -183,7 +183,7 @@ export default function SignupPage() {
                     value={formData.firstName}
                     onChange={handleChange}
                     placeholder="Seu nome"
-                    className="w-full pl-10 pr-4 py-3 bg-gray-500 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                     required
                   />
                 </div>
@@ -198,7 +198,7 @@ export default function SignupPage() {
                   value={formData.lastName}
                   onChange={handleChange}
                   placeholder="Sobrenome"
-                  className="w-full px-4 py-3 bg-gray-500 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
                 />
               </div>
@@ -217,7 +217,7 @@ export default function SignupPage() {
                   value={formData.companyName}
                   onChange={handleChange}
                   placeholder="Sua empresa"
-                  className="w-full pl-10 pr-4 py-3 bg-gray-500 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                 />
               </div>
             </div>
@@ -235,7 +235,7 @@ export default function SignupPage() {
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="seu@email.com"
-                  className="w-full pl-10 pr-4 py-3 bg-gray-500 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
                 />
               </div>
@@ -254,7 +254,7 @@ export default function SignupPage() {
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="Mínimo 6 caracteres"
-                  className="w-full pl-10 pr-12 py-3 bg-gray-500 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-10 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
                   minLength={6}
                 />
@@ -277,7 +277,7 @@ export default function SignupPage() {
             )}
 
             {/* Terms */}
-            <p className="text-xs text-gray-9000">
+            <p className="text-xs text-gray-400">
               Ao criar sua conta, você concorda com nossos{' '}
               <a href="#" className="text-brand-600 hover:underline">Termos de Uso</a>
               {' '}e{' '}
@@ -334,7 +334,7 @@ export default function SignupPage() {
           {/* Large Logo */}
           <div className="mb-8">
             <WorderLogo size="lg" />
-            <p className="text-sm text-gray-9000 mt-1">by Convertfy</p>
+            <p className="text-sm text-gray-400 mt-1">by Convertfy</p>
           </div>
           
           <h2 className="text-3xl font-bold text-white mb-4">
@@ -367,8 +367,8 @@ export default function SignupPage() {
 
           {/* Trust Badge */}
           <div className="mt-12 pt-8 border-t border-gray-200">
-            <p className="text-gray-9000 text-sm mb-3">Confiado por empresas como:</p>
-            <div className="flex items-center gap-6 text-dark-600">
+            <p className="text-gray-400 text-sm mb-3">Confiado por empresas como:</p>
+            <div className="flex items-center gap-6 text-gray-500">
               <span className="font-semibold">Shopify</span>
               <span className="font-semibold">Nuvemshop</span>
               <span className="font-semibold">VTEX</span>

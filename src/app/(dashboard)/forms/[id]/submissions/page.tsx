@@ -168,7 +168,7 @@ export default function FormSubmissionsPage() {
             <div className="lg:col-span-1">
               {selectedSubmission ? (
                 <div className="sticky top-20 p-5 bg-white border border-gray-200 rounded-xl space-y-4">
-                  <h3 className="text-base font-semibold text-gray-900">Detalhes</h3>
+                  <h3 className="text-base font-semibold text-white">Detalhes</h3>
 
                   {/* Contact info */}
                   {selectedSubmission.contact && (

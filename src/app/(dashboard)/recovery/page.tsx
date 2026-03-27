@@ -1,192 +1,206 @@
 'use client'
 
-import { useState } from 'react'
-import { motion } from 'framer-motion'
-import {
-  ShoppingCartSimple,
-  CurrencyDollar,
-  ArrowClockwise,
-  TrendUp,
-  WhatsappLogo,
-  EnvelopeSimple,
-  Eye,
-  CreditCard,
-  Barcode,
-  PixLogo,
-  Robot,
-  Lightning,
-} from '@phosphor-icons/react'
+import { useState, useEffect } from 'react'
+import { ShoppingCart, CreditCard, QrCode, FileText, RefreshCcw, Send, Eye, TrendingUp, AlertCircle } from 'lucide-react'
+
+interface RecoveryItem {
+  id: string
+  type: 'cart' | 'pix' | 'boleto' | 'card_declined'
+  contact_name: string
+  contact_email: string
+  contact_phone?: string
+  amount: number
+  items_count?: number
+  order_number?: string
+  status: 'pending' | 'sent' | 'recovered' | 'expired'
+  decline_reason?: string
+  created_at: string
+  expires_at?: string
+}
+
+interface RecoveryStats {
+  pending: number
+  recovered_month: number
+  recovery_rate: number
+  revenue_recovered: number
+}
 
 const tabs = [
-  { id: 'cart', label: 'Carrinhos Abandonados', icon: ShoppingCartSimple, count: 47 },
-  { id: 'pix', label: 'PIX Pendente', icon: PixLogo, count: 12 },
-  { id: 'boleto', label: 'Boletos', icon: Barcode, count: 8 },
-  { id: 'card', label: 'Cartões Recusados', icon: CreditCard, count: 5 },
-]
-
-const kpiCards = [
-  { title: 'Valor em Carrinhos', value: 'R$ 47.832', change: '+12%', positive: true, icon: ShoppingCartSimple },
-  { title: 'Valor Recuperado', value: 'R$ 18.450', change: '+28%', positive: true, icon: CurrencyDollar, highlight: true },
-  { title: 'Taxa de Recuperação', value: '38.6%', change: '+5.2%', positive: true, icon: ArrowClockwise },
-  { title: 'ROI da IA', value: '4.2x', change: '+0.8x', positive: true, icon: Robot },
-]
-
-const mockData = [
-  { id: '#4521', customer: 'Ana Silva', email: 'ana@email.com', value: 'R$ 459,90', date: '2h atrás', status: 'Abandonado', aiStatus: 'Enviado' },
-  { id: '#4520', customer: 'Carlos Lima', email: 'carlos@email.com', value: 'R$ 1.290,00', date: '3h atrás', status: 'Recuperado', aiStatus: 'Recuperado' },
-  { id: '#4519', customer: 'Maria Costa', email: 'maria@email.com', value: 'R$ 189,90', date: '5h atrás', status: 'Abandonado', aiStatus: 'Não tentou' },
-  { id: '#4518', customer: 'João Santos', email: 'joao@email.com', value: 'R$ 2.150,00', date: '6h atrás', status: 'Expirado', aiStatus: 'Falhou' },
-  { id: '#4517', customer: 'Fernanda Dias', email: 'fer@email.com', value: 'R$ 349,90', date: '8h atrás', status: 'Abandonado', aiStatus: 'Enviado' },
-]
+  { id: 'cart', label: 'Carrinhos', icon: ShoppingCart },
+  { id: 'pix', label: 'PIX', icon: QrCode },
+  { id: 'boleto', label: 'Boleto', icon: FileText },
+  { id: 'card_declined', label: 'Cartão', icon: CreditCard },
+] as const
 
 export default function RecoveryPage() {
-  const [activeTab, setActiveTab] = useState('cart')
+  const [activeTab, setActiveTab] = useState<string>('cart')
+  const [items, setItems] = useState<RecoveryItem[]>([])
+  const [stats, setStats] = useState<RecoveryStats>({ pending: 0, recovered_month: 0, recovery_rate: 0, revenue_recovered: 0 })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadData()
+  }, [activeTab])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/recovery?type=${activeTab}`)
+      if (res.ok) {
+        const data = await res.json()
+        setItems(data.items || [])
+        setStats(data.stats || stats)
+      }
+    } catch (err) {
+      console.error('Error loading recovery data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+
+  const formatDate = (date: string) =>
+    new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      pending: 'bg-amber-50 text-amber-700 border border-amber-200',
+      sent: 'bg-orange-50 text-orange-700 border border-orange-200',
+      recovered: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+      expired: 'bg-gray-100 text-gray-600 border border-gray-200',
+    }
+    const labels: Record<string, string> = {
+      pending: 'Pendente',
+      sent: 'Enviado',
+      recovered: 'Recuperado',
+      expired: 'Expirado',
+    }
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>
+        {labels[status] || status}
+      </span>
+    )
+  }
+
+  const kpiCards = [
+    { label: 'Pendentes', value: stats.pending, icon: AlertCircle, color: 'text-amber-600' },
+    { label: 'Recuperados (mês)', value: stats.recovered_month, icon: RefreshCcw, color: 'text-emerald-600' },
+    { label: 'Taxa Recuperação', value: `${stats.recovery_rate.toFixed(1)}%`, icon: TrendingUp, color: 'text-brand-600' },
+    { label: 'Receita Recuperada', value: formatCurrency(stats.revenue_recovered), icon: CreditCard, color: 'text-emerald-600' },
+  ]
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-white">Recuperação de Vendas</h1>
-          <p className="text-sm text-dark-400 mt-1">Monitore e recupere vendas perdidas com IA</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-xs font-medium text-green-400">IA Ativa</span>
-          </div>
-          <button className="px-4 py-2 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20">
-            Configurar IA
-          </button>
-        </div>
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Recuperação de Vendas</h1>
+        <p className="text-sm text-gray-500 mt-1">Carrinhos abandonados, PIX, boletos e cartões recusados</p>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiCards.map((kpi) => {
-          const Icon = kpi.icon
-          return (
-            <motion.div
-              key={kpi.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`relative overflow-hidden rounded-2xl border p-5 transition-all ${
-                kpi.highlight
-                  ? 'bg-gradient-to-br from-[#F26B2A]/10 to-[#F5A623]/5 border-[#F26B2A]/20'
-                  : 'bg-[#1A1A1A] border-white/[0.06]'
-              }`}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs text-dark-400 font-medium">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-white mt-1 font-display">{kpi.value}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendUp className="w-3.5 h-3.5 text-green-400" weight="bold" />
-                    <span className="text-xs font-medium text-green-400">{kpi.change}</span>
-                    <span className="text-xs text-dark-500">vs 30d</span>
-                  </div>
-                </div>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                  kpi.highlight ? 'bg-[#F26B2A]/20' : 'bg-white/[0.06]'
-                }`}>
-                  <Icon className={`w-5 h-5 ${kpi.highlight ? 'text-[#F26B2A]' : 'text-dark-400'}`} weight="duotone" />
-                </div>
+        {kpiCards.map((kpi, i) => (
+          <div key={i} className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center ${kpi.color}`}>
+                <kpi.icon className="w-5 h-5" />
               </div>
-            </motion.div>
-          )
-        })}
+              <div>
+                <p className="text-sm text-gray-500">{kpi.label}</p>
+                <p className="text-xl font-bold text-gray-900">{typeof kpi.value === 'number' ? kpi.value.toLocaleString() : kpi.value}</p>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-[#1A1A1A] rounded-xl border border-white/[0.06] w-fit">
-        {tabs.map((tab) => {
-          const Icon = tab.icon
-          const isActive = activeTab === tab.id
-          return (
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+        <div className="flex border-b border-gray-200">
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                isActive
-                  ? 'bg-white/[0.08] text-white'
-                  : 'text-dark-400 hover:text-dark-200 hover:bg-white/[0.04]'
+              className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-brand-500 text-brand-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-[#F26B2A]' : ''}`} weight={isActive ? 'fill' : 'regular'} />
+              <tab.icon className="w-4 h-4" />
               {tab.label}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                isActive ? 'bg-[#F26B2A]/15 text-[#F26B2A]' : 'bg-white/[0.06] text-dark-500'
-              }`}>
-                {tab.count}
-              </span>
             </button>
-          )
-        })}
-      </div>
+          ))}
+        </div>
 
-      {/* Table */}
-      <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-[#111111]">
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Pedido</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Cliente</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Valor</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Data</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Status</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">IA Status</th>
-              <th className="text-left text-xs font-semibold text-dark-400 uppercase tracking-wider px-5 py-3">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {mockData.map((item) => (
-              <tr key={item.id} className="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors group">
-                <td className="px-5 py-4 text-sm font-medium text-white">{item.id}</td>
-                <td className="px-5 py-4">
-                  <div>
-                    <p className="text-sm font-medium text-white">{item.customer}</p>
-                    <p className="text-xs text-dark-500">{item.email}</p>
-                  </div>
-                </td>
-                <td className="px-5 py-4 text-sm font-semibold text-white">{item.value}</td>
-                <td className="px-5 py-4 text-sm text-dark-400">{item.date}</td>
-                <td className="px-5 py-4">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                    item.status === 'Recuperado' ? 'bg-green-500/10 text-green-400' :
-                    item.status === 'Expirado' ? 'bg-red-500/10 text-red-400' :
-                    'bg-amber-500/10 text-amber-400'
-                  }`}>
-                    {item.status}
-                  </span>
-                </td>
-                <td className="px-5 py-4">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                    item.aiStatus === 'Recuperado' ? 'bg-green-500/10 text-green-400' :
-                    item.aiStatus === 'Enviado' ? 'bg-blue-500/10 text-blue-400' :
-                    item.aiStatus === 'Falhou' ? 'bg-red-500/10 text-red-400' :
-                    'bg-dark-700 text-dark-400'
-                  }`}>
-                    <Robot className="w-3 h-3" weight="fill" />
-                    {item.aiStatus}
-                  </span>
-                </td>
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="p-1.5 rounded-lg hover:bg-[#25D366]/10 text-dark-400 hover:text-[#25D366] transition-colors" title="Enviar WhatsApp">
-                      <WhatsappLogo className="w-4 h-4" weight="fill" />
-                    </button>
-                    <button className="p-1.5 rounded-lg hover:bg-blue-500/10 text-dark-400 hover:text-blue-400 transition-colors" title="Enviar E-mail">
-                      <EnvelopeSimple className="w-4 h-4" weight="fill" />
-                    </button>
-                    <button className="p-1.5 rounded-lg hover:bg-white/[0.06] text-dark-400 hover:text-white transition-colors" title="Ver Detalhes">
-                      <Eye className="w-4 h-4" weight="fill" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {/* Table */}
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="p-12 text-center">
+              <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-sm text-gray-500">Carregando...</p>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="p-12 text-center">
+              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <ShoppingCart className="w-6 h-6 text-gray-400" />
+              </div>
+              <p className="text-sm font-medium text-gray-600">Nenhum item encontrado</p>
+              <p className="text-xs text-gray-400 mt-1">Itens de recuperação aparecerão aqui quando detectados</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contato</th>
+                  {activeTab === 'card_declined' && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pedido</th>
+                  )}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {activeTab === 'cart' ? 'Itens' : activeTab === 'card_declined' ? 'Motivo' : 'Vencimento'}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <p className="text-sm font-medium text-gray-900">{item.contact_name}</p>
+                      <p className="text-xs text-gray-500">{item.contact_email}</p>
+                    </td>
+                    {activeTab === 'card_declined' && (
+                      <td className="px-6 py-4 text-sm text-gray-900">{item.order_number || '-'}</td>
+                    )}
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatCurrency(item.amount)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {activeTab === 'cart' ? `${item.items_count || 0} itens` :
+                       activeTab === 'card_declined' ? (item.decline_reason || 'Recusado') :
+                       item.expires_at ? formatDate(item.expires_at) : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{formatDate(item.created_at)}</td>
+                    <td className="px-6 py-4">{getStatusBadge(item.status)}</td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors" title="Enviar WhatsApp">
+                          <Send className="w-4 h-4" />
+                        </button>
+                        <button className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Ver detalhes">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   )

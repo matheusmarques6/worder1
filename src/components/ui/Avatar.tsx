@@ -48,7 +48,7 @@ export const Avatar: React.FC<AvatarProps> = ({
       ) : (
         <div
           className={cn(
-            'rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center font-medium text-white',
+            'rounded-full bg-brand-100 flex items-center justify-center font-medium text-brand-700',
             sizes[size]
           )}
         >
@@ -58,7 +58,7 @@ export const Avatar: React.FC<AvatarProps> = ({
       {status && (
         <span
           className={cn(
-            'absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-gray-200',
+            'absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white',
             statusColors[status]
           )}
         />

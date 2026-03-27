@@ -89,7 +89,7 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50"
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
         onClick={onClose}
       />
 
@@ -109,7 +109,7 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
               placeholder="Buscar páginas, ações, contatos..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="flex-1 bg-transparent text-white placeholder:text-gray-500 outline-none text-sm"
+              className="flex-1 bg-transparent text-gray-900 placeholder:text-gray-500 outline-none text-sm"
               autoFocus
             />
             <kbd className="px-2 py-1 text-xs bg-gray-100 rounded text-gray-500">
@@ -129,7 +129,7 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                   <div className="p-1.5 rounded-lg bg-gray-100">
                     <suggestion.icon className="w-4 h-4 text-gray-500" />
                   </div>
-                  <span className="text-sm text-gray-700">{suggestion.label}</span>
+                  <span className="text-sm text-gray-900">{suggestion.label}</span>
                   <span className="ml-auto text-xs text-gray-400 capitalize">
                     {suggestion.type === 'page' ? 'Página' : 'Ação'}
                   </span>
@@ -290,7 +290,7 @@ function NotificationsDropdown({
                     <div className="flex items-start justify-between gap-2">
                       <p className={cn(
                         "text-sm font-medium line-clamp-1",
-                        notification.read ? 'text-gray-600' : 'text-white'
+                        notification.read ? 'text-gray-500' : 'text-gray-900'
                       )}>
                         {notification.title}
                       </p>
@@ -846,7 +846,7 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
                   size="sm" 
                 />
                 <div className="hidden sm:block text-left">
-                  <p className="text-xs font-medium text-white truncate max-w-[100px]">
+                  <p className="text-xs font-medium text-gray-900 truncate max-w-[100px]">
                     {userData.name}
                   </p>
                   <p className="text-[10px] text-gray-500">

@@ -140,7 +140,7 @@ export default function OnboardingPage() {
           <p className="text-gray-500 mb-6">
             Redirecionando para o dashboard...
           </p>
-          <Loader2 className="w-6 h-6 text-primary-500 animate-spin mx-auto" />
+          <Loader2 className="w-6 h-6 text-brand-500 animate-spin mx-auto" />
         </motion.div>
       </div>
     )
@@ -159,7 +159,7 @@ export default function OnboardingPage() {
           {/* Logo */}
           <div className="flex flex-col items-center gap-1 mb-6">
             <WorderLogo />
-            <p className="text-xs text-gray-9000">by Convertfy</p>
+            <p className="text-xs text-gray-400">by Convertfy</p>
           </div>
 
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
@@ -209,7 +209,7 @@ export default function OnboardingPage() {
                     className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
                     autoFocus
                   />
-                  <p className="text-xs text-gray-9000 mt-2">
+                  <p className="text-xs text-gray-400 mt-2">
                     Um nome para identificar sua loja no dashboard
                   </p>
                 </div>
@@ -242,7 +242,7 @@ export default function OnboardingPage() {
                       .myshopify.com
                     </span>
                   </div>
-                  <p className="text-xs text-gray-9000 mt-2">
+                  <p className="text-xs text-gray-400 mt-2">
                     Encontre em: Shopify Admin → Configurações → Domínios
                   </p>
                 </div>
@@ -273,7 +273,7 @@ export default function OnboardingPage() {
                     className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors font-mono"
                     autoFocus
                   />
-                  <p className="text-xs text-gray-9000 mt-2">
+                  <p className="text-xs text-gray-400 mt-2">
                     Token de acesso da Admin API do Shopify.{' '}
                     <a
                       href="https://help.shopify.com/en/manual/apps/custom-apps"
@@ -302,7 +302,7 @@ export default function OnboardingPage() {
                     <div className="flex items-center gap-2">
                       <Shield className="w-4 h-4 text-green-400" />
                       API Secret Key
-                      <span className="text-xs text-gray-9000 font-normal">(opcional)</span>
+                      <span className="text-xs text-gray-400 font-normal">(opcional)</span>
                     </div>
                   </label>
                   <input
@@ -313,7 +313,7 @@ export default function OnboardingPage() {
                     className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors font-mono"
                     autoFocus
                   />
-                  <p className="text-xs text-gray-9000 mt-2">
+                  <p className="text-xs text-gray-400 mt-2">
                     Usado para validar webhooks e receber eventos em tempo real.
                   </p>
                 </div>
@@ -373,7 +373,7 @@ export default function OnboardingPage() {
                 'flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-medium transition-all',
                 canProceed() && !isLoading
                   ? 'bg-primary-500 hover:bg-primary-600 text-white'
-                  : 'bg-gray-100 text-gray-9000 cursor-not-allowed'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               )}
             >
               {isLoading ? (
@@ -398,7 +398,7 @@ export default function OnboardingPage() {
           {/* Skip Link */}
           <button
             onClick={handleSkip}
-            className="w-full mt-4 py-3 text-gray-9000 hover:text-gray-500 transition-colors text-sm"
+            className="w-full mt-4 py-3 text-gray-400 hover:text-gray-500 transition-colors text-sm"
           >
             Configurar depois
           </button>
@@ -408,7 +408,7 @@ export default function OnboardingPage() {
         <div className="px-8 pb-6 pt-2 border-t border-gray-200">
           <button
             onClick={handleLogout}
-            className="flex items-center justify-center gap-2 w-full py-2 text-gray-9000 hover:text-gray-500 transition-colors text-sm"
+            className="flex items-center justify-center gap-2 w-full py-2 text-gray-400 hover:text-gray-500 transition-colors text-sm"
           >
             <LogOut className="w-4 h-4" />
             Sair da conta

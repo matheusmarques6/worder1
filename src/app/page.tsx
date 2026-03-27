@@ -103,7 +103,7 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="flex flex-col gap-1 mb-8">
             <WorderLogo size="md" />
-            <p className="text-xs text-gray-9000">by Convertfy</p>
+            <p className="text-xs text-gray-400">by Convertfy</p>
           </div>
 
           {/* Welcome Text */}
@@ -127,7 +127,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seu@email.com"
-                  className="w-full pl-10 pr-4 py-3 bg-gray-500 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
                 />
               </div>
@@ -144,7 +144,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-12 py-3 bg-gray-500 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-10 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
                 />
                 <button
@@ -161,7 +161,7 @@ export default function LoginPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded border-gray-200 bg-white text-primary-500 focus:ring-primary-500/20"
+                  className="w-4 h-4 rounded border-gray-200 bg-white text-brand-500 focus:ring-primary-500/20"
                 />
                 <span className="text-sm text-gray-500">Lembrar de mim</span>
               </label>
@@ -194,7 +194,7 @@ export default function LoginPage() {
           </form>
 
           {/* Demo Account */}
-          <div className="mt-6 p-4 bg-gray-500 border border-gray-200 rounded-xl">
+          <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-xl">
             <p className="text-sm text-gray-500 mb-2">Conta demo:</p>
             <div className="flex items-center gap-2 text-sm">
               <code className="px-2 py-1 bg-white rounded text-gray-600">demo@worder.com</code>
@@ -231,7 +231,7 @@ export default function LoginPage() {
             {/* Large Logo */}
             <div className="mb-8">
               <WorderLogo size="lg" />
-              <p className="text-sm text-gray-9000 mt-1">by Convertfy</p>
+              <p className="text-sm text-gray-400 mt-1">by Convertfy</p>
             </div>
             
             <h2 className="text-3xl font-bold text-white mb-4">
@@ -250,7 +250,7 @@ export default function LoginPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 + index * 0.1 }}
-                className="p-4 bg-gray-50 backdrop-blur-sm border border-gray-200 rounded-xl hover:border-primary-500/30 transition-all"
+                className="p-4 bg-gray-50 backdrop-blur-sm border border-gray-200 rounded-xl hover:border-brand-300 transition-all"
               >
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center mb-3">
                   <feature.icon className="w-5 h-5 text-brand-600" />

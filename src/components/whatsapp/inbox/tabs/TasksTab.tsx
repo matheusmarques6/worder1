@@ -350,7 +350,7 @@ function CreateTaskModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
         <div className="p-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Nova Tarefa</h3>

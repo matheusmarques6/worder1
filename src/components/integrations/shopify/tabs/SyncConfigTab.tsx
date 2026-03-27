@@ -268,7 +268,7 @@ export function SyncConfigTab({
               <Users className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-gray-900">Novos Clientes</h3>
+              <h3 className="text-base font-semibold text-white">Novos Clientes</h3>
               <p className="text-xs text-gray-500">
                 Criar contato quando cliente se cadastrar na Shopify
               </p>
@@ -422,7 +422,7 @@ export function SyncConfigTab({
               <ShoppingBag className="w-5 h-5 text-green-400" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-gray-900">Novos Pedidos</h3>
+              <h3 className="text-base font-semibold text-white">Novos Pedidos</h3>
               <p className="text-xs text-gray-500">
                 Criar deal quando um pedido for criado
               </p>
@@ -535,7 +535,7 @@ export function SyncConfigTab({
               <ShoppingCart className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-gray-900">Carrinho Abandonado</h3>
+              <h3 className="text-base font-semibold text-white">Carrinho Abandonado</h3>
               <p className="text-xs text-gray-500">
                 Criar deal quando checkout for abandonado
               </p>
