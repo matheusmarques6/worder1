@@ -190,8 +190,8 @@ export default function WhatsAppConnectionManager({
   // ✅ NOVO: Mostrar mensagem se não tiver loja
   if (!storeId) {
     return (
-      <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-        <p className="text-sm text-yellow-500 text-center">
+      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <p className="text-sm text-amber-700 text-center">
           Selecione uma loja para ver as conexões
         </p>
       </div>
@@ -203,55 +203,55 @@ export default function WhatsAppConnectionManager({
       {/* Current Selection */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center gap-3 p-2 bg-dark-800/50 hover:bg-dark-800 border border-dark-700 rounded-lg transition-colors"
+        className="w-full flex items-center gap-3 p-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
       >
         {loading ? (
-          <Loader2 className="w-5 h-5 text-dark-400 animate-spin" />
+          <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
         ) : selectedInstance ? (
           <>
             <div className="relative">
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                selectedInstance.status === 'connected' ? 'bg-green-500/20' : 'bg-dark-700'
+                selectedInstance.status === 'connected' ? 'bg-green-100' : 'bg-gray-100'
               }`}>
                 <Smartphone className={`w-5 h-5 ${
-                  selectedInstance.status === 'connected' ? 'text-green-400' : 'text-dark-400'
+                  selectedInstance.status === 'connected' ? 'text-green-600' : 'text-gray-400'
                 }`} />
               </div>
-              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-dark-800 ${
+              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
                 getStatusColor(selectedInstance.status)
               }`} />
             </div>
             <div className="flex-1 text-left min-w-0">
-              <p className="text-sm font-medium text-white truncate">
+              <p className="text-sm font-medium text-gray-900 truncate">
                 {selectedInstance.title || selectedInstance.phone_number || 'WhatsApp'}
               </p>
-              <p className="text-xs text-dark-400">
+              <p className="text-xs text-gray-500">
                 {selectedInstance.phone_number || getStatusText(selectedInstance.status)}
               </p>
             </div>
           </>
         ) : instances.length === 0 ? (
           <>
-            <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center">
-              <Plus className="w-5 h-5 text-dark-400" />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+              <Plus className="w-5 h-5 text-gray-400" />
             </div>
             <div className="flex-1 text-left">
-              <p className="text-sm font-medium text-white">Conectar WhatsApp</p>
-              <p className="text-xs text-dark-400">Nenhuma conexão</p>
+              <p className="text-sm font-medium text-gray-900">Conectar WhatsApp</p>
+              <p className="text-xs text-gray-500">Nenhuma conexão</p>
             </div>
           </>
         ) : (
           <>
-            <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center">
-              <Smartphone className="w-5 h-5 text-dark-400" />
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+              <Smartphone className="w-5 h-5 text-gray-400" />
             </div>
             <div className="flex-1 text-left">
-              <p className="text-sm font-medium text-white">Selecione um número</p>
-              <p className="text-xs text-dark-400">{instances.length} disponível(is)</p>
+              <p className="text-sm font-medium text-gray-900">Selecione um número</p>
+              <p className="text-xs text-gray-500">{instances.length} disponível(is)</p>
             </div>
           </>
         )}
-        <ChevronDown className={`w-5 h-5 text-dark-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown */}
@@ -261,22 +261,22 @@ export default function WhatsAppConnectionManager({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute z-50 w-full mt-2 bg-dark-800 border border-dark-700 rounded-lg shadow-xl overflow-hidden"
+            className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
           >
             {/* Instance List */}
             <div className="max-h-64 overflow-y-auto">
               {instances.length === 0 ? (
                 <div className="p-4 text-center">
-                  <Smartphone className="w-8 h-8 text-dark-500 mx-auto mb-2" />
-                  <p className="text-sm text-dark-400">Nenhum WhatsApp conectado</p>
-                  <p className="text-xs text-dark-500 mt-1">para esta loja</p>
+                  <Smartphone className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Nenhum WhatsApp conectado</p>
+                  <p className="text-xs text-gray-400 mt-1">para esta loja</p>
                 </div>
               ) : (
                 instances.map((instance) => (
                   <div
                     key={instance.id}
-                    className={`flex items-center gap-3 p-3 hover:bg-dark-700/50 cursor-pointer ${
-                      selectedInstance?.id === instance.id ? 'bg-primary-500/10' : ''
+                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${
+                      selectedInstance?.id === instance.id ? 'bg-orange-50' : ''
                     }`}
                   >
                     <div
@@ -288,26 +288,26 @@ export default function WhatsAppConnectionManager({
                     >
                       <div className="relative">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                          instance.status === 'connected' ? 'bg-green-500/20' : 'bg-dark-700'
+                          instance.status === 'connected' ? 'bg-green-100' : 'bg-gray-100'
                         }`}>
                           <Smartphone className={`w-4 h-4 ${
-                            instance.status === 'connected' ? 'text-green-400' : 'text-dark-400'
+                            instance.status === 'connected' ? 'text-green-600' : 'text-gray-400'
                           }`} />
                         </div>
-                        <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-dark-800 ${
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
                           getStatusColor(instance.status)
                         }`} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">
+                        <p className="text-sm font-medium text-gray-900 truncate">
                           {instance.title || instance.phone_number || 'WhatsApp'}
                         </p>
-                        <p className="text-xs text-dark-400">
+                        <p className="text-xs text-gray-500">
                           {instance.phone_number || getStatusText(instance.status)}
                         </p>
                       </div>
                       {selectedInstance?.id === instance.id && (
-                        <Check className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                        <Check className="w-4 h-4 text-orange-500 flex-shrink-0" />
                       )}
                     </div>
 
@@ -318,18 +318,18 @@ export default function WhatsAppConnectionManager({
                           e.stopPropagation()
                           setMenuOpen(menuOpen === instance.id ? null : instance.id)
                         }}
-                        className="p-1 hover:bg-dark-600 rounded"
+                        className="p-1 hover:bg-gray-200 rounded"
                       >
-                        <MoreVertical className="w-4 h-4 text-dark-400" />
+                        <MoreVertical className="w-4 h-4 text-gray-400" />
                       </button>
 
                       {menuOpen === instance.id && (
-                        <div className="absolute right-0 mt-1 w-40 bg-dark-700 border border-dark-600 rounded-lg shadow-xl z-10">
+                        <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
                           {instance.status === 'connected' && (
                             <button
                               onClick={() => handleDisconnect(instance.id)}
                               disabled={actionLoading === instance.id}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-yellow-400 hover:bg-dark-600"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-amber-600 hover:bg-gray-50"
                             >
                               {actionLoading === instance.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -342,7 +342,7 @@ export default function WhatsAppConnectionManager({
                           <button
                             onClick={() => handleDelete(instance.id)}
                             disabled={actionLoading === instance.id}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-dark-600"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-gray-50"
                           >
                             {actionLoading === instance.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -360,13 +360,13 @@ export default function WhatsAppConnectionManager({
             </div>
 
             {/* Add New Button */}
-            <div className="border-t border-dark-700 p-2">
+            <div className="border-t border-gray-200 p-2">
               <button
                 onClick={() => {
                   setIsOpen(false)
                   onConnectClick()
                 }}
-                className="w-full flex items-center justify-center gap-2 p-2 text-sm text-primary-400 hover:bg-dark-700/50 rounded-lg"
+                className="w-full flex items-center justify-center gap-2 p-2 text-sm text-orange-600 hover:bg-orange-50 rounded-lg"
               >
                 <Plus className="w-4 h-4" />
                 Conectar novo WhatsApp

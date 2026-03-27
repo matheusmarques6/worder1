@@ -157,32 +157,32 @@ const MetricCard = ({
     animate={{ opacity: 1, y: 0 }}
     className={`
       relative rounded-xl p-5 transition-all duration-300
-      ${highlight 
-        ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/20' 
-        : 'bg-dark-800/60 border border-dark-700/50 hover:border-dark-600'
+      ${highlight
+        ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+        : 'bg-white border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md'
       }
     `}
   >
     {loading ? (
       <div className="flex items-center justify-center py-4">
-        <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
       </div>
     ) : (
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className={`p-2.5 rounded-xl ${highlight ? 'bg-white/20' : 'bg-dark-700/50'}`}>
-            <Icon className={`w-5 h-5 ${highlight ? 'text-white' : 'text-primary-400'}`} />
+          <div className={`p-2.5 rounded-xl ${highlight ? 'bg-white/20' : 'bg-orange-50'}`}>
+            <Icon className={`w-5 h-5 ${highlight ? 'text-white' : 'text-orange-500'}`} />
           </div>
           <div>
-            <p className={`text-sm font-medium ${highlight ? 'text-white/80' : 'text-dark-400'}`}>{title}</p>
-            <p className="text-2xl font-bold mt-0.5 text-white">{value}{suffix}</p>
+            <p className={`text-sm font-medium ${highlight ? 'text-white/80' : 'text-gray-500'}`}>{title}</p>
+            <p className={`text-2xl font-bold mt-0.5 ${highlight ? 'text-white' : 'text-gray-900'}`}>{value}{suffix}</p>
           </div>
         </div>
         {change !== undefined && (
           <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
-            highlight 
+            highlight
               ? change >= 0 ? 'bg-white/20 text-white' : 'bg-red-500/30 text-red-200'
-              : change >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+              : change >= 0 ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-red-50 text-red-600 border border-red-100'
           }`}>
             {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
             {Math.abs(change).toFixed(1)}%
@@ -206,13 +206,13 @@ const RateCard = ({
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    className="bg-dark-800/60 border border-dark-700/50 rounded-xl p-4"
+    className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"
   >
     <div className="flex items-center justify-between mb-3">
-      <span className="text-sm text-dark-400">{title}</span>
-      <span className="text-lg font-bold text-white">{formatPercent(value)}</span>
+      <span className="text-sm text-gray-500">{title}</span>
+      <span className="text-lg font-bold text-gray-900">{formatPercent(value)}</span>
     </div>
-    <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
       <motion.div
         initial={{ width: 0 }}
         animate={{ width: `${Math.min(value, 100)}%` }}
@@ -228,43 +228,43 @@ const AgentCard = ({ agent }: { agent: Agent }) => (
   <motion.div
     initial={{ opacity: 0, scale: 0.95 }}
     animate={{ opacity: 1, scale: 1 }}
-    className="bg-dark-800/60 border border-dark-700/50 rounded-xl p-5 hover:border-dark-600 transition-all"
+    className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-md shadow-sm transition-all"
   >
     <div className="flex items-start justify-between mb-4">
       <div className="flex items-center gap-3">
-        <div className="p-2.5 rounded-xl bg-purple-500/20">
-          <Bot className="w-5 h-5 text-purple-400" />
+        <div className="p-2.5 rounded-xl bg-purple-50">
+          <Bot className="w-5 h-5 text-purple-500" />
         </div>
         <div>
-          <h4 className="font-semibold text-white">{agent.name}</h4>
-          <p className="text-xs text-dark-400">{agent.provider} • {agent.model}</p>
+          <h4 className="font-semibold text-gray-900">{agent.name}</h4>
+          <p className="text-xs text-gray-500">{agent.provider} • {agent.model}</p>
         </div>
       </div>
       <div className={`px-2 py-1 rounded-lg text-xs font-medium ${
-        agent.isActive 
-          ? 'bg-green-500/10 text-green-400' 
-          : 'bg-dark-700 text-dark-400'
+        agent.isActive
+          ? 'bg-green-50 text-green-600 border border-green-100'
+          : 'bg-gray-100 text-gray-500'
       }`}>
         {agent.isActive ? 'Ativo' : 'Inativo'}
       </div>
     </div>
     
     <div className="grid grid-cols-2 gap-3">
-      <div className="bg-dark-700/30 rounded-lg p-3">
-        <p className="text-xs text-dark-400 mb-1">Interações</p>
-        <p className="text-lg font-bold text-white">{formatNumber(agent.interactions)}</p>
+      <div className="bg-gray-50 rounded-lg p-3">
+        <p className="text-xs text-gray-500 mb-1">Interações</p>
+        <p className="text-lg font-bold text-gray-900">{formatNumber(agent.interactions)}</p>
       </div>
-      <div className="bg-dark-700/30 rounded-lg p-3">
-        <p className="text-xs text-dark-400 mb-1">Taxa Sucesso</p>
-        <p className="text-lg font-bold text-green-400">{formatPercent(agent.successRate)}</p>
+      <div className="bg-gray-50 rounded-lg p-3">
+        <p className="text-xs text-gray-500 mb-1">Taxa Sucesso</p>
+        <p className="text-lg font-bold text-green-600">{formatPercent(agent.successRate)}</p>
       </div>
-      <div className="bg-dark-700/30 rounded-lg p-3">
-        <p className="text-xs text-dark-400 mb-1">Latência</p>
-        <p className="text-lg font-bold text-white">{formatLatency(agent.avgLatency)}</p>
+      <div className="bg-gray-50 rounded-lg p-3">
+        <p className="text-xs text-gray-500 mb-1">Latência</p>
+        <p className="text-lg font-bold text-gray-900">{formatLatency(agent.avgLatency)}</p>
       </div>
-      <div className="bg-dark-700/30 rounded-lg p-3">
-        <p className="text-xs text-dark-400 mb-1">Custo</p>
-        <p className="text-lg font-bold text-yellow-400">{formatCurrency(agent.cost)}</p>
+      <div className="bg-gray-50 rounded-lg p-3">
+        <p className="text-xs text-gray-500 mb-1">Custo</p>
+        <p className="text-lg font-bold text-amber-600">{formatCurrency(agent.cost)}</p>
       </div>
     </div>
   </motion.div>
@@ -283,13 +283,13 @@ const EmptyState = ({
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    className="flex flex-col items-center justify-center py-16 px-8 bg-dark-800/40 rounded-2xl border border-dark-700/30 border-dashed"
+    className="flex flex-col items-center justify-center py-16 px-8 bg-gray-50 rounded-2xl border border-gray-200 border-dashed"
   >
-    <div className="w-16 h-16 rounded-2xl bg-dark-700/50 flex items-center justify-center mb-4">
-      <Icon className="w-8 h-8 text-dark-400" />
+    <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+      <Icon className="w-8 h-8 text-gray-400" />
     </div>
-    <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
-    <p className="text-dark-400 text-center max-w-md">{description}</p>
+    <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
+    <p className="text-gray-500 text-center max-w-md">{description}</p>
   </motion.div>
 )
 
@@ -297,13 +297,13 @@ const EmptyState = ({
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload) return null
   return (
-    <div className="bg-dark-900 border border-dark-700 rounded-lg p-3 shadow-xl">
-      <p className="text-sm text-dark-400 mb-2">{label}</p>
+    <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-xl">
+      <p className="text-sm text-gray-500 mb-2">{label}</p>
       {payload.map((item: any, index: number) => (
         <div key={index} className="flex items-center gap-2 text-sm">
           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-          <span className="text-dark-300">{item.name}:</span>
-          <span className="font-medium text-white">{formatNumber(item.value)}</span>
+          <span className="text-gray-500">{item.name}:</span>
+          <span className="font-medium text-gray-900">{formatNumber(item.value)}</span>
         </div>
       ))}
     </div>
@@ -504,21 +504,21 @@ export default function WhatsAppAnalyticsPage() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Analytics WhatsApp</h1>
-          <p className="text-dark-400 mt-1">Métricas e performance das suas campanhas e agentes</p>
+          <h1 className="text-2xl font-bold text-gray-900">Analytics WhatsApp</h1>
+          <p className="text-gray-500 mt-1">Métricas e performance das suas campanhas e agentes</p>
         </div>
         
         <div className="flex items-center gap-3">
           {/* Date Range Filter */}
-          <div className="flex items-center gap-1 bg-dark-800/60 border border-dark-700/50 rounded-xl p-1">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1 shadow-sm">
             {dateRanges.slice(0, 5).map((range) => (
               <button
                 key={range.id}
                 onClick={() => setDateRange(range.id)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                   dateRange === range.id
-                    ? 'bg-primary-500 text-white'
-                    : 'text-dark-400 hover:text-white hover:bg-dark-700/50'
+                    ? 'bg-orange-500 text-white'
+                    : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
                 {range.label}
@@ -530,24 +530,24 @@ export default function WhatsAppAnalyticsPage() {
           <button
             onClick={handleRefresh}
             disabled={loading}
-            className="p-2.5 bg-dark-800/60 border border-dark-700/50 rounded-xl text-dark-400 hover:text-white hover:border-dark-600 transition-all disabled:opacity-50"
+            className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-400 hover:text-gray-700 hover:border-gray-300 shadow-sm transition-all disabled:opacity-50"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button className="p-2.5 bg-dark-800/60 border border-dark-700/50 rounded-xl text-dark-400 hover:text-white hover:border-dark-600 transition-all">
+          <button className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-400 hover:text-gray-700 hover:border-gray-300 shadow-sm transition-all">
             <Download className="w-5 h-5" />
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 mb-8">
+      <div className="flex items-center gap-0 mb-8 border-b border-gray-200">
         <button
           onClick={() => setActiveTab('campaigns')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+          className={`flex items-center gap-2 px-4 py-3 font-medium transition-all border-b-2 -mb-px ${
             activeTab === 'campaigns'
-              ? 'bg-primary-500 text-white'
-              : 'bg-dark-800/60 border border-dark-700/50 text-dark-400 hover:text-white hover:border-dark-600'
+              ? 'border-orange-500 text-orange-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           }`}
         >
           <Send className="w-4 h-4" />
@@ -555,10 +555,10 @@ export default function WhatsAppAnalyticsPage() {
         </button>
         <button
           onClick={() => setActiveTab('ai')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+          className={`flex items-center gap-2 px-4 py-3 font-medium transition-all border-b-2 -mb-px ${
             activeTab === 'ai'
-              ? 'bg-primary-500 text-white'
-              : 'bg-dark-800/60 border border-dark-700/50 text-dark-400 hover:text-white hover:border-dark-600'
+              ? 'border-orange-500 text-orange-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           }`}
         >
           <Bot className="w-4 h-4" />
@@ -566,10 +566,10 @@ export default function WhatsAppAnalyticsPage() {
         </button>
         <button
           onClick={() => setActiveTab('quality')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+          className={`flex items-center gap-2 px-4 py-3 font-medium transition-all border-b-2 -mb-px ${
             activeTab === 'quality'
-              ? 'bg-primary-500 text-white'
-              : 'bg-dark-800/60 border border-dark-700/50 text-dark-400 hover:text-white hover:border-dark-600'
+              ? 'border-orange-500 text-orange-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           }`}
         >
           <Shield className="w-4 h-4" />
@@ -644,13 +644,13 @@ export default function WhatsAppAnalyticsPage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-dark-800/60 border border-dark-700/50 rounded-xl p-6"
+            className="bg-white border border-gray-200 rounded-xl shadow-sm p-6"
           >
-            <h3 className="text-lg font-semibold text-white mb-6">Performance de Campanhas</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-6">Performance de Campanhas</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={campaignChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} />
                   <YAxis stroke="#9ca3af" fontSize={12} />
                   <Tooltip content={<CustomTooltip />} />
@@ -668,16 +668,16 @@ export default function WhatsAppAnalyticsPage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-dark-800/60 border border-dark-700/50 rounded-xl overflow-hidden"
+            className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
           >
-            <div className="p-6 border-b border-dark-700/50">
+            <div className="p-6 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Ranking de Campanhas</h3>
-                  <p className="text-sm text-dark-400 mt-1">Ordenado por taxa de resposta no período</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Ranking de Campanhas</h3>
+                  <p className="text-sm text-gray-500 mt-1">Ordenado por taxa de resposta no período</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <select className="bg-dark-700/50 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500">
+                  <select className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-orange-500">
                     <option value="response">Taxa de Resposta</option>
                     <option value="read">Taxa de Leitura</option>
                     <option value="delivery">Taxa de Entrega</option>
@@ -690,17 +690,17 @@ export default function WhatsAppAnalyticsPage() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-dark-700/50">
-                    <th className="text-left py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">#</th>
-                    <th className="text-left py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Campanha</th>
-                    <th className="text-left py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Status</th>
-                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Enviadas</th>
-                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Entregues</th>
-                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Lidas</th>
-                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Respondidas</th>
-                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Tx. Entrega</th>
-                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Tx. Leitura</th>
-                    <th className="text-right py-4 px-6 text-xs font-semibold text-dark-400 uppercase tracking-wider">Tx. Resposta</th>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">#</th>
+                    <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Campanha</th>
+                    <th className="text-left py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Enviadas</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Entregues</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Lidas</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Respondidas</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tx. Entrega</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tx. Leitura</th>
+                    <th className="text-right py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tx. Resposta</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -709,22 +709,22 @@ export default function WhatsAppAnalyticsPage() {
                     .map((campaign, index) => (
                     <tr 
                       key={campaign.id} 
-                      className="border-b border-dark-700/30 hover:bg-dark-700/20 transition-colors"
+                      className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
                     >
                       <td className="py-4 px-6">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${
-                          index === 0 ? 'bg-yellow-500/20 text-yellow-400' :
-                          index === 1 ? 'bg-gray-400/20 text-gray-300' :
-                          index === 2 ? 'bg-orange-700/20 text-orange-400' :
-                          'bg-dark-700/50 text-dark-400'
+                          index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                          index === 1 ? 'bg-gray-100 text-gray-500' :
+                          index === 2 ? 'bg-orange-100 text-orange-600' :
+                          'bg-gray-100 text-gray-500'
                         }`}>
                           {index + 1}
                         </div>
                       </td>
                       <td className="py-4 px-6">
                         <div>
-                          <p className="font-medium text-white">{campaign.name}</p>
-                          <p className="text-xs text-dark-400">
+                          <p className="font-medium text-gray-900">{campaign.name}</p>
+                          <p className="text-xs text-gray-400">
                             {new Date(campaign.sentAt).toLocaleDateString('pt-BR', { 
                               day: '2-digit', 
                               month: 'short',
@@ -753,20 +753,20 @@ export default function WhatsAppAnalyticsPage() {
                         </span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <span className="text-white font-medium">{formatNumber(campaign.enviadas)}</span>
+                        <span className="text-gray-900 font-medium">{formatNumber(campaign.enviadas)}</span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <span className="text-white">{formatNumber(campaign.entregues)}</span>
+                        <span className="text-gray-700">{formatNumber(campaign.entregues)}</span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <span className="text-white">{formatNumber(campaign.lidas)}</span>
+                        <span className="text-gray-700">{formatNumber(campaign.lidas)}</span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <span className="text-white">{formatNumber(campaign.respondidas)}</span>
+                        <span className="text-gray-700">{formatNumber(campaign.respondidas)}</span>
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <div className="w-16 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                          <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div 
                               className="h-full bg-green-500 rounded-full" 
                               style={{ width: `${campaign.taxaEntrega}%` }}
@@ -779,7 +779,7 @@ export default function WhatsAppAnalyticsPage() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <div className="w-16 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                          <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div 
                               className="h-full bg-blue-500 rounded-full" 
                               style={{ width: `${campaign.taxaLeitura}%` }}
@@ -792,7 +792,7 @@ export default function WhatsAppAnalyticsPage() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <div className="w-16 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                          <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div 
                               className="h-full bg-purple-500 rounded-full" 
                               style={{ width: `${campaign.taxaResposta * 3}%` }}
@@ -810,12 +810,12 @@ export default function WhatsAppAnalyticsPage() {
             </div>
 
             {/* Summary Footer */}
-            <div className="p-4 bg-dark-700/30 border-t border-dark-700/50">
+            <div className="p-4 bg-gray-50 border-t border-gray-100">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-dark-400">
+                <span className="text-gray-500">
                   Mostrando {campaigns.length} campanhas no período selecionado
                 </span>
-                <button className="text-primary-400 hover:text-primary-300 font-medium transition-colors">
+                <button className="text-orange-500 hover:text-orange-600 font-medium transition-colors">
                   Ver todas as campanhas →
                 </button>
               </div>
@@ -895,13 +895,13 @@ export default function WhatsAppAnalyticsPage() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="lg:col-span-2 bg-dark-800/60 border border-dark-700/50 rounded-xl p-6"
+              className="lg:col-span-2 bg-white border border-gray-200 rounded-xl shadow-sm p-6"
             >
-              <h3 className="text-lg font-semibold text-white mb-6">Performance IA</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-6">Performance IA</h3>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={aiChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                     <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} />
                     <YAxis yAxisId="left" stroke="#9ca3af" fontSize={12} />
                     <YAxis yAxisId="right" orientation="right" stroke="#9ca3af" fontSize={12} />
@@ -918,11 +918,11 @@ export default function WhatsAppAnalyticsPage() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-dark-800/60 border border-dark-700/50 rounded-xl p-6"
+              className="bg-white border border-gray-200 rounded-xl shadow-sm p-6"
             >
-              <h3 className="text-lg font-semibold text-white mb-6">Por Provider</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-6">Por Provider</h3>
               {providerData.length === 0 ? (
-                <div className="flex items-center justify-center h-48 text-dark-400">
+                <div className="flex items-center justify-center h-48 text-gray-400">
                   Sem dados de providers
                 </div>
               ) : (
@@ -952,9 +952,9 @@ export default function WhatsAppAnalyticsPage() {
                       <div key={provider.name} className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: provider.color }} />
-                          <span className="text-sm text-dark-300">{provider.name}</span>
+                          <span className="text-sm text-gray-600">{provider.name}</span>
                         </div>
-                        <span className="text-sm font-medium text-white">{provider.value}%</span>
+                        <span className="text-sm font-medium text-gray-900">{provider.value}%</span>
                       </div>
                     ))}
                   </div>
@@ -965,9 +965,9 @@ export default function WhatsAppAnalyticsPage() {
 
           {/* Agents Grid */}
           <div>
-            <h3 className="text-lg font-semibold text-white mb-4">Agentes Configurados</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Agentes Configurados</h3>
             {agents.length === 0 ? (
-              <div className="text-center py-8 text-dark-400">
+              <div className="text-center py-8 text-gray-400">
                 Nenhum agente configurado ainda
               </div>
             ) : (

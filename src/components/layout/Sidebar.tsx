@@ -38,6 +38,8 @@ import {
   User,
   Building2,
   Menu,
+  Image as ImageIcon,
+  Ticket,
 } from 'lucide-react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
@@ -89,6 +91,11 @@ const mainNavItems: NavItem[] = [
 const toolsNavItems: NavItem[] = [
   { title: 'Formulários', href: '/forms', icon: FileText },
   { title: 'Automações', href: '/automations', icon: Zap },
+]
+
+const contentNavItems: NavItem[] = [
+  { title: 'Mídia', href: '/content/media', icon: ImageIcon },
+  { title: 'Cupons', href: '/content/coupons', icon: Ticket },
 ]
 
 const settingsNavItems: NavItem[] = [
@@ -266,6 +273,20 @@ export function Sidebar() {
             )}
             <div className="space-y-1">
               {toolsNavItems.map((item) => (
+                <NavLink key={item.href} item={item} />
+              ))}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div>
+            {!sidebarCollapsed && (
+              <p className="px-4 mb-2 text-xs font-semibold text-dark-500 uppercase tracking-wider">
+                Conteúdo
+              </p>
+            )}
+            <div className="space-y-1">
+              {contentNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>

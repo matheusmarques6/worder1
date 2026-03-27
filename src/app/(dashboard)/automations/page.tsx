@@ -101,6 +101,70 @@ const AUTOMATION_TEMPLATES = [
     trigger: 'trigger_deal_created',
     icon: '💼',
   },
+  {
+    id: 'welcome-series',
+    name: 'Welcome Series',
+    description: 'Série de boas-vindas: 3 emails ao longo de 5 dias',
+    trigger: 'trigger_signup',
+    icon: '✉️',
+    channels: ['email'],
+  },
+  {
+    id: 'cart-recovery-multi',
+    name: 'Recuperação Carrinho (Multi)',
+    description: 'Email + WhatsApp para recuperar carrinhos abandonados',
+    trigger: 'trigger_abandon',
+    icon: '🛒',
+    channels: ['email', 'whatsapp'],
+  },
+  {
+    id: 'post-purchase',
+    name: 'Pós-Compra',
+    description: 'Confirmação + pedido de review por email',
+    trigger: 'trigger_order',
+    icon: '📬',
+    channels: ['email'],
+  },
+  {
+    id: 'winback',
+    name: 'Win-back',
+    description: 'Reengajar clientes inativos com email + WhatsApp',
+    trigger: 'trigger_segment',
+    icon: '💌',
+    channels: ['email', 'whatsapp'],
+  },
+  {
+    id: 'boleto-pix-reminder',
+    name: 'Lembrete Boleto/PIX',
+    description: 'Lembrar pagamento pendente via email e WhatsApp',
+    trigger: 'trigger_order',
+    icon: '💳',
+    channels: ['email', 'whatsapp'],
+  },
+  {
+    id: 'review-request',
+    name: 'Pedido de Review',
+    description: 'Solicitar avaliação após entrega do pedido',
+    trigger: 'trigger_order_paid',
+    icon: '⭐',
+    channels: ['email', 'whatsapp'],
+  },
+  {
+    id: 'vip-upgrade',
+    name: 'VIP Upgrade',
+    description: 'Boas-vindas ao programa VIP com benefícios',
+    trigger: 'trigger_segment',
+    icon: '👑',
+    channels: ['email'],
+  },
+  {
+    id: 'browse-abandonment',
+    name: 'Browse Abandonment',
+    description: 'Email para quem viu produto mas não comprou',
+    trigger: 'trigger_webhook',
+    icon: '👀',
+    channels: ['email'],
+  },
 ];
 
 // ============================================
@@ -385,7 +449,7 @@ export default function AutomationsPage() {
           onClick={() => setShowNewModal(true)}
           className={cn(
             'flex items-center gap-2 px-4 py-2.5 rounded-xl',
-            'bg-primary-500 hover:bg-primary-600 text-white font-medium',
+            'bg-orange-500 hover:bg-orange-600 text-white font-medium',
             'transition-colors'
           )}
         >
@@ -400,7 +464,7 @@ export default function AutomationsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+          className="bg-white border border-gray-200 rounded-xl shadow-sm p-6"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
@@ -408,13 +472,13 @@ export default function AutomationsPage() {
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
               ) : (
-                <p className="text-xl font-bold text-white">
+                <p className="text-xl font-bold text-gray-900">
                   {dashboardStats?.activeAutomations || 0}
                 </p>
               )}
-              <p className="text-xs text-dark-400">Automações Ativas</p>
+              <p className="text-xs text-gray-500">Automações Ativas</p>
             </div>
           </div>
         </motion.div>
@@ -424,7 +488,7 @@ export default function AutomationsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+          className="bg-white border border-gray-200 rounded-xl shadow-sm p-6"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
@@ -432,13 +496,13 @@ export default function AutomationsPage() {
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
               ) : (
-                <p className="text-xl font-bold text-white">
+                <p className="text-xl font-bold text-gray-900">
                   {formatNumber(dashboardStats?.processedToday || 0)}
                 </p>
               )}
-              <p className="text-xs text-dark-400">Processados Hoje</p>
+              <p className="text-xs text-gray-500">Processados Hoje</p>
             </div>
           </div>
         </motion.div>
@@ -448,7 +512,7 @@ export default function AutomationsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+          className="bg-white border border-gray-200 rounded-xl shadow-sm p-6"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
@@ -456,13 +520,13 @@ export default function AutomationsPage() {
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
               ) : (
-                <p className="text-xl font-bold text-white">
+                <p className="text-xl font-bold text-gray-900">
                   {formatNumber(dashboardStats?.conversions30d || 0)}
                 </p>
               )}
-              <p className="text-xs text-dark-400">Conversões (30d)</p>
+              <p className="text-xs text-gray-500">Conversões (30d)</p>
             </div>
           </div>
         </motion.div>
@@ -472,7 +536,7 @@ export default function AutomationsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl"
+          className="bg-white border border-gray-200 rounded-xl shadow-sm p-6"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
@@ -480,13 +544,13 @@ export default function AutomationsPage() {
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-dark-700 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
               ) : (
-                <p className="text-xl font-bold text-white">
+                <p className="text-xl font-bold text-gray-900">
                   {formatCurrency(dashboardStats?.revenue30d || 0)}
                 </p>
               )}
-              <p className="text-xs text-dark-400">Receita (30d)</p>
+              <p className="text-xs text-gray-500">Receita (30d)</p>
             </div>
           </div>
         </motion.div>
@@ -620,9 +684,9 @@ interface AutomationCardProps {
 
 function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: AutomationCardProps) {
   const statusConfig = {
-    active: { label: 'Ativa', color: 'bg-success-500/20 text-success-400 border-success-500/30' },
-    paused: { label: 'Pausada', color: 'bg-warning-500/20 text-warning-400 border-warning-500/30' },
-    draft: { label: 'Rascunho', color: 'bg-dark-600/50 text-dark-400 border-dark-500/30' },
+    active: { label: 'Ativa', color: 'bg-green-100 text-green-700 border-green-200' },
+    paused: { label: 'Pausada', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+    draft: { label: 'Rascunho', color: 'bg-gray-100 text-gray-700 border-gray-200' },
   };
 
   const { label, color } = statusConfig[automation.status];
@@ -784,17 +848,32 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
                   key={template.id}
                   onClick={() => onSelectTemplate(template.id)}
                   className={cn(
-                    'p-4 rounded-xl text-left',
-                    'bg-dark-800/60 border border-dark-700/50',
-                    'hover:border-dark-600 hover:bg-dark-700/30',
-                    'transition-colors group'
+                    'bg-white border border-gray-200 rounded-lg p-4 text-left',
+                    'hover:border-brand-500 hover:shadow-md',
+                    'transition-all group'
                   )}
                 >
                   <div className="text-2xl mb-2">{template.icon}</div>
-                  <h4 className="font-medium text-white group-hover:text-primary-400 transition-colors">
+                  <h4 className="font-medium text-gray-900 group-hover:text-primary-600 transition-colors">
                     {template.name}
                   </h4>
-                  <p className="text-xs text-dark-500 mt-1">{template.description}</p>
+                  <p className="text-xs text-gray-500 mt-1">{template.description}</p>
+                  {'channels' in template && Array.isArray(template.channels) && template.channels.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {template.channels.map((channel: string) => (
+                        <span
+                          key={channel}
+                          className={cn(
+                            'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                            channel === 'email' ? 'bg-blue-100 text-blue-700' : '',
+                            channel === 'whatsapp' ? 'bg-green-100 text-green-700' : ''
+                          )}
+                        >
+                          {channel === 'email' ? 'Email' : channel === 'whatsapp' ? 'WhatsApp' : channel}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>

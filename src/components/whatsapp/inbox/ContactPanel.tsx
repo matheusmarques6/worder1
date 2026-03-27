@@ -184,17 +184,17 @@ export function ContactPanel({
 
   if (isLoading) {
     return (
-      <div className="w-[380px] flex items-center justify-center h-full bg-dark-800/50">
-        <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+      <div className="w-full flex items-center justify-center h-full bg-white">
+        <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
       </div>
     )
   }
 
   if (!contact) {
     return (
-      <div className="w-[380px] flex flex-col items-center justify-center h-full text-dark-400 p-8">
+      <div className="w-full flex flex-col items-center justify-center h-full text-gray-400 p-8">
         <MessageSquare className="w-12 h-12 mb-4 opacity-30" />
-        <p className="text-center">Selecione uma conversa para ver os detalhes do contato</p>
+        <p className="text-center text-sm">Selecione uma conversa para ver os detalhes do contato</p>
       </div>
     )
   }
@@ -243,34 +243,34 @@ export function ContactPanel({
   ]
 
   return (
-    <div className="w-full flex flex-col h-full bg-dark-900 overflow-hidden">
+    <div className="w-full flex flex-col h-full bg-white overflow-hidden">
       {/* ========== HEADER ========== */}
-      <div className="p-6 border-b border-dark-700/50 text-center">
+      <div className="p-6 border-b border-gray-200 text-center">
         {/* Avatar */}
         {contact.profile_picture_url || contact.avatar_url ? (
           <img
             src={contact.profile_picture_url || contact.avatar_url}
             alt={contact.name || 'Contato'}
-            className="w-20 h-20 mx-auto rounded-full object-cover mb-4 ring-4 ring-primary-500/20"
+            className="w-16 h-16 mx-auto rounded-full object-cover mb-3 ring-4 ring-orange-100"
           />
         ) : (
-          <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary-500 to-accent-500 
-                          flex items-center justify-center mb-4 ring-4 ring-primary-500/20">
-            <span className="text-white font-bold text-2xl">
+          <div className="w-16 h-16 mx-auto rounded-full bg-orange-100
+                          flex items-center justify-center mb-3">
+            <span className="text-orange-700 font-bold text-xl">
               {getInitials(contact.name || contact.first_name || contact.phone_number)}
             </span>
           </div>
         )}
 
         {/* Name & Phone */}
-        <h3 className="text-lg font-semibold text-white mb-1">
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">
           {contact.name || contact.full_name || contact.first_name || 'Sem nome'}
         </h3>
-        <p className="text-sm text-dark-400 mb-1">{contact.phone_number || contact.whatsapp}</p>
-        
+        <p className="text-sm text-gray-600 mb-1">{contact.phone_number || contact.whatsapp}</p>
+
         {/* Company */}
         {contact.company && (
-          <p className="text-xs text-dark-500 flex items-center justify-center gap-1">
+          <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
             <Building className="w-3 h-3" />
             {contact.company}
             {contact.position && ` • ${contact.position}`}
@@ -280,16 +280,16 @@ export function ContactPanel({
         {/* Status badges */}
         <div className="flex items-center justify-center gap-2 flex-wrap mt-3">
           {contact.is_blocked ? (
-            <span className="px-2.5 py-1 bg-error-500/10 text-error-400 text-xs font-medium rounded-lg">
+            <span className="px-2.5 py-1 bg-red-50 text-red-600 text-xs font-medium rounded-lg">
               Bloqueado
             </span>
           ) : (
-            <span className="px-2.5 py-1 bg-success-500/10 text-success-400 text-xs font-medium rounded-lg">
+            <span className="px-2.5 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-lg">
               Ativo
             </span>
           )}
           {contact.total_orders > 0 && (
-            <span className="px-2.5 py-1 bg-primary-500/10 text-primary-400 text-xs font-medium rounded-lg">
+            <span className="px-2.5 py-1 bg-orange-50 text-orange-600 text-xs font-medium rounded-lg">
               Cliente
             </span>
           )}
@@ -297,7 +297,7 @@ export function ContactPanel({
       </div>
 
       {/* ========== TABS - CORRIGIDO: Sem scroll horizontal ========== */}
-      <div className="border-b border-dark-700/50 overflow-hidden">
+      <div className="border-b border-gray-200 overflow-hidden">
         <div className="flex">
           {tabs.map((tab) => (
             <button
@@ -305,8 +305,8 @@ export function ContactPanel({
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 px-2 py-3 text-[11px] font-medium transition-all border-b-2 whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'text-primary-400 border-primary-500'
-                  : 'text-dark-400 border-transparent hover:text-white'
+                  ? 'text-orange-600 border-orange-500'
+                  : 'text-gray-400 border-transparent hover:text-gray-700'
               }`}
             >
               {tab.label}
@@ -322,19 +322,19 @@ export function ContactPanel({
           <div className="p-4 space-y-4">
             {/* Contact Fields */}
             <div className="space-y-3">
-              <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
-                <Phone className="w-5 h-5 text-dark-400" />
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <Phone className="w-5 h-5 text-gray-400" />
                 <div className="flex-1">
-                  <p className="text-xs text-dark-500">Telefone</p>
-                  <p className="text-sm text-white">{contact.phone_number || contact.whatsapp}</p>
+                  <p className="text-xs text-gray-500">Telefone</p>
+                  <p className="text-sm text-gray-900">{contact.phone_number || contact.whatsapp}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl">
-                <Calendar className="w-5 h-5 text-dark-400" />
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <Calendar className="w-5 h-5 text-gray-400" />
                 <div className="flex-1">
-                  <p className="text-xs text-dark-500">Contato desde</p>
-                  <p className="text-sm text-white">{formatDate(contact.created_at)}</p>
+                  <p className="text-xs text-gray-500">Contato desde</p>
+                  <p className="text-sm text-gray-900">{formatDate(contact.created_at)}</p>
                 </div>
               </div>
             </div>
@@ -342,21 +342,21 @@ export function ContactPanel({
             {/* Tags */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-medium text-white">Tags</h4>
+                <h4 className="text-sm font-medium text-gray-900">Tags</h4>
                 <button
                   onClick={() => setShowAddTag(true)}
-                  className="p-1 text-primary-400 hover:bg-primary-500/10 rounded transition-colors"
+                  className="p-1 text-orange-500 hover:bg-orange-50 rounded transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
               </div>
-              
+
               <div className="flex flex-wrap gap-2">
                 {(contact.tags || []).map((tag, i) => (
-                  <span 
+                  <span
                     key={i}
-                    className="px-2.5 py-1 bg-primary-500/20 text-primary-400 text-xs rounded-lg 
-                               flex items-center gap-1 group"
+                    className="px-2.5 py-1 bg-orange-50 text-orange-600 text-xs rounded-lg
+                               flex items-center gap-1 group border border-orange-100"
                   >
                     {tag}
                     <button
@@ -367,7 +367,7 @@ export function ContactPanel({
                     </button>
                   </span>
                 ))}
-                
+
                 {showAddTag && (
                   <div className="flex items-center gap-1">
                     <input
@@ -376,14 +376,14 @@ export function ContactPanel({
                       onChange={(e) => setNewTag(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
                       placeholder="Nova tag"
-                      className="px-2 py-1 bg-dark-700 border border-dark-600 rounded text-xs text-white 
-                                 placeholder:text-dark-500 focus:outline-none focus:border-primary-500 w-24"
+                      className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-900
+                                 placeholder:text-gray-400 focus:outline-none focus:border-orange-400 w-24"
                       autoFocus
                     />
-                    <button onClick={handleAddTag} className="p-1 bg-primary-500 text-white rounded">
+                    <button onClick={handleAddTag} className="p-1 bg-orange-500 text-white rounded">
                       <Plus className="w-3 h-3" />
                     </button>
-                    <button onClick={() => { setShowAddTag(false); setNewTag('') }} className="p-1 bg-dark-600 text-dark-300 rounded">
+                    <button onClick={() => { setShowAddTag(false); setNewTag('') }} className="p-1 bg-gray-200 text-gray-600 rounded">
                       <X className="w-3 h-3" />
                     </button>
                   </div>
@@ -393,17 +393,17 @@ export function ContactPanel({
 
             {/* Message Stats */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-2xl font-bold text-white">
+              <div className="p-3 bg-gray-50 rounded-xl text-center border border-gray-100">
+                <p className="text-2xl font-bold text-gray-900">
                   {contact.total_messages_received || 0}
                 </p>
-                <p className="text-xs text-dark-400">Msg Recebidas</p>
+                <p className="text-xs text-gray-500">Msg Recebidas</p>
               </div>
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-2xl font-bold text-white">
+              <div className="p-3 bg-gray-50 rounded-xl text-center border border-gray-100">
+                <p className="text-2xl font-bold text-gray-900">
                   {contact.total_messages_sent || 0}
                 </p>
-                <p className="text-xs text-dark-400">Msg Enviadas</p>
+                <p className="text-xs text-gray-500">Msg Enviadas</p>
               </div>
             </div>
           </div>
@@ -414,36 +414,35 @@ export function ContactPanel({
           <div className="p-4 space-y-4">
             {/* Active Deal ou botão de criar */}
             {activeDeal ? (
-              <div className="p-4 bg-gradient-to-br from-primary-500/10 to-accent-500/10 
-                              border border-primary-500/20 rounded-xl">
+              <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl">
                 <div className="flex items-center justify-between mb-2">
                   <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                    activeDeal.status === 'won' ? 'bg-success-500/20 text-success-400' :
-                    activeDeal.status === 'lost' ? 'bg-error-500/20 text-error-400' :
-                    'bg-primary-500/20 text-primary-400'
+                    activeDeal.status === 'won' ? 'bg-green-100 text-green-700' :
+                    activeDeal.status === 'lost' ? 'bg-red-100 text-red-600' :
+                    'bg-orange-100 text-orange-600'
                   }`}>
                     {activeDeal.stage?.name || 'Em progresso'}
                   </span>
                 </div>
-                <h4 className="font-semibold text-white mb-1">{activeDeal.title}</h4>
-                <p className="text-2xl font-bold text-primary-400 mb-1">
+                <h4 className="font-semibold text-gray-900 mb-1">{activeDeal.title}</h4>
+                <p className="text-2xl font-bold text-orange-600 mb-1">
                   {formatCurrency(activeDeal.value)}
                 </p>
                 <div className="mt-3 flex gap-2">
-                  <a 
+                  <a
                     href={`/crm?deal=${activeDeal.id}`}
                     target="_blank"
-                    className="flex-1 py-2 bg-dark-700/50 text-dark-300 text-sm rounded-lg 
-                               hover:bg-dark-700 transition-colors text-center">
+                    className="flex-1 py-2 bg-white text-gray-600 text-sm rounded-lg border border-gray-200
+                               hover:bg-gray-50 transition-colors text-center">
                     Ver Deal
                   </a>
                 </div>
               </div>
             ) : (
-              <button 
+              <button
                 onClick={() => setShowCreateDeal(true)}
-                className="w-full py-4 border border-dashed border-dark-600 rounded-xl 
-                           text-dark-400 hover:text-white hover:border-primary-500 transition-all
+                className="w-full py-4 border border-dashed border-gray-300 rounded-xl
+                           text-gray-400 hover:text-gray-600 hover:border-orange-400 transition-all
                            flex items-center justify-center gap-2">
                 <Plus className="w-4 h-4" />
                 Criar Novo Deal
@@ -452,38 +451,38 @@ export function ContactPanel({
 
             {/* Deal Stats */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-2xl font-bold text-success-400">
+              <div className="p-3 bg-gray-50 rounded-xl text-center border border-gray-100">
+                <p className="text-2xl font-bold text-green-600">
                   {deals.filter(d => d.status === 'won').length}
                 </p>
-                <p className="text-xs text-dark-400">Deals Ganhos</p>
+                <p className="text-xs text-gray-500">Deals Ganhos</p>
               </div>
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-2xl font-bold text-white">
+              <div className="p-3 bg-gray-50 rounded-xl text-center border border-gray-100">
+                <p className="text-2xl font-bold text-gray-900">
                   {formatCurrency(deals.filter(d => d.status === 'won')
                     .reduce((sum, d) => sum + d.value, 0))}
                 </p>
-                <p className="text-xs text-dark-400">Valor Total</p>
+                <p className="text-xs text-gray-500">Valor Total</p>
               </div>
             </div>
 
             {/* Deal History */}
             {deals.length > 0 && (
               <div>
-                <h4 className="text-sm font-medium text-dark-300 mb-3">Histórico</h4>
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Histórico</h4>
                 <div className="space-y-2">
                   {deals.filter(d => d.id !== activeDeal?.id).slice(0, 5).map((deal) => (
-                    <div 
+                    <div
                       key={deal.id}
-                      className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"
+                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100"
                     >
                       <div className={`w-2 h-2 rounded-full ${
-                        deal.status === 'won' ? 'bg-success-500' : 
-                        deal.status === 'lost' ? 'bg-error-500' : 'bg-warning-500'
+                        deal.status === 'won' ? 'bg-green-500' :
+                        deal.status === 'lost' ? 'bg-red-500' : 'bg-amber-500'
                       }`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white truncate">{deal.title}</p>
-                        <p className="text-xs text-dark-400">
+                        <p className="text-sm text-gray-900 truncate">{deal.title}</p>
+                        <p className="text-xs text-gray-500">
                           {formatCurrency(deal.value)}
                         </p>
                       </div>
@@ -500,33 +499,33 @@ export function ContactPanel({
           <div className="p-4 space-y-4">
             {/* Summary */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-2xl font-bold text-white">{contact.total_orders || 0}</p>
-                <p className="text-xs text-dark-400">Pedidos</p>
+              <div className="p-3 bg-gray-50 rounded-xl text-center border border-gray-100">
+                <p className="text-2xl font-bold text-gray-900">{contact.total_orders || 0}</p>
+                <p className="text-xs text-gray-500">Pedidos</p>
               </div>
-              <div className="p-3 bg-dark-800/50 rounded-xl text-center">
-                <p className="text-2xl font-bold text-primary-400">
+              <div className="p-3 bg-gray-50 rounded-xl text-center border border-gray-100">
+                <p className="text-2xl font-bold text-orange-600">
                   {formatCurrency(contact.total_spent || 0)}
                 </p>
-                <p className="text-xs text-dark-400">Total Gasto</p>
+                <p className="text-xs text-gray-500">Total Gasto</p>
               </div>
             </div>
 
             {/* Abandoned Cart */}
             {cart && (
-              <div className="p-4 bg-warning-500/10 border border-warning-500/20 rounded-xl">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
                 <div className="flex items-center gap-2 mb-3">
-                  <ShoppingCart className="w-5 h-5 text-warning-400" />
-                  <h4 className="font-medium text-warning-400">Carrinho Abandonado</h4>
+                  <ShoppingCart className="w-5 h-5 text-amber-600" />
+                  <h4 className="font-medium text-amber-700">Carrinho Abandonado</h4>
                 </div>
-                <p className="text-sm text-dark-300 mb-1">
+                <p className="text-sm text-gray-700 mb-1">
                   {cart.line_items?.length || 0} itens • {formatCurrency(cart.total_price)}
                 </p>
-                <p className="text-xs text-dark-500 mb-3">
+                <p className="text-xs text-gray-500 mb-3">
                   Abandonado {formatRelativeTime(cart.created_at)}
                 </p>
-                <button className="w-full py-2 bg-warning-500 text-white text-sm font-medium 
-                                   rounded-lg hover:bg-warning-600 transition-colors">
+                <button className="w-full py-2 bg-amber-500 text-white text-sm font-medium
+                                   rounded-lg hover:bg-amber-600 transition-colors">
                   Enviar Lembrete
                 </button>
               </div>
@@ -535,35 +534,35 @@ export function ContactPanel({
             {/* Order History */}
             {orders.length > 0 ? (
               <div>
-                <h4 className="text-sm font-medium text-dark-300 mb-3">Últimos Pedidos</h4>
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Últimos Pedidos</h4>
                 <div className="space-y-2">
                   {orders.slice(0, 5).map((order) => (
-                    <div 
+                    <div
                       key={order.id}
-                      className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-xl"
+                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100"
                     >
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        order.fulfillment_status === 'fulfilled' 
-                          ? 'bg-success-500/10' 
-                          : 'bg-primary-500/10'
+                        order.fulfillment_status === 'fulfilled'
+                          ? 'bg-green-100'
+                          : 'bg-orange-100'
                       }`}>
                         {order.fulfillment_status === 'fulfilled' ? (
-                          <CheckCircle className="w-5 h-5 text-success-400" />
+                          <CheckCircle className="w-5 h-5 text-green-600" />
                         ) : (
-                          <Package className="w-5 h-5 text-primary-400" />
+                          <Package className="w-5 h-5 text-orange-600" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white">Pedido #{order.order_number}</p>
-                        <p className="text-xs text-dark-400">
+                        <p className="text-sm text-gray-900">Pedido #{order.order_number}</p>
+                        <p className="text-xs text-gray-500">
                           {order.line_items?.length || 0} itens
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-medium text-white">
+                        <p className="text-sm font-medium text-gray-900">
                           {formatCurrency(order.total_price)}
                         </p>
-                        <p className="text-xs text-dark-500">
+                        <p className="text-xs text-gray-400">
                           {formatDate(order.created_at)}
                         </p>
                       </div>
@@ -572,7 +571,7 @@ export function ContactPanel({
                 </div>
               </div>
             ) : (
-              <div className="text-center py-8 text-dark-400">
+              <div className="text-center py-8 text-gray-400">
                 <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Nenhum pedido encontrado</p>
               </div>
@@ -614,38 +613,38 @@ export function ContactPanel({
       </div>
 
       {/* ========== QUICK ACTIONS ========== */}
-      <div className="p-4 border-t border-dark-700/50 bg-dark-800/30">
+      <div className="p-4 border-t border-gray-200 bg-white">
         <div className="grid grid-cols-2 gap-2">
-          <button 
+          <button
             onClick={() => setShowAddTag(true)}
-            className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 
-                       text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+            className="flex items-center justify-center gap-2 p-3 bg-gray-50
+                       text-gray-600 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-all border border-gray-200">
             <Tag className="w-4 h-4" />
             <span className="text-xs">Tag</span>
           </button>
-          <button 
+          <button
             onClick={() => setShowAssignModal(true)}
-            className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 
-                       text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+            className="flex items-center justify-center gap-2 p-3 bg-gray-50
+                       text-gray-600 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-all border border-gray-200">
             <UserPlus className="w-4 h-4" />
             <span className="text-xs">Atribuir</span>
           </button>
-          <button 
+          <button
             onClick={() => setShowCreateDeal(true)}
-            className="flex items-center justify-center gap-2 p-3 bg-dark-700/50 
-                       text-dark-300 rounded-xl hover:bg-dark-700 hover:text-white transition-all">
+            className="flex items-center justify-center gap-2 p-3 bg-gray-50
+                       text-gray-600 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-all border border-gray-200">
             <DollarSign className="w-4 h-4" />
             <span className="text-xs">Deal</span>
           </button>
-          <button 
-            onClick={() => contact.is_blocked 
-              ? onUnblockContact(contact.id) 
+          <button
+            onClick={() => contact.is_blocked
+              ? onUnblockContact(contact.id)
               : onBlockContact(contact.id)
             }
-            className={`flex items-center justify-center gap-2 p-3 rounded-xl transition-all ${
+            className={`flex items-center justify-center gap-2 p-3 rounded-xl transition-all border ${
               contact.is_blocked
-                ? 'bg-success-500/10 text-success-400 hover:bg-success-500/20'
-                : 'bg-error-500/10 text-error-400 hover:bg-error-500/20'
+                ? 'bg-green-50 text-green-700 hover:bg-green-100 border-green-200'
+                : 'bg-red-50 text-red-600 hover:bg-red-100 border-red-200'
             }`}
           >
             <Ban className="w-4 h-4" />

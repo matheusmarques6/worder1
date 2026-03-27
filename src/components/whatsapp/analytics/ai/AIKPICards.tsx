@@ -67,7 +67,7 @@ function AIKPICard({ title, value, change, icon: Icon, color, delay = 0, inverse
   const colors = colorMap[color];
   
   const getTrendColor = (val: number, inverse: boolean): string => {
-    if (val === 0) return 'text-dark-400';
+    if (val === 0) return 'text-gray-400';
     const isPositive = inverse ? val < 0 : val > 0;
     return isPositive ? 'text-emerald-400' : 'text-red-400';
   };
@@ -82,7 +82,7 @@ function AIKPICard({ title, value, change, icon: Icon, color, delay = 0, inverse
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
-      className={`relative bg-dark-800/60 rounded-xl border border-dark-700/50 p-5 hover:border-dark-600 transition-all group`}
+      className={`relative bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:border-gray-300 hover:shadow-md transition-all group`}
     >
       <div className="flex items-start justify-between">
         <div className={`p-2.5 rounded-lg ${colors.bg}`}>
@@ -97,8 +97,8 @@ function AIKPICard({ title, value, change, icon: Icon, color, delay = 0, inverse
       </div>
       
       <div className="mt-4">
-        <p className="text-2xl font-bold text-white">{value}</p>
-        <p className="text-sm text-dark-400 mt-1">{title}</p>
+        <p className="text-2xl font-bold text-gray-900">{value}</p>
+        <p className="text-sm text-gray-500 mt-1">{title}</p>
       </div>
       
       <div className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r ${colors.gradient} rounded-b-xl opacity-60 group-hover:opacity-100 transition-opacity`} />

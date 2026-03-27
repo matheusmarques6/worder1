@@ -97,18 +97,18 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
     <div
       onClick={onClick}
       className={`
-        p-4 bg-dark-800/60 border border-dark-700/50 rounded-xl cursor-pointer
-        hover:border-dark-600 hover:bg-dark-800/80 transition-all group
-        ${isDragging ? 'opacity-50 scale-105 shadow-xl shadow-primary-500/10 rotate-2' : ''}
+        p-4 bg-white border border-gray-200 rounded-lg cursor-pointer
+        hover:border-gray-300 hover:shadow-md transition-all group shadow-sm
+        ${isDragging ? 'opacity-50 scale-105 shadow-xl shadow-orange-500/10 rotate-2' : ''}
       `}
     >
       <div className="flex items-start justify-between mb-3">
-        <h4 className="text-sm font-medium text-white line-clamp-2 group-hover:text-primary-300 transition-colors">
+        <h4 className="text-sm font-medium text-gray-900 line-clamp-2 group-hover:text-orange-600 transition-colors">
           {deal.title}
         </h4>
-        <button 
+        <button
           onClick={(e) => e.stopPropagation()}
-          className="p-1 rounded hover:bg-dark-700/50 text-dark-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+          className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100"
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
@@ -122,24 +122,24 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
             </span>
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-white truncate">{contactName}</p>
+            <p className="text-xs text-gray-800 truncate">{contactName}</p>
             {deal.contact.company && (
-              <p className="text-[10px] text-dark-400 truncate">{deal.contact.company}</p>
+              <p className="text-[10px] text-gray-500 truncate">{deal.contact.company}</p>
             )}
           </div>
         </div>
       )}
 
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-success-400">{formatCurrency(deal.value)}</span>
+        <span className="text-sm font-semibold text-green-600">{formatCurrency(deal.value)}</span>
         <div className="flex items-center gap-1">
-          <div className="w-12 h-1.5 rounded-full bg-dark-700 overflow-hidden">
-            <div 
-              className="h-full rounded-full bg-gradient-to-r from-primary-500 to-accent-500 transition-all duration-300"
+          <div className="w-12 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-orange-500 transition-all duration-300"
               style={{ width: `${deal.probability}%` }}
             />
           </div>
-          <span className="text-[10px] text-dark-400">{deal.probability}%</span>
+          <span className="text-[10px] text-gray-500">{deal.probability}%</span>
         </div>
       </div>
 
@@ -149,13 +149,13 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
           {deal.tags.slice(0, 2).map((tag, i) => (
             <span
               key={i}
-              className="px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-400 text-[10px]"
+              className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[10px]"
             >
               {tag}
             </span>
           ))}
           {deal.tags.length > 2 && (
-            <span className="px-2 py-0.5 rounded-full bg-dark-700/50 text-dark-400 text-[10px]">
+            <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[10px]">
               +{deal.tags.length - 2}
             </span>
           )}
@@ -164,7 +164,7 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
 
       {/* Footer */}
       {deal.expected_close_date && (
-        <div className="flex items-center gap-1.5 text-xs text-dark-400">
+        <div className="flex items-center gap-1.5 text-xs text-gray-500">
           <Clock className="w-3 h-3" />
           <span>{new Date(deal.expected_close_date).toLocaleDateString('pt-BR')}</span>
         </div>
@@ -229,36 +229,36 @@ function KanbanColumn({ stage, deals, onAddDeal, onDealClick, onEditStage }: Kan
       <div
         ref={setNodeRef}
         className={`
-          h-full flex flex-col bg-dark-900/30 rounded-2xl border transition-all duration-200
-          ${isOver ? 'border-primary-500/50 bg-primary-500/5 scale-[1.02]' : 'border-dark-800/50'}
+          h-full flex flex-col bg-gray-50 rounded-lg border transition-all duration-200
+          ${isOver ? 'border-orange-400 bg-orange-50 scale-[1.02]' : 'border-gray-200'}
         `}
       >
         {/* Column Header */}
-        <div className="p-4 border-b border-dark-800/50">
+        <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-2">
-            <button 
+            <button
               onClick={() => onEditStage(stage)}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity group"
               title="Clique para editar este estágio"
             >
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
-              <h3 className="font-semibold text-white group-hover:text-primary-300 transition-colors">{stage.name}</h3>
-              <span className="px-2 py-0.5 rounded-full bg-dark-800/50 text-xs text-dark-400">
+              <h3 className="text-sm font-semibold text-gray-700 group-hover:text-orange-500 transition-colors">{stage.name}</h3>
+              <span className="px-2 py-0.5 rounded-full bg-gray-200 text-xs text-gray-500">
                 {safeDeals.length}
               </span>
-              <Pencil className="w-3 h-3 text-dark-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Pencil className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
-            <button 
+            <button
               onClick={onAddDeal}
-              className="p-1.5 rounded-lg hover:bg-dark-800/50 text-dark-400 hover:text-white transition-colors"
+              className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-700 transition-colors"
               title="Adicionar deal"
             >
               <Plus className="w-4 h-4" />
             </button>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-success-400 font-medium">{formatCurrency(totalValue)}</span>
-            <span className="text-dark-500 text-xs">
+            <span className="text-green-600 font-medium">{formatCurrency(totalValue)}</span>
+            <span className="text-gray-500 text-xs">
               Ponderado: {formatCurrency(weightedValue)}
             </span>
           </div>
@@ -274,16 +274,16 @@ function KanbanColumn({ stage, deals, onAddDeal, onDealClick, onEditStage }: Kan
           
           {safeDeals.length === 0 && (
             <div className="p-4 text-center">
-              <p className="text-sm text-dark-500">Arraste deals para cá</p>
+              <p className="text-sm text-gray-400">Arraste deals para cá</p>
             </div>
           )}
         </div>
 
         {/* Add Deal Button */}
-        <div className="p-2 border-t border-dark-800/50">
+        <div className="p-2 border-t border-gray-200">
           <button
             onClick={onAddDeal}
-            className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-dark-500 hover:text-white hover:bg-dark-800/50 transition-colors"
+            className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-gray-500 hover:text-orange-600 hover:bg-orange-50 transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span className="text-sm">Adicionar</span>
@@ -302,8 +302,8 @@ function LoadingState() {
   return (
     <div className="h-[calc(100vh-120px)] flex items-center justify-center">
       <div className="text-center">
-        <div className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-dark-400">Carregando CRM...</p>
+        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-gray-500">Carregando CRM...</p>
       </div>
     </div>
   )
@@ -320,11 +320,11 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
         <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
           <AlertCircle className="w-8 h-8 text-red-500" />
         </div>
-        <h3 className="text-lg font-semibold text-white mb-2">Erro ao carregar</h3>
-        <p className="text-dark-400 mb-4 max-w-sm">{error.message}</p>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Erro ao carregar</h3>
+        <p className="text-gray-500 mb-4 max-w-sm">{error.message}</p>
         <button
           onClick={onRetry}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg text-white transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 rounded-lg text-white transition-colors"
         >
           <RefreshCw className="w-4 h-4" />
           Tentar novamente
@@ -342,16 +342,16 @@ function EmptyState({ onCreatePipeline }: { onCreatePipeline: () => void }) {
   return (
     <div className="h-[calc(100vh-120px)] flex items-center justify-center">
       <div className="text-center max-w-md">
-        <div className="w-20 h-20 bg-primary-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Settings className="w-10 h-10 text-primary-500" />
+        <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Settings className="w-10 h-10 text-orange-500" />
         </div>
-        <h3 className="text-xl font-semibold text-white mb-2">Nenhum pipeline encontrado</h3>
-        <p className="text-dark-400 mb-6">
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">Nenhum pipeline encontrado</h3>
+        <p className="text-gray-500 mb-6">
           Crie seu primeiro pipeline para começar a gerenciar seus deals e oportunidades.
         </p>
         <button
           onClick={onCreatePipeline}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-primary-500/20"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-orange-500/20"
         >
           <Plus className="w-5 h-5" />
           Criar Pipeline
@@ -740,10 +740,10 @@ export default function CRMPage() {
         <div className="relative">
           <button 
             onClick={() => setShowPipelineDropdown(!showPipelineDropdown)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white hover:bg-dark-800 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 hover:bg-gray-50 transition-colors shadow-sm"
           >
             <span className="font-medium">{activePipeline?.name || 'Selecionar'}</span>
-            <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showPipelineDropdown ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPipelineDropdown ? 'rotate-180' : ''}`} />
           </button>
           
           {/* Dropdown */}
@@ -753,7 +753,7 @@ export default function CRMPage() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="absolute left-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
+                className="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-20 overflow-hidden"
               >
                 <div className="p-2">
                     {pipelines.map(pipeline => (
@@ -761,8 +761,8 @@ export default function CRMPage() {
                         key={pipeline.id}
                         className={`flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors group ${
                           activePipeline?.id === pipeline.id
-                            ? 'bg-primary-500/20'
-                            : 'hover:bg-dark-700/50'
+                            ? 'bg-orange-50'
+                            : 'hover:bg-gray-50'
                         }`}
                       >
                         <button
@@ -774,12 +774,12 @@ export default function CRMPage() {
                             style={{ backgroundColor: pipeline.color || '#f97316' }}
                           />
                           <span className={`flex-1 text-left truncate ${
-                            activePipeline?.id === pipeline.id ? 'text-primary-400' : 'text-dark-300'
+                            activePipeline?.id === pipeline.id ? 'text-orange-600' : 'text-gray-700'
                           }`}>
                             {pipeline.name}
                           </span>
                           {activePipeline?.id === pipeline.id && (
-                            <span className="text-xs text-primary-400 flex-shrink-0">Ativo</span>
+                            <span className="text-xs text-orange-500 flex-shrink-0">Ativo</span>
                           )}
                         </button>
                         
@@ -790,7 +790,7 @@ export default function CRMPage() {
                               e.stopPropagation()
                               handleEditPipeline(pipeline)
                             }}
-                            className="p-1.5 rounded-lg text-dark-400 hover:text-white hover:bg-dark-600 transition-colors"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors"
                             title="Editar pipeline"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -800,7 +800,7 @@ export default function CRMPage() {
                               e.stopPropagation()
                               handleDeletePipeline(pipeline)
                             }}
-                            className="p-1.5 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                             title="Excluir pipeline"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -809,14 +809,14 @@ export default function CRMPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="border-t border-dark-700 p-2">
+                  <div className="border-t border-gray-200 p-2">
                     <button
                       onClick={() => {
                         setShowPipelineDropdown(false)
                         setEditingPipeline(null)
                         setShowPipelineModal(true)
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-primary-400 hover:bg-primary-500/10 transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-orange-500 hover:bg-orange-50 transition-colors"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Novo Pipeline</span>
@@ -829,18 +829,18 @@ export default function CRMPage() {
           
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Buscar deals..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 w-64 transition-colors"
+              className="pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-orange-400 w-64 transition-colors shadow-sm"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -852,14 +852,14 @@ export default function CRMPage() {
             <button 
               onClick={() => setShowFilterDropdown(!showFilterDropdown)}
               className={`p-2.5 rounded-xl border transition-all ${
-                hasActiveFilters 
-                  ? 'bg-primary-500/20 border-primary-500/50 text-primary-400' 
-                  : 'bg-dark-800/50 border-dark-700/50 text-dark-400 hover:text-white hover:bg-dark-800'
+                hasActiveFilters
+                  ? 'bg-orange-100 border-orange-300 text-orange-600'
+                  : 'bg-white border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-50 shadow-sm'
               }`}
             >
               <Filter className="w-5 h-5" />
               {hasActiveFilters && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary-500 rounded-full" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full" />
               )}
             </button>
             
@@ -871,19 +871,19 @@ export default function CRMPage() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -10, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-full mt-2 w-80 bg-dark-800/95 backdrop-blur-xl border border-dark-700/50 rounded-2xl shadow-2xl shadow-black/20 z-20 overflow-hidden"
+                  className="absolute right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-2xl shadow-2xl z-20 overflow-hidden"
                 >
                   {/* Header */}
-                  <div className="px-5 py-4 border-b border-dark-700/50 bg-dark-900/30">
+                  <div className="px-5 py-4 border-b border-gray-200 bg-gray-50">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-primary-400" />
-                        <h3 className="text-sm font-semibold text-white">Filtros</h3>
+                        <Filter className="w-4 h-4 text-orange-500" />
+                        <h3 className="text-sm font-semibold text-gray-900">Filtros</h3>
                       </div>
                       {hasActiveFilters && (
                         <button
                           onClick={clearFilters}
-                          className="text-xs text-dark-400 hover:text-white transition-colors flex items-center gap-1"
+                          className="text-xs text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1"
                         >
                           <X className="w-3 h-3" />
                           Limpar
@@ -896,7 +896,7 @@ export default function CRMPage() {
                   <div className="p-5 space-y-5">
                     {/* Status Filter */}
                     <div>
-                      <label className="flex items-center gap-2 text-xs font-medium text-dark-300 mb-3">
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-3">
                         📊 Status do Deal
                       </label>
                       <div className="grid grid-cols-4 gap-2">
@@ -904,7 +904,7 @@ export default function CRMPage() {
                           { value: 'open', label: 'Abertos', color: 'bg-yellow-500' },
                           { value: 'won', label: 'Ganhos', color: 'bg-green-500' },
                           { value: 'lost', label: 'Perdidos', color: 'bg-red-500' },
-                          { value: 'all', label: 'Todos', color: 'bg-dark-500' },
+                          { value: 'all', label: 'Todos', color: 'bg-gray-500' },
                         ].map(option => (
                           <button
                             key={option.value}
@@ -912,7 +912,7 @@ export default function CRMPage() {
                             className={`px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
                               filters.status === option.value
                                 ? `${option.color} text-white shadow-lg`
-                                : 'bg-dark-900/80 text-dark-400 border border-dark-600/50 hover:border-dark-500 hover:text-dark-300'
+                                : 'bg-gray-50 text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
                             }`}
                           >
                             {option.label}
@@ -923,30 +923,30 @@ export default function CRMPage() {
                     
                     {/* Value Range */}
                     <div>
-                      <label className="flex items-center gap-2 text-xs font-medium text-dark-300 mb-3">
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-3">
                         <DollarSign className="w-3.5 h-3.5" />
                         Valor do Deal
                       </label>
                       <div className="flex items-center gap-3">
                         <div className="flex-1 relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500 text-xs">R$</span>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">R$</span>
                           <input
                             type="number"
                             placeholder="0"
                             value={filters.minValue}
                             onChange={(e) => setFilters(f => ({ ...f, minValue: e.target.value }))}
-                            className="w-full pl-9 pr-3 py-2.5 bg-dark-900/80 border border-dark-600/50 rounded-xl text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                            className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
                           />
                         </div>
-                        <div className="text-dark-500 text-sm font-medium">até</div>
+                        <div className="text-gray-400 text-sm font-medium">até</div>
                         <div className="flex-1 relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500 text-xs">R$</span>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">R$</span>
                           <input
                             type="number"
                             placeholder="∞"
                             value={filters.maxValue}
                             onChange={(e) => setFilters(f => ({ ...f, maxValue: e.target.value }))}
-                            className="w-full pl-9 pr-3 py-2.5 bg-dark-900/80 border border-dark-600/50 rounded-xl text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                            className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
                           />
                         </div>
                       </div>
@@ -954,7 +954,7 @@ export default function CRMPage() {
                     
                     {/* Has Contact */}
                     <div>
-                      <label className="flex items-center gap-2 text-xs font-medium text-dark-300 mb-3">
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-3">
                         <User className="w-3.5 h-3.5" />
                         Contato Vinculado
                       </label>
@@ -969,8 +969,8 @@ export default function CRMPage() {
                             onClick={() => setFilters(f => ({ ...f, hasContact: option.value as any }))}
                             className={`px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
                               filters.hasContact === option.value
-                                ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/25'
-                                : 'bg-dark-900/80 text-dark-400 border border-dark-600/50 hover:border-dark-500 hover:text-dark-300'
+                                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/25'
+                                : 'bg-gray-50 text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
                             }`}
                           >
                             <span className="mr-1">{option.icon}</span>
@@ -982,19 +982,19 @@ export default function CRMPage() {
                   </div>
                   
                   {/* Footer */}
-                  <div className="px-5 py-4 border-t border-dark-700/50 bg-dark-900/30 flex gap-3">
+                  <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex gap-3">
                     <button
                       onClick={() => {
                         clearFilters()
                         setShowFilterDropdown(false)
                       }}
-                      className="flex-1 px-4 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-xl text-dark-300 text-sm font-medium transition-colors"
+                      className="flex-1 px-4 py-2.5 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-600 text-sm font-medium transition-colors"
                     >
                       Cancelar
                     </button>
                     <button
                       onClick={() => setShowFilterDropdown(false)}
-                      className="flex-1 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 rounded-xl text-white text-sm font-medium transition-colors shadow-lg shadow-primary-500/25"
+                      className="flex-1 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 rounded-xl text-white text-sm font-medium transition-colors shadow-lg shadow-orange-500/25"
                     >
                       Aplicar
                     </button>
@@ -1010,7 +1010,7 @@ export default function CRMPage() {
                 handleAddDealToStage(stages[0].id)
               }
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-primary-500/20"
+            className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 rounded-xl text-white font-medium transition-colors shadow-lg shadow-orange-500/20"
           >
             <Plus className="w-5 h-5" />
             <span>Novo Deal</span>
@@ -1018,33 +1018,33 @@ export default function CRMPage() {
       </div>
 
       {/* Pipeline Stats */}
-      <div className="flex items-center gap-6 mb-6 p-4 bg-dark-800/30 rounded-xl border border-dark-700/50">
+      <div className="flex items-center gap-6 mb-6 p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
         <div>
-          <p className="text-sm text-dark-400">Valor Ponderado</p>
-          <p className="text-xl font-bold text-success-400">{formatCurrency(pipelineStats.weightedValue)}</p>
+          <p className="text-sm text-gray-500">Valor Ponderado</p>
+          <p className="text-xl font-bold text-green-600">{formatCurrency(pipelineStats.weightedValue)}</p>
         </div>
-        <div className="w-px h-10 bg-dark-700" />
+        <div className="w-px h-10 bg-gray-200" />
         <div>
-          <p className="text-sm text-dark-400">Contatos na Pipeline</p>
-          <p className="text-xl font-bold text-white">{pipelineStats.totalContacts}</p>
+          <p className="text-sm text-gray-500">Contatos na Pipeline</p>
+          <p className="text-xl font-bold text-gray-900">{pipelineStats.totalContacts}</p>
         </div>
-        <div className="w-px h-10 bg-dark-700" />
+        <div className="w-px h-10 bg-gray-200" />
         <div>
-          <p className="text-sm text-dark-400">Deals Abertos</p>
-          <p className="text-xl font-bold text-white">{pipelineStats.totalDeals}</p>
+          <p className="text-sm text-gray-500">Deals Abertos</p>
+          <p className="text-xl font-bold text-gray-900">{pipelineStats.totalDeals}</p>
         </div>
-        <div className="w-px h-10 bg-dark-700" />
+        <div className="w-px h-10 bg-gray-200" />
         <div>
-          <p className="text-sm text-dark-400">Estágios</p>
-          <p className="text-xl font-bold text-white">{stages.length}</p>
+          <p className="text-sm text-gray-500">Estágios</p>
+          <p className="text-xl font-bold text-gray-900">{stages.length}</p>
         </div>
-        
+
         {/* Refresh Button */}
         <div className="ml-auto">
           <button
             onClick={() => refetch()}
             disabled={loading}
-            className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-800/50 transition-colors disabled:opacity-50"
+            className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
             title="Atualizar"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -1079,7 +1079,7 @@ export default function CRMPage() {
                 setEditingPipeline(activePipeline)
                 setShowPipelineModal(true)
               }}
-              className="flex-shrink-0 w-80 h-full min-h-[400px] flex flex-col items-center justify-center gap-2 bg-dark-900/20 border-2 border-dashed border-dark-800/50 rounded-2xl text-dark-500 hover:text-primary-400 hover:border-primary-500/30 transition-all"
+              className="flex-shrink-0 w-80 h-full min-h-[400px] flex flex-col items-center justify-center gap-2 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg text-gray-400 hover:text-orange-500 hover:border-orange-300 transition-all"
             >
               <Plus className="w-6 h-6" />
               <span className="text-sm font-medium">Editar Estágios</span>

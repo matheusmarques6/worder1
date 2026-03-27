@@ -128,21 +128,21 @@ export function CreateDealModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-dark-800 rounded-2xl w-full max-w-md border border-dark-700 shadow-xl">
+      <div className="bg-white rounded-2xl w-full max-w-md border border-gray-200 shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-dark-700">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary-500/10 rounded-xl flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-primary-400" />
+            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+              <DollarSign className="w-5 h-5 text-orange-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-white">Criar Novo Deal</h3>
-              <p className="text-xs text-dark-400">{contactName}</p>
+              <h3 className="font-semibold text-gray-900">Criar Novo Deal</h3>
+              <p className="text-xs text-gray-500">{contactName}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-dark-400 hover:text-white rounded-lg transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -152,26 +152,26 @@ export function CreateDealModal({
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {isFetching ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+              <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
             </div>
           ) : pipelines.length === 0 ? (
-            <div className="text-center py-8 text-dark-400">
-              <p>Nenhum pipeline encontrado</p>
-              <p className="text-xs mt-1">Crie um pipeline no CRM primeiro</p>
+            <div className="text-center py-8 text-gray-400">
+              <p className="text-gray-500">Nenhum pipeline encontrado</p>
+              <p className="text-xs mt-1 text-gray-400">Crie um pipeline no CRM primeiro</p>
             </div>
           ) : (
             <>
               {/* Pipeline */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-1.5">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Pipeline *
                 </label>
                 <div className="relative">
                   <select
                     value={selectedPipeline}
                     onChange={(e) => setSelectedPipeline(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-dark-700 border border-dark-600 rounded-xl 
-                               text-white appearance-none focus:outline-none focus:border-primary-500"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl
+                               text-gray-900 appearance-none focus:outline-none focus:border-orange-400"
                   >
                     {pipelines.map((pipeline) => (
                       <option key={pipeline.id} value={pipeline.id}>
@@ -179,13 +179,13 @@ export function CreateDealModal({
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400 pointer-events-none" />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
               </div>
 
               {/* Estágio */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-1.5">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Estágio Inicial *
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -196,8 +196,8 @@ export function CreateDealModal({
                       onClick={() => setSelectedStage(stage.id)}
                       className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                         selectedStage === stage.id
-                          ? 'bg-primary-500/20 text-primary-400 border-2 border-primary-500'
-                          : 'bg-dark-700 text-dark-300 border-2 border-transparent hover:border-dark-600'
+                          ? 'bg-orange-50 text-orange-600 border-2 border-orange-400'
+                          : 'bg-gray-50 text-gray-600 border-2 border-transparent hover:border-gray-300'
                       }`}
                     >
                       {stage.name}
@@ -208,7 +208,7 @@ export function CreateDealModal({
 
               {/* Título */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-1.5">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Título do Deal *
                 </label>
                 <input
@@ -216,19 +216,19 @@ export function CreateDealModal({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Ex: Proposta de Serviço"
-                  className="w-full px-4 py-2.5 bg-dark-700 border border-dark-600 rounded-xl 
-                             text-white placeholder:text-dark-500 
-                             focus:outline-none focus:border-primary-500"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl
+                             text-gray-900 placeholder:text-gray-400
+                             focus:outline-none focus:border-orange-400"
                 />
               </div>
 
               {/* Valor */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-1.5">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Valor (R$)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-dark-400">R$</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">R$</span>
                   <input
                     type="number"
                     value={value}
@@ -236,16 +236,16 @@ export function CreateDealModal({
                     placeholder="0,00"
                     step="0.01"
                     min="0"
-                    className="w-full px-4 py-2.5 pl-12 bg-dark-700 border border-dark-600 rounded-xl 
-                               text-white placeholder:text-dark-500 
-                               focus:outline-none focus:border-primary-500"
+                    className="w-full px-4 py-2.5 pl-12 bg-gray-50 border border-gray-200 rounded-xl
+                               text-gray-900 placeholder:text-gray-400
+                               focus:outline-none focus:border-orange-400"
                   />
                 </div>
               </div>
 
               {/* Error */}
               {error && (
-                <p className="text-sm text-red-400 bg-red-500/10 p-3 rounded-lg">
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-lg">
                   {error}
                 </p>
               )}
@@ -255,16 +255,16 @@ export function CreateDealModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 py-2.5 bg-dark-700 text-dark-300 rounded-xl 
-                             hover:bg-dark-600 transition-colors font-medium"
+                  className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl
+                             hover:bg-gray-200 transition-colors font-medium"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isLoading || !selectedPipeline || !selectedStage || !title.trim()}
-                  className="flex-1 py-2.5 bg-primary-500 text-white rounded-xl 
-                             hover:bg-primary-600 transition-colors font-medium
+                  className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl
+                             hover:bg-orange-600 transition-colors font-medium
                              disabled:opacity-50 disabled:cursor-not-allowed
                              flex items-center justify-center gap-2"
                 >

@@ -140,21 +140,21 @@ export function AssignModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-dark-800 rounded-2xl w-full max-w-md border border-dark-700 shadow-xl">
+      <div className="bg-white rounded-2xl w-full max-w-md border border-gray-200 shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-dark-700">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center">
-              <UserPlus className="w-5 h-5 text-blue-400" />
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+              <UserPlus className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-white">Atribuir Conversa</h3>
-              <p className="text-xs text-dark-400">Selecione um membro da equipe</p>
+              <h3 className="font-semibold text-gray-900">Atribuir Conversa</h3>
+              <p className="text-xs text-gray-500">Selecione um membro da equipe</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-dark-400 hover:text-white rounded-lg transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -164,21 +164,21 @@ export function AssignModal({
         <div className="p-4">
           {/* Search */}
           <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nome ou email..."
-              className="w-full px-4 py-2.5 pl-10 bg-dark-700 border border-dark-600 rounded-xl 
-                         text-white placeholder:text-dark-500 
-                         focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2.5 pl-10 bg-gray-50 border border-gray-200 rounded-xl
+                         text-gray-900 placeholder:text-gray-400
+                         focus:outline-none focus:border-orange-400"
             />
           </div>
 
           {/* Error message */}
           {error && (
-            <div className="mb-4 p-3 bg-error-500/10 border border-error-500/20 rounded-xl text-error-400 text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
               {error}
             </div>
           )}
@@ -189,19 +189,19 @@ export function AssignModal({
               onClick={() => setSelectedUserId(null)}
               className={`w-full flex items-center gap-3 p-3 rounded-xl mb-2 transition-all ${
                 selectedUserId === null
-                  ? 'bg-red-500/20 border-2 border-red-500'
-                  : 'bg-dark-700/50 border-2 border-transparent hover:border-dark-600'
+                  ? 'bg-red-50 border-2 border-red-400'
+                  : 'bg-gray-50 border-2 border-transparent hover:border-gray-300'
               }`}
             >
-              <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center">
-                <X className="w-5 h-5 text-red-400" />
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <X className="w-5 h-5 text-red-500" />
               </div>
               <div className="flex-1 text-left">
-                <p className="text-sm font-medium text-red-400">Remover Atribuição</p>
-                <p className="text-xs text-dark-500">Deixar conversa não atribuída</p>
+                <p className="text-sm font-medium text-red-600">Remover Atribuição</p>
+                <p className="text-xs text-gray-500">Deixar conversa não atribuída</p>
               </div>
               {selectedUserId === null && (
-                <Check className="w-5 h-5 text-red-400" />
+                <Check className="w-5 h-5 text-red-500" />
               )}
             </button>
           )}
@@ -209,15 +209,15 @@ export function AssignModal({
           {/* Users List */}
           {isFetching ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+              <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
             </div>
           ) : filteredUsers.length === 0 ? (
-            <div className="text-center py-8 text-dark-400">
+            <div className="text-center py-8 text-gray-400">
               <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">
+              <p className="text-sm text-gray-500">
                 {search ? 'Nenhum usuário encontrado com esse termo' : 'Nenhum usuário disponível'}
               </p>
-              <p className="text-xs mt-2 text-dark-500">
+              <p className="text-xs mt-2 text-gray-400">
                 Verifique se há usuários ou agentes cadastrados
               </p>
             </div>
@@ -229,39 +229,38 @@ export function AssignModal({
                   onClick={() => setSelectedUserId(user.id)}
                   className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
                     selectedUserId === user.id
-                      ? 'bg-primary-500/20 border-2 border-primary-500'
-                      : 'bg-dark-700/50 border-2 border-transparent hover:border-dark-600'
+                      ? 'bg-orange-50 border-2 border-orange-400'
+                      : 'bg-gray-50 border-2 border-transparent hover:border-gray-300'
                   }`}
                 >
                   {user.avatar_url ? (
-                    <img 
-                      src={user.avatar_url} 
+                    <img
+                      src={user.avatar_url}
                       alt={user.name}
                       className="w-10 h-10 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-500 
-                                    rounded-full flex items-center justify-center">
-                      <span className="text-white font-medium text-sm">
+                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                      <span className="text-orange-700 font-medium text-sm">
                         {getInitials(user.name || user.email)}
                       </span>
                     </div>
                   )}
                   <div className="flex-1 text-left">
-                    <p className="text-sm font-medium text-white">{user.name || 'Sem nome'}</p>
-                    <p className="text-xs text-dark-400">{user.email || user.role || ''}</p>
+                    <p className="text-sm font-medium text-gray-900">{user.name || 'Sem nome'}</p>
+                    <p className="text-xs text-gray-500">{user.email || user.role || ''}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {user.source === 'agent' && (
-                      <span className="px-2 py-0.5 text-[10px] bg-purple-500/20 text-purple-400 rounded-full flex items-center gap-1">
+                      <span className="px-2 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded-full flex items-center gap-1">
                         <Bot className="w-3 h-3" /> Agente
                       </span>
                     )}
                     {selectedUserId === user.id && (
-                      <Check className="w-5 h-5 text-primary-400" />
+                      <Check className="w-5 h-5 text-orange-500" />
                     )}
                     {currentAssignedId === user.id && selectedUserId !== user.id && (
-                      <span className="px-2 py-0.5 text-[10px] bg-dark-600 text-dark-300 rounded-full">
+                      <span className="px-2 py-0.5 text-[10px] bg-gray-200 text-gray-600 rounded-full">
                         Atual
                       </span>
                     )}
@@ -273,19 +272,19 @@ export function AssignModal({
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 p-4 border-t border-dark-700">
+        <div className="flex gap-3 p-4 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 bg-dark-700 text-dark-300 rounded-xl 
-                       hover:bg-dark-600 transition-colors font-medium"
+            className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl
+                       hover:bg-gray-200 transition-colors font-medium"
           >
             Cancelar
           </button>
           <button
             onClick={handleAssign}
             disabled={isLoading || (selectedUserId === currentAssignedId)}
-            className="flex-1 py-2.5 bg-primary-500 text-white rounded-xl 
-                       hover:bg-primary-600 transition-colors font-medium
+            className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl
+                       hover:bg-orange-600 transition-colors font-medium
                        disabled:opacity-50 disabled:cursor-not-allowed
                        flex items-center justify-center gap-2"
           >

@@ -76,7 +76,7 @@ function KPICard({ title, value, change, icon: Icon, color, format = 'number', d
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
-      className={`relative bg-dark-800/60 rounded-xl border border-dark-700/50 p-5 hover:border-dark-600 transition-all group`}
+      className={`relative bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:border-gray-300 hover:shadow-md transition-all group`}
     >
       <div className="flex items-start justify-between">
         <div className={`p-2.5 rounded-lg ${colors.bg}`}>
@@ -91,8 +91,8 @@ function KPICard({ title, value, change, icon: Icon, color, format = 'number', d
       </div>
       
       <div className="mt-4">
-        <p className="text-2xl font-bold text-white">{formattedValue}</p>
-        <p className="text-sm text-dark-400 mt-1">{title}</p>
+        <p className="text-2xl font-bold text-gray-900">{formattedValue}</p>
+        <p className="text-sm text-gray-500 mt-1">{title}</p>
       </div>
       
       {/* Linha decorativa */}
@@ -191,8 +191,8 @@ export function CampaignRateCards({
   avgReadTime,
 }: RateCardsProps) {
   return (
-    <div className="bg-dark-800/50 rounded-xl border border-dark-700/50 p-6">
-      <h3 className="text-lg font-semibold text-white mb-4">Taxas Gerais</h3>
+    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Taxas Gerais</h3>
       
       <div className="space-y-4">
         <RateBar label="Taxa de Entrega" value={deliveryRate} color="emerald" />
@@ -201,15 +201,15 @@ export function CampaignRateCards({
         <RateBar label="Taxa de Falha" value={failureRate} color="red" inverse />
       </div>
 
-      <div className="mt-6 pt-4 border-t border-dark-700/50">
+      <div className="mt-6 pt-4 border-t border-gray-200">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-sm text-dark-400">Tempo Médio Entrega</p>
-            <p className="text-lg font-semibold text-white mt-1">{avgDeliveryTime}</p>
+            <p className="text-sm text-gray-500">Tempo Médio Entrega</p>
+            <p className="text-lg font-semibold text-gray-900 mt-1">{avgDeliveryTime}</p>
           </div>
           <div>
-            <p className="text-sm text-dark-400">Tempo Médio Leitura</p>
-            <p className="text-lg font-semibold text-white mt-1">{avgReadTime}</p>
+            <p className="text-sm text-gray-500">Tempo Médio Leitura</p>
+            <p className="text-lg font-semibold text-gray-900 mt-1">{avgReadTime}</p>
           </div>
         </div>
       </div>
@@ -242,12 +242,12 @@ function RateBar({ label, value, color, inverse }: RateBarProps) {
   return (
     <div>
       <div className="flex justify-between items-center mb-1.5">
-        <span className="text-sm text-dark-300">{label}</span>
+        <span className="text-sm text-gray-600">{label}</span>
         <span className={`text-sm font-medium ${textColorClasses[color]}`}>
           {value.toFixed(1)}%
         </span>
       </div>
-      <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(value, 100)}%` }}
