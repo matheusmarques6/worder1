@@ -194,7 +194,7 @@ export default function NewCampaignPage() {
       <div className="flex items-center gap-4">
         <Link
           href="/email/campaigns"
-          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
@@ -217,17 +217,17 @@ export default function NewCampaignPage() {
                   <div
                     className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
                       isCompleted
-                        ? 'bg-emerald-500 text-white'
+                        ? 'bg-brand-500 text-white'
                         : isActive
                         ? 'bg-brand-500 text-white'
-                        : 'bg-gray-100 text-gray-400'
+                        : 'bg-gray-200 text-gray-500'
                     }`}
                   >
                     {isCompleted ? <Check className="w-4 h-4" /> : step.id}
                   </div>
                   <span
                     className={`text-sm font-medium hidden sm:inline ${
-                      isActive ? 'text-gray-900' : 'text-gray-400'
+                      isActive || isCompleted ? 'text-gray-900' : 'text-gray-500'
                     }`}
                   >
                     {step.label}
@@ -236,7 +236,7 @@ export default function NewCampaignPage() {
                 {i < steps.length - 1 && (
                   <div
                     className={`flex-1 h-px mx-2 ${
-                      isCompleted ? 'bg-emerald-300' : 'bg-gray-200'
+                      isCompleted ? 'bg-brand-500' : 'bg-gray-200'
                     }`}
                   />
                 )}
@@ -272,7 +272,7 @@ export default function NewCampaignPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ex: Black Friday 2026"
-                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
                 />
               </div>
               <div>
@@ -284,7 +284,7 @@ export default function NewCampaignPage() {
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="Ex: Ofertas imperdíveis de Black Friday!"
-                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
                 />
               </div>
               <div>
@@ -297,7 +297,7 @@ export default function NewCampaignPage() {
                   value={previewText}
                   onChange={(e) => setPreviewText(e.target.value)}
                   placeholder="Texto que aparece após o assunto na caixa de entrada"
-                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -349,7 +349,7 @@ export default function NewCampaignPage() {
                   <select
                     value={selectedSegment}
                     onChange={(e) => setSelectedSegment(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
                   >
                     <option value="">Escolha um segmento...</option>
                     {segments.map((seg) => (
@@ -375,7 +375,7 @@ export default function NewCampaignPage() {
                 <select
                   value={selectedTemplate}
                   onChange={(e) => setSelectedTemplate(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
                 >
                   <option value="">Selecione um template...</option>
                   {templates.map((t) => (
@@ -395,7 +395,7 @@ export default function NewCampaignPage() {
                     value={senderName}
                     onChange={(e) => setSenderName(e.target.value)}
                     placeholder="Ex: Minha Loja"
-                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -407,7 +407,7 @@ export default function NewCampaignPage() {
                     value={senderEmail}
                     onChange={(e) => setSenderEmail(e.target.value)}
                     placeholder="Ex: contato@minhaloja.com"
-                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -504,7 +504,7 @@ export default function NewCampaignPage() {
                     type="datetime-local"
                     value={scheduledAt}
                     onChange={(e) => setScheduledAt(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
                   />
                 </div>
               )}

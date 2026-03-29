@@ -72,12 +72,12 @@ interface Notification {
 // ============================================
 const sidebarNav = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Inbox', href: '/inbox', icon: Inbox },
+  { name: 'Inbox', href: '/whatsapp', icon: MessageSquare },
   { name: 'Contatos', href: '/contacts', icon: Users },
   { name: 'Campanhas', href: '/campaigns', icon: Megaphone },
   { name: 'Email', href: '/email/campaigns', icon: Mail },
+  { name: 'Templates', href: '/email/templates', icon: FileText },
   { name: 'CRM', href: '/crm', icon: ShoppingBag },
-  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare },
   { name: 'Automações', href: '/automations', icon: Zap },
   { name: 'Formulários', href: '/forms', icon: FileText },
   { name: 'Segmentos', href: '/segments', icon: Target },

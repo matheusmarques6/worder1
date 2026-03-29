@@ -301,7 +301,7 @@ export default function WhatsAppSettingsPage() {
                 <button
                   onClick={saveMetaConfig}
                   disabled={metaLoading}
-                  className="w-full py-3 bg-green-600 text-white font-medium rounded-xl hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-green-600 text-gray-900 font-medium rounded-xl hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {metaLoading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />

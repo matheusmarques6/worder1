@@ -201,7 +201,7 @@ export default function SegmentsPage() {
                   <input
                     type="text"
                     placeholder="Valor"
-                    className="flex-1 bg-gray-100 border border-gray-200 rounded px-2 py-1 text-sm text-white placeholder-zinc-500 focus:outline-none"
+                    className="flex-1 bg-gray-100 border border-gray-200 rounded px-2 py-1 text-sm text-gray-700 placeholder-zinc-500 focus:outline-none"
                   />
                 </div>
               </div>

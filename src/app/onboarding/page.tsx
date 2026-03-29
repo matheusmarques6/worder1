@@ -134,7 +134,7 @@ export default function OnboardingPage() {
           <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-green-500/20 flex items-center justify-center">
             <CheckCircle className="w-10 h-10 text-green-500" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
             Loja conectada com sucesso!
           </h2>
           <p className="text-gray-500 mb-6">
@@ -165,7 +165,7 @@ export default function OnboardingPage() {
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
             <Store className="w-8 h-8 text-white" />
           </div>
-          <h2 className="text-2xl font-bold text-white">Conecte sua loja Shopify</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Conecte sua loja Shopify</h2>
           <p className="text-gray-500 mt-2">
             Configure sua loja para começar a monitorar seus lucros
           </p>
@@ -198,7 +198,7 @@ export default function OnboardingPage() {
                 className="space-y-4"
               >
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
                     Nome da Loja
                   </label>
                   <input
@@ -226,7 +226,7 @@ export default function OnboardingPage() {
                 className="space-y-4"
               >
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
                     Domínio Shopify
                   </label>
                   <div className="flex">
@@ -259,7 +259,7 @@ export default function OnboardingPage() {
                 className="space-y-4"
               >
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
                     <div className="flex items-center gap-2">
                       <Key className="w-4 h-4 text-brand-600" />
                       Access Token da API
@@ -298,7 +298,7 @@ export default function OnboardingPage() {
                 className="space-y-4"
               >
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
                     <div className="flex items-center gap-2">
                       <Shield className="w-4 h-4 text-green-400" />
                       API Secret Key
@@ -323,7 +323,7 @@ export default function OnboardingPage() {
                   <div className="flex items-start gap-3">
                     <HelpCircle className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" />
                     <div className="text-sm">
-                      <p className="font-medium text-white mb-1">Onde encontrar:</p>
+                      <p className="font-medium text-gray-900 mb-1">Onde encontrar:</p>
                       <ol className="text-gray-500 space-y-1 list-decimal list-inside">
                         <li>Shopify Admin → Configurações → Apps</li>
                         <li>Clique no seu app customizado</li>

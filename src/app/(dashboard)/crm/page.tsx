@@ -131,7 +131,7 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
       )}
 
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-success-400">{formatCurrency(deal.value)}</span>
+        <span className="text-sm font-semibold text-gray-900">{formatCurrency(deal.value)}</span>
         <div className="flex items-center gap-1">
           <div className="w-12 h-1.5 rounded-full bg-gray-100 overflow-hidden">
             <div 
@@ -257,7 +257,7 @@ function KanbanColumn({ stage, deals, onAddDeal, onDealClick, onEditStage }: Kan
             </button>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-success-400 font-medium">{formatCurrency(totalValue)}</span>
+            <span className="text-gray-900 font-medium">{formatCurrency(totalValue)}</span>
             <span className="text-gray-400 text-xs">
               Ponderado: {formatCurrency(weightedValue)}
             </span>
@@ -1021,7 +1021,7 @@ export default function CRMPage() {
       <div className="flex items-center gap-6 mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
         <div>
           <p className="text-sm text-gray-500">Valor Ponderado</p>
-          <p className="text-xl font-bold text-success-400">{formatCurrency(pipelineStats.weightedValue)}</p>
+          <p className="text-xl font-bold text-gray-900">{formatCurrency(pipelineStats.weightedValue)}</p>
         </div>
         <div className="w-px h-10 bg-gray-100" />
         <div>

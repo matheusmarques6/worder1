@@ -455,7 +455,7 @@ export default function EmbedFormPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full text-white font-semibold transition-opacity disabled:opacity-50"
+            className="w-full text-gray-900 font-semibold transition-opacity disabled:opacity-50"
             style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius, fontSize, height: inputHeight + 4 }}
           >
             {isSubmitting ? 'Enviando...' : buttonText}

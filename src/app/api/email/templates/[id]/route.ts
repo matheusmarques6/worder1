@@ -48,12 +48,13 @@ export async function PUT(
     const { user } = auth;
     const body = await request.json();
 
-    const { name, subject, html, type, thumbnail_url } = body;
+    const { name, subject, html, design, type, thumbnail_url } = body;
 
     const updateData: Record<string, any> = { updated_at: new Date().toISOString() };
     if (name !== undefined) updateData.name = name;
     if (subject !== undefined) updateData.subject = subject;
     if (html !== undefined) updateData.html = html;
+    if (design !== undefined) updateData.design = design;
     if (type !== undefined) updateData.type = type;
     if (thumbnail_url !== undefined) updateData.thumbnail_url = thumbnail_url;
 

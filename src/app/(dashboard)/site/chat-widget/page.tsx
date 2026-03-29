@@ -80,7 +80,7 @@ export default function ChatWidgetPage() {
                 <label className="block text-xs text-gray-500 mb-1.5 font-medium">Cor Principal</label>
                 <div className="flex items-center gap-3">
                   <input type="color" defaultValue="#F26B2A" className="w-10 h-10 rounded-lg border border-white/[0.06] cursor-pointer" />
-                  <input type="text" defaultValue="#F26B2A" className="bg-[#111111] border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white font-mono w-32 focus:outline-none focus:border-[#F26B2A]/40 transition-colors" />
+                  <input type="text" defaultValue="#F26B2A" className="bg-[#111111] border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-gray-700 font-mono w-32 focus:outline-none focus:border-[#F26B2A]/40 transition-colors" />
                 </div>
               </div>
               <div>

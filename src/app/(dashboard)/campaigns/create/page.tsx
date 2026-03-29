@@ -92,12 +92,12 @@ function StepChannel({ onNext, selectedChannel, setSelectedChannel }: { onNext: 
               onClick={() => setSelectedChannel(channel.id)}
               className={`relative text-left p-6 rounded-2xl border-2 transition-all duration-200 ${
                 isSelected
-                  ? 'border-[#F26B2A] bg-[#F26B2A]/5'
-                  : 'border-white/[0.06] bg-[#1A1A1A] hover:border-white/[0.12]'
+                  ? 'border-brand-500 bg-brand-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
               }`}
             >
               {isSelected && (
-                <div className="absolute top-4 right-4 w-6 h-6 rounded-full bg-[#F26B2A] flex items-center justify-center">
+                <div className="absolute top-4 right-4 w-6 h-6 rounded-full bg-brand-500 flex items-center justify-center">
                   <Check className="w-3.5 h-3.5 text-white" weight="bold" />
                 </div>
               )}
@@ -160,7 +160,7 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
           placeholder="Buscar segmentos..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+          className="w-full border border-gray-300 rounded-lg pl-9 pr-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
         />
       </div>
 
@@ -173,17 +173,17 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
               onClick={() => setSelectedAudience(segment.id)}
               className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all duration-200 ${
                 isSelected
-                  ? 'border-[#F26B2A] bg-[#F26B2A]/5'
-                  : 'border-white/[0.06] bg-[#1A1A1A] hover:border-white/[0.12]'
+                  ? 'border-brand-500 bg-brand-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
             >
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                  isSelected ? 'bg-[#F26B2A]/15' : 'bg-white/[0.06]'
+                  isSelected ? 'bg-brand-50' : 'bg-gray-100'
                 }`}>
                   {segment.type === 'Lista'
-                    ? <UsersThree className={`w-5 h-5 ${isSelected ? 'text-[#F26B2A]' : 'text-gray-500'}`} weight="duotone" />
-                    : <FunnelSimple className={`w-5 h-5 ${isSelected ? 'text-[#F26B2A]' : 'text-gray-500'}`} weight="duotone" />
+                    ? <UsersThree className={`w-5 h-5 ${isSelected ? 'text-brand-500' : 'text-gray-500'}`} weight="duotone" />
+                    : <FunnelSimple className={`w-5 h-5 ${isSelected ? 'text-brand-500' : 'text-gray-500'}`} weight="duotone" />
                   }
                 </div>
                 <div className="text-left">
@@ -195,7 +195,7 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
                 <span className="text-sm font-semibold text-gray-900">{segment.count.toLocaleString()}</span>
                 <span className="text-xs text-gray-500">contatos</span>
                 {isSelected && (
-                  <div className="w-5 h-5 rounded-full bg-[#F26B2A] flex items-center justify-center">
+                  <div className="w-5 h-5 rounded-full bg-brand-500 flex items-center justify-center">
                     <Check className="w-3 h-3 text-white" weight="bold" />
                   </div>
                 )}
@@ -206,7 +206,7 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
       </div>
 
       <div className="flex justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-white/[0.06] text-gray-600 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-200 transition-colors">
           <ArrowLeft className="w-4 h-4" weight="bold" />
           Voltar
         </button>
@@ -249,7 +249,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
               placeholder="Ex: Promoção de Março"
               value={campaignName}
               onChange={(e) => setCampaignName(e.target.value)}
-              className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
             />
           </div>
 
@@ -262,7 +262,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
                   placeholder="Ex: 🔥 Promoção exclusiva para você!"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
                 />
               </div>
               <div>
@@ -270,7 +270,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
                 <input
                   type="text"
                   placeholder="Texto que aparece ao lado do assunto na caixa de entrada"
-                  className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
                 />
               </div>
             </>
@@ -279,7 +279,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
           {channel === 'whatsapp' && (
             <div>
               <label className="block text-xs text-gray-500 mb-1.5 font-medium">Template Aprovado</label>
-              <select className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:border-[#F26B2A]/40 transition-colors">
+              <select className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none">
                 <option value="">Selecionar template...</option>
                 <option value="promo">promocao_mensal</option>
                 <option value="recover">recuperacao_carrinho</option>
@@ -295,7 +295,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
                 placeholder="Até 160 caracteres..."
                 maxLength={160}
                 rows={4}
-                className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors resize-none"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none resize-none"
               />
             </div>
           )}
@@ -308,15 +308,15 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
                 {['Começar do Zero', 'Promoção', 'Boas-vindas', 'Win-back'].map((tpl) => (
                   <button
                     key={tpl}
-                    className="p-4 bg-[#1A1A1A] border border-white/[0.06] rounded-xl hover:border-[#F26B2A]/30 transition-colors text-left"
+                    className="bg-white border border-gray-200 rounded-lg p-6 cursor-pointer hover:border-brand-500 hover:shadow-md transition-all text-center"
                   >
-                    <div className="h-16 bg-[#111111] rounded-lg mb-2 flex items-center justify-center">
+                    <div className="h-16 bg-gray-50 rounded-lg mb-2 flex items-center justify-center">
                       {tpl === 'Começar do Zero'
                         ? <PencilSimple className="w-5 h-5 text-gray-400" weight="duotone" />
                         : <EnvelopeSimple className="w-5 h-5 text-gray-400" weight="duotone" />
                       }
                     </div>
-                    <p className="text-xs font-medium text-gray-600">{tpl}</p>
+                    <p className="text-xs font-medium text-gray-900">{tpl}</p>
                   </button>
                 ))}
               </div>
@@ -330,7 +330,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
               {['{{ first_name }}', '{{ product.name }}', '{{ coupon.code }}', '{{ order.total }}'].map((tag) => (
                 <button
                   key={tag}
-                  className="px-3 py-1.5 bg-[#1A1A1A] border border-white/[0.06] rounded-lg text-xs text-gray-500 hover:text-[#F26B2A] hover:border-[#F26B2A]/30 font-mono transition-colors"
+                  className="px-3 py-1.5 bg-gray-100 text-gray-700 border border-gray-200 rounded-lg text-xs hover:text-brand-500 hover:border-brand-500 font-mono transition-colors"
                 >
                   {tag}
                 </button>
@@ -341,20 +341,20 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
 
         {/* Preview */}
         <div>
-          <div className="bg-[#1A1A1A] border border-white/[0.06] rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+          <div className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
               <span className="text-xs font-medium text-gray-500">Preview</span>
               <div className="flex items-center gap-2">
-                <button className="px-2.5 py-1 rounded-lg bg-white/[0.08] text-[10px] font-medium text-gray-900">Desktop</button>
-                <button className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-gray-500 hover:text-gray-600 transition-colors">Mobile</button>
+                <button className="px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-[10px] font-medium text-gray-900">Desktop</button>
+                <button className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-gray-500 hover:text-gray-700 transition-colors">Mobile</button>
               </div>
             </div>
-            <div className="p-6 min-h-[400px] bg-[#111111] flex items-center justify-center">
+            <div className="p-6 min-h-[400px] bg-white flex items-center justify-center">
               <div className="text-center">
-                <div className="w-16 h-16 rounded-2xl bg-white/[0.04] flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
                   <Eye className="w-8 h-8 text-gray-400" weight="duotone" />
                 </div>
-                <p className="text-gray-500 font-medium">Preview do conteúdo</p>
+                <p className="text-gray-700 font-medium">Preview do conteúdo</p>
                 <p className="text-gray-500 text-sm mt-1">Edite o conteúdo à esquerda para ver o preview aqui</p>
               </div>
             </div>
@@ -363,7 +363,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
       </div>
 
       <div className="flex justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-white/[0.06] text-gray-600 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-200 transition-colors">
           <ArrowLeft className="w-4 h-4" weight="bold" />
           Voltar
         </button>
@@ -410,7 +410,7 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] p-5">
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-3">Detalhes</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -430,7 +430,7 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
           </div>
         </div>
 
-        <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] p-5">
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-3">Público</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -446,13 +446,13 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
       </div>
 
       {/* Schedule */}
-      <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] p-5">
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
         <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-3">Agendamento</p>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setScheduleMode('now')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
-              scheduleMode === 'now' ? 'border-[#F26B2A] bg-[#F26B2A]/5 text-white' : 'border-white/[0.06] text-gray-500 hover:border-white/[0.12]'
+              scheduleMode === 'now' ? 'border-brand-500 bg-brand-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'
             }`}
           >
             <Rocket className="w-4 h-4" weight={scheduleMode === 'now' ? 'fill' : 'regular'} />
@@ -461,14 +461,14 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
           <button
             onClick={() => setScheduleMode('scheduled')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
-              scheduleMode === 'scheduled' ? 'border-[#F26B2A] bg-[#F26B2A]/5 text-white' : 'border-white/[0.06] text-gray-500 hover:border-white/[0.12]'
+              scheduleMode === 'scheduled' ? 'border-brand-500 bg-brand-50 text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'
             }`}
           >
             <CalendarBlank className="w-4 h-4" weight={scheduleMode === 'scheduled' ? 'fill' : 'regular'} />
             Agendar
           </button>
           <button
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-white/[0.06] text-sm font-medium text-gray-500 hover:border-white/[0.12] transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-500 hover:border-gray-300 transition-all"
           >
             <Sparkle className="w-4 h-4" weight="duotone" />
             Smart Send
@@ -479,18 +479,18 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
           <div className="flex items-center gap-4 mt-4">
             <input
               type="date"
-              className="bg-[#111111] border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
             />
             <input
               type="time"
-              className="bg-[#111111] border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
             />
           </div>
         )}
       </div>
 
       <div className="flex justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-white/[0.06] text-gray-600 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-200 transition-colors">
           <ArrowLeft className="w-4 h-4" weight="bold" />
           Voltar
         </button>
@@ -537,7 +537,7 @@ export default function CreateCampaignPage() {
       <div className="flex items-center gap-4">
         <button
           onClick={() => router.push('/campaigns')}
-          className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-gray-500 hover:text-white transition-colors"
+          className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" weight="bold" />
         </button>
@@ -556,19 +556,19 @@ export default function CreateCampaignPage() {
             <div key={step.id} className="flex items-center flex-1">
               <div className="flex items-center gap-3 flex-1">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  isCompleted ? 'bg-[#F26B2A] text-white' :
-                  isActive ? 'bg-[#F26B2A]/15 text-[#F26B2A] ring-2 ring-[#F26B2A]/30' :
-                  'bg-white/[0.06] text-gray-500'
+                  isCompleted ? 'bg-brand-500 text-white' :
+                  isActive ? 'bg-brand-500 text-white ring-2 ring-brand-500/30' :
+                  'bg-gray-200 text-gray-500'
                 }`}>
                   {isCompleted ? <Check className="w-4 h-4" weight="bold" /> : step.id}
                 </div>
                 <div className="hidden sm:block">
-                  <p className={`text-xs font-medium ${isActive || isCompleted ? 'text-white' : 'text-gray-500'}`}>{step.label}</p>
-                  <p className="text-[10px] text-gray-400">{step.description}</p>
+                  <p className={`text-xs font-medium ${isActive || isCompleted ? 'text-gray-900' : 'text-gray-500'}`}>{step.label}</p>
+                  <p className="text-[10px] text-gray-500">{step.description}</p>
                 </div>
               </div>
               {i < steps.length - 1 && (
-                <div className={`h-px flex-1 mx-4 transition-colors ${isCompleted ? 'bg-[#F26B2A]' : 'bg-white/[0.06]'}`} />
+                <div className={`h-px flex-1 mx-4 transition-colors ${isCompleted ? 'bg-brand-500' : 'bg-gray-200'}`} />
               )}
             </div>
           )

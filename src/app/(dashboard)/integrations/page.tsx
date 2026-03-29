@@ -138,7 +138,7 @@ function IntegrationCard({
       {/* Featured badge */}
       {integration.is_featured && !isInstalled && (
         <div className="absolute -top-2 -right-2">
-          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full text-[10px] font-bold text-white shadow-lg">
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full text-[10px] font-bold text-gray-900 shadow-lg">
             <Sparkles className="w-3 h-3" />
             Popular
           </span>
@@ -148,7 +148,7 @@ function IntegrationCard({
       {/* Builtin badge */}
       {integration.is_builtin && (
         <div className="absolute -top-2 -left-2">
-          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full text-[10px] font-bold text-white shadow-lg">
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full text-[10px] font-bold text-gray-900 shadow-lg">
             <Zap className="w-3 h-3" />
             Nativo
           </span>
@@ -817,7 +817,7 @@ function IntegrationInstallModal({
           <button
             onClick={handleInstall}
             disabled={loading || !selectedPipeline}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors"
+            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-gray-900 font-medium transition-colors"
           >
             {loading ? (
               <>
@@ -1035,7 +1035,7 @@ function IntegrationConfigModal({
           <button
             onClick={handleSave}
             disabled={loading}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors"
+            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-gray-900 font-medium transition-colors"
           >
             {loading ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

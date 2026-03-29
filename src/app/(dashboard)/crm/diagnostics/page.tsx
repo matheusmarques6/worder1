@@ -613,7 +613,7 @@ export default function CRMDiagnosticsPage() {
           <button
             onClick={runAllTests}
             disabled={running || !organizationId}
-            className="flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-medium transition-colors"
+            className="flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-gray-900 font-medium transition-colors"
           >
             {running ? (
               <>
