@@ -59,23 +59,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Build insert data — only include fields that have values
+    const insertData: Record<string, any> = {
+      organization_id: user.organization_id,
+      name,
+    }
+    if (subject) insertData.subject = subject
+    if (html) insertData.html = html
+    if (type || category) insertData.type = type || category
+    if (thumbnail_url) insertData.thumbnail_url = thumbnail_url
+
+    console.log('[EmailTemplates] Inserting:', { ...insertData, html: insertData.html ? '(has html)' : undefined })
+
     const { data: template, error } = await supabaseAdmin
       .from('email_templates')
-      .insert({
-        organization_id: user.organization_id,
-        name,
-        subject: subject || '',
-        html: html || '',
-        type: type || category || 'campaign',
-        thumbnail_url: thumbnail_url || null,
-        created_by: user.id,
-      })
+      .insert(insertData)
       .select()
       .single();
 
     if (error) {
       console.error('[EmailTemplates] Error creating template:', error);
-      return NextResponse.json({ error: 'Failed to create template' }, { status: 500 });
+      return NextResponse.json({ error: error.message || 'Failed to create template', details: error.code }, { status: 500 });
     }
 
     return NextResponse.json({ template }, { status: 201 });

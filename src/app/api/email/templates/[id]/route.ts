@@ -48,13 +48,14 @@ export async function PUT(
     const { user } = auth;
     const body = await request.json();
 
-    const { name, subject, html, design, type, thumbnail_url } = body;
+    const { name, subject, html, design, design_json, type, thumbnail_url } = body;
 
-    const updateData: Record<string, any> = { updated_at: new Date().toISOString() };
+    const updateData: Record<string, any> = {};
     if (name !== undefined) updateData.name = name;
     if (subject !== undefined) updateData.subject = subject;
     if (html !== undefined) updateData.html = html;
     if (design !== undefined) updateData.design = design;
+    if (design_json !== undefined) updateData.design_json = design_json;
     if (type !== undefined) updateData.type = type;
     if (thumbnail_url !== undefined) updateData.thumbnail_url = thumbnail_url;
 
@@ -67,7 +68,8 @@ export async function PUT(
       .single();
 
     if (error || !template) {
-      return NextResponse.json({ error: 'Template not found or update failed' }, { status: 404 });
+      console.error('[EmailTemplate] Update error:', error);
+      return NextResponse.json({ error: error?.message || 'Template not found or update failed' }, { status: error ? 500 : 404 });
     }
 
     return NextResponse.json({ template });

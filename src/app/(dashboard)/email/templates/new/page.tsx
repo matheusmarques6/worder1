@@ -13,7 +13,7 @@ import {
   Palette,
 } from 'lucide-react'
 import Link from 'next/link'
-import { useStoreStore } from '@/stores'
+// Template creation
 
 const categories = [
   {
@@ -48,7 +48,6 @@ const categories = [
 
 export default function NewTemplatePage() {
   const router = useRouter()
-  const { currentStore } = useStoreStore()
   const [name, setName] = useState('')
   const [category, setCategory] = useState('marketing')
   const [saving, setSaving] = useState(false)
@@ -70,8 +69,7 @@ export default function NewTemplatePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          category,
-          store_id: currentStore,
+          type: category,
         }),
       })
 
