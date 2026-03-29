@@ -167,7 +167,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center mb-4">
               <Sparkles className="w-8 h-8 text-brand-600" />
             </div>
-            <h4 className="text-white font-medium mb-1">Teste seu agente</h4>
+            <h4 className="text-gray-900 font-medium mb-1">Teste seu agente</h4>
             <p className="text-sm text-gray-400 max-w-xs">
               Envie uma mensagem para ver como o agente responde com as configurações atuais.
             </p>

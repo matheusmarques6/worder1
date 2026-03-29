@@ -133,7 +133,7 @@ const DefaultCostModal = ({
             <Percent className="w-6 h-6 text-brand-600" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">Custo Padrão</h2>
+            <h2 className="text-lg font-bold text-gray-900">Custo Padrão</h2>
             <p className="text-sm text-gray-500">Configuração para produtos sem custo cadastrado</p>
           </div>
         </div>
@@ -151,7 +151,7 @@ const DefaultCostModal = ({
                 step="0.1"
                 value={percentage}
                 onChange={(e) => setPercentage(e.target.value)}
-                className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-white text-lg font-medium focus:outline-none focus:border-primary-500"
+                className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-gray-900 text-lg font-medium focus:outline-none focus:border-primary-500"
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">%</span>
             </div>
@@ -164,7 +164,7 @@ const DefaultCostModal = ({
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="text-white font-medium">Importante</p>
+                <p className="text-gray-900 font-medium">Importante</p>
                 <p className="text-gray-500 mt-1">
                   Este valor será usado para calcular automaticamente o custo de produtos que ainda não têm custo cadastrado manualmente.
                 </p>
@@ -240,7 +240,7 @@ const BulkEditModal = ({
             <Upload className="w-6 h-6 text-blue-400" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">Edição em Massa</h2>
+            <h2 className="text-lg font-bold text-gray-900">Edição em Massa</h2>
             <p className="text-sm text-gray-500">{selectedProducts.length} produto(s) selecionado(s)</p>
           </div>
         </div>
@@ -252,7 +252,7 @@ const BulkEditModal = ({
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-24 px-3 py-3 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                className="w-24 px-3 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
               >
                 {CURRENCIES.map(c => (
                   <option key={c.code} value={c.code}>{c.code}</option>
@@ -265,7 +265,7 @@ const BulkEditModal = ({
                 value={cost}
                 onChange={(e) => setCost(e.target.value)}
                 placeholder="0.00"
-                className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
                 autoFocus
               />
             </div>
@@ -279,7 +279,7 @@ const BulkEditModal = ({
               className="w-5 h-5 rounded border-gray-300 text-primary-500 focus:ring-primary-500"
             />
             <div>
-              <p className="text-white font-medium">Aplicar a todas as variantes</p>
+              <p className="text-gray-900 font-medium">Aplicar a todas as variantes</p>
               <p className="text-xs text-gray-500">O custo será aplicado a cada variante individualmente</p>
             </div>
           </label>
@@ -287,7 +287,7 @@ const BulkEditModal = ({
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 py-3 bg-white hover:bg-gray-100 text-white rounded-xl font-medium transition-colors"
+              className="flex-1 py-3 bg-white hover:bg-gray-100 text-gray-900 rounded-xl font-medium transition-colors"
             >
               Cancelar
             </button>
@@ -334,7 +334,7 @@ const CostEditor = ({
       <select
         value={currency}
         onChange={(e) => setCurrency(e.target.value)}
-        className="w-16 px-1.5 py-1 bg-gray-100 border border-gray-300 rounded text-white text-xs focus:outline-none focus:border-primary-500"
+        className="w-16 px-1.5 py-1 bg-gray-100 border border-gray-300 rounded text-gray-900 text-xs focus:outline-none focus:border-primary-500"
       >
         {CURRENCIES.map(c => (
           <option key={c.code} value={c.code}>{c.code}</option>
@@ -347,7 +347,7 @@ const CostEditor = ({
         value={cost}
         onChange={(e) => setCost(e.target.value)}
         placeholder="0.00"
-        className="w-20 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-white text-sm focus:outline-none focus:border-primary-500"
+        className="w-20 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-primary-500"
         autoFocus
         onKeyDown={(e) => {
           if (e.key === 'Enter') handleSave()
@@ -440,7 +440,7 @@ const ProductRow = ({
               </div>
             )}
             <div className="min-w-0">
-              <p className="font-medium text-white truncate max-w-[250px]">{product.title}</p>
+              <p className="font-medium text-gray-900 truncate max-w-[250px]">{product.title}</p>
               <p className="text-xs text-gray-500">
                 {product.variants_count} variante{product.variants_count > 1 ? 's' : ''} • {product.vendor || 'Sem marca'}
               </p>
@@ -471,7 +471,7 @@ const ProductRow = ({
           ) : (
             <div className="flex items-center gap-2">
               {product.cost !== null ? (
-                <span className="text-white text-sm font-medium">
+                <span className="text-gray-900 text-sm font-medium">
                   {formatCurrency(product.cost, product.cost_currency)}
                 </span>
               ) : (
@@ -539,7 +539,7 @@ const ProductRow = ({
                           <td className="w-8"></td>
                           <td className="px-3 py-2">
                             <div className="pl-6">
-                              <p className="text-sm text-white">{variant.title}</p>
+                              <p className="text-sm text-gray-700">{variant.title}</p>
                               {variant.sku && <p className="text-xs text-gray-400">SKU: {variant.sku}</p>}
                             </div>
                           </td>
@@ -560,7 +560,7 @@ const ProductRow = ({
                             ) : (
                               <div className="flex items-center gap-2">
                                 {variant.cost !== null ? (
-                                  <span className="text-sm text-white">
+                                  <span className="text-sm text-gray-700">
                                     {formatCurrency(variant.cost, variant.cost_currency)}
                                   </span>
                                 ) : (
@@ -788,7 +788,7 @@ export default function ProductsPage() {
           >
             <Settings className="w-4 h-4" />
             <span className="hidden sm:inline">Custo Padrão:</span>
-            <span className="font-medium text-white">{taxSettings.default_cost_percentage}%</span>
+            <span className="font-medium text-gray-900">{taxSettings.default_cost_percentage}%</span>
           </button>
           <button
             onClick={fetchProducts}
@@ -873,7 +873,7 @@ export default function ProductsPage() {
             placeholder="Buscar produto..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
           />
         </div>
 
@@ -882,7 +882,7 @@ export default function ProductsPage() {
             <button
               onClick={() => setFilter('all')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                filter === 'all' ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
+                filter === 'all' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-white'
               }`}
             >
               Todos
@@ -890,7 +890,7 @@ export default function ProductsPage() {
             <button
               onClick={() => setFilter('with')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                filter === 'with' ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
+                filter === 'with' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-white'
               }`}
             >
               Com Custo
@@ -898,7 +898,7 @@ export default function ProductsPage() {
             <button
               onClick={() => setFilter('without')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                filter === 'without' ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
+                filter === 'without' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-white'
               }`}
             >
               Sem Custo

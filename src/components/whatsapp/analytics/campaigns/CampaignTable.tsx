@@ -205,7 +205,7 @@ function CampaignRow({ campaign, onViewDetails }: CampaignRowProps) {
         </span>
       </td>
       <td className="px-4 py-4 text-right">
-        <span className="text-sm text-white">{formatNumber(campaign.sent)}</span>
+        <span className="text-sm text-gray-700">{formatNumber(campaign.sent)}</span>
       </td>
       <td className="px-4 py-4 text-right">
         <span className="text-sm text-emerald-400">{formatNumber(campaign.delivered)}</span>

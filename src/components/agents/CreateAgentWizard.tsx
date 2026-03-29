@@ -447,7 +447,7 @@ export function CreateAgentWizard({
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-medium text-white">Agente Humano</h3>
+                  <h3 className="font-medium text-gray-900">Agente Humano</h3>
                   <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
                     {humanAgentsCount}/3
                   </span>
@@ -467,7 +467,7 @@ export function CreateAgentWizard({
                 <Bot className="w-5 h-5 text-purple-400" />
               </div>
               <div className="flex-1">
-                <h3 className="font-medium text-white">Agente de IA</h3>
+                <h3 className="font-medium text-gray-900">Agente de IA</h3>
                 <p className="text-sm text-gray-500 mt-1">Respostas automáticas 24/7</p>
               </div>
               <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -542,7 +542,7 @@ export function CreateAgentWizard({
               <div className="flex items-start gap-3">
                 <Sparkles className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm text-white font-medium">Senha será gerada automaticamente</p>
+                  <p className="text-sm text-gray-700 font-medium">Senha será gerada automaticamente</p>
                   <p className="text-xs text-gray-500 mt-1">
                     Uma senha forte será criada e exibida após a criação do agente.
                     O agente deverá trocar a senha no primeiro acesso.
@@ -616,7 +616,7 @@ export function CreateAgentWizard({
                     }`}
                   >
                     <User className="w-5 h-5 text-blue-400 mb-2" />
-                    <div className="font-medium text-white text-sm">Agente</div>
+                    <div className="font-medium text-gray-900 text-sm">Agente</div>
                     <div className="text-xs text-gray-500">Acesso limitado</div>
                   </button>
                   <button
@@ -629,7 +629,7 @@ export function CreateAgentWizard({
                     }`}
                   >
                     <Shield className="w-5 h-5 text-purple-400 mb-2" />
-                    <div className="font-medium text-white text-sm">Administrador</div>
+                    <div className="font-medium text-gray-900 text-sm">Administrador</div>
                     <div className="text-xs text-gray-500">Acesso completo</div>
                   </button>
                 </div>
@@ -685,7 +685,7 @@ export function CreateAgentWizard({
                             className="w-4 h-4 rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500/50"
                           />
                           <div className="flex-1">
-                            <div className="text-sm text-white">{number.phone_number}</div>
+                            <div className="text-sm text-gray-700">{number.phone_number}</div>
                             {number.display_name && (
                               <div className="text-xs text-gray-500">{number.display_name}</div>
                             )}
@@ -858,7 +858,7 @@ export function CreateAgentWizard({
                 )}
               </div>
               <div>
-                <h3 className="font-medium text-white">
+                <h3 className="font-medium text-gray-900">
                   {agentType === 'human' ? humanForm.name : aiForm.name}
                 </h3>
                 {agentType === 'human' && (
@@ -879,7 +879,7 @@ export function CreateAgentWizard({
                   <MessageSquare className="w-4 h-4" />
                   Números WhatsApp
                 </h4>
-                <p className="text-sm text-white">
+                <p className="text-sm text-gray-700">
                   {permissions.whatsappAccessAll
                     ? 'Acesso a todos os números'
                     : permissions.whatsappNumberIds.length > 0

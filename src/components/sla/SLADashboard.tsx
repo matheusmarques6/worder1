@@ -206,7 +206,7 @@ export function SLADashboard({ organizationId, storeId }: SLADashboardProps) {
             </div>
             <div>
               <p className="text-sm text-slate-400">SLAs Ativos</p>
-              <p className="text-2xl font-bold text-white">{overallStats.activeConfigs}</p>
+              <p className="text-2xl font-bold text-gray-900">{overallStats.activeConfigs}</p>
             </div>
           </div>
         </motion.div>
@@ -223,7 +223,7 @@ export function SLADashboard({ organizationId, storeId }: SLADashboardProps) {
             </div>
             <div>
               <p className="text-sm text-slate-400">Conversas Rastreadas</p>
-              <p className="text-2xl font-bold text-white">{overallStats.totalTracked}</p>
+              <p className="text-2xl font-bold text-gray-900">{overallStats.totalTracked}</p>
             </div>
           </div>
         </motion.div>
@@ -296,7 +296,7 @@ export function SLADashboard({ organizationId, storeId }: SLADashboardProps) {
 
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-4">
-        <h3 className="text-lg font-semibold text-white">Configuracoes de SLA</h3>
+        <h3 className="text-lg font-semibold text-gray-900">Configuracoes de SLA</h3>
         <div className="flex items-center gap-2">
           <button
             onClick={() => loadConfigs()}
@@ -354,7 +354,7 @@ export function SLADashboard({ organizationId, storeId }: SLADashboardProps) {
                 {/* Config Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-medium text-white truncate">{config.name}</h3>
+                    <h3 className="text-lg font-medium text-gray-900 truncate">{config.name}</h3>
                     <span className={`px-2 py-0.5 text-xs rounded-full ${
                       config.is_active
                         ? 'bg-emerald-500/20 text-emerald-400'
@@ -388,7 +388,7 @@ export function SLADashboard({ organizationId, storeId }: SLADashboardProps) {
                 <div className="flex-shrink-0 text-right">
                   <p className="text-xs text-slate-400 mb-1">Horario Comercial</p>
                   {config.business_hours_only ? (
-                    <p className="text-sm text-white">
+                    <p className="text-sm text-gray-700">
                       {config.business_hours_start} - {config.business_hours_end}
                     </p>
                   ) : (
@@ -439,7 +439,7 @@ export function SLADashboard({ organizationId, storeId }: SLADashboardProps) {
             className="text-center py-12"
           >
             <Clock className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">Nenhum SLA configurado</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum SLA configurado</h3>
             <p className="text-slate-400 mb-4">
               Configure acordos de nivel de servico para monitorar tempos de resposta
             </p>
@@ -542,7 +542,7 @@ function CreateSLAModal({ isOpen, onClose, onSave }: CreateSLAModalProps) {
         className="w-full max-w-lg bg-slate-800 border border-slate-700 rounded-xl shadow-xl"
       >
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
-          <h2 className="text-lg font-semibold text-white">Nova Configuracao SLA</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Nova Configuracao SLA</h2>
           <button
             onClick={onClose}
             className="p-1 text-slate-400 hover:text-white transition-colors"
@@ -700,7 +700,7 @@ function MetricsModal({ isOpen, onClose, config, metrics, stats, getTimeRemainin
       >
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div>
-            <h2 className="text-lg font-semibold text-white">{config.name}</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{config.name}</h2>
             <p className="text-sm text-slate-400">Metricas e conversas rastreadas</p>
           </div>
           <button
@@ -716,7 +716,7 @@ function MetricsModal({ isOpen, onClose, config, metrics, stats, getTimeRemainin
           <div className="p-4 border-b border-slate-700 bg-slate-800/50">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center">
-                <p className="text-2xl font-bold text-white">{stats.total_conversations}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total_conversations}</p>
                 <p className="text-sm text-slate-400">Total</p>
               </div>
               <div className="text-center">
@@ -735,11 +735,11 @@ function MetricsModal({ isOpen, onClose, config, metrics, stats, getTimeRemainin
             <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-slate-700">
               <div className="text-center">
                 <p className="text-sm text-slate-400">Tempo medio 1a resposta</p>
-                <p className="text-lg font-semibold text-white">{formatMinutes(stats.average_first_response_minutes)}</p>
+                <p className="text-lg font-semibold text-gray-900">{formatMinutes(stats.average_first_response_minutes)}</p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-slate-400">Tempo medio resolucao</p>
-                <p className="text-lg font-semibold text-white">{formatMinutes(stats.average_resolution_minutes)}</p>
+                <p className="text-lg font-semibold text-gray-900">{formatMinutes(stats.average_resolution_minutes)}</p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-slate-400">Compliance</p>

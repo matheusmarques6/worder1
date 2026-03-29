@@ -108,7 +108,7 @@ function MetricCard({
       <div className="flex items-start justify-between">
         <div>
           <p className="text-gray-500 text-sm font-medium">{title}</p>
-          <p className={`font-bold text-white mt-1 ${size === 'lg' ? 'text-3xl' : 'text-2xl'}`}>
+          <p className={`font-bold text-gray-900 mt-1 ${size === 'lg' ? 'text-3xl' : 'text-2xl'}`}>
             {value}
           </p>
           {subtitle && (
@@ -172,7 +172,7 @@ function FunnelChart({ data }: FunnelChartProps) {
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: stage.color }}
                 />
-                <span className="text-sm font-medium text-white">{stage.stage}</span>
+                <span className="text-sm font-medium text-gray-900">{stage.stage}</span>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-gray-500">{stage.count} negócios</span>
@@ -189,7 +189,7 @@ function FunnelChart({ data }: FunnelChartProps) {
                 className="h-full rounded-lg flex items-center justify-end px-3"
                 style={{ backgroundColor: stage.color + '40' }}
               >
-                <span className="text-xs font-medium text-white">
+                <span className="text-xs font-medium text-gray-900">
                   {stage.percentage}%
                 </span>
               </motion.div>
@@ -244,7 +244,7 @@ function StageMetricsTable({ stages }: StageMetricsTableProps) {
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: stage.color }}
                   />
-                  <span className="text-sm font-medium text-white">{stage.name}</span>
+                  <span className="text-sm font-medium text-gray-900">{stage.name}</span>
                 </div>
               </td>
               <td className="py-3 px-4 text-right">
@@ -304,7 +304,7 @@ function AgentLeaderboard({ agents }: AgentLeaderboardProps) {
             {index + 1}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{agent.name}</p>
+            <p className="text-sm font-medium text-gray-900 truncate">{agent.name}</p>
             <p className="text-xs text-gray-500">{agent.deals_count} negócios</p>
           </div>
           <div className="text-right">
@@ -361,7 +361,7 @@ function SourceBreakdown({ sources }: SourceBreakdownProps) {
             transition={{ delay: index * 0.05 }}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-white capitalize">{source.source}</span>
+              <span className="text-sm text-gray-700 capitalize">{source.source}</span>
               <span className="text-xs text-gray-500">{source.deals_count} ({percentage.toFixed(0)}%)</span>
             </div>
             <div className="h-2 bg-white rounded-full overflow-hidden">
@@ -424,7 +424,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-          <p className="text-white font-medium">Erro ao carregar dados</p>
+          <p className="text-gray-900 font-medium">Erro ao carregar dados</p>
           <p className="text-gray-500 text-sm mt-1">{error}</p>
           <button
             onClick={refresh}
@@ -444,7 +444,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard CRM</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard CRM</h1>
           <p className="text-gray-500 mt-1">
             Métricas de {data.period.label === '7d' ? '7 dias' :
               data.period.label === '30d' ? '30 dias' :
@@ -534,23 +534,23 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="p-4 bg-white border border-gray-200 rounded-xl">
           <p className="text-gray-500 text-sm">Taxa de Conversão</p>
-          <p className="text-2xl font-bold text-white mt-1">{data.summary.conversion_rate}%</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{data.summary.conversion_rate}%</p>
         </div>
         <div className="p-4 bg-white border border-gray-200 rounded-xl">
           <p className="text-gray-500 text-sm">Ticket Médio</p>
-          <p className="text-2xl font-bold text-white mt-1">
+          <p className="text-2xl font-bold text-gray-900 mt-1">
             {formatCurrency(parseFloat(data.summary.avg_deal_value as string) || 0)}
           </p>
         </div>
         <div className="p-4 bg-white border border-gray-200 rounded-xl">
           <p className="text-gray-500 text-sm">LTV Médio</p>
-          <p className="text-2xl font-bold text-white mt-1">
+          <p className="text-2xl font-bold text-gray-900 mt-1">
             {formatCurrency(data.ltv.average)}
           </p>
         </div>
         <div className="p-4 bg-white border border-gray-200 rounded-xl">
           <p className="text-gray-500 text-sm">Clientes com LTV</p>
-          <p className="text-2xl font-bold text-white mt-1">
+          <p className="text-2xl font-bold text-gray-900 mt-1">
             {data.ltv.total_customers}
           </p>
         </div>
@@ -561,7 +561,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
         {/* Funnel Chart */}
         <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-white">Gráfico de Funil</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Gráfico de Funil</h2>
             <BarChart3 className="w-5 h-5 text-gray-500" />
           </div>
           <FunnelChart data={data.funnel} />
@@ -570,7 +570,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
         {/* Stage Metrics */}
         <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-white">Métricas por Etapa</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Métricas por Etapa</h2>
             <Clock className="w-5 h-5 text-gray-500" />
           </div>
           <StageMetricsTable stages={data.stages} />
@@ -579,7 +579,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
         {/* Agent Leaderboard */}
         <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-white">Top Vendedores</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Top Vendedores</h2>
             <Trophy className="w-5 h-5 text-amber-400" />
           </div>
           {data.agents.length > 0 ? (
@@ -592,7 +592,7 @@ export function CRMDashboard({ organizationId }: CRMDashboardProps) {
         {/* Source Breakdown */}
         <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-white">Origem dos Leads</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Origem dos Leads</h2>
             <PieChart className="w-5 h-5 text-gray-500" />
           </div>
           {data.sources.length > 0 ? (

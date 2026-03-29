@@ -130,7 +130,7 @@ export default function CampaignsTab() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && fetchCampaigns()}
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 focus:outline-none focus:border-brand-400"
           />
         </div>
 
@@ -180,7 +180,7 @@ export default function CampaignsTab() {
           <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
             <Send className="w-8 h-8 opacity-50" />
           </div>
-          <p className="text-lg font-medium text-white mb-1">Nenhuma campanha</p>
+          <p className="text-lg font-medium text-gray-900 mb-1">Nenhuma campanha</p>
           <p className="text-sm text-gray-400 mb-4">Crie sua primeira campanha de WhatsApp</p>
           <button
             onClick={() => router.push('/whatsapp/campaigns/new')}
@@ -208,7 +208,7 @@ export default function CampaignsTab() {
                   {/* Left side */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-white font-medium truncate group-hover:text-brand-500 transition-colors">
+                      <h3 className="text-gray-900 font-medium truncate group-hover:text-brand-500 transition-colors">
                         {campaign.name}
                       </h3>
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${status.bg} ${status.color}`}>

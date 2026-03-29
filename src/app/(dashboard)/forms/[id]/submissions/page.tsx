@@ -168,14 +168,14 @@ export default function FormSubmissionsPage() {
             <div className="lg:col-span-1">
               {selectedSubmission ? (
                 <div className="sticky top-20 p-5 bg-white border border-gray-200 rounded-xl space-y-4">
-                  <h3 className="text-base font-semibold text-white">Detalhes</h3>
+                  <h3 className="text-base font-semibold text-gray-900">Detalhes</h3>
 
                   {/* Contact info */}
                   {selectedSubmission.contact && (
                     <div className="space-y-2">
                       <p className="text-xs text-gray-500 font-medium">Contato</p>
                       <div className="space-y-1">
-                        <p className="text-sm text-white">{selectedSubmission.contact.name}</p>
+                        <p className="text-sm text-gray-700">{selectedSubmission.contact.name}</p>
                         {selectedSubmission.contact.email && <p className="text-xs text-gray-600">{selectedSubmission.contact.email}</p>}
                         {selectedSubmission.contact.phone && <p className="text-xs text-gray-600">{selectedSubmission.contact.phone}</p>}
                       </div>
@@ -189,7 +189,7 @@ export default function FormSubmissionsPage() {
                       {Object.entries(selectedSubmission.answers).map(([fieldId, value]) => (
                         <div key={fieldId} className="p-2 bg-gray-50 rounded-lg">
                           <p className="text-[10px] text-gray-400">{fieldId}</p>
-                          <p className="text-xs text-white">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</p>
+                          <p className="text-xs text-gray-600">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</p>
                         </div>
                       ))}
                     </div>
@@ -207,7 +207,7 @@ export default function FormSubmissionsPage() {
                             ) : (
                               <XCircle className="w-3 h-3 text-red-400" />
                             )}
-                            <span className="text-xs text-white">{ev.event}</span>
+                            <span className="text-xs text-gray-600">{ev.event}</span>
                             <span className="text-[10px] text-gray-400">{ev.platform}</span>
                           </div>
                         ))}

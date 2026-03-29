@@ -148,7 +148,7 @@ export function AssignModal({
               <UserPlus className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <h3 className="font-semibold text-white">Atribuir Conversa</h3>
+              <h3 className="font-semibold text-gray-900">Atribuir Conversa</h3>
               <p className="text-xs text-gray-500">Selecione um membro da equipe</p>
             </div>
           </div>
@@ -242,7 +242,7 @@ export function AssignModal({
                   ) : (
                     <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-500 
                                     rounded-full flex items-center justify-center">
-                      <span className="text-white font-medium text-sm">
+                      <span className="text-gray-900 font-medium text-sm">
                         {getInitials(user.name || user.email)}
                       </span>
                     </div>

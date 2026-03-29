@@ -190,7 +190,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                   <Phone className="w-4 h-4 text-green-400" />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium">Canais de Atendimento</span>
+                  <span className="text-gray-900 font-medium">Canais de Atendimento</span>
                   <p className="text-xs text-gray-400">Números de WhatsApp onde o agente atuará</p>
                 </div>
               </div>
@@ -227,7 +227,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                           })}
                           className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500"
                         />
-                        <span className="text-sm text-white">Todos os canais</span>
+                        <span className="text-sm text-gray-700">Todos os canais</span>
                       </div>
                       <span className="text-xs text-gray-400">O agente responderá em todos os números conectados</span>
                     </label>
@@ -258,7 +258,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                                   className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500"
                                 />
                                 <div className="flex-1">
-                                  <p className="text-sm text-white">
+                                  <p className="text-sm text-gray-700">
                                     {number.display_name || number.phone_number}
                                   </p>
                                   <p className="text-xs text-gray-400">{number.phone_number}</p>
@@ -289,7 +289,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                   <GitBranch className="w-4 h-4 text-blue-400" />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium">Etapas do Pipeline</span>
+                  <span className="text-gray-900 font-medium">Etapas do Pipeline</span>
                   <p className="text-xs text-gray-400">Em quais etapas o agente deve atuar</p>
                 </div>
               </div>
@@ -327,7 +327,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                           })}
                           className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-blue-500"
                         />
-                        <span className="text-sm text-white">Todas as etapas</span>
+                        <span className="text-sm text-gray-700">Todas as etapas</span>
                       </div>
                       <span className="text-xs text-gray-400">O agente responderá em qualquer etapa</span>
                     </label>
@@ -400,7 +400,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                   <Clock className="w-4 h-4 text-purple-400" />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium">Horário de Funcionamento</span>
+                  <span className="text-gray-900 font-medium">Horário de Funcionamento</span>
                   <p className="text-xs text-gray-400">Quando o agente deve estar ativo</p>
                 </div>
               </div>
@@ -436,7 +436,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                           className="w-4 h-4 bg-gray-100 border-gray-300 text-purple-500"
                         />
                         <div>
-                          <span className="text-sm text-white">Sempre ativo</span>
+                          <span className="text-sm text-gray-700">Sempre ativo</span>
                           <p className="text-xs text-gray-400">O agente responde 24 horas por dia, 7 dias por semana</p>
                         </div>
                       </label>
@@ -452,7 +452,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                           className="w-4 h-4 bg-gray-100 border-gray-300 text-purple-500"
                         />
                         <div>
-                          <span className="text-sm text-white">Horário personalizado</span>
+                          <span className="text-sm text-gray-700">Horário personalizado</span>
                           <p className="text-xs text-gray-400">Defina dias e horários específicos</p>
                         </div>
                       </label>
@@ -534,7 +534,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                   <Cog className="w-4 h-4 text-orange-400" />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium">Comportamento</span>
+                  <span className="text-gray-900 font-medium">Comportamento</span>
                   <p className="text-xs text-gray-400">Como o agente deve se comportar</p>
                 </div>
               </div>
@@ -574,7 +574,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                               className="w-4 h-4 bg-gray-100 border-gray-300 text-orange-500"
                             />
                             <div>
-                              <span className="text-sm text-white">{option.label}</span>
+                              <span className="text-sm text-gray-700">{option.label}</span>
                               <p className="text-xs text-gray-400">{option.description}</p>
                             </div>
                           </label>
@@ -585,7 +585,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                     {/* Stop on Human Reply */}
                     <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
                       <div>
-                        <span className="text-sm text-white">Parar quando humano responder</span>
+                        <span className="text-sm text-gray-700">Parar quando humano responder</span>
                         <p className="text-xs text-gray-400">O agente para de responder quando um humano assume a conversa</p>
                       </div>
                       <input
@@ -601,7 +601,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                     {/* Cooldown */}
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-white">Cooldown após transferência</span>
+                        <span className="text-sm text-gray-700">Cooldown após transferência</span>
                         <span className="text-sm text-orange-400">
                           {Math.floor(settings.behavior.cooldown_after_transfer / 60)} min
                         </span>
@@ -625,7 +625,7 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                     {/* Max Messages */}
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-white">Limite de mensagens por conversa</span>
+                        <span className="text-sm text-gray-700">Limite de mensagens por conversa</span>
                         <span className="text-sm text-orange-400">
                           {settings.behavior.max_messages_per_conversation === 0 
                             ? 'Ilimitado' 

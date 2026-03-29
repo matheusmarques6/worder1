@@ -86,7 +86,7 @@ function ConversationItem({
         ) : (
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 
                           flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">
+            <span className="text-gray-900 font-semibold text-sm">
               {getInitials(conversation.contact_name || conversation.phone_number)}
             </span>
           </div>
@@ -121,7 +121,7 @@ function ConversationItem({
           
           {hasUnread && (
             <span className="flex-shrink-0 px-2 py-0.5 bg-primary-500 rounded-full 
-                           text-[10px] font-bold text-white min-w-[20px] text-center">
+                           text-[10px] font-bold text-gray-900 min-w-[20px] text-center">
               {conversation.unread_count > 99 ? '99+' : conversation.unread_count}
             </span>
           )}

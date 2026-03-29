@@ -79,7 +79,7 @@ export function AIProviderBreakdown({ data }: AIProviderBreakdownProps) {
                 <span className="text-sm text-gray-600">{item.name}</span>
               </div>
               <div className="flex items-center gap-4">
-                <span className="text-sm text-white font-medium">
+                <span className="text-sm text-gray-700 font-medium">
                   {item.percent.toFixed(1)}%
                 </span>
               </div>
@@ -118,7 +118,7 @@ function ProviderTooltip({ active, payload }: any) {
   
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-xl">
-      <p className="text-white font-medium mb-1">{data.name}</p>
+      <p className="text-gray-900 font-medium mb-1">{data.name}</p>
       <p className="text-sm text-gray-600">Interações: {data.value.toLocaleString()}</p>
       <p className="text-sm text-gray-600">Tokens: {formatTokens(data.tokens)}</p>
       <p className="text-sm text-gray-600">Custo: {formatCost(data.cost)}</p>

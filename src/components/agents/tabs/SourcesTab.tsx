@@ -261,7 +261,7 @@ export default function SourcesTab({
           <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
             <Database className="w-8 h-8 text-gray-400" />
           </div>
-          <h4 className="text-lg font-medium text-white mb-2">Nenhuma fonte adicionada</h4>
+          <h4 className="text-lg font-medium text-gray-900 mb-2">Nenhuma fonte adicionada</h4>
           <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
             Adicione URLs, arquivos ou textos para treinar seu agente com informações específicas do seu negócio.
           </p>
@@ -297,7 +297,7 @@ export default function SourcesTab({
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h4 className="text-white font-medium truncate">{source.name}</h4>
+                      <h4 className="text-gray-900 font-medium truncate">{source.name}</h4>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${statusInfo.bg} ${statusInfo.color} flex items-center gap-1`}>
                         <StatusIcon className={`w-3 h-3 ${source.status === 'processing' ? 'animate-spin' : ''}`} />
                         {statusInfo.label}
@@ -424,7 +424,7 @@ export default function SourcesTab({
                         <Globe className="w-6 h-6 text-blue-400" />
                       </div>
                       <div className="text-center">
-                        <p className="text-white font-medium">URL</p>
+                        <p className="text-gray-900 font-medium">URL</p>
                         <p className="text-xs text-gray-400">Site ou página web</p>
                       </div>
                     </button>
@@ -437,7 +437,7 @@ export default function SourcesTab({
                         <Upload className="w-6 h-6 text-green-400" />
                       </div>
                       <div className="text-center">
-                        <p className="text-white font-medium">Arquivo</p>
+                        <p className="text-gray-900 font-medium">Arquivo</p>
                         <p className="text-xs text-gray-400">PDF, DOCX, TXT</p>
                       </div>
                     </button>
@@ -450,7 +450,7 @@ export default function SourcesTab({
                         <FileText className="w-6 h-6 text-purple-400" />
                       </div>
                       <div className="text-center">
-                        <p className="text-white font-medium">Texto</p>
+                        <p className="text-gray-900 font-medium">Texto</p>
                         <p className="text-xs text-gray-400">Cole texto diretamente</p>
                       </div>
                     </button>
@@ -463,7 +463,7 @@ export default function SourcesTab({
                         <ShoppingBag className="w-6 h-6 text-orange-400" />
                       </div>
                       <div className="text-center">
-                        <p className="text-white font-medium">Produtos</p>
+                        <p className="text-gray-900 font-medium">Produtos</p>
                         <p className="text-xs text-gray-400">Via integração</p>
                       </div>
                     </button>
@@ -513,7 +513,7 @@ export default function SourcesTab({
                       className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-green-500/50 hover:bg-green-500/5 transition-all"
                     >
                       <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                      <p className="text-white font-medium mb-1">Clique para selecionar</p>
+                      <p className="text-gray-900 font-medium mb-1">Clique para selecionar</p>
                       <p className="text-sm text-gray-400">PDF, DOCX, TXT até 25MB</p>
                     </div>
                     <input
@@ -581,7 +581,7 @@ export default function SourcesTab({
                   <div className="space-y-4">
                     <div className="text-center py-6">
                       <ShoppingBag className="w-12 h-12 text-orange-400 mx-auto mb-3" />
-                      <h4 className="text-white font-medium mb-2">Sincronizar Produtos</h4>
+                      <h4 className="text-gray-900 font-medium mb-2">Sincronizar Produtos</h4>
                       <p className="text-sm text-gray-500 mb-4">
                         Configure uma integração na aba "Integrações" para sincronizar
                         automaticamente os produtos da sua loja.

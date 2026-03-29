@@ -114,11 +114,11 @@ export default function DataPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center">
-          <Database size={22} className="text-white" weight="fill" />
+          <Database size={22} className="text-brand-500" weight="fill" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold font-display text-white">Worder Data</h1>
-          <p className="text-sm text-zinc-400 mt-0.5">Customer Data Platform — Rastreamento, scoring e perfis unificados</p>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Worder Data</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Customer Data Platform — Rastreamento, scoring e perfis unificados</p>
         </div>
       </div>
 
@@ -132,13 +132,13 @@ export default function DataPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4"
+              className="bg-white/50 border border-gray-200 rounded-xl p-4"
             >
               <div className="flex items-center gap-2 mb-2">
-                <Icon size={16} className="text-zinc-500" />
-                <span className="text-xs text-zinc-500">{kpi.title}</span>
+                <Icon size={16} className="text-gray-500" />
+                <span className="text-xs text-gray-500">{kpi.title}</span>
               </div>
-              <p className="text-xl font-bold text-white">{kpi.value}</p>
+              <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
               <span className="text-xs text-emerald-400">{kpi.change}</span>
             </motion.div>
           )
@@ -147,23 +147,23 @@ export default function DataPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Tracking Pixel */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Code size={16} className="text-[#F26B2A]" />
             Pixel de Rastreamento
           </h3>
           <div className="relative">
-            <pre className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 text-xs text-zinc-400 overflow-x-auto">
+            <pre className="bg-zinc-950 border border-gray-200 rounded-lg p-4 text-xs text-gray-500 overflow-x-auto">
               {pixelCode}
             </pre>
             <button
               onClick={handleCopy}
-              className="absolute top-3 right-3 p-1.5 bg-zinc-800 rounded-md hover:bg-zinc-700 transition-colors"
+              className="absolute top-3 right-3 p-1.5 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
             >
               {copied ? (
                 <CheckCircle size={14} className="text-emerald-400" />
               ) : (
-                <Copy size={14} className="text-zinc-400" />
+                <Copy size={14} className="text-gray-500" />
               )}
             </button>
           </div>
@@ -174,20 +174,20 @@ export default function DataPage() {
         </div>
 
         {/* Event Tracking Config */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Crosshair size={16} className="text-[#F26B2A]" />
             Eventos Rastreados
           </h3>
           <div className="space-y-3">
             {trackingEvents.map((ev) => (
-              <div key={ev.event} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
+              <div key={ev.event} className="flex items-center justify-between py-2 border-b border-gray-200/50 last:border-0">
                 <div>
-                  <span className="text-sm text-white">{ev.label}</span>
-                  <span className="text-xs text-zinc-500 ml-2 font-mono">{ev.event}</span>
+                  <span className="text-sm text-gray-700">{ev.label}</span>
+                  <span className="text-xs text-gray-500 ml-2 font-mono">{ev.event}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-zinc-400">{ev.count.toLocaleString('pt-BR')}/dia</span>
+                  <span className="text-xs text-gray-500">{ev.count.toLocaleString('pt-BR')}/dia</span>
                   <div className="w-2 h-2 rounded-full bg-emerald-400" />
                 </div>
               </div>
@@ -197,8 +197,8 @@ export default function DataPage() {
       </div>
 
       {/* Events Trend */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4">Eventos Rastreados — Últimos 14 dias</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Eventos Rastreados — Últimos 14 dias</h3>
         <ResponsiveContainer width="100%" height={250}>
           <AreaChart data={eventTrend}>
             <defs>
@@ -222,8 +222,8 @@ export default function DataPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Lead Scoring Rules */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Star size={16} className="text-[#F26B2A]" />
             Regras de Scoring
           </h3>
@@ -231,10 +231,10 @@ export default function DataPage() {
             {scoringRules.map((rule) => {
               const Icon = rule.icon
               return (
-                <div key={rule.action} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
+                <div key={rule.action} className="flex items-center justify-between py-2 border-b border-gray-200/50 last:border-0">
                   <div className="flex items-center gap-2">
-                    <Icon size={16} className="text-zinc-500" />
-                    <span className="text-sm text-white">{rule.action}</span>
+                    <Icon size={16} className="text-gray-500" />
+                    <span className="text-sm text-gray-700">{rule.action}</span>
                   </div>
                   <span className={`text-sm font-medium ${rule.points > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     {rule.points > 0 ? '+' : ''}{rule.points} pts
@@ -246,8 +246,8 @@ export default function DataPage() {
         </div>
 
         {/* Scoring Distribution */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Lightning size={16} className="text-[#F26B2A]" />
             Distribuição de Scores
           </h3>
@@ -260,12 +260,12 @@ export default function DataPage() {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: seg.color }} />
-                      <span className="text-sm text-white">{seg.label}</span>
-                      <span className="text-xs text-zinc-500">({seg.range})</span>
+                      <span className="text-sm text-gray-700">{seg.label}</span>
+                      <span className="text-xs text-gray-500">({seg.range})</span>
                     </div>
-                    <span className="text-xs text-zinc-400">{seg.count.toLocaleString('pt-BR')} ({pct}%)</span>
+                    <span className="text-xs text-gray-500">{seg.count.toLocaleString('pt-BR')} ({pct}%)</span>
                   </div>
-                  <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-gray-50 rounded-full overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${pct}%` }}

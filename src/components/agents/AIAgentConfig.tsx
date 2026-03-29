@@ -292,7 +292,7 @@ export default function AIAgentConfig({
                               : 'border-gray-200 hover:border-gray-300'
                           }`}
                         >
-                          <span className="text-sm text-white capitalize">{provider}</span>
+                          <span className="text-sm text-gray-700 capitalize">{provider}</span>
                           {hasKey ? (
                             <CheckCircle className="absolute top-1 right-1 w-3 h-3 text-green-400" />
                           ) : (
@@ -435,7 +435,7 @@ export default function AIAgentConfig({
                 {/* Transfer to Queue */}
                 <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer mb-4">
                   <div>
-                    <span className="text-sm text-white">Transferir para fila de espera</span>
+                    <span className="text-sm text-gray-700">Transferir para fila de espera</span>
                     <p className="text-xs text-gray-400">Adiciona o chat à fila quando transferido</p>
                   </div>
                   <input
@@ -477,7 +477,7 @@ export default function AIAgentConfig({
                 {/* Always Active */}
                 <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer mb-4">
                   <div>
-                    <span className="text-sm text-white">Sempre ativo (24/7)</span>
+                    <span className="text-sm text-gray-700">Sempre ativo (24/7)</span>
                     <p className="text-xs text-gray-400">Responde a qualquer hora</p>
                   </div>
                   <input
@@ -491,7 +491,7 @@ export default function AIAgentConfig({
                 {/* Only When No Human */}
                 <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer mb-4">
                   <div>
-                    <span className="text-sm text-white">Apenas quando não há humanos online</span>
+                    <span className="text-sm text-gray-700">Apenas quando não há humanos online</span>
                     <p className="text-xs text-gray-400">IA para quando agentes humanos estiverem offline</p>
                   </div>
                   <input
@@ -623,7 +623,7 @@ export default function AIAgentConfig({
                             className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500"
                           />
                           <div className="flex-1">
-                            <p className="text-sm text-white">
+                            <p className="text-sm text-gray-700">
                               {number.display_name || number.phone_number}
                             </p>
                             <p className="text-xs text-gray-400">{number.phone_number}</p>
@@ -649,7 +649,7 @@ export default function AIAgentConfig({
               >
                 <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer mb-4">
                   <div>
-                    <span className="text-sm text-white">Usar base de conhecimento</span>
+                    <span className="text-sm text-gray-700">Usar base de conhecimento</span>
                     <p className="text-xs text-gray-400">O agente consultará documentos para responder</p>
                   </div>
                   <input
@@ -761,7 +761,7 @@ function ConfigSection({
           <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center`}>
             <Icon className={`w-4 h-4 ${iconColor}`} />
           </div>
-          <span className="text-white font-medium">{title}</span>
+          <span className="text-gray-900 font-medium">{title}</span>
           {badge && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
               {badge}

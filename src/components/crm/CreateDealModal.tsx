@@ -261,7 +261,7 @@ export function CreateDealModal({
                           }`}
                         >
                           <div className={`w-2 h-2 rounded-full ${option.color} mx-auto mb-1`} />
-                          <span className="text-xs text-white">{option.label}</span>
+                          <span className="text-xs text-gray-600">{option.label}</span>
                         </button>
                       ))}
                     </div>
@@ -322,7 +322,7 @@ export function CreateDealModal({
                   <button
                     type="submit"
                     disabled={loading || !formData.title.trim()}
-                    className="px-5 py-2.5 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors disabled:opacity-50 shadow-lg shadow-primary-500/20"
+                    className="px-5 py-2.5 rounded-xl bg-primary-500 hover:bg-primary-600 text-gray-900 font-medium transition-colors disabled:opacity-50 shadow-lg shadow-primary-500/20"
                   >
                     {loading ? (
                       <span className="flex items-center gap-2">

@@ -156,7 +156,7 @@ function ContactModal({ isOpen, contact, onClose, onSave }: ContactModalProps) {
                         type="text"
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
                         placeholder="João"
                         autoFocus
                       />
@@ -167,7 +167,7 @@ function ContactModal({ isOpen, contact, onClose, onSave }: ContactModalProps) {
                         type="text"
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
                         placeholder="Silva"
                       />
                     </div>
@@ -181,7 +181,7 @@ function ContactModal({ isOpen, contact, onClose, onSave }: ContactModalProps) {
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
                         placeholder="joao@empresa.com"
                       />
                     </div>
@@ -195,7 +195,7 @@ function ContactModal({ isOpen, contact, onClose, onSave }: ContactModalProps) {
                         type="tel"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
                         placeholder="(11) 99999-9999"
                       />
                     </div>
@@ -207,7 +207,7 @@ function ContactModal({ isOpen, contact, onClose, onSave }: ContactModalProps) {
                     type="button"
                     onClick={onClose}
                     disabled={loading}
-                    className="px-4 py-2.5 rounded-xl bg-white hover:bg-gray-100 text-white transition-colors"
+                    className="px-4 py-2.5 rounded-xl bg-white hover:bg-gray-100 text-gray-900 transition-colors"
                   >
                     Cancelar
                   </button>
@@ -291,13 +291,13 @@ function ContactRow({ contact, onEdit, onDelete, onClick, isSelected, onToggleSe
         onClick={onClick}
         className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0"
       >
-        <span className="text-white font-bold">{getInitials()}</span>
+        <span className="text-gray-900 font-bold">{getInitials()}</span>
       </div>
 
       {/* Info */}
       <div onClick={onClick} className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <h3 className="text-white font-medium truncate">{getDisplayName()}</h3>
+          <h3 className="text-gray-900 font-medium truncate">{getDisplayName()}</h3>
           {/* Tags inline */}
           {contact.tags && contact.tags.length > 0 && (
             <div className="flex items-center gap-1">
@@ -341,7 +341,7 @@ function ContactRow({ contact, onEdit, onDelete, onClick, isSelected, onToggleSe
       <div onClick={onClick} className="flex items-center gap-6 text-sm">
         <div className="text-center">
           <p className="text-gray-400 text-xs">Deals</p>
-          <p className="text-white font-medium">{contact.deals_count || 0}</p>
+          <p className="text-gray-900 font-medium">{contact.deals_count || 0}</p>
         </div>
         <div className="text-center">
           <p className="text-gray-400 text-xs">Valor</p>
@@ -773,7 +773,7 @@ export default function ContactsPage() {
                 setSearch(e.target.value)
                 setPage(1)
               }}
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500"
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 focus:outline-none focus:border-primary-500"
             />
             {search && (
               <button
@@ -956,7 +956,7 @@ export default function ContactsPage() {
             <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
               <Users className="w-8 h-8 text-gray-400" />
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
               {search ? 'Nenhum contato encontrado' : 'Nenhum contato ainda'}
             </h3>
             <p className="text-gray-500 mb-4">
@@ -1001,7 +1001,7 @@ export default function ContactsPage() {
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <span className="px-3 py-1 text-sm text-white">
+            <span className="px-3 py-1 text-sm text-gray-700">
               {page} / {pagination.totalPages}
             </span>
             <button

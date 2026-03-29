@@ -380,7 +380,7 @@ export function PipelineAutomationConfig({
                 {/* Header */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-white font-medium">Fontes de Dados</h3>
+                    <h3 className="text-gray-900 font-medium">Fontes de Dados</h3>
                     <p className="text-gray-400 text-sm">
                       Eventos que criam deals nesta pipeline
                     </p>
@@ -432,7 +432,7 @@ export function PipelineAutomationConfig({
                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${colorClass.split(' ')[1]}`}>
                               <Icon className={`w-4 h-4 ${colorClass.split(' ')[0]}`} />
                             </div>
-                            <span className="text-white font-medium flex-1">
+                            <span className="text-gray-900 font-medium flex-1">
                               {integration.name}
                             </span>
                             {integrationRules.length > 0 && (
@@ -665,7 +665,7 @@ function AddSourceModal({
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${colorClass.split(' ')[1]}`}>
                     <Icon className={`w-5 h-5 ${colorClass.split(' ')[0]}`} />
                   </div>
-                  <p className="text-white font-medium">{integration.name}</p>
+                  <p className="text-gray-900 font-medium">{integration.name}</p>
                   <p className="text-gray-400 text-xs mt-0.5">
                     {integration.events.length} eventos
                   </p>

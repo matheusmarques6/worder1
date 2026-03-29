@@ -192,7 +192,7 @@ export function NotesTab({
                       <div className="w-32 p-2 flex items-center gap-2">
                         <FileText className="w-5 h-5 text-blue-400 flex-shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-xs text-white truncate">{att.name}</p>
+                          <p className="text-xs text-gray-600 truncate">{att.name}</p>
                           <p className="text-[10px] text-gray-500">{formatFileSize(att.size)}</p>
                         </div>
                       </div>
@@ -383,7 +383,7 @@ function NoteCard({
     <div className={`bg-gray-100 rounded-xl p-3 group ${isPinned ? 'border border-brand-300' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-white whitespace-pre-wrap break-words">
+          <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
             {note.content}
           </p>
           
@@ -408,7 +408,7 @@ function NoteCard({
                       className="flex items-center gap-2 bg-gray-200 rounded-lg p-2 hover:bg-gray-300 transition-colors"
                     >
                       <FileText className="w-4 h-4 text-blue-400" />
-                      <span className="text-xs text-white truncate max-w-[100px]">{att.name}</span>
+                      <span className="text-xs text-gray-600 truncate max-w-[100px]">{att.name}</span>
                       <Download className="w-3 h-3 text-gray-500" />
                     </a>
                   )}

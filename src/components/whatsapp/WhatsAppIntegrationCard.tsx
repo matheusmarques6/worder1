@@ -138,7 +138,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
       {/* Connected Badge */}
       {connected && (
         <div className="absolute -top-2 -right-2">
-          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full text-[10px] font-bold text-white shadow-lg">
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full text-[10px] font-bold text-gray-900 shadow-lg">
             <Wifi className="w-3 h-3" />
             {activeConnections} {activeConnections === 1 ? 'Conexão' : 'Conexões'}
           </span>
@@ -154,7 +154,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-white">WhatsApp Business</h3>
+            <h3 className="font-semibold text-gray-900">WhatsApp Business</h3>
             {connected ? (
               <span className="px-2 py-0.5 text-xs font-medium rounded-full border bg-green-500/20 text-green-400 border-green-500/30">
                 Ativo
@@ -227,7 +227,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
           <>
             <button
               onClick={handleConfigure}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-white transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-gray-700 transition-colors"
             >
               <Settings className="w-4 h-4" />
               Configurar

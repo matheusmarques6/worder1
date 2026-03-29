@@ -108,7 +108,7 @@ export default function LoginPage() {
 
           {/* Welcome Text */}
           <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white">Bem-vindo de volta</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Bem-vindo de volta</h2>
             <p className="text-gray-500 mt-2">
               Acesse sua conta para gerenciar suas campanhas
             </p>
@@ -117,7 +117,7 @@ export default function LoginPage() {
           {/* Login Form */}
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-white mb-2">
+              <label className="block text-sm font-medium text-gray-900 mb-2">
                 Email
               </label>
               <div className="relative">
@@ -127,14 +127,14 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seu@email.com"
-                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white mb-2">
+              <label className="block text-sm font-medium text-gray-900 mb-2">
                 Senha
               </label>
               <div className="relative">
@@ -144,7 +144,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-10 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
                 />
                 <button
@@ -180,7 +180,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-xl text-white font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary-500/25"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-xl text-gray-900 font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary-500/25"
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -234,7 +234,7 @@ export default function LoginPage() {
               <p className="text-sm text-gray-400 mt-1">by Convertfy</p>
             </div>
             
-            <h2 className="text-3xl font-bold text-white mb-4">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
               Transforme dados em{' '}
               <span className="text-gradient-worder">receita</span>
             </h2>
@@ -255,7 +255,7 @@ export default function LoginPage() {
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center mb-3">
                   <feature.icon className="w-5 h-5 text-brand-600" />
                 </div>
-                <h3 className="font-semibold text-white mb-1">{feature.title}</h3>
+                <h3 className="font-semibold text-gray-900 mb-1">{feature.title}</h3>
                 <p className="text-sm text-gray-500">{feature.description}</p>
               </motion.div>
             ))}
@@ -274,7 +274,7 @@ export default function LoginPage() {
               { value: '42%', label: 'Aumento médio' },
             ].map((stat) => (
               <div key={stat.label}>
-                <p className="text-2xl font-bold text-white">{stat.value}</p>
+                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
                 <p className="text-sm text-gray-500">{stat.label}</p>
               </div>
             ))}
@@ -289,10 +289,10 @@ export default function LoginPage() {
           >
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                <span className="text-white font-semibold text-sm">MS</span>
+                <span className="text-gray-900 font-semibold text-sm">MS</span>
               </div>
               <div>
-                <p className="font-medium text-white">Marina Santos</p>
+                <p className="font-medium text-gray-900">Marina Santos</p>
                 <p className="text-xs text-gray-500">CEO, ModaStyle</p>
               </div>
               <div className="ml-auto flex items-center gap-0.5">

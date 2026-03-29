@@ -243,7 +243,7 @@ export default function WhatsAppCloudConnect() {
                 <Phone className="w-6 h-6 text-green-400" />
               </div>
               <div>
-                <h4 className="font-semibold text-white">{config.business_name || 'WhatsApp Business'}</h4>
+                <h4 className="font-semibold text-gray-900">{config.business_name || 'WhatsApp Business'}</h4>
                 <p className="text-sm text-gray-500">{config.phone_number}</p>
               </div>
             </div>
@@ -322,7 +322,7 @@ export default function WhatsAppCloudConnect() {
         <form onSubmit={handleConnect} className="p-6 bg-white border border-gray-200 rounded-xl space-y-5">
           <div className="flex items-center gap-3 mb-2">
             <Shield className="w-5 h-5 text-green-400" />
-            <h3 className="font-semibold text-white">Conectar WhatsApp Business API</h3>
+            <h3 className="font-semibold text-gray-900">Conectar WhatsApp Business API</h3>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -267,7 +267,7 @@ export default function ChatPage() {
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-bold text-white">Chat</h1>
+            <h1 className="text-xl font-bold text-gray-900">Chat</h1>
             <button className="p-2 hover:bg-white rounded-lg transition-colors">
               <Settings className="w-5 h-5 text-gray-500" />
             </button>
@@ -284,7 +284,7 @@ export default function ChatPage() {
                   className={cn(
                     'flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-sm font-medium transition-all',
                     activeChannel === channel.id
-                      ? 'bg-gray-100 text-white'
+                      ? 'bg-gray-100 text-gray-900'
                       : 'text-gray-500 hover:text-gray-700'
                   )}
                 >
@@ -303,7 +303,7 @@ export default function ChatPage() {
               placeholder="Buscar conversas..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50"
+              className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50"
             />
           </div>
 
@@ -378,7 +378,7 @@ export default function ChatPage() {
                     <div className="flex items-center justify-between mb-1">
                       <span className={cn(
                         'font-medium truncate',
-                        conversation.unread_count > 0 ? 'text-white' : 'text-gray-700'
+                        conversation.unread_count > 0 ? 'text-gray-900' : 'text-gray-700'
                       )}>
                         {conversation.contact_name || conversation.username || 'Usuario'}
                       </span>
@@ -439,7 +439,7 @@ export default function ChatPage() {
                   </div>
                 </div>
                 <div>
-                  <h2 className="font-semibold text-white">
+                  <h2 className="font-semibold text-gray-900">
                     {selectedConversation.contact_name || selectedConversation.username}
                   </h2>
                   <p className="text-xs text-gray-500">
@@ -498,7 +498,7 @@ export default function ChatPage() {
                           'max-w-[70%] rounded-2xl px-4 py-2',
                           isOutbound
                             ? 'bg-primary-500 text-white rounded-br-sm'
-                            : 'bg-white text-white rounded-bl-sm'
+                            : 'bg-white text-gray-900 rounded-bl-sm'
                         )}
                       >
                         {/* Media */}
@@ -542,7 +542,7 @@ export default function ChatPage() {
                         )}>
                           <span className={cn(
                             'text-[10px]',
-                            isOutbound ? 'text-white/70' : 'text-gray-500'
+                            isOutbound ? 'text-gray-500' : 'text-gray-500'
                           )}>
                             {format(new Date(message.timestamp), 'HH:mm')}
                           </span>
@@ -584,7 +584,7 @@ export default function ChatPage() {
                       }}
                       placeholder="Digite sua mensagem..."
                       rows={1}
-                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 resize-none max-h-32"
+                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 resize-none max-h-32"
                     />
                   </div>
 
@@ -614,7 +614,7 @@ export default function ChatPage() {
             <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center mb-4">
               <MessageSquare className="w-10 h-10 text-gray-400" />
             </div>
-            <h2 className="text-xl font-semibold text-white mb-2">Selecione uma conversa</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Selecione uma conversa</h2>
             <p className="text-gray-500 max-w-md">
               Escolha uma conversa da lista para comecar a responder mensagens do WhatsApp e Instagram Direct
             </p>

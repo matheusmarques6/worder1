@@ -118,7 +118,7 @@ export default function ShopifyIntegrationPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push('/integrations')}
-            className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
           >
             <ArrowLeft size={18} weight="bold" />
           </button>
@@ -127,17 +127,17 @@ export default function ShopifyIntegrationPage() {
           </div>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold font-display text-white">Shopify</h1>
+              <h1 className="text-2xl font-bold font-display text-gray-900">Shopify</h1>
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="text-xs text-emerald-400 font-medium">Conectado</span>
               </div>
             </div>
-            <p className="text-sm text-zinc-400 mt-0.5">{connectionStatus.store}</p>
+            <p className="text-sm text-gray-500 mt-0.5">{connectionStatus.store}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-xs">
+          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
             <ArrowsClockwise size={14} />
             Sincronizar Agora
           </button>
@@ -145,7 +145,7 @@ export default function ShopifyIntegrationPage() {
             href={`https://${connectionStatus.store}/admin`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-xs"
+            className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs"
           >
             <ArrowSquareOut size={14} />
             Abrir Shopify
@@ -154,13 +154,13 @@ export default function ShopifyIntegrationPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-zinc-900/50 border border-zinc-800 rounded-xl w-fit">
+      <div className="flex items-center gap-1 p-1 bg-white/50 border border-gray-200 rounded-xl w-fit">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === tab.id ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
+              activeTab === tab.id ? 'bg-gray-50 text-white' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             {tab.label}
@@ -181,12 +181,12 @@ export default function ShopifyIntegrationPage() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5"
+                  className="bg-white/50 border border-gray-200 rounded-xl p-5"
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-xs text-zinc-500 font-medium">{kpi.title}</p>
-                      <p className="text-2xl font-bold text-white mt-1">{kpi.value}</p>
+                      <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">{kpi.value}</p>
                       {kpi.change && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <TrendUp size={12} className="text-emerald-400" weight="bold" />
@@ -204,9 +204,9 @@ export default function ShopifyIntegrationPage() {
           </div>
 
           {/* Revenue Chart */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-            <h3 className="text-sm font-semibold text-white mb-1">Receita Shopify (últimos 14 dias)</h3>
-            <p className="text-xs text-zinc-500 mb-4">Receita e pedidos rastreados via integração</p>
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Receita Shopify (últimos 14 dias)</h3>
+            <p className="text-xs text-gray-500 mb-4">Receita e pedidos rastreados via integração</p>
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={revenueData}>
                 <defs>
@@ -232,19 +232,19 @@ export default function ShopifyIntegrationPage() {
           </div>
 
           {/* Automations using Shopify */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-white">Automações Conectadas</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Automações Conectadas</h3>
               <Link href="/automations" className="text-xs text-[#F26B2A] hover:text-[#F5A623]">Ver todas</Link>
             </div>
             <div className="space-y-3">
               {automations.map((auto) => (
-                <div key={auto.name} className="flex items-center justify-between py-3 border-b border-zinc-800/50 last:border-0">
+                <div key={auto.name} className="flex items-center justify-between py-3 border-b border-gray-200/50 last:border-0">
                   <div className="flex items-center gap-3">
-                    <Lightning size={16} className={auto.status === 'active' ? 'text-[#F26B2A]' : 'text-zinc-600'} weight="fill" />
+                    <Lightning size={16} className={auto.status === 'active' ? 'text-[#F26B2A]' : 'text-gray-400'} weight="fill" />
                     <div>
-                      <p className="text-sm text-white font-medium">{auto.name}</p>
-                      <p className="text-xs text-zinc-500">
+                      <p className="text-sm text-gray-700 font-medium">{auto.name}</p>
+                      <p className="text-xs text-gray-500">
                         {auto.status === 'active' ? 'Ativo' : 'Pausado'}
                         {auto.recoveries !== undefined && ` · ${auto.recoveries} recuperações`}
                         {auto.sent !== undefined && auto.sent > 0 && ` · ${auto.sent} enviados`}
@@ -268,9 +268,9 @@ export default function ShopifyIntegrationPage() {
       {activeTab === 'sync' && (
         <>
           {/* Sync Status */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-white">Status da Sincronização</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Status da Sincronização</h3>
               <button className="flex items-center gap-2 px-3 py-1.5 bg-[#95BF47]/10 text-[#95BF47] rounded-lg hover:bg-[#95BF47]/20 text-xs font-medium">
                 <ArrowsClockwise size={14} />
                 Sincronizar Tudo
@@ -278,44 +278,44 @@ export default function ShopifyIntegrationPage() {
             </div>
             <div className="grid grid-cols-3 gap-4">
               {['Produtos', 'Clientes', 'Pedidos'].map((item) => (
-                <div key={item} className="bg-zinc-800/30 rounded-xl p-4">
+                <div key={item} className="bg-gray-50/30 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-white font-medium">{item}</span>
+                    <span className="text-sm text-gray-700 font-medium">{item}</span>
                     <CheckCircle size={16} className="text-emerald-400" weight="fill" />
                   </div>
-                  <p className="text-xs text-zinc-500">Última sync: {new Date(connectionStatus.lastSync).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
-                  <p className="text-xs text-zinc-600 mt-0.5">Intervalo: {connectionStatus.syncInterval}</p>
+                  <p className="text-xs text-gray-500">Última sync: {new Date(connectionStatus.lastSync).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Intervalo: {connectionStatus.syncInterval}</p>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Sync History */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-zinc-800">
-              <h3 className="text-sm font-semibold text-white">Histórico de Sincronização</h3>
+          <div className="bg-white/50 border border-gray-200 rounded-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900">Histórico de Sincronização</h3>
             </div>
             <table className="w-full">
               <thead>
-                <tr className="border-b border-zinc-800">
-                  <th className="text-left text-xs text-zinc-500 font-medium px-6 py-3">Data/Hora</th>
-                  <th className="text-left text-xs text-zinc-500 font-medium px-6 py-3">Tipo</th>
-                  <th className="text-left text-xs text-zinc-500 font-medium px-6 py-3">Itens</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium px-6 py-3">Registros</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium px-6 py-3">Duração</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium px-6 py-3">Status</th>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left text-xs text-gray-500 font-medium px-6 py-3">Data/Hora</th>
+                  <th className="text-left text-xs text-gray-500 font-medium px-6 py-3">Tipo</th>
+                  <th className="text-left text-xs text-gray-500 font-medium px-6 py-3">Itens</th>
+                  <th className="text-right text-xs text-gray-500 font-medium px-6 py-3">Registros</th>
+                  <th className="text-right text-xs text-gray-500 font-medium px-6 py-3">Duração</th>
+                  <th className="text-right text-xs text-gray-500 font-medium px-6 py-3">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {syncHistory.map((sync, i) => {
                   const st = statusSyncConfig[sync.status]
                   return (
-                    <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
-                      <td className="px-6 py-3 text-sm text-zinc-300">{sync.date}</td>
-                      <td className="px-6 py-3 text-xs text-zinc-400">{sync.type}</td>
-                      <td className="px-6 py-3 text-xs text-zinc-400">{sync.items}</td>
-                      <td className="px-6 py-3 text-sm text-white text-right">{sync.records}</td>
-                      <td className="px-6 py-3 text-xs text-zinc-500 text-right">{sync.duration}</td>
+                    <tr key={i} className="border-b border-gray-200/50 hover:bg-gray-50/20">
+                      <td className="px-6 py-3 text-sm text-gray-700">{sync.date}</td>
+                      <td className="px-6 py-3 text-xs text-gray-500">{sync.type}</td>
+                      <td className="px-6 py-3 text-xs text-gray-500">{sync.items}</td>
+                      <td className="px-6 py-3 text-sm text-gray-700 text-right">{sync.records}</td>
+                      <td className="px-6 py-3 text-xs text-gray-500 text-right">{sync.duration}</td>
                       <td className="px-6 py-3 text-right">
                         <span className={`text-xs font-medium ${st.color}`}>{st.label}</span>
                       </td>
@@ -330,24 +330,24 @@ export default function ShopifyIntegrationPage() {
 
       {/* Webhooks Tab */}
       {activeTab === 'webhooks' && (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-zinc-800">
-            <h3 className="text-sm font-semibold text-white">Webhooks Ativos</h3>
-            <p className="text-xs text-zinc-500 mt-0.5">Eventos do Shopify recebidos em tempo real</p>
+        <div className="bg-white/50 border border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-900">Webhooks Ativos</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Eventos do Shopify recebidos em tempo real</p>
           </div>
           <table className="w-full">
             <thead>
-              <tr className="border-b border-zinc-800">
-                <th className="text-left text-xs text-zinc-500 font-medium px-6 py-3">Evento</th>
-                <th className="text-left text-xs text-zinc-500 font-medium px-6 py-3">Status</th>
-                <th className="text-right text-xs text-zinc-500 font-medium px-6 py-3">Último Recebido</th>
+              <tr className="border-b border-gray-200">
+                <th className="text-left text-xs text-gray-500 font-medium px-6 py-3">Evento</th>
+                <th className="text-left text-xs text-gray-500 font-medium px-6 py-3">Status</th>
+                <th className="text-right text-xs text-gray-500 font-medium px-6 py-3">Último Recebido</th>
               </tr>
             </thead>
             <tbody>
               {webhookEvents.map((wh) => (
-                <tr key={wh.event} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
+                <tr key={wh.event} className="border-b border-gray-200/50 hover:bg-gray-50/20">
                   <td className="px-6 py-3">
-                    <code className="text-sm text-zinc-300 font-mono">{wh.event}</code>
+                    <code className="text-sm text-gray-700 font-mono">{wh.event}</code>
                   </td>
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-1.5">
@@ -355,7 +355,7 @@ export default function ShopifyIntegrationPage() {
                       <span className="text-xs text-emerald-400">Ativo</span>
                     </div>
                   </td>
-                  <td className="px-6 py-3 text-xs text-zinc-500 text-right">{wh.lastReceived}</td>
+                  <td className="px-6 py-3 text-xs text-gray-500 text-right">{wh.lastReceived}</td>
                 </tr>
               ))}
             </tbody>
@@ -366,30 +366,30 @@ export default function ShopifyIntegrationPage() {
       {/* Settings Tab */}
       {activeTab === 'settings' && (
         <div className="space-y-4">
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-5">
-            <h3 className="text-sm font-semibold text-white">Detalhes da Conexão</h3>
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6 space-y-5">
+            <h3 className="text-sm font-semibold text-gray-900">Detalhes da Conexão</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-zinc-500">Loja</p>
-                <p className="text-sm text-white mt-0.5 font-mono">{connectionStatus.store}</p>
+                <p className="text-xs text-gray-500">Loja</p>
+                <p className="text-sm text-gray-700 mt-0.5 font-mono">{connectionStatus.store}</p>
               </div>
               <div>
-                <p className="text-xs text-zinc-500">Plano</p>
-                <p className="text-sm text-white mt-0.5">{connectionStatus.plan}</p>
+                <p className="text-xs text-gray-500">Plano</p>
+                <p className="text-sm text-gray-700 mt-0.5">{connectionStatus.plan}</p>
               </div>
               <div>
-                <p className="text-xs text-zinc-500">Conectado desde</p>
-                <p className="text-sm text-white mt-0.5">{new Date(connectionStatus.connectedAt).toLocaleDateString('pt-BR')}</p>
+                <p className="text-xs text-gray-500">Conectado desde</p>
+                <p className="text-sm text-gray-700 mt-0.5">{new Date(connectionStatus.connectedAt).toLocaleDateString('pt-BR')}</p>
               </div>
               <div>
-                <p className="text-xs text-zinc-500">API Version</p>
-                <p className="text-sm text-white mt-0.5 font-mono">{connectionStatus.apiVersion}</p>
+                <p className="text-xs text-gray-500">API Version</p>
+                <p className="text-sm text-gray-700 mt-0.5 font-mono">{connectionStatus.apiVersion}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-5">
-            <h3 className="text-sm font-semibold text-white">Sincronização</h3>
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6 space-y-5">
+            <h3 className="text-sm font-semibold text-gray-900">Sincronização</h3>
             {[
               { label: 'Sincronizar Produtos', desc: 'Importar catálogo automaticamente', enabled: true },
               { label: 'Sincronizar Clientes', desc: 'Manter contatos atualizados', enabled: true },
@@ -399,10 +399,10 @@ export default function ShopifyIntegrationPage() {
             ].map((item) => (
               <div key={item.label} className="flex items-center justify-between py-2">
                 <div>
-                  <p className="text-sm text-white font-medium">{item.label}</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">{item.desc}</p>
+                  <p className="text-sm text-gray-700 font-medium">{item.label}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
                 </div>
-                <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-[#95BF47]' : 'bg-zinc-700'}`}>
+                <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-[#95BF47]' : 'bg-gray-100'}`}>
                   <div className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform ${item.enabled ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
                 </button>
               </div>
@@ -410,9 +410,9 @@ export default function ShopifyIntegrationPage() {
           </div>
 
           {/* Danger Zone */}
-          <div className="bg-zinc-900/50 border border-red-500/20 rounded-xl p-6">
+          <div className="bg-white/50 border border-red-500/20 rounded-xl p-6">
             <h3 className="text-sm font-semibold text-red-400 mb-2">Zona de Perigo</h3>
-            <p className="text-xs text-zinc-500 mb-4">Desconectar a integração irá parar todas as sincronizações e automações que dependem do Shopify.</p>
+            <p className="text-xs text-gray-500 mb-4">Desconectar a integração irá parar todas as sincronizações e automações que dependem do Shopify.</p>
             <button className="px-4 py-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 text-xs font-medium border border-red-500/20">
               Desconectar Shopify
             </button>

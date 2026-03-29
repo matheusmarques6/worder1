@@ -36,7 +36,7 @@ export default function ChatWidgetPage() {
           <ArrowLeft className="w-5 h-5" weight="bold" />
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold font-display text-white">Chat Widget</h1>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Chat Widget</h1>
           <p className="text-sm text-gray-500 mt-0.5">Configure o widget de chat para o seu site</p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
@@ -85,7 +85,7 @@ export default function ChatWidgetPage() {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1.5 font-medium">Mensagem de Boas-vindas</label>
-                <textarea rows={3} defaultValue="Olá! Como posso ajudar você hoje?" className="w-full bg-[#111111] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors resize-none" />
+                <textarea rows={3} defaultValue="Olá! Como posso ajudar você hoje?" className="w-full bg-[#111111] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors resize-none" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1.5 font-medium">Posição do Widget</label>
@@ -109,7 +109,7 @@ export default function ChatWidgetPage() {
               ].map((item) => (
                 <div key={item.label} className="flex items-center justify-between p-4 bg-[#111111] rounded-xl border border-white/[0.06]">
                   <div>
-                    <p className="text-sm font-medium text-white">{item.label}</p>
+                    <p className="text-sm font-medium text-gray-900">{item.label}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
                   </div>
                   <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-[#F26B2A]' : 'bg-gray-200'}`}>
@@ -126,11 +126,11 @@ export default function ChatWidgetPage() {
               <p className="text-sm text-gray-500">Configure os horários de atendimento humano. Fora desses horários, apenas a IA responde.</p>
               {['Segunda a Sexta', 'Sábado', 'Domingo'].map((day) => (
                 <div key={day} className="flex items-center justify-between p-4 bg-[#111111] rounded-xl border border-white/[0.06]">
-                  <span className="text-sm font-medium text-white">{day}</span>
+                  <span className="text-sm font-medium text-gray-900">{day}</span>
                   <div className="flex items-center gap-2">
-                    <input type="time" defaultValue="09:00" className="bg-white border border-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-white" />
+                    <input type="time" defaultValue="09:00" className="bg-white border border-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-gray-600" />
                     <span className="text-gray-500">até</span>
-                    <input type="time" defaultValue="18:00" className="bg-white border border-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-white" />
+                    <input type="time" defaultValue="18:00" className="bg-white border border-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-gray-600" />
                   </div>
                 </div>
               ))}
@@ -173,8 +173,8 @@ export default function ChatWidgetPage() {
                       <ChatCircleDots className="w-4 h-4 text-white" weight="fill" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-white">Worder Chat</p>
-                      <p className="text-[10px] text-white/70">Online agora</p>
+                      <p className="text-sm font-semibold text-gray-900">Worder Chat</p>
+                      <p className="text-[10px] text-gray-500">Online agora</p>
                     </div>
                   </div>
                 </div>

@@ -50,7 +50,7 @@ const products = [
 const statusConfig: Record<string, { label: string; color: string }> = {
   active: { label: 'Ativo', color: 'bg-emerald-500/10 text-emerald-400' },
   out_of_stock: { label: 'Sem Estoque', color: 'bg-red-500/10 text-red-400' },
-  draft: { label: 'Rascunho', color: 'bg-zinc-500/10 text-zinc-400' },
+  draft: { label: 'Rascunho', color: 'bg-zinc-500/10 text-gray-500' },
 }
 
 export default function ProductsPage() {
@@ -76,23 +76,23 @@ export default function ProductsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/content" className="p-2 rounded-lg hover:bg-zinc-800 transition-colors">
-            <ArrowLeft size={18} className="text-zinc-400" />
+          <Link href="/content" className="p-2 rounded-lg hover:bg-gray-50 transition-colors">
+            <ArrowLeft size={18} className="text-gray-500" />
           </Link>
           <div className="w-10 h-10 rounded-xl bg-[#F26B2A]/10 flex items-center justify-center">
             <ShoppingBag size={22} className="text-[#F26B2A]" weight="fill" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-display text-white">Produtos</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">Catálogo sincronizado da sua loja</p>
+            <h1 className="text-2xl font-bold font-display text-gray-900">Produtos</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Catálogo sincronizado da sua loja</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-xs">
+          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
             <ArrowsClockwise size={14} />
             Sincronizar
           </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-xs">
+          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
             <Export size={14} />
             Exportar
           </button>
@@ -109,13 +109,13 @@ export default function ProductsPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4"
+              className="bg-white/50 border border-gray-200 rounded-xl p-4"
             >
               <div className="flex items-center gap-2 mb-2">
                 <Icon size={16} className={kpi.color} />
-                <span className="text-xs text-zinc-500">{kpi.title}</span>
+                <span className="text-xs text-gray-500">{kpi.title}</span>
               </div>
-              <p className="text-xl font-bold text-white">{kpi.value}</p>
+              <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
             </motion.div>
           )
         })}
@@ -124,13 +124,13 @@ export default function ProductsPage() {
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
-          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             type="text"
             placeholder="Buscar por nome ou SKU..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-800/50 border border-zinc-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#F26B2A]"
+            className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500"
           />
         </div>
         <div className="flex gap-1 overflow-x-auto">
@@ -139,7 +139,7 @@ export default function ProductsPage() {
               key={cat}
               onClick={() => setCategory(cat)}
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
-                category === cat ? 'bg-[#F26B2A] text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                category === cat ? 'bg-[#F26B2A] text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
               }`}
             >
               {cat}
@@ -149,7 +149,7 @@ export default function ProductsPage() {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-          className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+          className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-900 focus:outline-none"
         >
           <option value="sold">Mais vendidos</option>
           <option value="price">Maior preço</option>
@@ -159,38 +159,38 @@ export default function ProductsPage() {
       </div>
 
       {/* Products Table */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
+      <div className="bg-white/50 border border-gray-200 rounded-xl overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-zinc-800">
-              <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">Produto</th>
-              <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">SKU</th>
-              <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">Status</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Preço</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Estoque</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Vendidos</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Avaliação</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Ações</th>
+            <tr className="border-b border-gray-200">
+              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Produto</th>
+              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">SKU</th>
+              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Status</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Preço</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Estoque</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Vendidos</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Avaliação</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Ações</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((product) => {
               const status = statusConfig[product.status]
               return (
-                <tr key={product.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+                <tr key={product.id} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                        <Package size={18} className="text-zinc-600" />
+                      <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
+                        <Package size={18} className="text-gray-400" />
                       </div>
                       <div>
-                        <p className="text-sm text-white font-medium">{product.name}</p>
-                        <p className="text-xs text-zinc-600">{product.category}</p>
+                        <p className="text-sm text-gray-700 font-medium">{product.name}</p>
+                        <p className="text-xs text-gray-400">{product.category}</p>
                       </div>
                     </div>
                   </td>
                   <td className="p-4">
-                    <code className="text-xs text-zinc-400 font-mono">{product.sku}</code>
+                    <code className="text-xs text-gray-500 font-mono">{product.sku}</code>
                   </td>
                   <td className="p-4">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${status.color}`}>
@@ -198,36 +198,36 @@ export default function ProductsPage() {
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    <p className="text-sm text-white font-medium">R$ {product.price.toFixed(2)}</p>
+                    <p className="text-sm text-gray-700 font-medium">R$ {product.price.toFixed(2)}</p>
                     {product.compareAt && (
-                      <p className="text-xs text-zinc-600 line-through">R$ {product.compareAt.toFixed(2)}</p>
+                      <p className="text-xs text-gray-400 line-through">R$ {product.compareAt.toFixed(2)}</p>
                     )}
                   </td>
                   <td className="p-4 text-right">
-                    <span className={`text-sm ${product.stock === 0 ? 'text-red-400' : product.stock < 20 ? 'text-yellow-400' : 'text-zinc-400'}`}>
+                    <span className={`text-sm ${product.stock === 0 ? 'text-red-400' : product.stock < 20 ? 'text-yellow-400' : 'text-gray-500'}`}>
                       {product.stock}
                     </span>
                   </td>
-                  <td className="p-4 text-sm text-zinc-400 text-right">
+                  <td className="p-4 text-sm text-gray-500 text-right">
                     {product.sold.toLocaleString('pt-BR')}
                   </td>
                   <td className="p-4 text-right">
                     {product.rating > 0 ? (
                       <div className="flex items-center gap-1 justify-end">
                         <Star size={12} className="text-yellow-400" weight="fill" />
-                        <span className="text-sm text-zinc-400">{product.rating}</span>
+                        <span className="text-sm text-gray-500">{product.rating}</span>
                       </div>
                     ) : (
-                      <span className="text-xs text-zinc-600">—</span>
+                      <span className="text-xs text-gray-400">—</span>
                     )}
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-1 justify-end">
-                      <button className="p-1.5 rounded hover:bg-zinc-800 transition-colors">
-                        <Eye size={14} className="text-zinc-500" />
+                      <button className="p-1.5 rounded hover:bg-gray-50 transition-colors">
+                        <Eye size={14} className="text-gray-500" />
                       </button>
-                      <button className="p-1.5 rounded hover:bg-zinc-800 transition-colors">
-                        <PencilSimple size={14} className="text-zinc-500" />
+                      <button className="p-1.5 rounded hover:bg-gray-50 transition-colors">
+                        <PencilSimple size={14} className="text-gray-500" />
                       </button>
                     </div>
                   </td>
@@ -239,12 +239,12 @@ export default function ProductsPage() {
       </div>
 
       {/* Sync Info */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 flex items-center justify-between">
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <ArrowsClockwise size={18} className="text-zinc-500" />
+          <ArrowsClockwise size={18} className="text-gray-500" />
           <div>
-            <p className="text-sm text-zinc-400">Última sincronização: <span className="text-white">há 2 horas</span></p>
-            <p className="text-xs text-zinc-600">Sincronização automática a cada 6 horas via Shopify</p>
+            <p className="text-sm text-gray-500">Última sincronização: <span className="text-gray-900">há 2 horas</span></p>
+            <p className="text-xs text-gray-400">Sincronização automática a cada 6 horas via Shopify</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

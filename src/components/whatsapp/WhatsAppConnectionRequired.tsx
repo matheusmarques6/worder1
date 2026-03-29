@@ -126,7 +126,7 @@ export function WhatsAppConnectionRequired({
                 <span className="text-xs font-bold text-green-400">1</span>
               </div>
               <div>
-                <p className="text-sm text-white">Conta no Meta Business Suite</p>
+                <p className="text-sm text-gray-700">Conta no Meta Business Suite</p>
                 <p className="text-xs text-gray-400">Com verificação do negócio</p>
               </div>
             </li>
@@ -135,7 +135,7 @@ export function WhatsAppConnectionRequired({
                 <span className="text-xs font-bold text-green-400">2</span>
               </div>
               <div>
-                <p className="text-sm text-white">Número de WhatsApp Business</p>
+                <p className="text-sm text-gray-700">Número de WhatsApp Business</p>
                 <p className="text-xs text-gray-400">Registrado na API</p>
               </div>
             </li>
@@ -144,7 +144,7 @@ export function WhatsAppConnectionRequired({
                 <span className="text-xs font-bold text-green-400">3</span>
               </div>
               <div>
-                <p className="text-sm text-white">Access Token permanente</p>
+                <p className="text-sm text-gray-700">Access Token permanente</p>
                 <p className="text-xs text-gray-400">System User Token da Meta</p>
               </div>
             </li>

@@ -676,7 +676,7 @@ export default function CRMDiagnosticsPage() {
               >
                 <div className="flex items-center gap-3">
                   <group.icon className="w-5 h-5 text-brand-600" />
-                  <span className="font-medium text-white">{group.name}</span>
+                  <span className="font-medium text-gray-900">{group.name}</span>
                   <span className="text-sm text-gray-400">
                     ({group.tests.filter(t => t.status === 'passed').length}/{group.tests.length})
                   </span>
@@ -762,7 +762,7 @@ export default function CRMDiagnosticsPage() {
 
         {/* Instructions */}
         <div className="mt-8 bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-white font-medium mb-4">📋 Checklist Manual</h3>
+          <h3 className="text-gray-900 font-medium mb-4">📋 Checklist Manual</h3>
           <div className="space-y-3 text-gray-600 text-sm">
             <label className="flex items-start gap-3 cursor-pointer">
               <input type="checkbox" className="mt-1 rounded border-gray-300" />

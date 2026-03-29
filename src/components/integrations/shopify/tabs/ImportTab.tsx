@@ -364,7 +364,7 @@ export function ImportTab({
                 <Clock className="w-5 h-5 text-amber-400" />
               )}
               <div>
-                <h3 className="text-white font-medium">
+                <h3 className="text-gray-900 font-medium">
                   {activeJob.status === 'pending' && 'Aguardando início...'}
                   {activeJob.status === 'running' && 'Importando...'}
                   {activeJob.status === 'paused' && 'Pausado'}
@@ -543,7 +543,7 @@ export function ImportTab({
           {/* Create Deals Toggle */}
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
             <div>
-              <p className="text-sm text-white">Criar Deals</p>
+              <p className="text-sm text-gray-700">Criar Deals</p>
               <p className="text-xs text-gray-500">Criar um deal para cada contato importado</p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -642,7 +642,7 @@ export function ImportTab({
       <button
         onClick={handleStartImport}
         disabled={customerCount === 0 || (createDeals && (!selectedPipeline || !selectedStage))}
-        className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#96bf48] hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-medium transition-colors"
+        className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#96bf48] hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-gray-900 font-medium transition-colors"
       >
         <Download className="w-5 h-5" />
         Iniciar Importação em Background

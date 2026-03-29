@@ -282,7 +282,7 @@ function CanvasNode({
               
               {/* Label */}
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-white text-sm truncate">
+                <p className="font-semibold text-gray-900 text-sm truncate">
                   {node.data.label || nodeType?.label}
                 </p>
                 {node.data.description && (
@@ -689,7 +689,7 @@ function NodePalette({ onAddNode }: NodePaletteProps) {
   return (
     <div className="w-64 bg-[#111111] border-r border-[#222222] overflow-y-auto flex-shrink-0">
       <div className="p-4 border-b border-[#222222]">
-        <h3 className="font-semibold text-white">Blocos</h3>
+        <h3 className="font-semibold text-gray-900">Blocos</h3>
         <p className="text-xs text-[#555555] mt-1">Arraste para o canvas</p>
       </div>
 
@@ -902,7 +902,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-400 disabled:opacity-50"
+        className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-brand-400 disabled:opacity-50"
       >
         <option value="">{placeholder || 'Selecionar...'}</option>
         {options.map((opt: any) => (
@@ -1030,7 +1030,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 <select
                   value={node.data.config?.abandonTimeUnit || 'minutes'}
                   onChange={(e) => updateConfig('abandonTimeUnit', e.target.value)}
-                  className="bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white"
+                  className="bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-gray-700"
                 >
                   <option value="minutes">Minutos</option>
                   <option value="hours">Horas</option>
@@ -1071,7 +1071,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 onChange={(e) => updateConfig('requireEmail', e.target.checked)}
                 className="rounded bg-[#0d0d0d] border-[#333333]"
               />
-              <label htmlFor="requireEmail" className="text-sm text-white">Obrigatório ter email</label>
+              <label htmlFor="requireEmail" className="text-sm text-gray-700">Obrigatório ter email</label>
             </div>
           </div>
         )}
@@ -1170,7 +1170,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 onChange={(e) => updateConfig('validatePayload', e.target.checked)}
                 className="rounded bg-[#0d0d0d] border-[#333333]"
               />
-              <label htmlFor="validatePayload" className="text-sm text-white">Validar assinatura</label>
+              <label htmlFor="validatePayload" className="text-sm text-gray-700">Validar assinatura</label>
             </div>
           </div>
         )}
@@ -1521,7 +1521,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                     },
                   })
                 }
-                className="bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-400"
+                className="bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-brand-400"
               >
                 <option value="minutes">Minutos</option>
                 <option value="hours">Horas</option>
@@ -2342,7 +2342,7 @@ export function AutomationCanvas({
           {connectingFrom && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
               <div className="bg-[#111111] border border-brand-400 rounded-lg px-4 py-2 shadow-lg">
-                <p className="text-sm text-white">
+                <p className="text-sm text-gray-700">
                   🔗 Clique no <span className="text-emerald-400 font-semibold">ponto verde</span> de outro bloco para conectar
                 </p>
               </div>
@@ -2353,7 +2353,7 @@ export function AutomationCanvas({
           {isSpacePressed && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
               <div className="bg-[#111111] border border-cyan-500/50 rounded-lg px-4 py-2 shadow-lg">
-                <p className="text-sm text-white">
+                <p className="text-sm text-gray-700">
                   ✋ Modo <span className="text-cyan-400 font-semibold">mover tela</span> — arraste para navegar
                 </p>
               </div>
@@ -2454,7 +2454,7 @@ export function AutomationListItem({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-white">{automation.name}</h3>
+              <h3 className="font-semibold text-gray-900">{automation.name}</h3>
               <Badge
                 variant={automation.status === 'active' ? 'success' : automation.status === 'paused' ? 'warning' : 'default'}
               >
@@ -2509,7 +2509,7 @@ export function AutomationTemplateCard({ template, onSelect }: { template: (type
           <Icon className={cn('w-5 h-5', colors.text)} />
         </div>
         <div>
-          <h4 className="font-medium text-white group-hover:text-primary transition-colors">{template.name}</h4>
+          <h4 className="font-medium text-gray-900 group-hover:text-primary transition-colors">{template.name}</h4>
           <p className="text-xs text-[#555555]">{template.description}</p>
         </div>
       </div>

@@ -148,8 +148,8 @@ export default function SegmentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display text-white">Segmentação</h1>
-          <p className="text-sm text-zinc-400 mt-1">Crie e gerencie segmentos dinâmicos e estáticos</p>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Segmentação</h1>
+          <p className="text-sm text-gray-500 mt-1">Crie e gerencie segmentos dinâmicos e estáticos</p>
         </div>
         <button
           onClick={() => setShowBuilder(!showBuilder)}
@@ -165,24 +165,24 @@ export default function SegmentsPage() {
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
-          className="bg-zinc-900/50 border border-[#F26B2A]/30 rounded-xl p-6"
+          className="bg-white/50 border border-[#F26B2A]/30 rounded-xl p-6"
         >
-          <h3 className="text-sm font-semibold text-white mb-4">Criar Segmento</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Criar Segmento</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">Nome do Segmento</label>
+              <label className="block text-xs text-gray-500 mb-1.5">Nome do Segmento</label>
               <input
                 type="text"
                 placeholder="Ex: Compradores frequentes"
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#F26B2A]"
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs text-zinc-500 mb-2">Condições</label>
+              <label className="block text-xs text-gray-500 mb-2">Condições</label>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 bg-zinc-800/50 rounded-lg p-3">
-                  <select className="bg-zinc-700 border border-zinc-600 rounded px-2 py-1 text-sm text-white focus:outline-none">
+                <div className="flex items-center gap-2 bg-gray-50/50 rounded-lg p-3">
+                  <select className="bg-gray-100 border border-gray-200 rounded px-2 py-1 text-sm text-gray-900 focus:outline-none">
                     {conditionOptions.map((group) => (
                       <optgroup key={group.label} label={group.label}>
                         {group.options.map((opt) => (
@@ -191,7 +191,7 @@ export default function SegmentsPage() {
                       </optgroup>
                     ))}
                   </select>
-                  <select className="bg-zinc-700 border border-zinc-600 rounded px-2 py-1 text-sm text-white focus:outline-none">
+                  <select className="bg-gray-100 border border-gray-200 rounded px-2 py-1 text-sm text-gray-900 focus:outline-none">
                     <option>é maior que</option>
                     <option>é menor que</option>
                     <option>é igual a</option>
@@ -201,7 +201,7 @@ export default function SegmentsPage() {
                   <input
                     type="text"
                     placeholder="Valor"
-                    className="flex-1 bg-zinc-700 border border-zinc-600 rounded px-2 py-1 text-sm text-white placeholder-zinc-500 focus:outline-none"
+                    className="flex-1 bg-gray-100 border border-gray-200 rounded px-2 py-1 text-sm text-white placeholder-zinc-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -217,11 +217,11 @@ export default function SegmentsPage() {
               </button>
               <button
                 onClick={() => setShowBuilder(false)}
-                className="px-4 py-2 bg-zinc-800 text-zinc-400 rounded-lg hover:bg-zinc-700 text-sm"
+                className="px-4 py-2 bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 text-sm"
               >
                 Cancelar
               </button>
-              <span className="text-xs text-zinc-500 ml-auto">
+              <span className="text-xs text-gray-500 ml-auto">
                 Estimativa: ~2.400 contatos
               </span>
             </div>
@@ -232,16 +232,16 @@ export default function SegmentsPage() {
       {/* Filters */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             type="text"
             placeholder="Buscar segmentos..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-800/50 border border-zinc-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#F26B2A]"
+            className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500"
           />
         </div>
-        <div className="flex bg-zinc-800/50 rounded-lg p-1">
+        <div className="flex bg-gray-50/50 rounded-lg p-1">
           {[
             { id: 'all' as const, label: 'Todos' },
             { id: 'dynamic' as const, label: 'Dinâmicos' },
@@ -251,7 +251,7 @@ export default function SegmentsPage() {
               key={f.id}
               onClick={() => setFilter(f.id)}
               className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                filter === f.id ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
+                filter === f.id ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
               }`}
             >
               {f.label}
@@ -268,46 +268,46 @@ export default function SegmentsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05 }}
-            className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700 transition-colors group"
+            className="bg-white/50 border border-gray-200 rounded-xl p-5 hover:border-gray-200 transition-colors group"
           >
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  seg.type === 'dynamic' ? 'bg-[#F26B2A]/10' : 'bg-zinc-700'
+                  seg.type === 'dynamic' ? 'bg-[#F26B2A]/10' : 'bg-gray-100'
                 }`}>
                   {seg.type === 'dynamic' ? (
                     <Lightning size={16} className="text-[#F26B2A]" />
                   ) : (
-                    <UsersThree size={16} className="text-zinc-400" />
+                    <UsersThree size={16} className="text-gray-500" />
                   )}
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium text-white">{seg.name}</h4>
+                  <h4 className="text-sm font-medium text-gray-900">{seg.name}</h4>
                   <span className={`text-xs px-1.5 py-0.5 rounded ${
-                    seg.type === 'dynamic' ? 'bg-[#F26B2A]/10 text-[#F5A623]' : 'bg-zinc-700 text-zinc-400'
+                    seg.type === 'dynamic' ? 'bg-[#F26B2A]/10 text-[#F5A623]' : 'bg-gray-100 text-gray-500'
                   }`}>
                     {seg.type === 'dynamic' ? 'Dinâmico' : 'Estático'}
                   </span>
                 </div>
               </div>
-              <button className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-700 transition-all">
-                <DotsThree size={18} className="text-zinc-400" />
+              <button className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100 transition-all">
+                <DotsThree size={18} className="text-gray-500" />
               </button>
             </div>
 
-            <p className="text-xs text-zinc-500 mb-3">{seg.description}</p>
+            <p className="text-xs text-gray-500 mb-3">{seg.description}</p>
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div>
-                  <span className="text-lg font-bold text-white">{seg.contacts.toLocaleString('pt-BR')}</span>
-                  <span className="text-xs text-zinc-500 ml-1">contatos</span>
+                  <span className="text-lg font-bold text-gray-900">{seg.contacts.toLocaleString('pt-BR')}</span>
+                  <span className="text-xs text-gray-500 ml-1">contatos</span>
                 </div>
                 <span className={`text-xs ${seg.positive ? 'text-emerald-400' : 'text-red-400'}`}>
                   {seg.growth}
                 </span>
               </div>
-              <div className="flex items-center gap-1 text-xs text-zinc-600">
+              <div className="flex items-center gap-1 text-xs text-gray-400">
                 <ArrowClockwise size={12} />
                 {seg.lastUpdated}
               </div>
@@ -316,7 +316,7 @@ export default function SegmentsPage() {
             {seg.conditions.length > 0 && seg.conditions[0] !== 'manual_list' && (
               <div className="mt-3 flex flex-wrap gap-1">
                 {seg.conditions.map((cond) => (
-                  <span key={cond} className="px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-400 font-mono">
+                  <span key={cond} className="px-2 py-0.5 bg-gray-50 rounded text-xs text-gray-500 font-mono">
                     {cond}
                   </span>
                 ))}

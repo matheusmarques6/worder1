@@ -97,7 +97,7 @@ function TaskSection({
           )}
         </div>
         <Icon className={`w-4 h-4 ${iconColor}`} />
-        <span className="font-medium text-white">{title}</span>
+        <span className="font-medium text-gray-900">{title}</span>
         <span className={`px-2 py-0.5 text-xs rounded-full ${bgColor} ${iconColor}`}>
           {tasks.length}
         </span>
@@ -299,7 +299,7 @@ export default function TasksPage() {
           <button
             onClick={handleRefresh}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-white rounded-xl 
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-900 rounded-xl 
                        hover:bg-gray-200 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -414,7 +414,7 @@ export default function TasksPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar tarefas, contatos, deals..."
             className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl 
-                       text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
+                       text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
           />
           {searchQuery && (
             <button
@@ -461,7 +461,7 @@ export default function TasksPage() {
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
                     className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm 
-                               text-white focus:outline-none focus:border-primary-500 min-w-[140px]"
+                               text-gray-900 focus:outline-none focus:border-primary-500 min-w-[140px]"
                   >
                     <option value="">Todos</option>
                     <option value="pending">Pendentes</option>
@@ -477,7 +477,7 @@ export default function TasksPage() {
                     value={typeFilter}
                     onChange={(e) => setTypeFilter(e.target.value)}
                     className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm 
-                               text-white focus:outline-none focus:border-primary-500 min-w-[140px]"
+                               text-gray-900 focus:outline-none focus:border-primary-500 min-w-[140px]"
                   >
                     <option value="">Todos</option>
                     <option value="task">Tarefa</option>
@@ -497,7 +497,7 @@ export default function TasksPage() {
                     value={priorityFilter}
                     onChange={(e) => setPriorityFilter(e.target.value)}
                     className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm 
-                               text-white focus:outline-none focus:border-primary-500 min-w-[140px]"
+                               text-gray-900 focus:outline-none focus:border-primary-500 min-w-[140px]"
                   >
                     <option value="">Todas</option>
                     <option value="urgent">Urgente</option>
@@ -514,7 +514,7 @@ export default function TasksPage() {
                     value={assignedFilter}
                     onChange={(e) => setAssignedFilter(e.target.value)}
                     className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm 
-                               text-white focus:outline-none focus:border-primary-500 min-w-[140px]"
+                               text-gray-900 focus:outline-none focus:border-primary-500 min-w-[140px]"
                   >
                     <option value="">Todos</option>
                     <option value={user?.id || ''}>Minhas tarefas</option>
@@ -551,7 +551,7 @@ export default function TasksPage() {
           <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
             <ListTodo className="w-8 h-8 text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
             {hasActiveFilters ? 'Nenhuma tarefa encontrada' : 'Nenhuma tarefa ainda'}
           </h3>
           <p className="text-gray-500 max-w-sm mx-auto mb-6">

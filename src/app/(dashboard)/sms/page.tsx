@@ -66,7 +66,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.C
   sent: { label: 'Enviado', color: 'bg-blue-500/10 text-blue-400', icon: CheckCircle },
   active: { label: 'Ativo', color: 'bg-emerald-500/10 text-emerald-400', icon: Lightning },
   scheduled: { label: 'Agendado', color: 'bg-yellow-500/10 text-yellow-400', icon: Clock },
-  paused: { label: 'Pausado', color: 'bg-zinc-500/10 text-zinc-400', icon: Pause },
+  paused: { label: 'Pausado', color: 'bg-zinc-500/10 text-gray-500', icon: Pause },
 }
 
 export default function SMSPage() {
@@ -82,18 +82,18 @@ export default function SMSPage() {
             <DeviceMobileSpeaker size={22} className="text-purple-400" weight="fill" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-display text-white">SMS Marketing</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">Envie campanhas e automações via SMS</p>
+            <h1 className="text-2xl font-bold font-display text-gray-900">SMS Marketing</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Envie campanhas e automações via SMS</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex bg-zinc-800/50 rounded-lg p-1">
+          <div className="flex bg-gray-50/50 rounded-lg p-1">
             {['7d', '30d', '90d'].map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  period === p ? 'bg-purple-500 text-white' : 'text-zinc-400 hover:text-white'
+                  period === p ? 'bg-purple-500 text-white' : 'text-gray-500 hover:text-white'
                 }`}
               >
                 {p}
@@ -117,13 +117,13 @@ export default function SMSPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4"
+              className="bg-white/50 border border-gray-200 rounded-xl p-4"
             >
               <div className="flex items-center gap-2 mb-2">
-                <Icon size={16} className="text-zinc-500" />
-                <span className="text-xs text-zinc-500">{kpi.title}</span>
+                <Icon size={16} className="text-gray-500" />
+                <span className="text-xs text-gray-500">{kpi.title}</span>
               </div>
-              <p className="text-xl font-bold text-white">{kpi.value}</p>
+              <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
               <span className="text-xs text-emerald-400">{kpi.change}</span>
             </motion.div>
           )
@@ -131,8 +131,8 @@ export default function SMSPage() {
       </div>
 
       {/* Performance Chart */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4">Performance de SMS</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Performance de SMS</h3>
         <ResponsiveContainer width="100%" height={280}>
           <AreaChart data={smsPerformance}>
             <defs>
@@ -156,7 +156,7 @@ export default function SMSPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-zinc-800 pb-0">
+      <div className="flex gap-2 border-b border-gray-200 pb-0">
         {[
           { id: 'campaigns' as const, label: 'Campanhas', icon: PaperPlaneTilt },
           { id: 'templates' as const, label: 'Templates', icon: ChatText },
@@ -168,8 +168,8 @@ export default function SMSPage() {
               onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm border-b-2 transition-colors -mb-px ${
                 tab === t.id
-                  ? 'border-purple-500 text-white'
-                  : 'border-transparent text-zinc-400 hover:text-white'
+                  ? 'border-purple-500 text-gray-900'
+                  : 'border-transparent text-gray-500 hover:text-white'
               }`}
             >
               <Icon size={16} />
@@ -180,17 +180,17 @@ export default function SMSPage() {
       </div>
 
       {tab === 'campaigns' ? (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
+        <div className="bg-white/50 border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-zinc-800">
-                <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">Campanha</th>
-                <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">Status</th>
-                <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Enviados</th>
-                <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Entregues</th>
-                <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Cliques</th>
-                <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Receita</th>
-                <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Data</th>
+              <tr className="border-b border-gray-200">
+                <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Campanha</th>
+                <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Status</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Enviados</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Entregues</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Cliques</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Receita</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Data</th>
               </tr>
             </thead>
             <tbody>
@@ -198,19 +198,19 @@ export default function SMSPage() {
                 const status = statusConfig[camp.status]
                 const StatusIcon = status.icon
                 return (
-                  <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors cursor-pointer">
-                    <td className="p-4 text-sm text-white font-medium">{camp.name}</td>
+                  <tr key={i} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors cursor-pointer">
+                    <td className="p-4 text-sm text-gray-700 font-medium">{camp.name}</td>
                     <td className="p-4">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${status.color}`}>
                         <StatusIcon size={12} weight="fill" />
                         {status.label}
                       </span>
                     </td>
-                    <td className="p-4 text-sm text-zinc-400 text-right">{camp.sent.toLocaleString('pt-BR')}</td>
-                    <td className="p-4 text-sm text-zinc-400 text-right">{camp.delivered.toLocaleString('pt-BR')}</td>
-                    <td className="p-4 text-sm text-zinc-400 text-right">{camp.clicked.toLocaleString('pt-BR')}</td>
+                    <td className="p-4 text-sm text-gray-500 text-right">{camp.sent.toLocaleString('pt-BR')}</td>
+                    <td className="p-4 text-sm text-gray-500 text-right">{camp.delivered.toLocaleString('pt-BR')}</td>
+                    <td className="p-4 text-sm text-gray-500 text-right">{camp.clicked.toLocaleString('pt-BR')}</td>
                     <td className="p-4 text-sm text-emerald-400 font-medium text-right">{camp.revenue}</td>
-                    <td className="p-4 text-sm text-zinc-500 text-right">{camp.date}</td>
+                    <td className="p-4 text-sm text-gray-500 text-right">{camp.date}</td>
                   </tr>
                 )
               })}
@@ -225,17 +225,17 @@ export default function SMSPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700 transition-colors"
+              className="bg-white/50 border border-gray-200 rounded-xl p-5 hover:border-gray-200 transition-colors"
             >
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-medium text-white">{tmpl.name}</h4>
-                <span className="text-xs text-zinc-500">{tmpl.uses} usos</span>
+                <h4 className="text-sm font-medium text-gray-900">{tmpl.name}</h4>
+                <span className="text-xs text-gray-500">{tmpl.uses} usos</span>
               </div>
-              <div className="bg-zinc-800/50 rounded-lg p-3 mb-3">
-                <p className="text-xs text-zinc-400 leading-relaxed font-mono">{tmpl.preview}</p>
+              <div className="bg-gray-50/50 rounded-lg p-3 mb-3">
+                <p className="text-xs text-gray-500 leading-relaxed font-mono">{tmpl.preview}</p>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">{tmpl.preview.length} caracteres</span>
+                <span className="text-xs text-gray-500">{tmpl.preview.length} caracteres</span>
                 <button className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
                   Usar template →
                 </button>
@@ -246,16 +246,16 @@ export default function SMSPage() {
       )}
 
       {/* Credits Info */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 flex items-center justify-between">
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <DeviceMobileSpeaker size={20} className="text-purple-400" />
           <div>
-            <p className="text-sm text-white font-medium">Créditos SMS</p>
-            <p className="text-xs text-zinc-500">8.600 créditos restantes de 20.000</p>
+            <p className="text-sm text-gray-700 font-medium">Créditos SMS</p>
+            <p className="text-xs text-gray-500">8.600 créditos restantes de 20.000</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="w-32 h-2 bg-zinc-800 rounded-full overflow-hidden">
+          <div className="w-32 h-2 bg-gray-50 rounded-full overflow-hidden">
             <div className="h-full bg-purple-500 rounded-full" style={{ width: '43%' }} />
           </div>
           <button className="text-xs text-purple-400 hover:text-purple-300 transition-colors">

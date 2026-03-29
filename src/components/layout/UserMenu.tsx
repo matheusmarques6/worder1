@@ -153,7 +153,7 @@ export function UserMenu() {
         {/* Avatar */}
         <div className="relative">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">
+            <span className="text-gray-900 font-semibold text-sm">
               {getInitials(userName)}
             </span>
           </div>
@@ -190,7 +190,7 @@ export function UserMenu() {
             <div className="p-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">
+                  <span className="text-gray-900 font-bold text-lg">
                     {getInitials(userName)}
                   </span>
                 </div>

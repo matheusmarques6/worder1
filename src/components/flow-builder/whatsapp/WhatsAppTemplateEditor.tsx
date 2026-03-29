@@ -383,7 +383,7 @@ export function WhatsAppTemplateEditor({
             </button>
             <button
               onClick={onClose}
-              className="flex items-center gap-2 px-6 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-colors"
+              className="flex items-center gap-2 px-6 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-gray-900 font-medium transition-colors"
             >
               <Check className="w-4 h-4" />
               Salvar Mensagem
@@ -472,7 +472,7 @@ function FreeTextEditor({ config, onUpdate, onOpenVariables }: FreeTextEditorPro
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-xs text-white/60">Mensagem</label>
+          <label className="text-xs text-gray-600/60">Mensagem</label>
           <button
             onClick={() => onOpenVariables('message')}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-100 hover:bg-primary-500/30 text-brand-600 text-xs font-medium transition-colors"
@@ -489,7 +489,7 @@ function FreeTextEditor({ config, onUpdate, onOpenVariables }: FreeTextEditorPro
           className={cn(
             'w-full px-3 py-3 rounded-lg resize-none',
             'bg-[#0a0a0a] border border-gray-200',
-            'text-sm text-white placeholder-white/30',
+            'text-sm text-gray-700 placeholder-white/30',
             'focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20',
             'transition-all'
           )}
@@ -501,7 +501,7 @@ function FreeTextEditor({ config, onUpdate, onOpenVariables }: FreeTextEditorPro
 
       {/* Media attachment */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Anexar mídia (opcional)</label>
+        <label className="text-xs text-gray-600/60">Anexar mídia (opcional)</label>
         <div className="grid grid-cols-4 gap-2">
           {[
             { type: 'none', icon: X, label: 'Nenhum' },
@@ -528,7 +528,7 @@ function FreeTextEditor({ config, onUpdate, onOpenVariables }: FreeTextEditorPro
 
       {config.headerType && config.headerType !== 'none' && (
         <div className="space-y-2">
-          <label className="text-xs text-white/60">URL da Mídia</label>
+          <label className="text-xs text-gray-600/60">URL da Mídia</label>
           <input
             type="url"
             value={config.headerMediaUrl || ''}
@@ -537,7 +537,7 @@ function FreeTextEditor({ config, onUpdate, onOpenVariables }: FreeTextEditorPro
             className={cn(
               'w-full px-3 py-2 rounded-lg',
               'bg-[#0a0a0a] border border-gray-200',
-              'text-sm text-white placeholder-white/30',
+              'text-sm text-gray-700 placeholder-white/30',
               'focus:outline-none focus:border-green-500/50'
             )}
           />
@@ -588,7 +588,7 @@ function TemplateEditor({
 
       {/* Template Type Selection */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Tipo de Template</label>
+        <label className="text-xs text-gray-600/60">Tipo de Template</label>
         <div className="grid grid-cols-2 gap-2">
           {TEMPLATE_TYPES.map((type) => (
             <button
@@ -627,7 +627,7 @@ function TemplateEditor({
       {/* Template Name */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className="text-xs text-white/60">Nome do Template</label>
+          <label className="text-xs text-gray-600/60">Nome do Template</label>
           <input
             type="text"
             value={config.templateName || ''}
@@ -636,14 +636,14 @@ function TemplateEditor({
             className={cn(
               'w-full px-3 py-2 rounded-lg',
               'bg-[#0a0a0a] border border-gray-200',
-              'text-sm text-white placeholder-white/30',
+              'text-sm text-gray-700 placeholder-white/30',
               'focus:outline-none focus:border-green-500/50'
             )}
           />
           <p className="text-[10px] text-white/40">Apenas letras minúsculas e _</p>
         </div>
         <div className="space-y-2">
-          <label className="text-xs text-white/60">Categoria</label>
+          <label className="text-xs text-gray-600/60">Categoria</label>
           <SelectField
             value={config.templateCategory || 'marketing'}
             onChange={(v) => onUpdate({ templateCategory: v })}
@@ -654,7 +654,7 @@ function TemplateEditor({
 
       {/* Language */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Idioma</label>
+        <label className="text-xs text-gray-600/60">Idioma</label>
         <SelectField
           value={config.language || 'pt_BR'}
           onChange={(v) => onUpdate({ language: v })}
@@ -665,7 +665,7 @@ function TemplateEditor({
       {/* Header */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-xs text-white/60 font-medium">Cabeçalho</label>
+          <label className="text-xs text-gray-600/60 font-medium">Cabeçalho</label>
           <span className="text-[10px] text-gray-400">Opcional</span>
         </div>
         <div className="flex gap-2">
@@ -711,7 +711,7 @@ function TemplateEditor({
               className={cn(
                 'w-full px-3 py-2 rounded-lg',
                 'bg-[#0a0a0a] border border-gray-200',
-                'text-sm text-white placeholder-white/30',
+                'text-sm text-gray-700 placeholder-white/30',
                 'focus:outline-none focus:border-green-500/50'
               )}
             />
@@ -732,7 +732,7 @@ function TemplateEditor({
               className={cn(
                 'w-full px-3 py-2 rounded-lg',
                 'bg-[#0a0a0a] border border-gray-200',
-                'text-sm text-white placeholder-white/30',
+                'text-sm text-gray-700 placeholder-white/30',
                 'focus:outline-none focus:border-green-500/50'
               )}
             />
@@ -743,7 +743,7 @@ function TemplateEditor({
       {/* Body */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-xs text-white/60 font-medium">Corpo da Mensagem *</label>
+          <label className="text-xs text-gray-600/60 font-medium">Corpo da Mensagem *</label>
           <button
             onClick={() => onOpenVariables('body')}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-100 hover:bg-primary-500/30 text-brand-600 text-xs font-medium transition-colors"
@@ -761,7 +761,7 @@ function TemplateEditor({
           className={cn(
             'w-full px-3 py-3 rounded-lg resize-none',
             'bg-[#0a0a0a] border border-gray-200',
-            'text-sm text-white placeholder-white/30',
+            'text-sm text-gray-700 placeholder-white/30',
             'focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20',
             'transition-all'
           )}
@@ -774,7 +774,7 @@ function TemplateEditor({
       {/* Footer */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-xs text-white/60 font-medium">Rodapé</label>
+          <label className="text-xs text-gray-600/60 font-medium">Rodapé</label>
           <span className="text-[10px] text-gray-400">Opcional</span>
         </div>
         <input
@@ -786,7 +786,7 @@ function TemplateEditor({
           className={cn(
             'w-full px-3 py-2 rounded-lg',
             'bg-[#0a0a0a] border border-gray-200',
-            'text-sm text-white placeholder-white/30',
+            'text-sm text-gray-700 placeholder-white/30',
             'focus:outline-none focus:border-green-500/50'
           )}
         />
@@ -795,7 +795,7 @@ function TemplateEditor({
       {/* Buttons */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-xs text-white/60 font-medium">Botões</label>
+          <label className="text-xs text-gray-600/60 font-medium">Botões</label>
           <span className="text-[10px] text-gray-400">Máx. 3 botões</span>
         </div>
 
@@ -805,7 +805,7 @@ function TemplateEditor({
               <select
                 value={button.type}
                 onChange={(e) => onUpdateButton(index, { type: e.target.value as any })}
-                className="px-2 py-1.5 rounded bg-gray-100 border border-gray-300 text-xs text-white"
+                className="px-2 py-1.5 rounded bg-gray-100 border border-gray-300 text-xs text-gray-600"
               >
                 <option value="quick_reply">Resposta Rápida</option>
                 <option value="url">Link/URL</option>
@@ -817,7 +817,7 @@ function TemplateEditor({
                 onChange={(e) => onUpdateButton(index, { text: e.target.value })}
                 placeholder="Texto do botão"
                 maxLength={25}
-                className="flex-1 px-2 py-1.5 rounded bg-gray-100 border border-gray-300 text-xs text-white placeholder-dark-400"
+                className="flex-1 px-2 py-1.5 rounded bg-gray-100 border border-gray-300 text-xs text-gray-600 placeholder-dark-400"
               />
               {button.type !== 'quick_reply' && (
                 <input
@@ -825,7 +825,7 @@ function TemplateEditor({
                   value={button.value || ''}
                   onChange={(e) => onUpdateButton(index, { value: e.target.value })}
                   placeholder={button.type === 'url' ? 'https://...' : '+5511...'}
-                  className="flex-1 px-2 py-1.5 rounded bg-gray-100 border border-gray-300 text-xs text-white placeholder-dark-400"
+                  className="flex-1 px-2 py-1.5 rounded bg-gray-100 border border-gray-300 text-xs text-gray-600 placeholder-dark-400"
                 />
               )}
               <button
@@ -909,7 +909,7 @@ function PhonePreview({ config }: PhonePreviewProps) {
 
               {/* Chat Header */}
               <div className="bg-[#1f2c33] px-4 py-3 flex items-center gap-3 border-b border-[#2a3942]">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center text-gray-900 font-bold text-sm">
                   WA
                 </div>
                 <div>
@@ -931,7 +931,7 @@ function PhonePreview({ config }: PhonePreviewProps) {
                   <div className="max-w-[85%] bg-[#005c4b] rounded-lg rounded-tr-none p-2.5 relative">
                     {/* Header */}
                     {config.headerType === 'text' && config.headerText && (
-                      <div className="font-medium text-white text-sm mb-1.5 pb-1.5 border-b border-gray-200">
+                      <div className="font-medium text-gray-900 text-sm mb-1.5 pb-1.5 border-b border-gray-200">
                         {highlightVariables(config.headerText)}
                       </div>
                     )}
@@ -1026,7 +1026,7 @@ function SelectField({ value, onChange, options }: SelectFieldProps) {
         className={cn(
           'w-full px-3 py-2 rounded-lg appearance-none',
           'bg-[#0a0a0a] border border-gray-200',
-          'text-sm text-white',
+          'text-sm text-gray-700',
           'focus:outline-none focus:border-green-500/50'
         )}
       >

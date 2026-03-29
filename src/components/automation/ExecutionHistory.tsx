@@ -295,7 +295,7 @@ export function ExecutionHistory({
               setStatusFilter(e.target.value);
               setPage(1);
             }}
-            className="px-3 py-1.5 bg-[#1a1a1a] border border-[#333333] rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+            className="px-3 py-1.5 bg-[#1a1a1a] border border-[#333333] rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
           >
             <option value="">Todos os status</option>
             <option value="pending">⏳ Pendente</option>
@@ -311,7 +311,7 @@ export function ExecutionHistory({
               setDateFilter(e.target.value);
               setPage(1);
             }}
-            className="px-3 py-1.5 bg-[#1a1a1a] border border-[#333333] rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+            className="px-3 py-1.5 bg-[#1a1a1a] border border-[#333333] rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
           >
             <option value="today">Hoje</option>
             <option value="week">Últimos 7 dias</option>
@@ -359,7 +359,7 @@ export function ExecutionHistory({
         ) : runs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-gray-500">
             <PlayCircle className="w-12 h-12 mb-3 text-gray-400" />
-            <p className="text-lg font-medium text-white mb-1">Nenhuma execução</p>
+            <p className="text-lg font-medium text-gray-900 mb-1">Nenhuma execução</p>
             <p className="text-sm text-center max-w-md mb-4">
               {automationId 
                 ? 'Esta automação ainda não foi executada. Certifique-se de que está ativa e que o trigger foi disparado.'
@@ -412,7 +412,7 @@ export function ExecutionHistory({
                 <div className="w-40 flex-shrink-0 hidden md:block">
                   {run.contact ? (
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-[10px] text-white font-medium">
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-[10px] text-gray-900 font-medium">
                         {(run.contact.name?.[0] || run.contact.email[0]).toUpperCase()}
                       </div>
                       <span className="text-sm text-gray-600 truncate">

@@ -363,7 +363,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                   <button
                     type="submit"
                     disabled={loading || !name.trim()}
-                    className="px-5 py-2.5 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-primary-500/20"
+                    className="px-5 py-2.5 rounded-xl bg-primary-500 hover:bg-primary-600 text-gray-900 font-medium transition-colors disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-primary-500/20"
                   >
                     {loading ? (
                       <>

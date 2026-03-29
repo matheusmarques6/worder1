@@ -261,7 +261,7 @@ export function QualityDashboard({ organizationId, compact = false }: QualityDas
       {/* Instâncias */}
       <div className="bg-white rounded-2xl border border-slate-800/50 overflow-hidden">
         <div className="p-4 border-b border-slate-800/50">
-          <h3 className="font-medium text-white">Números WhatsApp</h3>
+          <h3 className="font-medium text-gray-900">Números WhatsApp</h3>
         </div>
         
         {instances.length === 0 ? (
@@ -287,7 +287,7 @@ export function QualityDashboard({ organizationId, compact = false }: QualityDas
           >
             <div className="flex items-center gap-2">
               <History className="w-5 h-5 text-gray-500" />
-              <h3 className="font-medium text-white">Mudanças Recentes</h3>
+              <h3 className="font-medium text-gray-900">Mudanças Recentes</h3>
               <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">
                 {recentChanges.length}
               </span>
@@ -321,7 +321,7 @@ export function QualityDashboard({ organizationId, compact = false }: QualityDas
       {/* Gráfico (Simples) */}
       {chartData.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-800/50 p-4">
-          <h3 className="font-medium text-white mb-4">Histórico (7 dias)</h3>
+          <h3 className="font-medium text-gray-900 mb-4">Histórico (7 dias)</h3>
           <SimpleChart data={chartData} />
         </div>
       )}
@@ -377,7 +377,7 @@ function InstanceRow({ instance }: { instance: QualityInstance }) {
           <Icon className={`w-5 h-5 ${config.textColor}`} />
         </div>
         <div>
-          <p className="font-medium text-white">{instance.instance_name}</p>
+          <p className="font-medium text-gray-900">{instance.instance_name}</p>
           <p className="text-sm text-gray-500">{instance.phone_number}</p>
         </div>
       </div>
@@ -472,7 +472,7 @@ function CompactQualityCard({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Icon className={`w-5 h-5 ${config.textColor}`} />
-          <span className="font-medium text-white">Qualidade WhatsApp</span>
+          <span className="font-medium text-gray-900">Qualidade WhatsApp</span>
         </div>
         <button
           onClick={onCheck}

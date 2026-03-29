@@ -67,7 +67,7 @@ function SortableStage({ stage, index }: { stage: any; index: number }) {
         className="w-3 h-3 rounded-full flex-shrink-0"
         style={{ backgroundColor: stage.color || '#8b5cf6' }}
       />
-      <span className="text-white flex-1">{stage.name}</span>
+      <span className="text-gray-900 flex-1">{stage.name}</span>
       <span className="text-gray-400 text-sm">
         Posição {index + 1}
       </span>
@@ -197,7 +197,7 @@ export default function PipelinesPage() {
           <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
             <Plus className="w-8 h-8 text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">Nenhuma pipeline ainda</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma pipeline ainda</h3>
           <p className="text-gray-500 mb-4">Crie sua primeira pipeline para começar a gerenciar seus deals</p>
           <button
             onClick={() => setShowModal(true)}
@@ -229,7 +229,7 @@ export default function PipelinesPage() {
                 />
                 
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-white font-medium">{pipeline.name}</h3>
+                  <h3 className="text-gray-900 font-medium">{pipeline.name}</h3>
                   <p className="text-gray-500 text-sm mt-1">
                     {pipeline.stages?.length || 0} estágios
                   </p>

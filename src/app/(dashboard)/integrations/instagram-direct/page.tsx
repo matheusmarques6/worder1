@@ -36,7 +36,7 @@ export default function InstagramDirectPage() {
               <Instagram className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">Instagram Direct</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Instagram Direct</h1>
               <p className="text-gray-500">
                 Receba e responda mensagens do Direct na plataforma
               </p>
@@ -73,7 +73,7 @@ export default function InstagramDirectPage() {
                     <Zap className="w-5 h-5 text-primary-400" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white">Automacoes</h3>
+                    <h3 className="font-semibold text-gray-900">Automacoes</h3>
                     <p className="text-sm text-gray-500">Configure gatilhos automaticos</p>
                   </div>
                 </div>
@@ -86,7 +86,7 @@ export default function InstagramDirectPage() {
                     <div className="flex items-center gap-3">
                       <MessageSquare className="w-5 h-5 text-pink-400" />
                       <div>
-                        <p className="font-medium text-white">Mensagem Recebida</p>
+                        <p className="font-medium text-gray-900">Mensagem Recebida</p>
                         <p className="text-xs text-gray-500">
                           Quando receber uma mensagem no Direct
                         </p>
@@ -102,7 +102,7 @@ export default function InstagramDirectPage() {
                     <div className="flex items-center gap-3">
                       <Instagram className="w-5 h-5 text-purple-400" />
                       <div>
-                        <p className="font-medium text-white">Mencao no Story</p>
+                        <p className="font-medium text-gray-900">Mencao no Story</p>
                         <p className="text-xs text-gray-500">
                           Quando alguem mencionar sua conta no story
                         </p>
@@ -124,14 +124,14 @@ export default function InstagramDirectPage() {
               transition={{ delay: 0.2 }}
               className="bg-white rounded-2xl border border-gray-200 p-6"
             >
-              <h3 className="font-semibold text-white mb-4">Recursos</h3>
+              <h3 className="font-semibold text-gray-900 mb-4">Recursos</h3>
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center flex-shrink-0">
                     <MessageSquare className="w-4 h-4 text-pink-400" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">Inbox Unificada</p>
+                    <p className="text-sm font-medium text-gray-900">Inbox Unificada</p>
                     <p className="text-xs text-gray-500">
                       Todas as conversas em um so lugar
                     </p>
@@ -143,7 +143,7 @@ export default function InstagramDirectPage() {
                     <Zap className="w-4 h-4 text-purple-400" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">Automacoes</p>
+                    <p className="text-sm font-medium text-gray-900">Automacoes</p>
                     <p className="text-xs text-gray-500">
                       Gatilhos para mover leads no pipeline
                     </p>
@@ -155,7 +155,7 @@ export default function InstagramDirectPage() {
                     <Users className="w-4 h-4 text-blue-400" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">CRM Integrado</p>
+                    <p className="text-sm font-medium text-gray-900">CRM Integrado</p>
                     <p className="text-xs text-gray-500">
                       Contatos sincronizados automaticamente
                     </p>
@@ -167,7 +167,7 @@ export default function InstagramDirectPage() {
                     <Shield className="w-4 h-4 text-green-400" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">Seguro</p>
+                    <p className="text-sm font-medium text-gray-900">Seguro</p>
                     <p className="text-xs text-gray-500">
                       Conexao oficial via Meta API
                     </p>
@@ -183,7 +183,7 @@ export default function InstagramDirectPage() {
               transition={{ delay: 0.3 }}
               className="bg-white rounded-2xl border border-gray-200 p-6"
             >
-              <h3 className="font-semibold text-white mb-4">Requisitos</h3>
+              <h3 className="font-semibold text-gray-900 mb-4">Requisitos</h3>
               <ul className="space-y-2 text-sm text-gray-500">
                 <li className="flex items-start gap-2">
                   <span className="text-gray-400">•</span>

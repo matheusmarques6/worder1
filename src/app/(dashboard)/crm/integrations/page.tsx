@@ -197,7 +197,7 @@ function IntegrationCard({
           <>
             <button
               onClick={onConfigure}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-white transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-gray-700 transition-colors"
             >
               <Settings className="w-4 h-4" />
               Configurar
@@ -424,7 +424,7 @@ export default function IntegrationsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar integrações..."
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 focus:outline-none focus:border-brand-400"
           />
         </div>
 
@@ -477,7 +477,7 @@ export default function IntegrationsPage() {
             <button
               onClick={() => setViewMode('grid')}
               className={`p-2 rounded-lg transition-colors ${
-                viewMode === 'grid' ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
+                viewMode === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-white'
               }`}
             >
               <Grid3X3 className="w-4 h-4" />
@@ -485,7 +485,7 @@ export default function IntegrationsPage() {
             <button
               onClick={() => setViewMode('list')}
               className={`p-2 rounded-lg transition-colors ${
-                viewMode === 'list' ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
+                viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-white'
               }`}
             >
               <List className="w-4 h-4" />
@@ -725,7 +725,7 @@ function IntegrationInstallModal({
                   setSelectedStage(pipeline.stages[0].id)
                 }
               }}
-              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
             >
               {pipelines.map((pipeline) => (
                 <option key={pipeline.id} value={pipeline.id}>
@@ -776,7 +776,7 @@ function IntegrationInstallModal({
                 onChange={(e) => setNewTag(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addTag()}
                 placeholder="Digite uma tag..."
-                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
               />
               <button
                 onClick={addTag}
@@ -964,7 +964,7 @@ function IntegrationConfigModal({
             <select
               value={selectedPipeline}
               onChange={(e) => setSelectedPipeline(e.target.value)}
-              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
             >
               {pipelines.map((pipeline) => (
                 <option key={pipeline.id} value={pipeline.id}>
@@ -991,7 +991,7 @@ function IntegrationConfigModal({
                   }
                 }}
                 placeholder="Nova tag..."
-                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
               />
             </div>
             {autoTags.length > 0 && (
@@ -1016,7 +1016,7 @@ function IntegrationConfigModal({
             <div className="p-4 bg-gray-50 rounded-xl">
               <p className="text-sm text-gray-500">
                 Última sincronização:{' '}
-                <span className="text-white">
+                <span className="text-gray-900">
                   {new Date(installed.last_sync_at).toLocaleString('pt-BR')}
                 </span>
               </p>

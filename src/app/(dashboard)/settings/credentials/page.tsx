@@ -365,7 +365,7 @@ export default function CredentialsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Credenciais</h1>
-          <p className="text-white/60 mt-1">
+          <p className="text-gray-500 mt-1">
             Gerencie as credenciais de integração para suas automações
           </p>
         </div>
@@ -402,14 +402,14 @@ export default function CredentialsPage() {
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-12">
           <Loader2 className="w-8 h-8 text-blue-400 animate-spin mb-3" />
-          <p className="text-white/60">Carregando credenciais...</p>
+          <p className="text-gray-500">Carregando credenciais...</p>
         </div>
       ) : credentials.length === 0 ? (
         /* Empty State */
         <div className="flex flex-col items-center justify-center py-12 border border-dashed border-white/20 rounded-lg">
-          <Key className="w-12 h-12 text-white/20 mb-3" />
-          <p className="text-white/60">Nenhuma credencial cadastrada</p>
-          <p className="text-white/40 text-sm mt-1">
+          <Key className="w-12 h-12 text-gray-300 mb-3" />
+          <p className="text-gray-500">Nenhuma credencial cadastrada</p>
+          <p className="text-gray-400 text-sm mt-1">
             Crie uma credencial para conectar suas integrações
           </p>
           <button
@@ -435,23 +435,23 @@ export default function CredentialsPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-gray-50">
-                      <IconComponent className="w-5 h-5 text-white/60" />
+                      <IconComponent className="w-5 h-5 text-gray-500" />
                     </div>
                     <div>
-                      <h3 className="font-medium text-white">{credential.name}</h3>
-                      <p className="text-xs text-white/40">{typeConfig?.name || credential.type}</p>
+                      <h3 className="font-medium text-gray-900">{credential.name}</h3>
+                      <p className="text-xs text-gray-600/40">{typeConfig?.name || credential.type}</p>
                     </div>
                   </div>
 
                   {/* Actions Menu */}
                   <div className="relative group">
-                    <button className="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white">
+                    <button className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white">
                       <MoreVertical className="w-4 h-4" />
                     </button>
                     <div className="absolute right-0 top-full mt-1 py-1 bg-[#1a1a1a] rounded-lg border border-gray-200 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[140px]">
                       <button
                         onClick={() => openEditModal(credential)}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-gray-50"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700/70 hover:text-white hover:bg-gray-50"
                       >
                         <Edit2 className="w-4 h-4" />
                         Editar
@@ -459,7 +459,7 @@ export default function CredentialsPage() {
                       <button
                         onClick={() => handleTest(credential.id)}
                         disabled={testingId === credential.id}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-gray-50"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700/70 hover:text-white hover:bg-gray-50"
                       >
                         {testingId === credential.id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -494,7 +494,7 @@ export default function CredentialsPage() {
                     </div>
                   )}
                   {credential.automations_using && credential.automations_using.length > 0 && (
-                    <span className="text-white/40">
+                    <span className="text-gray-400">
                       {credential.automations_using.length} automação(ões)
                     </span>
                   )}
@@ -502,7 +502,7 @@ export default function CredentialsPage() {
 
                 {/* Last Used */}
                 {credential.last_used_at && (
-                  <p className="text-xs text-white/30 mt-2">
+                  <p className="text-xs text-gray-600/30 mt-2">
                     Último uso: {new Date(credential.last_used_at).toLocaleString('pt-BR')}
                   </p>
                 )}
@@ -536,7 +536,7 @@ export default function CredentialsPage() {
                 </h2>
                 <button
                   onClick={closeModal}
-                  className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                  className="p-2 rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
@@ -560,11 +560,11 @@ export default function CredentialsPage() {
                             className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-white/30 hover:bg-gray-50 transition-colors text-left"
                           >
                             <div className="p-2 rounded-lg bg-gray-50">
-                              <IconComponent className="w-5 h-5 text-white/60" />
+                              <IconComponent className="w-5 h-5 text-gray-500" />
                             </div>
                             <div>
-                              <p className="font-medium text-white">{type.name}</p>
-                              <p className="text-xs text-white/40">{type.description}</p>
+                              <p className="font-medium text-gray-900">{type.name}</p>
+                              <p className="text-xs text-gray-600/40">{type.description}</p>
                             </div>
                           </button>
                         );
@@ -578,7 +578,7 @@ export default function CredentialsPage() {
                     {!editingCredential && (
                       <button
                         onClick={() => setSelectedType(null)}
-                        className="text-sm text-white/60 hover:text-white"
+                        className="text-sm text-gray-700/60 hover:text-white"
                       >
                         ← Voltar
                       </button>
@@ -626,7 +626,7 @@ export default function CredentialsPage() {
                             <button
                               type="button"
                               onClick={() => toggleShowPassword(field.name)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-white/40 hover:text-white"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-white"
                             >
                               {showPasswords.has(field.name) ? (
                                 <EyeOff className="w-4 h-4" />
@@ -637,7 +637,7 @@ export default function CredentialsPage() {
                           )}
                         </div>
                         {field.help && (
-                          <p className="mt-1 text-xs text-white/40">{field.help}</p>
+                          <p className="mt-1 text-xs text-gray-600/40">{field.help}</p>
                         )}
                       </div>
                     ))}

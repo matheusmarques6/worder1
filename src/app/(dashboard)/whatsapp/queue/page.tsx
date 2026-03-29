@@ -109,7 +109,7 @@ function QueueItemCard({ item, agents, onAssign }: QueueItemCardProps) {
             <User className="w-5 h-5 text-brand-600" />
           </div>
           <div>
-            <h4 className="font-medium text-white">
+            <h4 className="font-medium text-gray-900">
               {item.contact_name || item.contact_phone || 'Contato'}
             </h4>
             {item.last_message_preview && (
@@ -134,7 +134,7 @@ function QueueItemCard({ item, agents, onAssign }: QueueItemCardProps) {
           <select
             value={selectedAgent}
             onChange={(e) => setSelectedAgent(e.target.value)}
-            className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm text-white"
+            className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-700"
           >
             <option value="">Selecionar agente</option>
             {availableAgents.map((agent) => (
@@ -195,7 +195,7 @@ function AgentCard({ agent }: AgentCardProps) {
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h4 className="font-medium text-white truncate">
+            <h4 className="font-medium text-gray-900 truncate">
               {agent.profile?.full_name || 'Agente'}
             </h4>
             {agent.on_break && (
@@ -210,7 +210,7 @@ function AgentCard({ agent }: AgentCardProps) {
 
         {/* Stats */}
         <div className="text-right">
-          <p className="text-lg font-bold text-white">
+          <p className="text-lg font-bold text-gray-900">
             {agent.current_conversations}/{agent.max_conversations}
           </p>
           <p className="text-xs text-gray-400">conversas</p>
@@ -350,7 +350,7 @@ export default function QueuePage() {
           <button
             onClick={handleRefresh}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-white rounded-xl hover:bg-gray-200"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-900 rounded-xl hover:bg-gray-200"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -437,7 +437,7 @@ export default function QueuePage() {
           ) : items.length === 0 ? (
             <div className="text-center py-12 bg-gray-50 rounded-xl border border-gray-200">
               <CheckCircle className="w-12 h-12 text-success-400 mx-auto mb-3" />
-              <h3 className="text-lg font-medium text-white mb-1">Fila vazia!</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-1">Fila vazia!</h3>
               <p className="text-gray-500">Todas as conversas foram atendidas</p>
             </div>
           ) : (

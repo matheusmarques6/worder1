@@ -112,7 +112,7 @@ export function BulkActionsToolbar({
                 <select
                   value={tagAction}
                   onChange={(e) => setTagAction(e.target.value as 'add' | 'remove')}
-                  className="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-white"
+                  className="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-700"
                 >
                   <option value="add">Adicionar</option>
                   <option value="remove">Remover</option>
@@ -122,7 +122,7 @@ export function BulkActionsToolbar({
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
                   placeholder="tag1, tag2..."
-                  className="w-40 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-white placeholder-dark-500"
+                  className="w-40 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 placeholder-dark-500"
                   onKeyDown={(e) => e.key === 'Enter' && handleTagSubmit()}
                 />
                 <button

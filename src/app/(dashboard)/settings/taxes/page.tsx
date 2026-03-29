@@ -45,7 +45,7 @@ const CURRENCIES = ['BRL', 'USD', 'EUR', 'GBP', 'CNY']
 const InfoTooltip = ({ text }: { text: string }) => (
   <div className="group relative inline-block ml-1">
     <Info className="w-4 h-4 text-gray-400 cursor-help" />
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-100 rounded-lg text-xs text-white w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-100 rounded-lg text-xs text-gray-600 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
       {text}
       <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-dark-700" />
     </div>
@@ -86,7 +86,7 @@ const InputField = ({
         min="0"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500 ${
+        className={`w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500 ${
           prefix ? 'pl-10' : ''
         } ${suffix ? 'pr-10' : ''}`}
       />
@@ -147,7 +147,7 @@ const CustomFeeModal = ({
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="Ex: Taxa Shopify, Embalagem"
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
             />
           </div>
 
@@ -158,7 +158,7 @@ const CustomFeeModal = ({
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Descrição da taxa"
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
             />
           </div>
 
@@ -168,7 +168,7 @@ const CustomFeeModal = ({
               <select
                 value={formData.fee_type}
                 onChange={(e) => setFormData({ ...formData, fee_type: e.target.value as 'percentage' | 'fixed' })}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
               >
                 <option value="percentage">Porcentagem (%)</option>
                 <option value="fixed">Valor Fixo (R$)</option>
@@ -184,7 +184,7 @@ const CustomFeeModal = ({
                   min="0"
                   value={formData.fee_value}
                   onChange={(e) => setFormData({ ...formData, fee_value: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500 pr-10"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500 pr-10"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                   {formData.fee_type === 'percentage' ? '%' : 'R$'}
@@ -199,7 +199,7 @@ const CustomFeeModal = ({
               <select
                 value={formData.applies_to}
                 onChange={(e) => setFormData({ ...formData, applies_to: e.target.value })}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
               >
                 <option value="revenue">Receita Total</option>
                 <option value="subtotal">Subtotal (sem frete)</option>
@@ -364,7 +364,7 @@ export default function TaxSettingsPage() {
         <button
           onClick={saveSettings}
           disabled={isSaving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 text-white rounded-xl font-medium transition-colors"
+          className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 text-gray-900 rounded-xl font-medium transition-colors"
         >
           {isSaving ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -407,7 +407,7 @@ export default function TaxSettingsPage() {
             <select
               value={settings.default_cost_currency}
               onChange={(e) => setSettings({ ...settings, default_cost_currency: e.target.value })}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
             >
               {CURRENCIES.map(c => (
                 <option key={c} value={c}>{c}</option>
@@ -546,7 +546,7 @@ export default function TaxSettingsPage() {
                 <div className="flex items-center gap-3">
                   <div className={`w-2 h-2 rounded-full ${fee.is_active ? 'bg-green-400' : 'bg-gray-300'}`} />
                   <div>
-                    <p className="font-medium text-white">{fee.name}</p>
+                    <p className="font-medium text-gray-900">{fee.name}</p>
                     <p className="text-sm text-gray-500">
                       {fee.fee_type === 'percentage'
                         ? `${fee.fee_value}% sobre ${fee.applies_to === 'revenue' ? 'receita' : fee.applies_to === 'subtotal' ? 'subtotal' : 'frete'}`

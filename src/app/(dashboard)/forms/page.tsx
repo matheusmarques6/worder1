@@ -147,7 +147,7 @@ export default function FormsPage() {
           placeholder="Buscar formularios..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
+          className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
         />
       </div>
 
@@ -267,7 +267,7 @@ export default function FormsPage() {
                 <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-200">
                   <div>
                     <p className="text-xs text-gray-400">Views</p>
-                    <p className="text-lg font-bold text-white">{form.views_count}</p>
+                    <p className="text-lg font-bold text-gray-900">{form.views_count}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-400">Leads</p>
@@ -332,7 +332,7 @@ export default function FormsPage() {
                     value={newFormName}
                     onChange={(e) => setNewFormName(e.target.value)}
                     placeholder="Ex: Diagnostico Gratuito"
-                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
                     autoFocus
                   />
                 </div>
@@ -343,7 +343,7 @@ export default function FormsPage() {
                     onChange={(e) => setNewFormDescription(e.target.value)}
                     placeholder="Descreva o objetivo do formulario..."
                     rows={3}
-                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500 resize-none"
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-primary-500 resize-none"
                   />
                 </div>
                 <button

@@ -237,7 +237,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
               <TrendingUp className="h-4 w-4" />
               Melhor Cohort
             </div>
-            <p className="text-lg font-bold text-white">
+            <p className="text-lg font-bold text-gray-900">
               {formatMonth(matrixData.summary.bestCohort)}
             </p>
           </div>
@@ -246,7 +246,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
               <TrendingDown className="h-4 w-4" />
               Pior Cohort
             </div>
-            <p className="text-lg font-bold text-white">
+            <p className="text-lg font-bold text-gray-900">
               {formatMonth(matrixData.summary.worstCohort)}
             </p>
           </div>
@@ -255,7 +255,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
 
       {/* Retention Curve */}
       <div className="bg-[#1a1a2e] rounded-xl p-6">
-        <h3 className="text-lg font-medium text-white mb-4">Curva de Retenção Média</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Curva de Retenção Média</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={retentionCurveData}>
@@ -294,7 +294,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
       {matrixData && matrixData.cohorts.length > 0 && (
         <div className="bg-[#1a1a2e] rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-white">Matriz de Retenção</h3>
+            <h3 className="text-lg font-medium text-gray-900">Matriz de Retenção</h3>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <Info className="h-4 w-4" />
               Cada célula mostra % de clientes que voltaram a comprar
@@ -411,7 +411,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
 
       {/* Insights */}
       <div className="bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/20 rounded-xl p-6">
-        <h3 className="text-lg font-medium text-white mb-3">💡 Insights</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-3">💡 Insights</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div className="flex items-start gap-3">
             <ArrowRight className="h-5 w-5 text-violet-400 mt-0.5" />

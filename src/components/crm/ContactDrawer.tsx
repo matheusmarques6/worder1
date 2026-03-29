@@ -965,7 +965,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                             <SegmentIcon className="w-5 h-5" />
                           </div>
                           <div>
-                            <p className="text-white font-medium">{segment.label}</p>
+                            <p className="text-gray-900 font-medium">{segment.label}</p>
                             <p className="text-gray-500 text-xs">Segmento RFM</p>
                           </div>
                         </>
@@ -975,15 +975,15 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                   <div className="flex gap-1">
                     <div className="text-center px-2">
                       <p className="text-xs text-gray-400">R</p>
-                      <p className="text-white font-bold">{enrichedData.rfm_recency_score || '-'}</p>
+                      <p className="text-gray-900 font-bold">{enrichedData.rfm_recency_score || '-'}</p>
                     </div>
                     <div className="text-center px-2">
                       <p className="text-xs text-gray-400">F</p>
-                      <p className="text-white font-bold">{enrichedData.rfm_frequency_score || '-'}</p>
+                      <p className="text-gray-900 font-bold">{enrichedData.rfm_frequency_score || '-'}</p>
                     </div>
                     <div className="text-center px-2">
                       <p className="text-xs text-gray-400">M</p>
-                      <p className="text-white font-bold">{enrichedData.rfm_monetary_score || '-'}</p>
+                      <p className="text-gray-900 font-bold">{enrichedData.rfm_monetary_score || '-'}</p>
                     </div>
                   </div>
                 </div>
@@ -1422,7 +1422,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
 
             {/* Actions */}
             <div className="pt-4 border-t border-gray-200 space-y-2">
-              <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-500 hover:bg-primary-600 rounded-xl text-white font-medium transition-colors">
+              <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-500 hover:bg-primary-600 rounded-xl text-gray-900 font-medium transition-colors">
                 <MessageSquare className="w-4 h-4" />
                 Enviar Mensagem
               </button>
@@ -1477,7 +1477,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                     <button
                       onClick={confirmDeleteDeal}
                       disabled={deletingDeal}
-                      className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 disabled:opacity-50 rounded-xl text-gray-900 font-medium transition-colors flex items-center justify-center gap-2"
                     >
                       {deletingDeal ? (
                         <>
@@ -1541,7 +1541,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                     <button
                       onClick={confirmDeleteActivity}
                       disabled={deletingActivity}
-                      className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 disabled:opacity-50 rounded-xl text-gray-900 font-medium transition-colors flex items-center justify-center gap-2"
                     >
                       {deletingActivity ? (
                         <>
@@ -1704,7 +1704,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                   <button
                     onClick={handleAddToPipeline}
                     disabled={!selectedPipeline || !selectedStage || creatingDeal}
-                    className="flex-1 px-4 py-3 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors"
+                    className="flex-1 px-4 py-3 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-gray-900 font-medium transition-colors"
                   >
                     {creatingDeal ? 'Criando...' : 'Criar Deal'}
                   </button>

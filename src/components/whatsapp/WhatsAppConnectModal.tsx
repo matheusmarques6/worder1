@@ -183,7 +183,7 @@ export default function WhatsAppConnectModal({
                     >
                       <div className="flex items-center gap-3">
                         <span className="w-6 h-6 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-sm font-medium">1</span>
-                        <span className="font-medium text-white">Acessar Meta for Developers</span>
+                        <span className="font-medium text-gray-900">Acessar Meta for Developers</span>
                       </div>
                       {expandedGuide === 1 ? <ChevronDown className="w-5 h-5 text-gray-500" /> : <ChevronRight className="w-5 h-5 text-gray-500" />}
                     </button>
@@ -205,7 +205,7 @@ export default function WhatsAppConnectModal({
                     >
                       <div className="flex items-center gap-3">
                         <span className="w-6 h-6 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-sm font-medium">2</span>
-                        <span className="font-medium text-white">Copiar Phone Number ID</span>
+                        <span className="font-medium text-gray-900">Copiar Phone Number ID</span>
                       </div>
                       {expandedGuide === 2 ? <ChevronDown className="w-5 h-5 text-gray-500" /> : <ChevronRight className="w-5 h-5 text-gray-500" />}
                     </button>
@@ -229,7 +229,7 @@ export default function WhatsAppConnectModal({
                     >
                       <div className="flex items-center gap-3">
                         <span className="w-6 h-6 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-sm font-medium">3</span>
-                        <span className="font-medium text-white">Gerar Access Token Permanente</span>
+                        <span className="font-medium text-gray-900">Gerar Access Token Permanente</span>
                       </div>
                       {expandedGuide === 3 ? <ChevronDown className="w-5 h-5 text-gray-500" /> : <ChevronRight className="w-5 h-5 text-gray-500" />}
                     </button>
@@ -366,7 +366,7 @@ export default function WhatsAppConnectModal({
 
                 {/* Webhook Config */}
                 <div className="p-4 bg-white rounded-xl space-y-4">
-                  <h4 className="font-medium text-white flex items-center gap-2">
+                  <h4 className="font-medium text-gray-900 flex items-center gap-2">
                     <Info className="w-4 h-4 text-blue-400" />
                     Configure o Webhook no Meta
                   </h4>
@@ -437,7 +437,7 @@ export default function WhatsAppConnectModal({
                 </button>
                 <button
                   onClick={() => setStep(2)}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-green-500 hover:bg-green-600 rounded-xl text-white font-medium transition-colors"
+                  className="flex items-center gap-2 px-6 py-2.5 bg-green-500 hover:bg-green-600 rounded-xl text-gray-900 font-medium transition-colors"
                 >
                   Tenho as credenciais
                   <ChevronRight className="w-4 h-4" />
@@ -456,7 +456,7 @@ export default function WhatsAppConnectModal({
                 <button
                   onClick={handleConnect}
                   disabled={loading || !phoneNumberId || !accessToken}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-medium transition-colors"
+                  className="flex items-center gap-2 px-6 py-2.5 bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-gray-900 font-medium transition-colors"
                 >
                   {loading ? (
                     <>
@@ -481,7 +481,7 @@ export default function WhatsAppConnectModal({
                     onSuccess()
                     onClose()
                   }}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-green-500 hover:bg-green-600 rounded-xl text-white font-medium transition-colors"
+                  className="flex items-center gap-2 px-6 py-2.5 bg-green-500 hover:bg-green-600 rounded-xl text-gray-900 font-medium transition-colors"
                 >
                   <Check className="w-4 h-4" />
                   Concluir

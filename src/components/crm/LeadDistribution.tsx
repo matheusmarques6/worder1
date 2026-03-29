@@ -190,7 +190,7 @@ export function LeadDistribution({
             </div>
             <div>
               <p className="text-sm text-slate-400">Regras Ativas</p>
-              <p className="text-2xl font-bold text-white">{overallStats.activeRules}</p>
+              <p className="text-2xl font-bold text-gray-900">{overallStats.activeRules}</p>
             </div>
           </div>
         </motion.div>
@@ -207,7 +207,7 @@ export function LeadDistribution({
             </div>
             <div>
               <p className="text-sm text-slate-400">Distribuicoes Hoje</p>
-              <p className="text-2xl font-bold text-white">{overallStats.totalDistributions}</p>
+              <p className="text-2xl font-bold text-gray-900">{overallStats.totalDistributions}</p>
             </div>
           </div>
         </motion.div>
@@ -224,7 +224,7 @@ export function LeadDistribution({
             </div>
             <div>
               <p className="text-sm text-slate-400">Agentes Configurados</p>
-              <p className="text-2xl font-bold text-white">{overallStats.totalAgents}</p>
+              <p className="text-2xl font-bold text-gray-900">{overallStats.totalAgents}</p>
             </div>
           </div>
         </motion.div>
@@ -293,7 +293,7 @@ export function LeadDistribution({
                 {/* Rule Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-medium text-white truncate">{rule.name}</h3>
+                    <h3 className="text-lg font-medium text-gray-900 truncate">{rule.name}</h3>
                     <span className={`px-2 py-0.5 text-xs rounded-full ${
                       rule.is_active
                         ? 'bg-emerald-500/20 text-emerald-400'
@@ -395,7 +395,7 @@ export function LeadDistribution({
             className="text-center py-12"
           >
             <Shuffle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchQuery ? 'Nenhuma regra encontrada' : 'Nenhuma regra criada'}
             </h3>
             <p className="text-slate-400 mb-4">
@@ -521,7 +521,7 @@ function CreateRuleModal({ isOpen, onClose, onSave }: CreateRuleModalProps) {
         className="w-full max-w-lg bg-slate-800 border border-slate-700 rounded-xl shadow-xl"
       >
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
-          <h2 className="text-lg font-semibold text-white">Nova Regra de Distribuicao</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Nova Regra de Distribuicao</h2>
           <button
             onClick={onClose}
             className="p-1 text-slate-400 hover:text-white transition-colors"
@@ -561,7 +561,7 @@ function CreateRuleModal({ isOpen, onClose, onSave }: CreateRuleModalProps) {
                 >
                   <div className="flex items-center gap-2 mb-1">
                     {getDistributionTypeIcon(type)}
-                    <span className="font-medium text-white">{getDistributionTypeLabel(type)}</span>
+                    <span className="font-medium text-gray-900">{getDistributionTypeLabel(type)}</span>
                   </div>
                   <p className="text-xs text-slate-400">{getDistributionTypeDescription(type)}</p>
                 </button>
@@ -656,7 +656,7 @@ function ConfigRuleModal({
       >
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div>
-            <h2 className="text-lg font-semibold text-white">{rule.name}</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{rule.name}</h2>
             <p className="text-sm text-slate-400">Configurar agentes e parametros</p>
           </div>
           <button
@@ -715,7 +715,7 @@ function ConfigRuleModal({
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-white truncate">{agent.agent_name || 'Agente'}</p>
+                      <p className="font-medium text-gray-900 truncate">{agent.agent_name || 'Agente'}</p>
                       <p className="text-sm text-slate-400 truncate">{agent.agent_email}</p>
                     </div>
 
@@ -885,7 +885,7 @@ function LogsModal({ isOpen, onClose, rule, logs }: LogsModalProps) {
       >
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div>
-            <h2 className="text-lg font-semibold text-white">Historico de Distribuicao</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Historico de Distribuicao</h2>
             <p className="text-sm text-slate-400">{rule.name} - Ultimas 100 distribuicoes</p>
           </div>
           <button
@@ -913,7 +913,7 @@ function LogsModal({ isOpen, onClose, rule, logs }: LogsModalProps) {
                     <ChevronRight className="w-4 h-4 text-violet-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white">
+                    <p className="text-sm text-gray-700">
                       Lead distribuido para{' '}
                       <span className="font-medium">{log.profiles?.full_name || log.assigned_to}</span>
                     </p>

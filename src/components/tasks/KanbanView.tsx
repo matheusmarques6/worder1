@@ -134,7 +134,7 @@ export function KanbanView({
         >
           {/* Column Header */}
           <div className={`flex items-center gap-2 p-3 rounded-t-xl border-t-2 ${column.color} ${column.bgColor}`}>
-            <span className="font-medium text-white">{column.title}</span>
+            <span className="font-medium text-gray-900">{column.title}</span>
             <span className="px-2 py-0.5 text-xs bg-gray-100 rounded-full text-gray-600">
               {tasksByColumn[column.id]?.length || 0}
             </span>

@@ -295,10 +295,10 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
               {/* ACTION BUTTONS */}
               {deal.status === 'open' && !isEditing && (
                 <div className="flex gap-3">
-                  <button onClick={handleMarkAsWon} disabled={statusChanging} className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-green-500 hover:bg-green-600 text-white font-medium transition-all disabled:opacity-50 shadow-lg shadow-green-500/20">
+                  <button onClick={handleMarkAsWon} disabled={statusChanging} className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-green-500 hover:bg-green-600 text-gray-900 font-medium transition-all disabled:opacity-50 shadow-lg shadow-green-500/20">
                     {statusChanging ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Trophy className="w-5 h-5" />Marcar como Ganho</>}
                   </button>
-                  <button onClick={() => setShowLostReasonModal(true)} disabled={statusChanging} className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-all disabled:opacity-50 shadow-lg shadow-red-500/20">
+                  <button onClick={() => setShowLostReasonModal(true)} disabled={statusChanging} className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-red-500 hover:bg-red-600 text-gray-900 font-medium transition-all disabled:opacity-50 shadow-lg shadow-red-500/20">
                     <XCircle className="w-5 h-5" />Marcar como Perdido
                   </button>
                 </div>
@@ -406,10 +406,10 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                   <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
-                        <span className="text-white font-bold">{getContactInitials()}</span>
+                        <span className="text-gray-900 font-bold">{getContactInitials()}</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-white">{getContactName()}</p>
+                        <p className="font-medium text-gray-900">{getContactName()}</p>
                         {deal.contact.company && <p className="text-sm text-gray-500 flex items-center gap-1"><Building2 className="w-3 h-3" />{deal.contact.company}</p>}
                       </div>
                       <div className="flex gap-2 flex-shrink-0">
@@ -472,7 +472,7 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                     <textarea value={lostReason} onChange={(e) => setLostReason(e.target.value)} rows={3} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-red-500 resize-none mb-4" placeholder="Ex: Preço alto, concorrente, sem budget..." autoFocus />
                     <div className="flex gap-3">
                       <button onClick={() => { setShowLostReasonModal(false); setLostReason(''); }} disabled={statusChanging} className="flex-1 px-4 py-2.5 rounded-xl bg-white hover:bg-gray-100 text-white transition-colors disabled:opacity-50">Cancelar</button>
-                      <button onClick={handleMarkAsLost} disabled={statusChanging} className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                      <button onClick={handleMarkAsLost} disabled={statusChanging} className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-gray-900 font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                         {statusChanging ? (<><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Salvando...</>) : (<><XCircle className="w-4 h-4" />Confirmar Perda</>)}
                       </button>
                     </div>

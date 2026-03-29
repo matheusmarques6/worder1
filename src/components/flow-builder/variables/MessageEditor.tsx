@@ -115,7 +115,7 @@ export function MessageEditor({
       {/* Label Row */}
       {label && (
         <div className="flex items-center justify-between">
-          <label className="text-xs text-white/60">{label}</label>
+          <label className="text-xs text-gray-600/60">{label}</label>
           {variablesUsed > 0 && (
             <span className="text-[10px] text-brand-600 bg-brand-100 px-1.5 py-0.5 rounded">
               {variablesUsed} {variablesUsed === 1 ? 'variável' : 'variáveis'}
@@ -138,7 +138,7 @@ export function MessageEditor({
           className={cn(
             'w-full px-3 py-2 pr-24 rounded-lg resize-none',
             'bg-[#0a0a0a] border border-gray-200',
-            'text-sm text-white placeholder-white/30',
+            'text-sm text-gray-700 placeholder-white/30',
             'focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20',
             'transition-all'
           )}
@@ -190,7 +190,7 @@ export function MessageEditor({
               <Eye className="w-3.5 h-3.5 text-brand-600" />
               <span className="text-xs font-medium text-brand-600">Preview com dados do evento</span>
             </div>
-            <p className="text-sm text-white whitespace-pre-wrap">
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">
               {getPreviewText()}
             </p>
           </div>

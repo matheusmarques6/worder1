@@ -277,11 +277,11 @@ export function ExecutionDetail({
                 {/* Contato */}
                 {run.contact && (
                   <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-gray-900 font-semibold">
                       {(run.contact.name?.[0] || run.contact.email[0]).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-white truncate">
+                      <p className="font-medium text-gray-900 truncate">
                         {run.contact.name || 'Sem nome'}
                       </p>
                       <div className="flex items-center gap-3 text-xs text-gray-500">
@@ -307,7 +307,7 @@ export function ExecutionDetail({
                       <Briefcase className="w-5 h-5 text-blue-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-white truncate">
+                      <p className="font-medium text-gray-900 truncate">
                         Deal vinculado
                       </p>
                       <p className="text-xs text-gray-500">
@@ -333,12 +333,12 @@ export function ExecutionDetail({
             <div className="px-4 py-3 border-b border-[#222222] flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-500" />
-                <span className="text-sm text-white">{run.completed_steps} sucesso</span>
+                <span className="text-sm text-gray-700">{run.completed_steps} sucesso</span>
               </div>
               {run.failed_steps > 0 && (
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-red-500" />
-                  <span className="text-sm text-white">{run.failed_steps} erro</span>
+                  <span className="text-sm text-gray-700">{run.failed_steps} erro</span>
                 </div>
               )}
               <div className="flex items-center gap-2">

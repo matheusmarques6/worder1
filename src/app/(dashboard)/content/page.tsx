@@ -78,7 +78,7 @@ export default function ContentPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display text-white">Conteúdo</h1>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Conteúdo</h1>
           <p className="text-sm text-gray-500 mt-1">Templates, produtos, mídia e cupons</p>
         </div>
         <button className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20">
@@ -98,7 +98,7 @@ export default function ContentPage() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
                 isActive
-                  ? 'bg-white/[0.08] text-white'
+                  ? 'bg-white/[0.08] text-gray-900'
                   : 'text-gray-500 hover:text-gray-700 hover:bg-white/[0.04]'
               }`}
             >
@@ -121,7 +121,7 @@ export default function ContentPage() {
           <input
             type="text"
             placeholder="Buscar templates..."
-            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
           />
         </div>
         <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
@@ -141,7 +141,7 @@ export default function ContentPage() {
       {!loading && templates.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <EnvelopeSimple className="w-16 h-16 text-gray-600 mb-4" weight="duotone" />
-          <h3 className="text-lg font-semibold text-white mb-1">Nenhum template encontrado</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Nenhum template encontrado</h3>
           <p className="text-sm text-gray-500">Crie seu primeiro template para começar.</p>
         </div>
       )}
@@ -165,7 +165,7 @@ export default function ContentPage() {
                 )}
               </div>
               <div className="p-4">
-                <h3 className="text-sm font-semibold text-white">{template.name}</h3>
+                <h3 className="text-sm font-semibold text-gray-900">{template.name}</h3>
                 <div className="flex items-center gap-2 mt-2">
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-medium">
                     E-mail

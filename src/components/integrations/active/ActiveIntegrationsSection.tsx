@@ -326,7 +326,7 @@ function ShopifyActiveCard({
       <div className="mt-4 flex items-center gap-2">
         <button
           onClick={onConfigure}
-          className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-white transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-gray-700 transition-colors"
         >
           <Settings className="w-4 h-4" />
           Configurar
@@ -418,7 +418,7 @@ function WhatsAppActiveCard({
       <div className="mt-4">
         <button
           onClick={onConfigure}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-white transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-gray-700 transition-colors"
         >
           <Settings className="w-4 h-4" />
           Configurar
@@ -571,7 +571,7 @@ function ShopifyConfigModal({
             <div className="flex items-start gap-3">
               <Settings className="w-5 h-5 text-brand-600 mt-0.5 flex-shrink-0" />
               <div>
-                <h4 className="font-medium text-white">Configurar Automações</h4>
+                <h4 className="font-medium text-gray-900">Configurar Automações</h4>
                 <p className="text-sm text-gray-500 mt-1">
                   As configurações de eventos, estágios e importação de clientes 
                   estão disponíveis na aba <strong>Automações</strong> dentro de cada Pipeline no CRM.

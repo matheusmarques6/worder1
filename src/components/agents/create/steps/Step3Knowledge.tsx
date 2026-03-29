@@ -132,7 +132,7 @@ export function Step3Knowledge({
     returns: 'bg-orange-500/20 text-orange-400',
     payment: 'bg-green-500/20 text-green-400',
     product: 'bg-purple-500/20 text-purple-400',
-    general: 'bg-zinc-500/20 text-zinc-400',
+    general: 'bg-zinc-500/20 text-gray-500',
     support: 'bg-red-500/20 text-red-400',
   };
 
@@ -145,23 +145,23 @@ export function Step3Knowledge({
         <h2 className="text-xl font-semibold text-gray-900 mb-2">
           Base de Conhecimento
         </h2>
-        <p className="text-zinc-400">
+        <p className="text-gray-500">
           Configure as perguntas frequentes que seu agente saberá responder.
           {storeAnalysis && ' Geramos um FAQ baseado na sua loja.'}
         </p>
       </div>
 
       {/* Stats */}
-      <div className="flex items-center gap-4 p-4 bg-zinc-800/50 rounded-lg">
+      <div className="flex items-center gap-4 p-4 bg-gray-50/50 rounded-lg">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-5 h-5 text-blue-400" />
-          <span className="text-white font-medium">{enabledCount}</span>
-          <span className="text-zinc-400">perguntas ativas</span>
+          <span className="text-gray-900 font-medium">{enabledCount}</span>
+          <span className="text-gray-500">perguntas ativas</span>
         </div>
         {storeAnalysis && (
           <div className="flex items-center gap-2 ml-auto">
             <Sparkles className="w-4 h-4 text-yellow-400" />
-            <span className="text-xs text-zinc-400">Gerado automaticamente</span>
+            <span className="text-xs text-gray-500">Gerado automaticamente</span>
           </div>
         )}
       </div>
@@ -175,8 +175,8 @@ export function Step3Knowledge({
             className={`
               border rounded-lg overflow-hidden transition-colors
               ${item.enabled
-                ? 'bg-zinc-800/50 border-zinc-700'
-                : 'bg-zinc-900/50 border-zinc-800 opacity-60'
+                ? 'bg-gray-50/50 border-gray-200'
+                : 'bg-white/50 border-gray-200 opacity-60'
               }
             `}
           >
@@ -189,7 +189,7 @@ export function Step3Knowledge({
                   w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center mt-0.5
                   ${item.enabled
                     ? 'bg-blue-600 border-blue-600'
-                    : 'bg-transparent border-zinc-600'
+                    : 'bg-transparent border-gray-200'
                   }
                 `}
               >
@@ -206,7 +206,7 @@ export function Step3Knowledge({
                       onChange={(e) =>
                         setEditForm({ ...editForm, question: e.target.value })
                       }
-                      className="w-full px-2 py-1 bg-zinc-700 border border-zinc-600 rounded text-white text-sm"
+                      className="w-full px-2 py-1 bg-gray-100 border border-gray-200 rounded text-white text-sm"
                       placeholder="Pergunta"
                     />
                     <textarea
@@ -214,7 +214,7 @@ export function Step3Knowledge({
                       onChange={(e) =>
                         setEditForm({ ...editForm, answer: e.target.value })
                       }
-                      className="w-full px-2 py-1 bg-zinc-700 border border-zinc-600 rounded text-white text-sm resize-none"
+                      className="w-full px-2 py-1 bg-gray-100 border border-gray-200 rounded text-white text-sm resize-none"
                       rows={2}
                       placeholder="Resposta"
                     />
@@ -227,7 +227,7 @@ export function Step3Knowledge({
                       </button>
                       <button
                         onClick={() => setEditingFAQ(null)}
-                        className="px-2 py-1 bg-zinc-700 text-white text-xs rounded"
+                        className="px-2 py-1 bg-gray-100 text-white text-xs rounded"
                       >
                         Cancelar
                       </button>
@@ -255,7 +255,7 @@ export function Step3Knowledge({
                           exit={{ opacity: 0, height: 0 }}
                           className="mt-2"
                         >
-                          <p className="text-sm text-zinc-400">{item.answer}</p>
+                          <p className="text-sm text-gray-500">{item.answer}</p>
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -279,7 +279,7 @@ export function Step3Knowledge({
                       onClick={() =>
                         setExpandedFAQ(expandedFAQ === item.id ? null : item.id)
                       }
-                      className="p-1 text-zinc-500 hover:text-white"
+                      className="p-1 text-gray-500 hover:text-white"
                     >
                       {expandedFAQ === item.id ? (
                         <ChevronUp className="w-4 h-4" />
@@ -289,14 +289,14 @@ export function Step3Knowledge({
                     </button>
                     <button
                       onClick={() => startEdit(item)}
-                      className="p-1 text-zinc-500 hover:text-white"
+                      className="p-1 text-gray-500 hover:text-white"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     {item.isCustom && (
                       <button
                         onClick={() => deleteFAQ(item.id)}
-                        className="p-1 text-zinc-500 hover:text-red-400"
+                        className="p-1 text-gray-500 hover:text-red-400"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -314,19 +314,19 @@ export function Step3Knowledge({
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-4 bg-zinc-800 border border-zinc-700 rounded-lg space-y-3"
+          className="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3"
         >
           <input
             type="text"
             value={newFAQ.question}
             onChange={(e) => setNewFAQ({ ...newFAQ, question: e.target.value })}
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500"
+            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white placeholder-zinc-500"
             placeholder="Digite a pergunta..."
           />
           <textarea
             value={newFAQ.answer}
             onChange={(e) => setNewFAQ({ ...newFAQ, answer: e.target.value })}
-            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 resize-none"
+            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white placeholder-zinc-500 resize-none"
             rows={3}
             placeholder="Digite a resposta..."
           />
@@ -334,7 +334,7 @@ export function Step3Knowledge({
             <button
               onClick={addFAQ}
               disabled={!newFAQ.question.trim() || !newFAQ.answer.trim()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 text-white text-sm font-medium rounded-lg"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 text-white text-sm font-medium rounded-lg"
             >
               Adicionar
             </button>
@@ -343,7 +343,7 @@ export function Step3Knowledge({
                 setShowAddForm(false);
                 setNewFAQ({ question: '', answer: '' });
               }}
-              className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg"
+              className="px-4 py-2 bg-gray-100 hover:bg-zinc-600 text-white text-sm rounded-lg"
             >
               Cancelar
             </button>
@@ -352,7 +352,7 @@ export function Step3Knowledge({
       ) : (
         <button
           onClick={() => setShowAddForm(true)}
-          className="w-full p-3 border border-dashed border-zinc-700 rounded-lg text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors flex items-center justify-center gap-2"
+          className="w-full p-3 border border-dashed border-gray-200 rounded-lg text-gray-500 hover:text-white hover:border-gray-200 transition-colors flex items-center justify-center gap-2"
         >
           <Plus className="w-4 h-4" />
           Adicionar pergunta
@@ -363,13 +363,13 @@ export function Step3Knowledge({
       <div className="flex gap-3 pt-4">
         <button
           onClick={onBack}
-          className="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-medium rounded-lg transition-colors"
+          className="px-6 py-3 bg-gray-100 hover:bg-zinc-600 text-gray-900 font-medium rounded-lg transition-colors"
         >
           Voltar
         </button>
         <button
           onClick={onNext}
-          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-gray-900 font-medium rounded-lg transition-colors"
         >
           Continuar
         </button>

@@ -79,8 +79,8 @@ export default function SitePage() {
             <Globe size={22} className="text-blue-400" weight="fill" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-display text-white">Site</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">Formulários, chat widget, tracking e otimização</p>
+            <h1 className="text-2xl font-bold font-display text-gray-900">Site</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Formulários, chat widget, tracking e otimização</p>
           </div>
         </div>
         <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity">
@@ -99,13 +99,13 @@ export default function SitePage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4"
+              className="bg-white/50 border border-gray-200 rounded-xl p-4"
             >
               <div className="flex items-center gap-2 mb-2">
                 <Icon size={16} className={kpi.color} />
-                <span className="text-xs text-zinc-500">{kpi.title}</span>
+                <span className="text-xs text-gray-500">{kpi.title}</span>
               </div>
-              <p className="text-xl font-bold text-white">{kpi.value}</p>
+              <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
               <div className="flex items-center gap-1 mt-1">
                 <TrendUp size={12} className="text-emerald-400" weight="bold" />
                 <span className="text-xs text-emerald-400">{kpi.change}</span>
@@ -125,7 +125,7 @@ export default function SitePage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 hover:border-zinc-700 transition-all cursor-pointer group h-full"
+                className="bg-white/50 border border-gray-200 rounded-xl p-6 hover:border-gray-200 transition-all cursor-pointer group h-full"
               >
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-xl bg-[#F26B2A]/10 flex items-center justify-center flex-shrink-0 group-hover:bg-[#F26B2A]/15 transition-colors">
@@ -133,13 +133,13 @@ export default function SitePage() {
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-white">{feature.title}</h3>
-                      <ArrowRight size={16} className="text-zinc-600 group-hover:text-[#F26B2A] transition-colors" />
+                      <h3 className="text-sm font-semibold text-gray-900">{feature.title}</h3>
+                      <ArrowRight size={16} className="text-gray-400 group-hover:text-[#F26B2A] transition-colors" />
                     </div>
-                    <p className="text-xs text-zinc-400 mt-1">{feature.description}</p>
+                    <p className="text-xs text-gray-500 mt-1">{feature.description}</p>
                     <div className="flex items-center gap-2 mt-3">
                       <CheckCircle size={12} className="text-emerald-400" weight="fill" />
-                      <span className="text-xs text-zinc-500">{feature.stats}</span>
+                      <span className="text-xs text-gray-500">{feature.stats}</span>
                     </div>
                   </div>
                 </div>
@@ -150,8 +150,8 @@ export default function SitePage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Lightning size={16} className="text-[#F26B2A]" />
           Ações Rápidas
         </h3>
@@ -162,11 +162,11 @@ export default function SitePage() {
               <Link
                 key={action.title}
                 href={action.href}
-                className="p-4 bg-zinc-800/30 rounded-lg hover:bg-zinc-800/50 transition-colors group"
+                className="p-4 bg-gray-50/30 rounded-lg hover:bg-gray-50/50 transition-colors group"
               >
-                <Icon size={20} className="text-zinc-500 group-hover:text-[#F26B2A] transition-colors mb-2" />
-                <p className="text-sm text-white font-medium">{action.title}</p>
-                <p className="text-xs text-zinc-600 mt-0.5">{action.description}</p>
+                <Icon size={20} className="text-gray-500 group-hover:text-[#F26B2A] transition-colors mb-2" />
+                <p className="text-sm text-gray-700 font-medium">{action.title}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{action.description}</p>
               </Link>
             )
           })}
@@ -174,12 +174,12 @@ export default function SitePage() {
       </div>
 
       {/* Pixel Status */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 flex items-center justify-between">
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Code size={20} className="text-emerald-400" />
           <div>
-            <p className="text-sm text-white font-medium">Worder Pixel</p>
-            <p className="text-xs text-zinc-500">Instalado e rastreando eventos em minhaloja.com.br</p>
+            <p className="text-sm text-gray-700 font-medium">Worder Pixel</p>
+            <p className="text-xs text-gray-500">Instalado e rastreando eventos em minhaloja.com.br</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -187,7 +187,7 @@ export default function SitePage() {
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs text-emerald-400">Online</span>
           </div>
-          <span className="text-xs text-zinc-500">Último evento: 2 min atrás</span>
+          <span className="text-xs text-gray-500">Último evento: 2 min atrás</span>
         </div>
       </div>
     </div>

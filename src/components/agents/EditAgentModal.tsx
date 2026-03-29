@@ -391,7 +391,7 @@ export function EditAgentModal({
                         }`}
                       >
                         <div className={`w-3 h-3 rounded-full ${opt.color} mx-auto mb-1`} />
-                        <div className="text-xs text-white text-center">{opt.label}</div>
+                        <div className="text-xs text-gray-600 text-center">{opt.label}</div>
                       </button>
                     ))}
                   </div>
@@ -503,7 +503,7 @@ export function EditAgentModal({
                         }`}
                       >
                         <User className="w-5 h-5 text-blue-400 mb-2" />
-                        <div className="font-medium text-white">Agente</div>
+                        <div className="font-medium text-gray-900">Agente</div>
                         <div className="text-xs text-gray-500 mt-1">Acesso limitado às permissões definidas</div>
                       </button>
                       <button
@@ -516,7 +516,7 @@ export function EditAgentModal({
                         }`}
                       >
                         <Shield className="w-5 h-5 text-purple-400 mb-2" />
-                        <div className="font-medium text-white">Administrador</div>
+                        <div className="font-medium text-gray-900">Administrador</div>
                         <div className="text-xs text-gray-500 mt-1">Acesso completo ao sistema</div>
                       </button>
                     </div>
@@ -572,7 +572,7 @@ export function EditAgentModal({
                                 className="w-4 h-4 rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500/50"
                               />
                               <div className="flex-1">
-                                <div className="text-sm text-white">{number.phone_number}</div>
+                                <div className="text-sm text-gray-700">{number.phone_number}</div>
                                 {number.display_name && (
                                   <div className="text-xs text-gray-500">{number.display_name}</div>
                                 )}
@@ -629,7 +629,7 @@ export function EditAgentModal({
             <div className="space-y-6">
               {/* Password */}
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <h3 className="font-medium text-white mb-3 flex items-center gap-2">
+                <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                   <Key className="w-4 h-4" />
                   Senha
                 </h3>
@@ -710,7 +710,7 @@ export function EditAgentModal({
 
               {/* Timeline - empty state */}
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <h3 className="font-medium text-white mb-4 flex items-center gap-2">
+                <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
                   <Activity className="w-4 h-4" />
                   Atividade Recente
                 </h3>

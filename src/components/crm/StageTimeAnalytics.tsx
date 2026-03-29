@@ -127,7 +127,7 @@ export function StageTimeAnalytics({ organizationId, pipelineId }: StageTimeAnal
             </div>
             <div>
               <p className="text-sm text-slate-400">Ciclo Medio</p>
-              <p className="text-xl font-bold text-white">
+              <p className="text-xl font-bold text-gray-900">
                 {summary ? formatTimeShort(summary.average_cycle_minutes) : '--'}
               </p>
             </div>
@@ -146,7 +146,7 @@ export function StageTimeAnalytics({ organizationId, pipelineId }: StageTimeAnal
             </div>
             <div>
               <p className="text-sm text-slate-400">Etapas</p>
-              <p className="text-xl font-bold text-white">{summary?.total_stages || 0}</p>
+              <p className="text-xl font-bold text-gray-900">{summary?.total_stages || 0}</p>
             </div>
           </div>
         </motion.div>
@@ -163,7 +163,7 @@ export function StageTimeAnalytics({ organizationId, pipelineId }: StageTimeAnal
             </div>
             <div>
               <p className="text-sm text-slate-400">Etapa Mais Lenta</p>
-              <p className="text-sm font-medium text-white truncate">
+              <p className="text-sm font-medium text-gray-900 truncate">
                 {summary?.slowest_stage || '--'}
               </p>
             </div>
@@ -182,7 +182,7 @@ export function StageTimeAnalytics({ organizationId, pipelineId }: StageTimeAnal
             </div>
             <div>
               <p className="text-sm text-slate-400">Etapa Mais Rapida</p>
-              <p className="text-sm font-medium text-white truncate">
+              <p className="text-sm font-medium text-gray-900 truncate">
                 {summary?.fastest_stage || '--'}
               </p>
             </div>
@@ -244,7 +244,7 @@ export function StageTimeAnalytics({ organizationId, pipelineId }: StageTimeAnal
               animate={{ opacity: 1, y: 0 }}
               className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
             >
-              <h3 className="text-lg font-semibold text-white mb-4">Tempo Medio por Etapa</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Tempo Medio por Etapa</h3>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} layout="vertical">
@@ -286,7 +286,7 @@ export function StageTimeAnalytics({ organizationId, pipelineId }: StageTimeAnal
             transition={{ delay: 0.1 }}
             className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
           >
-            <h3 className="text-lg font-semibold text-white mb-4">Detalhes por Etapa</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Detalhes por Etapa</h3>
             <div className="space-y-3">
               {stats.map((stage, index) => (
                 <div
@@ -299,7 +299,7 @@ export function StageTimeAnalytics({ organizationId, pipelineId }: StageTimeAnal
                   />
 
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-white">{stage.stage_name}</p>
+                    <p className="font-medium text-gray-900">{stage.stage_name}</p>
                     <p className="text-sm text-slate-400">
                       {stage.deals_count} deals passaram por esta etapa
                     </p>
@@ -308,7 +308,7 @@ export function StageTimeAnalytics({ organizationId, pipelineId }: StageTimeAnal
                   <div className="flex items-center gap-6 text-sm">
                     <div className="text-center">
                       <p className="text-slate-400">Tempo Medio</p>
-                      <p className="font-semibold text-white">{formatTimeShort(stage.average_time_minutes)}</p>
+                      <p className="font-semibold text-gray-900">{formatTimeShort(stage.average_time_minutes)}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-slate-400">Min</p>
@@ -343,7 +343,7 @@ export function StageTimeAnalytics({ organizationId, pipelineId }: StageTimeAnal
             animate={{ opacity: 1, y: 0 }}
             className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
           >
-            <h3 className="text-lg font-semibold text-white mb-4">Movimentacoes Recentes</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Movimentacoes Recentes</h3>
 
             {history.length === 0 && !isLoading ? (
               <div className="text-center py-8">
@@ -363,7 +363,7 @@ export function StageTimeAnalytics({ organizationId, pipelineId }: StageTimeAnal
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white">
+                      <p className="text-sm text-gray-700">
                         <span className="font-medium">{entry.deals?.title || 'Deal'}</span>
                         {' movido de '}
                         <span className="text-slate-400">{entry.from_stage?.name || 'Inicio'}</span>
@@ -440,7 +440,7 @@ function DealTimeModal({ isOpen, onClose, deal, formatTime, formatTimeShort }: D
       >
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div>
-            <h2 className="text-lg font-semibold text-white">{deal.deal_title}</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{deal.deal_title}</h2>
             <p className="text-sm text-slate-400">Timeline de etapas</p>
           </div>
           <button
@@ -460,7 +460,7 @@ function DealTimeModal({ isOpen, onClose, deal, formatTime, formatTimeShort }: D
             </div>
             <div className="bg-slate-700/30 rounded-lg p-3 text-center">
               <p className="text-sm text-slate-400">Tempo Total</p>
-              <p className="font-semibold text-white">{formatTimeShort(deal.total_time_minutes)}</p>
+              <p className="font-semibold text-gray-900">{formatTimeShort(deal.total_time_minutes)}</p>
             </div>
           </div>
 
@@ -485,7 +485,7 @@ function DealTimeModal({ isOpen, onClose, deal, formatTime, formatTimeShort }: D
                   }`} />
                   <div className="bg-slate-700/30 rounded-lg p-3">
                     <div className="flex items-center justify-between">
-                      <p className="font-medium text-white">{stage.stage_name}</p>
+                      <p className="font-medium text-gray-900">{stage.stage_name}</p>
                       <p className={`text-sm ${
                         index === deal.stage_history.length - 1
                           ? 'text-violet-400'

@@ -285,7 +285,7 @@ export default function IntegrationConfigPage() {
 
                 {/* Instructions */}
                 <div className="p-4 bg-white rounded-xl">
-                  <h3 className="font-semibold text-white mb-3">Como configurar:</h3>
+                  <h3 className="font-semibold text-gray-900 mb-3">Como configurar:</h3>
                   <ol className="space-y-2 text-sm text-gray-500 list-decimal list-inside">
                     <li>Acesse as configurações do {integration.name}</li>
                     <li>Vá para a seção de Webhooks ou Integrações</li>

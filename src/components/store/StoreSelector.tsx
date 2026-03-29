@@ -69,7 +69,7 @@ export function StoreSelector({
     return (
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-sm"
+        className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-gray-900 font-bold text-sm"
       >
         {currentStore ? getInitials(currentStore.name) : <Store className="w-5 h-5" />}
       </button>
@@ -88,7 +88,7 @@ export function StoreSelector({
         )}
       >
         {/* Store Avatar */}
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-gray-900 font-bold text-sm flex-shrink-0">
           {currentStore ? getInitials(currentStore.name) : <Store className="w-5 h-5" />}
         </div>
 
@@ -177,7 +177,7 @@ export function StoreSelector({
             {/* User Section */}
             <div className="p-2 border-t border-gray-200 bg-gray-50">
               <div className="flex items-center gap-3 px-2 py-1">
-                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-white">
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-900">
                   {getInitials(userName)}
                 </div>
                 <div className="flex-1 min-w-0">

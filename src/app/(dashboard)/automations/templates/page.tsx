@@ -172,7 +172,7 @@ export default function AutomationTemplatesPage() {
           <ArrowLeft className="w-5 h-5" weight="bold" />
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold font-display text-white">Templates de Automação</h1>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Templates de Automação</h1>
           <p className="text-sm text-gray-500 mt-0.5">Escolha um template para criar sua automação rapidamente</p>
         </div>
         <button
@@ -192,7 +192,7 @@ export default function AutomationTemplatesPage() {
             onClick={() => setActiveCategory(cat.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
               activeCategory === cat.id
-                ? 'bg-white/[0.08] text-white'
+                ? 'bg-white/[0.08] text-gray-900'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-white/[0.04]'
             }`}
           >
@@ -214,7 +214,7 @@ export default function AutomationTemplatesPage() {
           placeholder="Buscar templates..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+          className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
         />
       </div>
 
@@ -246,7 +246,7 @@ export default function AutomationTemplatesPage() {
               </div>
             </div>
 
-            <h3 className="text-sm font-semibold text-white font-display">{template.name}</h3>
+            <h3 className="text-sm font-semibold text-gray-900 font-display">{template.name}</h3>
             <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description}</p>
 
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.04]">

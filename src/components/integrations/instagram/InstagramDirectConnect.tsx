@@ -238,7 +238,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
       {step === 'connected' && connectedAccounts.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Contas Conectadas</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Contas Conectadas</h3>
             <button
               onClick={startOAuth}
               disabled={isLoading}
@@ -269,7 +269,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h4 className="font-semibold text-white">{account.name || account.username}</h4>
+                    <h4 className="font-semibold text-gray-900">{account.name || account.username}</h4>
                     {account.status === 'active' && (
                       <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full">
                         Ativo
@@ -305,19 +305,19 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
           {/* Quick Stats */}
           <div className="grid grid-cols-3 gap-4 mt-6">
             <div className="p-4 bg-white rounded-xl text-center">
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold text-gray-900">
                 {connectedAccounts.reduce((sum, a) => sum + (a.messages_received_today || 0), 0)}
               </p>
               <p className="text-xs text-gray-500 mt-1">Mensagens hoje</p>
             </div>
             <div className="p-4 bg-white rounded-xl text-center">
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold text-gray-900">
                 {connectedAccounts.reduce((sum, a) => sum + (a.total_messages_received || 0), 0)}
               </p>
               <p className="text-xs text-gray-500 mt-1">Total de mensagens</p>
             </div>
             <div className="p-4 bg-white rounded-xl text-center">
-              <p className="text-2xl font-bold text-white">{connectedAccounts.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{connectedAccounts.length}</p>
               <p className="text-xs text-gray-500 mt-1">Contas conectadas</p>
             </div>
           </div>
@@ -327,7 +327,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
       {/* Account Selection */}
       {step === 'selecting' && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-white">Selecione uma conta</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Selecione uma conta</h3>
           <p className="text-sm text-gray-500">
             Escolha qual conta do Instagram Business voce deseja conectar
           </p>
@@ -357,7 +357,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
                 )}
 
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-white">{account.instagram_name}</h4>
+                  <h4 className="font-semibold text-gray-900">{account.instagram_name}</h4>
                   <p className="text-sm text-gray-500">@{account.instagram_username}</p>
                   <p className="text-xs text-gray-500 mt-1">
                     {account.instagram_followers?.toLocaleString()} seguidores
@@ -387,7 +387,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
             <button
               onClick={connectAccount}
               disabled={!selectedAccount || isLoading}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-gray-900 font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -409,7 +409,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
             <Instagram className="w-10 h-10 text-white" />
           </div>
 
-          <h3 className="text-xl font-bold text-white mb-2">Conecte seu Instagram</h3>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">Conecte seu Instagram</h3>
           <p className="text-gray-500 mb-6 max-w-md mx-auto">
             Receba e responda mensagens do Direct diretamente na plataforma. Configure automacoes para mover leads para pipelines especificos.
           </p>
@@ -420,7 +420,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
                 <Check className="w-3.5 h-3.5 text-primary-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-white">Inbox unificada</p>
+                <p className="text-sm font-medium text-gray-900">Inbox unificada</p>
                 <p className="text-xs text-gray-500">Todas as mensagens em um so lugar</p>
               </div>
             </div>
@@ -429,7 +429,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
                 <Check className="w-3.5 h-3.5 text-primary-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-white">Automacoes inteligentes</p>
+                <p className="text-sm font-medium text-gray-900">Automacoes inteligentes</p>
                 <p className="text-xs text-gray-500">Crie gatilhos para seu pipeline de vendas</p>
               </div>
             </div>
@@ -438,7 +438,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
                 <Check className="w-3.5 h-3.5 text-primary-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-white">Responda stories</p>
+                <p className="text-sm font-medium text-gray-900">Responda stories</p>
                 <p className="text-xs text-gray-500">Veja e responda mencoes e respostas aos seus stories</p>
               </div>
             </div>
@@ -447,7 +447,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
           <button
             onClick={startOAuth}
             disabled={isLoading}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-gray-900 font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {isLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />

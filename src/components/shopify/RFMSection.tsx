@@ -206,7 +206,7 @@ export function RFMSection({ data }: RFMSectionProps) {
         <div className="p-4 rounded-xl bg-gradient-to-br from-primary-500/10 to-accent-500/5 border border-primary-500/20">
           <div className="flex items-center gap-2 mb-2">
             <Crown className="w-5 h-5 text-brand-600" />
-            <span className="font-medium text-white">Campeões</span>
+            <span className="font-medium text-gray-900">Campeões</span>
           </div>
           <p className="text-sm text-gray-600 mb-3">
             {champions?.count || 0} clientes que compram frequentemente e gastam muito.
@@ -220,7 +220,7 @@ export function RFMSection({ data }: RFMSectionProps) {
         <div className="p-4 rounded-xl bg-gradient-to-br from-red-500/10 to-orange-500/5 border border-red-500/20">
           <div className="flex items-center gap-2 mb-2">
             <TrendingDown className="w-5 h-5 text-red-400" />
-            <span className="font-medium text-white">Em Risco</span>
+            <span className="font-medium text-gray-900">Em Risco</span>
           </div>
           <p className="text-sm text-gray-600 mb-3">
             {(atRisk?.count || 0) + (cantLose?.count || 0)} clientes valiosos que pararam de comprar.
@@ -234,7 +234,7 @@ export function RFMSection({ data }: RFMSectionProps) {
         <div className="p-4 rounded-xl bg-gradient-to-br from-accent-500/10 to-primary-500/5 border border-accent-500/20">
           <div className="flex items-center gap-2 mb-2">
             <Star className="w-5 h-5 text-accent-400" />
-            <span className="font-medium text-white">Potenciais Leais</span>
+            <span className="font-medium text-gray-900">Potenciais Leais</span>
           </div>
           <p className="text-sm text-gray-600 mb-3">
             {segments.find(s => s.segment === 'potential_loyalist')?.count || 0} clientes com potencial de crescimento.

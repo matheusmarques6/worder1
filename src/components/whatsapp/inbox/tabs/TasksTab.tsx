@@ -289,7 +289,7 @@ function TaskCard({
             </span>
           </div>
           
-          <p className={`text-sm text-white mb-1 ${completed ? 'line-through' : ''}`}>
+          <p className={`text-sm text-gray-700 mb-1 ${completed ? 'line-through' : ''}`}>
             {task.title}
           </p>
           

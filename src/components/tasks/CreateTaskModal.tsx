@@ -311,7 +311,7 @@ export function CreateTaskModal({
                     value={reminderMinutes}
                     onChange={(e) => setReminderMinutes(e.target.value)}
                     className="px-3 py-1.5 bg-gray-200 border border-gray-300 rounded-lg 
-                               text-sm text-white focus:outline-none"
+                               text-sm text-gray-700 focus:outline-none"
                   >
                     <option value="15">15 min antes</option>
                     <option value="30">30 min antes</option>

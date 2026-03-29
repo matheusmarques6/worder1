@@ -300,7 +300,7 @@ export function ShopifyConfigModal({
                     </div>
                     <div className="text-center">
                       <Zap className="w-5 h-5 text-amber-400 mx-auto mb-1" />
-                      <p className="text-sm text-white">
+                      <p className="text-sm text-gray-700">
                         {store.lastSyncAt
                           ? formatDistanceToNow(new Date(store.lastSyncAt), { addSuffix: true, locale: ptBR })
                           : '-'

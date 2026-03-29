@@ -78,7 +78,7 @@ function StepChannel({ onNext, selectedChannel, setSelectedChannel }: { onNext: 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-white font-display">Escolha o Canal</h2>
+        <h2 className="text-xl font-bold text-gray-900 font-display">Escolha o Canal</h2>
         <p className="text-sm text-gray-500 mt-1">Selecione por qual canal deseja enviar a campanha</p>
       </div>
 
@@ -104,7 +104,7 @@ function StepChannel({ onNext, selectedChannel, setSelectedChannel }: { onNext: 
               <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: `${channel.color}15` }}>
                 <Icon className="w-6 h-6" style={{ color: channel.color }} weight="fill" />
               </div>
-              <h3 className="text-lg font-semibold text-white font-display">{channel.name}</h3>
+              <h3 className="text-lg font-semibold text-gray-900 font-display">{channel.name}</h3>
               <p className="text-sm text-gray-500 mt-1">{channel.description}</p>
               <p className="text-xs font-medium mt-3" style={{ color: channel.color }}>{channel.stats}</p>
             </button>
@@ -149,7 +149,7 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-white font-display">Defina o Público</h2>
+        <h2 className="text-xl font-bold text-gray-900 font-display">Defina o Público</h2>
         <p className="text-sm text-gray-500 mt-1">Selecione uma lista ou segmento para receber a campanha</p>
       </div>
 
@@ -160,7 +160,7 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
           placeholder="Buscar segmentos..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+          className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
         />
       </div>
 
@@ -187,12 +187,12 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
                   }
                 </div>
                 <div className="text-left">
-                  <p className="text-sm font-medium text-white">{segment.name}</p>
+                  <p className="text-sm font-medium text-gray-900">{segment.name}</p>
                   <p className="text-xs text-gray-500">{segment.type}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-white">{segment.count.toLocaleString()}</span>
+                <span className="text-sm font-semibold text-gray-900">{segment.count.toLocaleString()}</span>
                 <span className="text-xs text-gray-500">contatos</span>
                 {isSelected && (
                   <div className="w-5 h-5 rounded-full bg-[#F26B2A] flex items-center justify-center">
@@ -235,7 +235,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-white font-display">Monte o Conteúdo</h2>
+        <h2 className="text-xl font-bold text-gray-900 font-display">Monte o Conteúdo</h2>
         <p className="text-sm text-gray-500 mt-1">Configure o conteúdo da campanha</p>
       </div>
 
@@ -249,7 +249,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
               placeholder="Ex: Promoção de Março"
               value={campaignName}
               onChange={(e) => setCampaignName(e.target.value)}
-              className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+              className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
             />
           </div>
 
@@ -262,7 +262,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
                   placeholder="Ex: 🔥 Promoção exclusiva para você!"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+                  className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
                 />
               </div>
               <div>
@@ -270,7 +270,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
                 <input
                   type="text"
                   placeholder="Texto que aparece ao lado do assunto na caixa de entrada"
-                  className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+                  className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
                 />
               </div>
             </>
@@ -279,7 +279,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
           {channel === 'whatsapp' && (
             <div>
               <label className="block text-xs text-gray-500 mb-1.5 font-medium">Template Aprovado</label>
-              <select className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#F26B2A]/40 transition-colors">
+              <select className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:border-[#F26B2A]/40 transition-colors">
                 <option value="">Selecionar template...</option>
                 <option value="promo">promocao_mensal</option>
                 <option value="recover">recuperacao_carrinho</option>
@@ -295,7 +295,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
                 placeholder="Até 160 caracteres..."
                 maxLength={160}
                 rows={4}
-                className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors resize-none"
+                className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors resize-none"
               />
             </div>
           )}
@@ -345,7 +345,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
               <span className="text-xs font-medium text-gray-500">Preview</span>
               <div className="flex items-center gap-2">
-                <button className="px-2.5 py-1 rounded-lg bg-white/[0.08] text-[10px] font-medium text-white">Desktop</button>
+                <button className="px-2.5 py-1 rounded-lg bg-white/[0.08] text-[10px] font-medium text-gray-900">Desktop</button>
                 <button className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-gray-500 hover:text-gray-600 transition-colors">Mobile</button>
               </div>
             </div>
@@ -404,7 +404,7 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-white font-display">Revisar e Enviar</h2>
+        <h2 className="text-xl font-bold text-gray-900 font-display">Revisar e Enviar</h2>
         <p className="text-sm text-gray-500 mt-1">Confirme os detalhes da campanha antes de enviar</p>
       </div>
 
@@ -415,16 +415,16 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">Nome</span>
-              <span className="text-sm font-medium text-white">{campaignName || 'Sem nome'}</span>
+              <span className="text-sm font-medium text-gray-900">{campaignName || 'Sem nome'}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">Canal</span>
-              <span className="text-sm font-medium text-white">{channelLabel}</span>
+              <span className="text-sm font-medium text-gray-900">{channelLabel}</span>
             </div>
             {subject && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500">Assunto</span>
-                <span className="text-sm font-medium text-white truncate ml-4">{subject}</span>
+                <span className="text-sm font-medium text-gray-900 truncate ml-4">{subject}</span>
               </div>
             )}
           </div>
@@ -435,11 +435,11 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">Segmento</span>
-              <span className="text-sm font-medium text-white">{audienceData?.name || '-'}</span>
+              <span className="text-sm font-medium text-gray-900">{audienceData?.name || '-'}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">Destinatários</span>
-              <span className="text-sm font-medium text-white">{audienceData?.count.toLocaleString() || '0'}</span>
+              <span className="text-sm font-medium text-gray-900">{audienceData?.count.toLocaleString() || '0'}</span>
             </div>
           </div>
         </div>
@@ -479,11 +479,11 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
           <div className="flex items-center gap-4 mt-4">
             <input
               type="date"
-              className="bg-[#111111] border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+              className="bg-[#111111] border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
             />
             <input
               type="time"
-              className="bg-[#111111] border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+              className="bg-[#111111] border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
             />
           </div>
         )}
@@ -542,7 +542,7 @@ export default function CreateCampaignPage() {
           <ArrowLeft className="w-5 h-5" weight="bold" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold font-display text-white">Criar Campanha</h1>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Criar Campanha</h1>
           <p className="text-sm text-gray-500 mt-0.5">Passo {currentStep} de 4</p>
         </div>
       </div>

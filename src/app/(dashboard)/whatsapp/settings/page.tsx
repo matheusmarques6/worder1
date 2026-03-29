@@ -245,7 +245,7 @@ export default function WhatsAppSettingsPage() {
                     value={metaConfig.phone_number_id}
                     onChange={e => setMetaConfig({ ...metaConfig, phone_number_id: e.target.value })}
                     placeholder="Ex: 123456789012345"
-                    className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                    className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                   />
                 </div>
 
@@ -256,7 +256,7 @@ export default function WhatsAppSettingsPage() {
                     value={metaConfig.waba_id}
                     onChange={e => setMetaConfig({ ...metaConfig, waba_id: e.target.value })}
                     placeholder="Ex: 123456789012345"
-                    className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                    className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                   />
                 </div>
 
@@ -268,7 +268,7 @@ export default function WhatsAppSettingsPage() {
                       value={metaConfig.access_token}
                       onChange={e => setMetaConfig({ ...metaConfig, access_token: e.target.value })}
                       placeholder="EAAxxxxxxxx..."
-                      className="w-full px-4 py-3 pr-12 bg-gray-50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                      className="w-full px-4 py-3 pr-12 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                     />
                     <button
                       onClick={() => setShowToken(!showToken)}
@@ -347,7 +347,7 @@ export default function WhatsAppSettingsPage() {
                         value={newInstanceTitle}
                         onChange={e => setNewInstanceTitle(e.target.value)}
                         placeholder="Ex: WhatsApp Principal"
-                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                       />
                     </div>
                     <div>
@@ -357,7 +357,7 @@ export default function WhatsAppSettingsPage() {
                         value={evolutionUrl}
                         onChange={e => setEvolutionUrl(e.target.value)}
                         placeholder="Ex: https://evolution.seudominio.com"
-                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                       />
                     </div>
                     <div>
@@ -367,7 +367,7 @@ export default function WhatsAppSettingsPage() {
                         value={evolutionKey}
                         onChange={e => setEvolutionKey(e.target.value)}
                         placeholder="Sua API Key"
-                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                       />
                     </div>
                     <div className="flex gap-2">
@@ -379,7 +379,7 @@ export default function WhatsAppSettingsPage() {
                       </button>
                       <button
                         onClick={createInstance}
-                        className="flex-1 py-3 bg-violet-600 text-white font-medium rounded-xl hover:bg-violet-700"
+                        className="flex-1 py-3 bg-violet-600 text-gray-900 font-medium rounded-xl hover:bg-violet-700"
                       >
                         Criar Instância
                       </button>
@@ -411,7 +411,7 @@ export default function WhatsAppSettingsPage() {
                           )}
                         </div>
                         <div>
-                          <h3 className="font-semibold text-white">{instance.title}</h3>
+                          <h3 className="font-semibold text-gray-900">{instance.title}</h3>
                           <p className="text-sm text-gray-500">
                             {instance.phone_number || instance.unique_id}
                           </p>
@@ -452,7 +452,7 @@ export default function WhatsAppSettingsPage() {
                           <button
                             onClick={() => generateQR(instance.id)}
                             disabled={qrLoading === instance.id}
-                            className="w-full py-3 bg-violet-600 text-white font-medium rounded-xl hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="w-full py-3 bg-violet-600 text-gray-900 font-medium rounded-xl hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2"
                           >
                             {qrLoading === instance.id ? (
                               <Loader2 className="w-5 h-5 animate-spin" />

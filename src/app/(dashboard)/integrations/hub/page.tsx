@@ -167,7 +167,7 @@ function IntegrationCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`relative overflow-hidden rounded-xl border ${config.bgClass} bg-[#1a1a2e]/50 backdrop-blur-sm`}
+      className={`relative overflow-hidden rounded-xl border ${config.bgClass} bg-white/50 backdrop-blur-sm`}
     >
       {/* Glow effect */}
       <div className={`absolute top-0 right-0 w-32 h-32 bg-${config.color}-500/10 blur-3xl rounded-full`} />
@@ -180,7 +180,7 @@ function IntegrationCard({
               <Icon className={`w-5 h-5 ${config.textClass}`} />
             </div>
             <div>
-              <h3 className="font-semibold text-white">{label}</h3>
+              <h3 className="font-semibold text-gray-900">{label}</h3>
               <p className="text-sm text-gray-400">{integration.name || integration.identifier}</p>
             </div>
           </div>
@@ -310,13 +310,13 @@ function EmptyState() {
       <div className="p-4 rounded-full bg-gray-100 mb-4">
         <Zap className="w-8 h-8 text-gray-500" />
       </div>
-      <h3 className="text-lg font-medium text-white mb-2">Nenhuma integração conectada</h3>
+      <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma integração conectada</h3>
       <p className="text-gray-400 mb-4 max-w-md">
         Conecte integrações como Shopify ou WhatsApp para monitorar a saúde das conexões.
       </p>
       <a
         href="/integrations"
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium transition-colors"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-gray-900 font-medium transition-colors"
       >
         Ver Integrações
         <ChevronRight className="w-4 h-4" />
@@ -481,7 +481,7 @@ export default function IntegrationHubPage() {
             <button
               onClick={handleCheckAll}
               disabled={isCheckingAll || integrations.length === 0}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-gray-900 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isCheckingAll ? (
                 <>
@@ -561,11 +561,11 @@ export default function IntegrationHubPage() {
             </div>
             
             {/* Health Logs */}
-            <div className="rounded-xl border border-gray-800 bg-[#1a1a2e]/50 backdrop-blur-sm overflow-hidden">
+            <div className="rounded-xl border border-gray-800 bg-white/50 backdrop-blur-sm overflow-hidden">
               <div className="flex items-center justify-between p-4 border-b border-gray-800">
                 <div className="flex items-center gap-2">
                   <History className="w-5 h-5 text-gray-400" />
-                  <h2 className="font-semibold text-white">Histórico de Verificações</h2>
+                  <h2 className="font-semibold text-gray-900">Histórico de Verificações</h2>
                 </div>
                 <span className="text-xs text-gray-500">Últimas 10 verificações</span>
               </div>

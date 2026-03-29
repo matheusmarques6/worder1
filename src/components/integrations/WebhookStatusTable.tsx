@@ -109,7 +109,7 @@ export function WebhookStatusTable({ storeId, organizationId }: WebhookStatusTab
           {webhooks.map((webhook) => (
             <tr key={webhook.topic} className="hover:bg-gray-50 transition-colors">
               <td className="px-4 py-3">
-                <span className="text-sm text-white">
+                <span className="text-sm text-gray-700">
                   {WEBHOOK_LABELS[webhook.topic] || webhook.topic}
                 </span>
               </td>
@@ -140,7 +140,7 @@ export function WebhookStatusTable({ storeId, organizationId }: WebhookStatusTab
                   : '-'
                 }
               </td>
-              <td className="px-4 py-3 text-right text-sm text-white font-medium">
+              <td className="px-4 py-3 text-right text-sm text-gray-700 font-medium">
                 {webhook.totalReceived || 0}
               </td>
             </tr>

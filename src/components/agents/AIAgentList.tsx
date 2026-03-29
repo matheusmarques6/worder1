@@ -232,7 +232,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-500/10 to-accent-500/10 flex items-center justify-center mb-4">
               <Sparkles className="w-10 h-10 text-brand-600" />
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchQuery || filterStatus !== 'all' ? 'Nenhum agente encontrado' : 'Crie seu primeiro agente'}
             </h3>
             <p className="text-sm text-gray-500 text-center max-w-md mb-6">
@@ -278,7 +278,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-white font-medium truncate">{agent.name}</h3>
+                      <h3 className="text-gray-900 font-medium truncate">{agent.name}</h3>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
                         agent.is_active 
                           ? 'bg-green-500/20 text-green-400' 

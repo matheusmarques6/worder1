@@ -136,7 +136,7 @@ export function CreateDealModal({
               <DollarSign className="w-5 h-5 text-brand-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-white">Criar Novo Deal</h3>
+              <h3 className="font-semibold text-gray-900">Criar Novo Deal</h3>
               <p className="text-xs text-gray-500">{contactName}</p>
             </div>
           </div>

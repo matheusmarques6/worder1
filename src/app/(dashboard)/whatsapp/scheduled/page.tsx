@@ -135,7 +135,7 @@ function MessageCard({ message, onCancel, onDelete, onSendNow, isActioning }: Me
           <div className="flex items-start justify-between gap-2 mb-2">
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-medium text-white">
+                <span className="font-medium text-gray-900">
                   {message.contact_name || message.phone_number}
                 </span>
                 {message.contact_name && (
@@ -188,7 +188,7 @@ function MessageCard({ message, onCancel, onDelete, onSendNow, isActioning }: Me
                             setShowActions(false)
                           }}
                           disabled={isActioning}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white 
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 
                                      hover:bg-gray-200 transition-colors"
                         >
                           <Play className="w-4 h-4" />
@@ -328,7 +328,7 @@ export default function ScheduledMessagesPage() {
         <button
           onClick={loadMessages}
           disabled={isLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-white rounded-xl 
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-900 rounded-xl 
                      hover:bg-gray-200 transition-colors"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -434,7 +434,7 @@ export default function ScheduledMessagesPage() {
           <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
             <Clock className="w-8 h-8 text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
             Nenhuma mensagem agendada
           </h3>
           <p className="text-gray-500 max-w-sm mx-auto">

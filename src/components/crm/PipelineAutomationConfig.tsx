@@ -345,7 +345,7 @@ export function PipelineAutomationConfig({
                   : 'border-gray-200 hover:border-gray-300'
               }`}
             >
-              <span className="block text-white font-medium">{action.label}</span>
+              <span className="block text-gray-900 font-medium">{action.label}</span>
               <span className="block text-xs text-gray-500 mt-0.5">{action.desc}</span>
             </button>
           ))}
@@ -371,7 +371,7 @@ export function PipelineAutomationConfig({
                 style={{ accentColor: '#F97316' }}
               />
               <div>
-                <span className="block text-white font-medium">{eventConfig.label}</span>
+                <span className="block text-gray-900 font-medium">{eventConfig.label}</span>
                 <span className="block text-xs text-gray-500">{eventConfig.description}</span>
               </div>
             </label>
@@ -431,7 +431,7 @@ export function PipelineAutomationConfig({
           <div className="flex items-start gap-3">
             <Download className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <h4 className="font-medium text-white">Importar Clientes Existentes</h4>
+              <h4 className="font-medium text-gray-900">Importar Clientes Existentes</h4>
               <p className="text-sm text-gray-500 mt-1">
                 Importe todos os clientes já cadastrados no Shopify para o CRM
               </p>

@@ -65,7 +65,7 @@ const statusIcon: Record<string, { icon: React.ComponentType<any>; color: string
 const requestStatusColors: Record<string, string> = {
   completed: 'bg-emerald-500/10 text-emerald-400',
   processing: 'bg-yellow-500/10 text-yellow-400',
-  pending: 'bg-zinc-500/10 text-zinc-400',
+  pending: 'bg-zinc-500/10 text-gray-500',
 }
 
 export default function LGPDPage() {
@@ -90,11 +90,11 @@ export default function LGPDPage() {
             <ShieldCheck size={22} className="text-emerald-400" weight="fill" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-display text-white">LGPD & Privacidade</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">Gerencie conformidade, consentimento e dados pessoais</p>
+            <h1 className="text-2xl font-bold font-display text-gray-900">LGPD & Privacidade</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Gerencie conformidade, consentimento e dados pessoais</p>
           </div>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors text-sm">
+        <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors text-sm">
           <Export size={16} />
           Relatório de Conformidade
         </button>
@@ -105,9 +105,9 @@ export default function LGPDPage() {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm text-emerald-400 font-medium">Score de Conformidade LGPD</h3>
-            <p className="text-3xl font-bold text-white mt-1">
+            <p className="text-3xl font-bold text-gray-900 mt-1">
               {compliantCount}/{totalChecks}
-              <span className="text-lg text-zinc-400 ml-2">
+              <span className="text-lg text-gray-500 ml-2">
                 ({((compliantCount / totalChecks) * 100).toFixed(0)}%)
               </span>
             </p>
@@ -119,19 +119,19 @@ export default function LGPDPage() {
       </div>
 
       {/* Compliance Checklist */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4">Checklist de Conformidade</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Checklist de Conformidade</h3>
         <div className="space-y-3">
           {complianceStatus.map((item) => {
             const status = statusIcon[item.status]
             const StatusIcon = status.icon
             return (
-              <div key={item.title} className="flex items-center justify-between py-3 border-b border-zinc-800/50 last:border-0">
+              <div key={item.title} className="flex items-center justify-between py-3 border-b border-gray-200/50 last:border-0">
                 <div className="flex items-center gap-3">
                   <StatusIcon size={20} className={status.color} weight="fill" />
                   <div>
-                    <p className="text-sm text-white font-medium">{item.title}</p>
-                    <p className="text-xs text-zinc-500">{item.description}</p>
+                    <p className="text-sm text-gray-700 font-medium">{item.title}</p>
+                    <p className="text-xs text-gray-500">{item.description}</p>
                   </div>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -149,26 +149,26 @@ export default function LGPDPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Consent Management */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Fingerprint size={16} className="text-[#F26B2A]" />
             Gerenciamento de Consentimento
           </h3>
-          <p className="text-xs text-zinc-500 mb-4">
+          <p className="text-xs text-gray-500 mb-4">
             Configure quais tipos de consentimento são coletados dos contatos.
           </p>
           <div className="space-y-3">
             {consentSettings.map((consent) => (
-              <div key={consent.id} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
+              <div key={consent.id} className="flex items-center justify-between py-2 border-b border-gray-200/50 last:border-0">
                 <div>
-                  <p className="text-sm text-white">{consent.label}</p>
-                  <p className="text-xs text-zinc-500">{consent.description}</p>
+                  <p className="text-sm text-gray-700">{consent.label}</p>
+                  <p className="text-xs text-gray-500">{consent.description}</p>
                 </div>
                 <button onClick={() => toggleConsent(consent.id)}>
                   {consents[consent.id] ? (
                     <ToggleRight size={28} className="text-emerald-400" weight="fill" />
                   ) : (
-                    <ToggleLeft size={28} className="text-zinc-600" weight="fill" />
+                    <ToggleLeft size={28} className="text-gray-400" weight="fill" />
                   )}
                 </button>
               </div>
@@ -177,21 +177,21 @@ export default function LGPDPage() {
         </div>
 
         {/* Data Retention */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Clock size={16} className="text-[#F26B2A]" />
             Políticas de Retenção de Dados
           </h3>
           <div className="space-y-3">
             {retentionPolicies.map((policy) => (
-              <div key={policy.data} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
+              <div key={policy.data} className="flex items-center justify-between py-2 border-b border-gray-200/50 last:border-0">
                 <div>
-                  <p className="text-sm text-white">{policy.data}</p>
-                  <p className="text-xs text-zinc-500">{policy.action}</p>
+                  <p className="text-sm text-gray-700">{policy.data}</p>
+                  <p className="text-xs text-gray-500">{policy.action}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   {policy.editable ? (
-                    <select className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:outline-none">
+                    <select className="bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none">
                       <option>{policy.retention}</option>
                       <option>6 meses</option>
                       <option>12 meses</option>
@@ -199,9 +199,9 @@ export default function LGPDPage() {
                       <option>36 meses</option>
                     </select>
                   ) : (
-                    <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-1 rounded">{policy.retention}</span>
+                    <span className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">{policy.retention}</span>
                   )}
-                  {!policy.editable && <Lock size={12} className="text-zinc-600" />}
+                  {!policy.editable && <Lock size={12} className="text-gray-400" />}
                 </div>
               </div>
             ))}
@@ -210,37 +210,37 @@ export default function LGPDPage() {
       </div>
 
       {/* Data Subject Requests */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
             <UserMinus size={16} className="text-[#F26B2A]" />
             Solicitações de Titulares
           </h3>
           <div className="relative">
-            <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               type="text"
               placeholder="Buscar por e-mail..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-[#F26B2A] w-48"
+              className="bg-white border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500 w-48"
             />
           </div>
         </div>
         <table className="w-full">
           <thead>
-            <tr className="border-b border-zinc-800">
-              <th className="text-left text-xs text-zinc-500 font-medium pb-3">ID</th>
-              <th className="text-left text-xs text-zinc-500 font-medium pb-3">Tipo</th>
-              <th className="text-left text-xs text-zinc-500 font-medium pb-3">Contato</th>
-              <th className="text-left text-xs text-zinc-500 font-medium pb-3">Solicitado em</th>
-              <th className="text-left text-xs text-zinc-500 font-medium pb-3">Status</th>
+            <tr className="border-b border-gray-200">
+              <th className="text-left text-xs text-gray-500 font-medium pb-3">ID</th>
+              <th className="text-left text-xs text-gray-500 font-medium pb-3">Tipo</th>
+              <th className="text-left text-xs text-gray-500 font-medium pb-3">Contato</th>
+              <th className="text-left text-xs text-gray-500 font-medium pb-3">Solicitado em</th>
+              <th className="text-left text-xs text-gray-500 font-medium pb-3">Status</th>
             </tr>
           </thead>
           <tbody>
             {dataRequests.map((req) => (
-              <tr key={req.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
-                <td className="py-3 text-sm text-zinc-400 font-mono">{req.id}</td>
+              <tr key={req.id} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors">
+                <td className="py-3 text-sm text-gray-500 font-mono">{req.id}</td>
                 <td className="py-3">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                     req.type === 'Exclusão' ? 'bg-red-500/10 text-red-400' :
@@ -250,8 +250,8 @@ export default function LGPDPage() {
                     {req.type}
                   </span>
                 </td>
-                <td className="py-3 text-sm text-white">{req.contact}</td>
-                <td className="py-3 text-sm text-zinc-500">{req.date}</td>
+                <td className="py-3 text-sm text-gray-700">{req.contact}</td>
+                <td className="py-3 text-sm text-gray-500">{req.date}</td>
                 <td className="py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${requestStatusColors[req.status]}`}>
                     {req.status === 'completed' ? 'Concluído' : 'Processando'}
@@ -264,45 +264,45 @@ export default function LGPDPage() {
       </div>
 
       {/* Cookie Banner Config */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Cookie size={16} className="text-[#F26B2A]" />
           Banner de Cookies
         </h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">Texto do Banner</label>
+              <label className="block text-xs text-gray-500 mb-1.5">Texto do Banner</label>
               <textarea
                 rows={3}
                 defaultValue="Utilizamos cookies para melhorar sua experiência. Ao continuar navegando, você concorda com nossa Política de Privacidade."
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#F26B2A] resize-none"
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-brand-500 resize-none"
               />
             </div>
             <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">Link da Política de Privacidade</label>
+              <label className="block text-xs text-gray-500 mb-1.5">Link da Política de Privacidade</label>
               <input
                 type="text"
                 defaultValue="https://minhaloja.com.br/privacidade"
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#F26B2A]"
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-brand-500"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">Preview</label>
-            <div className="bg-zinc-950 rounded-lg p-4 border border-zinc-800">
-              <div className="bg-zinc-800 rounded-lg p-4">
-                <p className="text-xs text-zinc-300 mb-3">
+            <label className="block text-xs text-gray-500 mb-1.5">Preview</label>
+            <div className="bg-zinc-950 rounded-lg p-4 border border-gray-200">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-xs text-gray-700 mb-3">
                   Utilizamos cookies para melhorar sua experiência. Ao continuar navegando, você concorda com nossa Política de Privacidade.
                 </p>
                 <div className="flex items-center gap-2">
                   <button className="px-3 py-1 bg-[#F26B2A] text-white text-xs rounded hover:opacity-90">
                     Aceitar
                   </button>
-                  <button className="px-3 py-1 bg-zinc-700 text-zinc-300 text-xs rounded hover:bg-zinc-600">
+                  <button className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-zinc-600">
                     Configurar
                   </button>
-                  <button className="text-xs text-zinc-500 hover:text-zinc-400 ml-auto">
+                  <button className="text-xs text-gray-500 hover:text-gray-500 ml-auto">
                     Rejeitar
                   </button>
                 </div>

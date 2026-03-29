@@ -307,7 +307,7 @@ export default function AgentsTab() {
             placeholder="Buscar agentes..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 focus:outline-none focus:border-brand-400"
           />
         </div>
 
@@ -476,7 +476,7 @@ function AgentCard({
             <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-gray-200 ${statusInfo.color}`} />
           </div>
           <div>
-            <h3 className="text-white font-medium text-sm">{agent.name}</h3>
+            <h3 className="text-gray-900 font-medium text-sm">{agent.name}</h3>
             <div className="flex items-center gap-1.5">
               <span className={`text-xs ${typeInfo.color}`}>{typeInfo.label}</span>
               {agent.type === 'ai' && agent.ai_config && (
@@ -552,7 +552,7 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
       <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
         <Bot className="w-8 h-8 opacity-50" />
       </div>
-      <p className="text-lg font-medium text-white mb-1">Nenhum agente</p>
+      <p className="text-lg font-medium text-gray-900 mb-1">Nenhum agente</p>
       <p className="text-sm text-gray-400 mb-4">Crie seu primeiro agente de IA</p>
       <button
         onClick={onCreateClick}

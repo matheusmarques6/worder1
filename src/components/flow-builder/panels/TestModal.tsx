@@ -324,7 +324,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                     onChange={(e) => setUseSampleData(e.target.checked)}
                     className="rounded border-white/20 bg-gray-50 text-blue-500 focus:ring-blue-500"
                   />
-                  <span className="text-sm text-white/70">Usar dados de exemplo</span>
+                  <span className="text-sm text-gray-700/70">Usar dados de exemplo</span>
                 </label>
               </div>
 
@@ -359,7 +359,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                   Dados do Gatilho (JSON)
                 </label>
                 {triggerNode && (
-                  <span className="text-xs text-white/40 bg-gray-50 px-2 py-0.5 rounded">
+                  <span className="text-xs text-gray-600/40 bg-gray-50 px-2 py-0.5 rounded">
                     {triggerNode.data?.label || triggerNode.data?.nodeType}
                   </span>
                 )}
@@ -376,7 +376,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                   'resize-none'
                 )}
               />
-              <p className="mt-1 text-xs text-white/40">
+              <p className="mt-1 text-xs text-gray-600/40">
                 Estes dados simularão o evento que dispara a automação
               </p>
             </div>
@@ -412,7 +412,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                       )}>
                         {result.success ? 'Teste bem sucedido!' : 'Teste falhou'}
                       </p>
-                      <p className="text-sm text-white/50">
+                      <p className="text-sm text-gray-700/50">
                         Duração: {result.totalDuration}ms • ID: {result.executionId}
                       </p>
                     </div>
@@ -456,11 +456,11 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                             className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors"
                           >
                             {getStatusIcon(step.status)}
-                            <span className="flex-1 text-left text-sm text-white/80">
+                            <span className="flex-1 text-left text-sm text-gray-700/80">
                               {node?.data?.label || step.nodeId}
                             </span>
                             {step.duration !== undefined && (
-                              <span className="text-xs text-white/40">
+                              <span className="text-xs text-gray-600/40">
                                 {step.duration}ms
                               </span>
                             )}
@@ -487,7 +487,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                                     </div>
                                   )}
                                   {step.output && (
-                                    <pre className="text-xs text-white/60 overflow-x-auto">
+                                    <pre className="text-xs text-gray-600/60 overflow-x-auto">
                                       {JSON.stringify(step.output, null, 2)}
                                     </pre>
                                   )}

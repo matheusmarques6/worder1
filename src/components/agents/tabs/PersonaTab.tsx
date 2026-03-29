@@ -105,7 +105,7 @@ export default function PersonaTab({ agent, onUpdate }: PersonaTabProps) {
               <Sparkles className="w-4 h-4 text-purple-400" />
             </div>
             <div className="text-left">
-              <span className="text-white font-medium">Função e Personalidade</span>
+              <span className="text-gray-900 font-medium">Função e Personalidade</span>
               <p className="text-xs text-gray-400">Descreva quem é o agente e como ele deve se comportar</p>
             </div>
           </div>
@@ -169,7 +169,7 @@ export default function PersonaTab({ agent, onUpdate }: PersonaTabProps) {
                 />
                 <span className="text-lg">{option.emoji}</span>
                 <div className="flex-1">
-                  <p className="text-sm text-white">{option.label}</p>
+                  <p className="text-sm text-gray-700">{option.label}</p>
                   <p className="text-xs text-gray-400">{option.description}</p>
                 </div>
                 {persona.tone === option.value && (
@@ -206,7 +206,7 @@ export default function PersonaTab({ agent, onUpdate }: PersonaTabProps) {
                 />
                 <span className="text-lg">{option.icon}</span>
                 <div className="flex-1">
-                  <p className="text-sm text-white">{option.label}</p>
+                  <p className="text-sm text-gray-700">{option.label}</p>
                   <p className="text-xs text-gray-400">{option.description}</p>
                 </div>
                 {persona.response_length === option.value && (
@@ -242,7 +242,7 @@ export default function PersonaTab({ agent, onUpdate }: PersonaTabProps) {
                   className="sr-only"
                 />
                 <span className="text-lg">{option.flag}</span>
-                <span className="text-sm text-white flex-1">{option.label}</span>
+                <span className="text-sm text-gray-700 flex-1">{option.label}</span>
                 {persona.language === option.value && (
                   <div className="w-2 h-2 rounded-full bg-green-400" />
                 )}
@@ -301,7 +301,7 @@ export default function PersonaTab({ agent, onUpdate }: PersonaTabProps) {
               <MessageSquare className="w-4 h-4 text-yellow-400" />
             </div>
             <div className="text-left">
-              <span className="text-white font-medium">Diretrizes</span>
+              <span className="text-gray-900 font-medium">Diretrizes</span>
               <p className="text-xs text-gray-400">Regras que o agente SEMPRE seguirá</p>
             </div>
           </div>

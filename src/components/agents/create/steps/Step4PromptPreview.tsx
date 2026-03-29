@@ -57,19 +57,19 @@ function Accordion({
   const [isOpen, setIsOpen] = useState(defaultOpen);
   
   return (
-    <div className="border border-zinc-700 rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 bg-zinc-800/50 flex items-center justify-between hover:bg-zinc-800 transition-colors"
+        className="w-full px-4 py-3 bg-gray-50/50 flex items-center justify-between hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-2">
           <Icon className="w-4 h-4 text-blue-400" />
-          <span className="font-medium text-white">{title}</span>
+          <span className="font-medium text-gray-900">{title}</span>
         </div>
         {isOpen ? (
-          <ChevronUp className="w-4 h-4 text-zinc-400" />
+          <ChevronUp className="w-4 h-4 text-gray-500" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-zinc-400" />
+          <ChevronDown className="w-4 h-4 text-gray-500" />
         )}
       </button>
       <AnimatePresence>
@@ -81,7 +81,7 @@ function Accordion({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="p-4 bg-zinc-900/50 border-t border-zinc-700">
+            <div className="p-4 bg-white/50 border-t border-gray-200">
               {children}
             </div>
           </motion.div>
@@ -146,7 +146,7 @@ export function Step4PromptPreview({
           <FileText className="w-5 h-5 text-purple-400" />
           Preview do Prompt
         </h2>
-        <p className="text-zinc-400">
+        <p className="text-gray-500">
           Revise como o prompt foi construído e edite se necessário.
         </p>
       </div>
@@ -154,7 +154,7 @@ export function Step4PromptPreview({
       {/* Prompt Editor/Viewer */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-medium text-zinc-300">
+          <label className="text-sm font-medium text-gray-700">
             Prompt Final
             {isModified && (
               <span className="ml-2 text-xs text-amber-400">(modificado)</span>
@@ -163,14 +163,14 @@ export function Step4PromptPreview({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowRaw(!showRaw)}
-              className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-white hover:bg-gray-50 rounded-lg transition-colors"
               title={showRaw ? 'Ver formatado' : 'Ver raw'}
             >
               {showRaw ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
             </button>
             <button
               onClick={handleCopy}
-              className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-white hover:bg-gray-50 rounded-lg transition-colors"
               title="Copiar"
             >
               {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
@@ -178,7 +178,7 @@ export function Step4PromptPreview({
             {isModified && (
               <button
                 onClick={handleReset}
-                className="p-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                className="p-2 text-gray-500 hover:text-amber-400 hover:bg-gray-50 rounded-lg transition-colors"
                 title="Restaurar original"
               >
                 <RotateCcw className="w-4 h-4" />
@@ -190,7 +190,7 @@ export function Step4PromptPreview({
                 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5
                 ${isEditing 
                   ? 'bg-green-600 hover:bg-green-700 text-white' 
-                  : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'}
+                  : 'bg-gray-100 hover:bg-zinc-600 text-gray-700'}
               `}
             >
               <Edit3 className="w-3.5 h-3.5" />
@@ -203,12 +203,12 @@ export function Step4PromptPreview({
           <textarea
             value={editedPrompt}
             onChange={(e) => onPromptChange(e.target.value)}
-            className="w-full h-80 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white font-mono text-sm focus:border-purple-500 focus:outline-none resize-none"
+            className="w-full h-80 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-white font-mono text-sm focus:border-purple-500 focus:outline-none resize-none"
             placeholder="Digite o prompt do agente..."
           />
         ) : (
           <div className="relative">
-            <pre className="w-full h-80 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-300 font-mono text-sm overflow-y-auto whitespace-pre-wrap">
+            <pre className="w-full h-80 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 font-mono text-sm overflow-y-auto whitespace-pre-wrap">
               {editedPrompt}
             </pre>
           </div>
@@ -217,7 +217,7 @@ export function Step4PromptPreview({
 
       {/* How it was built */}
       <div className="space-y-3">
-        <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wide flex items-center gap-2">
+        <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
           <Zap className="w-4 h-4" />
           Como foi construído
         </h3>
@@ -228,9 +228,9 @@ export function Step4PromptPreview({
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">{template.icon}</span>
-                <span className="text-white font-medium">{template.name}</span>
+                <span className="text-gray-900 font-medium">{template.name}</span>
               </div>
-              <p className="text-zinc-400">{template.description}</p>
+              <p className="text-gray-500">{template.description}</p>
             </div>
           </Accordion>
 
@@ -238,7 +238,7 @@ export function Step4PromptPreview({
           <Accordion title="Função do Agente" icon={Target}>
             <div className="space-y-3 text-sm">
               <div>
-                <span className="text-zinc-500">Objetivo:</span>
+                <span className="text-gray-500">Objetivo:</span>
                 <p className="text-white">
                   {agentFunction.objective === 'custom' 
                     ? agentFunction.objectiveCustom 
@@ -246,10 +246,10 @@ export function Step4PromptPreview({
                 </p>
               </div>
               <div>
-                <span className="text-zinc-500">Tarefas ({agentFunction.mainTasks.length}):</span>
+                <span className="text-gray-500">Tarefas ({agentFunction.mainTasks.length}):</span>
                 <ul className="mt-1 space-y-1">
                   {agentFunction.mainTasks.map((task, i) => (
-                    <li key={i} className="text-zinc-300 flex items-start gap-2">
+                    <li key={i} className="text-gray-700 flex items-start gap-2">
                       <span className="text-blue-400">•</span>
                       {task}
                     </li>
@@ -258,7 +258,7 @@ export function Step4PromptPreview({
               </div>
               {agentFunction.limitations.length > 0 && (
                 <div>
-                  <span className="text-zinc-500">Limitações ({agentFunction.limitations.length}):</span>
+                  <span className="text-gray-500">Limitações ({agentFunction.limitations.length}):</span>
                   <ul className="mt-1 space-y-1">
                     {agentFunction.limitations.map((lim, i) => (
                       <li key={i} className="text-red-300 flex items-start gap-2">
@@ -271,8 +271,8 @@ export function Step4PromptPreview({
               )}
               {agentFunction.handoffRules && (
                 <div>
-                  <span className="text-zinc-500">Transferir quando:</span>
-                  <p className="text-zinc-300 mt-1">{agentFunction.handoffRules}</p>
+                  <span className="text-gray-500">Transferir quando:</span>
+                  <p className="text-gray-700 mt-1">{agentFunction.handoffRules}</p>
                 </div>
               )}
             </div>
@@ -283,10 +283,10 @@ export function Step4PromptPreview({
             <div className="space-y-2 text-sm">
               {Object.entries(formData).map(([key, value]) => (
                 <div key={key} className="flex items-start gap-2">
-                  <code className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs text-blue-300">
+                  <code className="px-1.5 py-0.5 bg-gray-100 rounded text-xs text-blue-300">
                     {key}
                   </code>
-                  <span className="text-zinc-300">{value || '(vazio)'}</span>
+                  <span className="text-gray-700">{value || '(vazio)'}</span>
                 </div>
               ))}
             </div>
@@ -296,16 +296,16 @@ export function Step4PromptPreview({
           <Accordion title="Persona" icon={User}>
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="text-zinc-500">Tom de voz</span>
-                <p className="text-white font-medium">{toneLabels[persona.tone]}</p>
+                <span className="text-gray-500">Tom de voz</span>
+                <p className="text-gray-900 font-medium">{toneLabels[persona.tone]}</p>
               </div>
               <div>
-                <span className="text-zinc-500">Tamanho</span>
-                <p className="text-white font-medium">{lengthLabels[persona.responseLength]}</p>
+                <span className="text-gray-500">Tamanho</span>
+                <p className="text-gray-900 font-medium">{lengthLabels[persona.responseLength]}</p>
               </div>
               <div>
-                <span className="text-zinc-500">Delay</span>
-                <p className="text-white font-medium">{persona.replyDelay}s</p>
+                <span className="text-gray-500">Delay</span>
+                <p className="text-gray-900 font-medium">{persona.replyDelay}s</p>
               </div>
             </div>
           </Accordion>
@@ -315,15 +315,15 @@ export function Step4PromptPreview({
             <Accordion title="Dados da Loja" icon={Zap}>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-zinc-500">Loja</span>
+                  <span className="text-gray-500">Loja</span>
                   <span className="text-white">{storeAnalysis.storeName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-zinc-500">Produtos</span>
+                  <span className="text-gray-500">Produtos</span>
                   <span className="text-white">{storeAnalysis.products?.total || 0}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-zinc-500">Coleções</span>
+                  <span className="text-gray-500">Coleções</span>
                   <span className="text-white">{storeAnalysis.categories?.length || 0}</span>
                 </div>
               </div>
@@ -350,7 +350,7 @@ export function Step4PromptPreview({
       <div className="flex gap-3 pt-4">
         <button
           onClick={onBack}
-          className="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+          className="px-6 py-3 bg-gray-100 hover:bg-zinc-600 text-gray-900 font-medium rounded-lg transition-colors flex items-center gap-2"
         >
           <ChevronLeft className="w-4 h-4" />
           Voltar
@@ -358,7 +358,7 @@ export function Step4PromptPreview({
         <button
           onClick={onNext}
           disabled={!editedPrompt.trim()}
-          className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+          className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-100 disabled:text-gray-500 text-gray-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
         >
           Próximo
           <ChevronRight className="w-4 h-4" />

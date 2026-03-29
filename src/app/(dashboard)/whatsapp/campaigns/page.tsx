@@ -172,7 +172,7 @@ export default function CampaignsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input type="text" placeholder="Buscar campanhas..." value={search} onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && fetchCampaigns()}
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400" />
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 focus:outline-none focus:border-brand-400" />
         </div>
         <div className="flex gap-2">
           {['all', 'draft', 'scheduled', 'running', 'completed'].map((status) => (
@@ -224,7 +224,7 @@ export default function CampaignsPage() {
                     className="border-b border-gray-200/30 hover:bg-gray-100/20 cursor-pointer transition-colors"
                     onClick={() => router.push(`/whatsapp/campaigns/${campaign.id}`)}>
                     <td className="py-4 px-6">
-                      <div><p className="font-medium text-white">{campaign.name}</p>
+                      <div><p className="font-medium text-gray-900">{campaign.name}</p>
                         <p className="text-xs text-gray-500 mt-0.5">{campaign.template_name || 'Sem template'} • {formatDate(campaign.created_at)}</p></div>
                     </td>
                     <td className="py-4 px-4">
@@ -233,9 +233,9 @@ export default function CampaignsPage() {
                       </span>
                     </td>
                     <td className="py-4 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1"><Users className="w-4 h-4 text-gray-500" /><span className="text-white">{formatNumber(campaign.audience_count)}</span></div>
+                      <div className="flex items-center justify-center gap-1"><Users className="w-4 h-4 text-gray-500" /><span className="text-gray-900">{formatNumber(campaign.audience_count)}</span></div>
                     </td>
-                    <td className="py-4 px-4 text-center"><span className="text-white">{formatNumber(campaign.total_sent)}</span></td>
+                    <td className="py-4 px-4 text-center"><span className="text-gray-900">{formatNumber(campaign.total_sent)}</span></td>
                     <td className="py-4 px-4 text-center"><span className={campaign.total_sent > 0 ? 'text-green-400' : 'text-gray-400'}>{deliveryRate}%</span></td>
                     <td className="py-4 px-4 text-center"><span className={campaign.total_delivered > 0 ? 'text-cyan-400' : 'text-gray-400'}>{readRate}%</span></td>
                     <td className="py-4 px-6 text-right">
@@ -245,10 +245,10 @@ export default function CampaignsPage() {
                         </button>
                         {openDropdown === campaign.id && (
                           <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-10 py-1">
-                            {campaign.status === 'draft' && <button onClick={(e) => { e.stopPropagation(); handleAction('send', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-100"><Play className="w-4 h-4" /> Enviar Agora</button>}
-                            {campaign.status === 'running' && <button onClick={(e) => { e.stopPropagation(); handleAction('pause', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-100"><Pause className="w-4 h-4" /> Pausar</button>}
-                            {campaign.status === 'paused' && <button onClick={(e) => { e.stopPropagation(); handleAction('resume', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-100"><Play className="w-4 h-4" /> Retomar</button>}
-                            <button onClick={(e) => { e.stopPropagation(); handleAction('duplicate', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-100"><Copy className="w-4 h-4" /> Duplicar</button>
+                            {campaign.status === 'draft' && <button onClick={(e) => { e.stopPropagation(); handleAction('send', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Play className="w-4 h-4" /> Enviar Agora</button>}
+                            {campaign.status === 'running' && <button onClick={(e) => { e.stopPropagation(); handleAction('pause', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Pause className="w-4 h-4" /> Pausar</button>}
+                            {campaign.status === 'paused' && <button onClick={(e) => { e.stopPropagation(); handleAction('resume', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Play className="w-4 h-4" /> Retomar</button>}
+                            <button onClick={(e) => { e.stopPropagation(); handleAction('duplicate', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Copy className="w-4 h-4" /> Duplicar</button>
                             {['scheduled', 'running', 'paused'].includes(campaign.status) && <button onClick={(e) => { e.stopPropagation(); handleAction('cancel', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-yellow-400 hover:bg-gray-100"><XCircle className="w-4 h-4" /> Cancelar</button>}
                             <button onClick={(e) => { e.stopPropagation(); handleAction('delete', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-gray-100"><Trash2 className="w-4 h-4" /> Excluir</button>
                           </div>

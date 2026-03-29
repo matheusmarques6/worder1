@@ -200,7 +200,7 @@ export default function NewCampaignPage() {
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isCompleted ? 'bg-green-500' : isActive ? 'bg-primary-500' : 'bg-gray-100'}`}>
                   {isCompleted ? <Check className="w-5 h-5 text-white" /> : <Icon className="w-5 h-5 text-white" />}
                 </div>
-                <span className={`text-sm font-medium ${isActive ? 'text-white' : 'text-gray-500'}`}>{step.title}</span>
+                <span className={`text-sm font-medium ${isActive ? 'text-gray-900' : 'text-gray-500'}`}>{step.title}</span>
               </div>
               {i < steps.length - 1 && <div className={`w-16 lg:w-24 h-0.5 mx-4 ${isCompleted ? 'bg-green-500' : 'bg-gray-100'}`} />}
             </div>
@@ -215,15 +215,15 @@ export default function NewCampaignPage() {
               <h2 className="text-xl font-semibold text-gray-900 mb-6">Detalhes da Campanha</h2>
               <div className="space-y-4">
                 <div><label className="block text-sm font-medium text-gray-600 mb-2">Nome *</label>
-                  <input type="text" value={state.name} onChange={(e) => updateState({ name: e.target.value })} placeholder="Ex: Black Friday 2024" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400" /></div>
+                  <input type="text" value={state.name} onChange={(e) => updateState({ name: e.target.value })} placeholder="Ex: Black Friday 2024" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 focus:outline-none focus:border-brand-400" /></div>
                 <div><label className="block text-sm font-medium text-gray-600 mb-2">Descrição</label>
-                  <textarea value={state.description} onChange={(e) => updateState({ description: e.target.value })} placeholder="Objetivo da campanha..." rows={3} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400 resize-none" /></div>
+                  <textarea value={state.description} onChange={(e) => updateState({ description: e.target.value })} placeholder="Objetivo da campanha..." rows={3} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 focus:outline-none focus:border-brand-400 resize-none" /></div>
                 <div><label className="block text-sm font-medium text-gray-600 mb-3">Tipo</label>
                   <div className="grid grid-cols-2 gap-4">
                     <button onClick={() => updateState({ type: 'broadcast' })} className={`p-4 rounded-xl border-2 text-left ${state.type === 'broadcast' ? 'border-primary-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <Send className={`w-6 h-6 mb-2 ${state.type === 'broadcast' ? 'text-brand-600' : 'text-gray-500'}`} /><p className="font-medium text-white">Broadcast</p><p className="text-xs text-gray-500 mt-1">Envio único</p></button>
+                      <Send className={`w-6 h-6 mb-2 ${state.type === 'broadcast' ? 'text-brand-600' : 'text-gray-500'}`} /><p className="font-medium text-gray-900">Broadcast</p><p className="text-xs text-gray-500 mt-1">Envio único</p></button>
                     <button onClick={() => updateState({ type: 'automated' })} className={`p-4 rounded-xl border-2 text-left ${state.type === 'automated' ? 'border-primary-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <Sparkles className={`w-6 h-6 mb-2 ${state.type === 'automated' ? 'text-brand-600' : 'text-gray-500'}`} /><p className="font-medium text-white">Automatizada</p><p className="text-xs text-gray-500 mt-1">Por gatilho</p></button>
+                      <Sparkles className={`w-6 h-6 mb-2 ${state.type === 'automated' ? 'text-brand-600' : 'text-gray-500'}`} /><p className="font-medium text-gray-900">Automatizada</p><p className="text-xs text-gray-500 mt-1">Por gatilho</p></button>
                   </div></div>
               </div>
             </motion.div>
@@ -234,14 +234,14 @@ export default function NewCampaignPage() {
               <h2 className="text-xl font-semibold text-gray-900 mb-6">Selecione a Audiência</h2>
               <div className="space-y-4">
                 <button onClick={() => updateState({ audienceType: 'all', selectedTags: [], selectedPhonebookId: '' })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'all' ? 'border-primary-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <div className="flex items-center justify-between"><div className="flex items-center gap-3"><Users className={`w-5 h-5 ${state.audienceType === 'all' ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-white">Todos os contatos</p><p className="text-xs text-gray-500">Enviar para toda a base de contatos</p></div></div><span className="text-sm text-gray-500">~5.234</span></div></button>
+                  <div className="flex items-center justify-between"><div className="flex items-center gap-3"><Users className={`w-5 h-5 ${state.audienceType === 'all' ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-gray-900">Todos os contatos</p><p className="text-xs text-gray-500">Enviar para toda a base de contatos</p></div></div><span className="text-sm text-gray-500">~5.234</span></div></button>
                 
                 <button onClick={() => updateState({ audienceType: 'tags', selectedPhonebookId: '' })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'tags' ? 'border-primary-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <div className="flex items-center gap-3"><Tag className={`w-5 h-5 ${state.audienceType === 'tags' ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-white">Filtrar por tags</p><p className="text-xs text-gray-500">Selecione tags específicas</p></div></div></button>
+                  <div className="flex items-center gap-3"><Tag className={`w-5 h-5 ${state.audienceType === 'tags' ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-gray-900">Filtrar por tags</p><p className="text-xs text-gray-500">Selecione tags específicas</p></div></div></button>
                 {state.audienceType === 'tags' && <div className="ml-8 p-4 bg-gray-50 rounded-xl"><p className="text-sm text-gray-600 mb-3">Selecione:</p><div className="flex flex-wrap gap-2">{availableTags.map(t => <button key={t} onClick={() => toggleTag(t)} className={`px-3 py-1.5 rounded-lg text-sm ${state.selectedTags.includes(t) ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{t}</button>)}</div></div>}
                 
                 <button onClick={() => updateState({ audienceType: 'phonebook', selectedTags: [] })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'phonebook' ? 'border-primary-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <div className="flex items-center gap-3"><BookUser className={`w-5 h-5 ${state.audienceType === 'phonebook' ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-white">Lista de contatos (Phonebook)</p><p className="text-xs text-gray-500">Usar uma lista importada</p></div></div></button>
+                  <div className="flex items-center gap-3"><BookUser className={`w-5 h-5 ${state.audienceType === 'phonebook' ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-gray-900">Lista de contatos (Phonebook)</p><p className="text-xs text-gray-500">Usar uma lista importada</p></div></div></button>
                 {state.audienceType === 'phonebook' && (
                   <div className="ml-8 p-4 bg-gray-50 rounded-xl">
                     <p className="text-sm text-gray-600 mb-3">Selecione uma lista:</p>
@@ -257,7 +257,7 @@ export default function NewCampaignPage() {
                             className={`w-full p-3 rounded-lg text-left flex items-center justify-between ${state.selectedPhonebookId === pb.id ? 'bg-brand-100 border border-brand-300' : 'bg-gray-100 hover:bg-gray-100'}`}>
                             <div className="flex items-center gap-3">
                               <BookUser className="w-4 h-4 text-gray-500" />
-                              <span className="text-white text-sm">{pb.name}</span>
+                              <span className="text-gray-700 text-sm">{pb.name}</span>
                             </div>
                             <span className="text-xs text-gray-500">{pb.contact_count} contatos</span>
                           </button>
@@ -268,7 +268,7 @@ export default function NewCampaignPage() {
                 )}
                 
                 <button onClick={() => updateState({ audienceType: 'import', selectedTags: [], selectedPhonebookId: '' })} className={`w-full p-4 rounded-xl border-2 text-left ${state.audienceType === 'import' ? 'border-primary-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <div className="flex items-center gap-3"><Upload className={`w-5 h-5 ${state.audienceType === 'import' ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-white">Importar CSV</p><p className="text-xs text-gray-500">Carregar arquivo para esta campanha</p></div></div></button>
+                  <div className="flex items-center gap-3"><Upload className={`w-5 h-5 ${state.audienceType === 'import' ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-gray-900">Importar CSV</p><p className="text-xs text-gray-500">Carregar arquivo para esta campanha</p></div></div></button>
               </div>
               {audienceCount > 0 && <div className="mt-6 p-4 bg-brand-50 border border-primary-500/20 rounded-xl"><div className="flex items-center gap-2"><Users className="w-5 h-5 text-brand-600" /><span className="text-white font-medium">{audienceCount.toLocaleString()} contatos</span></div></div>}
             </motion.div>
@@ -320,9 +320,9 @@ export default function NewCampaignPage() {
                   {state.template.body_variables > 0 && <div className="mt-4 p-4 bg-gray-50 rounded-xl"><p className="text-sm font-medium text-gray-600 mb-3">Variáveis:</p><div className="space-y-3">
                     {Object.keys(state.templateVariables).map(k => (
                       <div key={k} className="flex items-center gap-2"><span className="text-sm text-gray-500 w-12">{`{{${k}}}`}</span>
-                        <select value={state.templateVariables[k]?.type || 'field'} onChange={(e) => { const nv = { ...state.templateVariables }; nv[k] = { ...nv[k], type: e.target.value as any }; updateState({ templateVariables: nv }) }} className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm text-white"><option value="field">Campo</option><option value="static">Fixo</option></select>
-                        {state.templateVariables[k]?.type === 'field' ? <select value={state.templateVariables[k]?.value || ''} onChange={(e) => { const nv = { ...state.templateVariables }; nv[k] = { ...nv[k], value: e.target.value }; updateState({ templateVariables: nv }) }} className="flex-1 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm text-white"><option value="">Selecione...</option><option value="name">Nome</option><option value="phone">Telefone</option><option value="email">Email</option></select>
-                        : <input type="text" value={state.templateVariables[k]?.value || ''} onChange={(e) => { const nv = { ...state.templateVariables }; nv[k] = { ...nv[k], value: e.target.value }; updateState({ templateVariables: nv }) }} placeholder="Valor..." className="flex-1 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm text-white placeholder-dark-400" />}
+                        <select value={state.templateVariables[k]?.type || 'field'} onChange={(e) => { const nv = { ...state.templateVariables }; nv[k] = { ...nv[k], type: e.target.value as any }; updateState({ templateVariables: nv }) }} className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm text-gray-700"><option value="field">Campo</option><option value="static">Fixo</option></select>
+                        {state.templateVariables[k]?.type === 'field' ? <select value={state.templateVariables[k]?.value || ''} onChange={(e) => { const nv = { ...state.templateVariables }; nv[k] = { ...nv[k], value: e.target.value }; updateState({ templateVariables: nv }) }} className="flex-1 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm text-gray-700"><option value="">Selecione...</option><option value="name">Nome</option><option value="phone">Telefone</option><option value="email">Email</option></select>
+                        : <input type="text" value={state.templateVariables[k]?.value || ''} onChange={(e) => { const nv = { ...state.templateVariables }; nv[k] = { ...nv[k], value: e.target.value }; updateState({ templateVariables: nv }) }} placeholder="Valor..." className="flex-1 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm text-gray-700 placeholder-dark-400" />}
                       </div>
                     ))}
                   </div></div>}
@@ -336,18 +336,18 @@ export default function NewCampaignPage() {
               <h2 className="text-xl font-semibold text-gray-900 mb-6">Agendar Envio</h2>
               <div className="space-y-4">
                 <button onClick={() => updateState({ sendNow: true })} className={`w-full p-4 rounded-xl border-2 text-left ${state.sendNow ? 'border-primary-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <div className="flex items-center gap-3"><Send className={`w-5 h-5 ${state.sendNow ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-white">Enviar agora</p><p className="text-xs text-gray-500">Imediatamente</p></div></div></button>
+                  <div className="flex items-center gap-3"><Send className={`w-5 h-5 ${state.sendNow ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-gray-900">Enviar agora</p><p className="text-xs text-gray-500">Imediatamente</p></div></div></button>
                 <button onClick={() => updateState({ sendNow: false })} className={`w-full p-4 rounded-xl border-2 text-left ${!state.sendNow ? 'border-primary-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <div className="flex items-center gap-3"><Calendar className={`w-5 h-5 ${!state.sendNow ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-white">Agendar</p><p className="text-xs text-gray-500">Data e hora específicas</p></div></div></button>
-                {!state.sendNow && <div className="ml-8 p-4 bg-gray-50 rounded-xl"><div className="grid grid-cols-2 gap-4"><div><label className="block text-sm text-gray-500 mb-2">Data</label><input type="date" value={state.scheduledDate} onChange={(e) => updateState({ scheduledDate: e.target.value })} min={new Date().toISOString().split('T')[0]} className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-white" /></div><div><label className="block text-sm text-gray-500 mb-2">Hora</label><input type="time" value={state.scheduledTime} onChange={(e) => updateState({ scheduledTime: e.target.value })} className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-white" /></div></div></div>}
+                  <div className="flex items-center gap-3"><Calendar className={`w-5 h-5 ${!state.sendNow ? 'text-brand-600' : 'text-gray-500'}`} /><div><p className="font-medium text-gray-900">Agendar</p><p className="text-xs text-gray-500">Data e hora específicas</p></div></div></button>
+                {!state.sendNow && <div className="ml-8 p-4 bg-gray-50 rounded-xl"><div className="grid grid-cols-2 gap-4"><div><label className="block text-sm text-gray-500 mb-2">Data</label><input type="date" value={state.scheduledDate} onChange={(e) => updateState({ scheduledDate: e.target.value })} min={new Date().toISOString().split('T')[0]} className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-900" /></div><div><label className="block text-sm text-gray-500 mb-2">Hora</label><input type="time" value={state.scheduledTime} onChange={(e) => updateState({ scheduledTime: e.target.value })} className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-900" /></div></div></div>}
               </div>
               <div className="mt-8 p-6 bg-gradient-to-br from-primary-500/10 to-yellow-500/10 border border-primary-500/20 rounded-xl">
-                <h3 className="font-semibold text-white mb-4">Resumo</h3>
+                <h3 className="font-semibold text-gray-900 mb-4">Resumo</h3>
                 <div className="space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-500">Nome:</span><span className="text-white font-medium">{state.name}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Audiência:</span><span className="text-white">{audienceCount.toLocaleString()} contatos</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Template:</span><span className="text-white">{state.template?.name || '-'}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Envio:</span><span className="text-white">{state.sendNow ? 'Agora' : `${state.scheduledDate} ${state.scheduledTime}`}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Nome:</span><span className="text-gray-900 font-medium">{state.name}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Audiência:</span><span className="text-gray-900">{audienceCount.toLocaleString()} contatos</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Template:</span><span className="text-gray-900">{state.template?.name || '-'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Envio:</span><span className="text-gray-900">{state.sendNow ? 'Agora' : `${state.scheduledDate} ${state.scheduledTime}`}</span></div>
                   <div className="border-t border-gray-200 pt-3 mt-3"><div className="flex justify-between"><span className="text-gray-500">Custo estimado:</span><span className="text-brand-600 font-semibold">~R$ {estimatedCost.toFixed(2)}</span></div></div>
                 </div>
               </div>

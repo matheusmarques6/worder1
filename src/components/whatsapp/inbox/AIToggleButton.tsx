@@ -90,7 +90,7 @@ export function AIToggleButton({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 5 }}
               className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 
-                         bg-white border border-gray-200 rounded-lg text-xs text-white whitespace-nowrap z-50"
+                         bg-white border border-gray-200 rounded-lg text-xs text-gray-600 whitespace-nowrap z-50"
             >
               {isEnabled ? 'Pausar IA' : 'Ativar IA'}
               <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 

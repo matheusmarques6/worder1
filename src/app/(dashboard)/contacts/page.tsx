@@ -62,7 +62,7 @@ export default function ContactsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display text-white">Contatos</h1>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Contatos</h1>
           <p className="text-sm text-gray-500 mt-1">Gerencie sua base de contatos e segmentos</p>
         </div>
         <div className="flex items-center gap-3">
@@ -99,7 +99,7 @@ export default function ContactsPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-white mt-1 font-display">{values[i]}</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1 font-display">{values[i]}</p>
                 </div>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${kpi.color}15` }}>
                   <Icon className="w-5 h-5" style={{ color: kpi.color }} weight="duotone" />
@@ -129,7 +129,7 @@ export default function ContactsPage() {
             placeholder="Buscar contatos..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
           />
         </div>
         <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
@@ -178,7 +178,7 @@ export default function ContactsPage() {
                         {(contact.first_name?.[0] || '') + (contact.last_name?.[0] || '')}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-white group-hover:text-[#F26B2A] transition-colors">
+                        <p className="text-sm font-medium text-gray-900 group-hover:text-[#F26B2A] transition-colors">
                           {contact.first_name} {contact.last_name}
                         </p>
                       </div>
@@ -202,7 +202,7 @@ export default function ContactsPage() {
                       <span className="text-sm text-gray-400">-</span>
                     )}
                   </td>
-                  <td className="px-5 py-4 text-sm font-medium text-white">
+                  <td className="px-5 py-4 text-sm font-medium text-gray-900">
                     {contact.ltv ? `R$ ${contact.ltv.toFixed(2)}` : '-'}
                   </td>
                   <td className="px-5 py-4 text-sm text-gray-500">

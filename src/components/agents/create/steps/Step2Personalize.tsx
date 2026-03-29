@@ -89,7 +89,7 @@ export function Step2Personalize({
       case 'textarea':
         return (
           <div key={field.id} className="space-y-1.5">
-            <label className="block text-sm font-medium text-zinc-300">
+            <label className="block text-sm font-medium text-gray-700">
               {field.label}
               {field.required && <span className="text-red-400 ml-1">*</span>}
             </label>
@@ -99,13 +99,13 @@ export function Step2Personalize({
               placeholder={field.placeholder}
               rows={3}
               className={`
-                w-full px-3 py-2 bg-zinc-800 border rounded-lg text-white placeholder-zinc-500
+                w-full px-3 py-2 bg-gray-50 border rounded-lg text-white placeholder-zinc-500
                 focus:outline-none focus:border-blue-500 resize-none
-                ${error ? 'border-red-500' : 'border-zinc-700'}
+                ${error ? 'border-red-500' : 'border-gray-200'}
               `}
             />
             {field.helpText && !error && (
-              <p className="text-xs text-zinc-500">{field.helpText}</p>
+              <p className="text-xs text-gray-500">{field.helpText}</p>
             )}
             {error && <p className="text-xs text-red-400">{error}</p>}
           </div>
@@ -114,14 +114,14 @@ export function Step2Personalize({
       case 'select':
         return (
           <div key={field.id} className="space-y-1.5">
-            <label className="block text-sm font-medium text-zinc-300">
+            <label className="block text-sm font-medium text-gray-700">
               {field.label}
               {field.required && <span className="text-red-400 ml-1">*</span>}
             </label>
             <select
               value={value}
               onChange={(e) => updateField(field.id, e.target.value)}
-              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-white focus:outline-none focus:border-blue-500"
             >
               <option value="">Selecione...</option>
               {field.options?.map((opt) => (
@@ -130,14 +130,14 @@ export function Step2Personalize({
                 </option>
               ))}
             </select>
-            {field.helpText && <p className="text-xs text-zinc-500">{field.helpText}</p>}
+            {field.helpText && <p className="text-xs text-gray-500">{field.helpText}</p>}
           </div>
         );
 
       default:
         return (
           <div key={field.id} className="space-y-1.5">
-            <label className="block text-sm font-medium text-zinc-300">
+            <label className="block text-sm font-medium text-gray-700">
               {field.label}
               {field.required && <span className="text-red-400 ml-1">*</span>}
             </label>
@@ -147,13 +147,13 @@ export function Step2Personalize({
               onChange={(e) => updateField(field.id, e.target.value)}
               placeholder={field.placeholder}
               className={`
-                w-full px-3 py-2 bg-zinc-800 border rounded-lg text-white placeholder-zinc-500
+                w-full px-3 py-2 bg-gray-50 border rounded-lg text-white placeholder-zinc-500
                 focus:outline-none focus:border-blue-500
-                ${error ? 'border-red-500' : 'border-zinc-700'}
+                ${error ? 'border-red-500' : 'border-gray-200'}
               `}
             />
             {field.helpText && !error && (
-              <p className="text-xs text-zinc-500">{field.helpText}</p>
+              <p className="text-xs text-gray-500">{field.helpText}</p>
             )}
             {error && <p className="text-xs text-red-400">{error}</p>}
           </div>
@@ -172,7 +172,7 @@ export function Step2Personalize({
         <h2 className="text-xl font-semibold text-gray-900 mb-2">
           Personalize seu agente
         </h2>
-        <p className="text-zinc-400">
+        <p className="text-gray-500">
           Configure as informações do seu agente de {template.name}.
           {storeAnalysis && ' Preenchemos alguns campos com base na análise da sua loja.'}
         </p>
@@ -190,7 +190,7 @@ export function Step2Personalize({
 
       {/* Required Fields */}
       <div className="space-y-4">
-        <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wide">
+        <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
           Informações Básicas
         </h3>
         {requiredFields.map(renderField)}
@@ -198,7 +198,7 @@ export function Step2Personalize({
 
       {/* Tone Selection */}
       <div className="space-y-3">
-        <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wide">
+        <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
           Tom de Voz
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -210,13 +210,13 @@ export function Step2Personalize({
                 p-3 rounded-lg border text-left transition-all
                 ${persona.tone === key
                   ? 'border-blue-500 bg-blue-500/10'
-                  : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
+                  : 'border-gray-200 bg-gray-50/50 hover:border-gray-200'
                 }
               `}
             >
               <span className="text-lg mb-1 block">{option.icon}</span>
               <span className="text-sm font-medium text-gray-900 block">{option.label}</span>
-              <span className="text-xs text-zinc-400">{option.description}</span>
+              <span className="text-xs text-gray-500">{option.description}</span>
             </button>
           ))}
         </div>
@@ -224,7 +224,7 @@ export function Step2Personalize({
 
       {/* Response Length */}
       <div className="space-y-3">
-        <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wide">
+        <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
           Tamanho das Respostas
         </h3>
         <div className="grid grid-cols-3 gap-2">
@@ -236,12 +236,12 @@ export function Step2Personalize({
                 p-3 rounded-lg border text-center transition-all
                 ${persona.responseLength === key
                   ? 'border-blue-500 bg-blue-500/10'
-                  : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
+                  : 'border-gray-200 bg-gray-50/50 hover:border-gray-200'
                 }
               `}
             >
               <span className="text-sm font-medium text-gray-900 block">{option.label}</span>
-              <span className="text-xs text-zinc-400">{option.description}</span>
+              <span className="text-xs text-gray-500">{option.description}</span>
             </button>
           ))}
         </div>
@@ -252,7 +252,7 @@ export function Step2Personalize({
         <div className="space-y-3">
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-white transition-colors"
           >
             {showAdvanced ? (
               <ChevronUp className="w-4 h-4" />
@@ -273,7 +273,7 @@ export function Step2Personalize({
 
               {/* Reply Delay */}
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-zinc-300">
+                <label className="block text-sm font-medium text-gray-700">
                   Tempo de resposta (segundos)
                 </label>
                 <input
@@ -284,9 +284,9 @@ export function Step2Personalize({
                   onChange={(e) =>
                     onPersonaChange({ ...persona, replyDelay: parseInt(e.target.value) || 0 })
                   }
-                  className="w-24 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className="w-24 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-white focus:outline-none focus:border-blue-500"
                 />
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-gray-500">
                   Tempo que o agente "digita" antes de responder (0-30s)
                 </p>
               </div>
@@ -299,13 +299,13 @@ export function Step2Personalize({
       <div className="flex gap-3 pt-4">
         <button
           onClick={onBack}
-          className="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-medium rounded-lg transition-colors"
+          className="px-6 py-3 bg-gray-100 hover:bg-zinc-600 text-gray-900 font-medium rounded-lg transition-colors"
         >
           Voltar
         </button>
         <button
           onClick={handleNext}
-          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-gray-900 font-medium rounded-lg transition-colors"
         >
           Continuar
         </button>

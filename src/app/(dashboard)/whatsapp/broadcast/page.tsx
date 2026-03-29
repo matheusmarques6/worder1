@@ -124,8 +124,8 @@ export default function WhatsAppBroadcastPage() {
             <WhatsappLogo size={22} className="text-green-400" weight="fill" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-display text-white">WhatsApp Broadcast</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">Envie mensagens em massa via WhatsApp Business API</p>
+            <h1 className="text-2xl font-bold font-display text-gray-900">WhatsApp Broadcast</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Envie mensagens em massa via WhatsApp Business API</p>
           </div>
         </div>
         <button
@@ -147,13 +147,13 @@ export default function WhatsAppBroadcastPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4"
+              className="bg-white/50 border border-gray-200 rounded-xl p-4"
             >
               <div className="flex items-center gap-2 mb-2">
-                <Icon size={16} className="text-zinc-500" />
-                <span className="text-xs text-zinc-500">{kpi.title}</span>
+                <Icon size={16} className="text-gray-500" />
+                <span className="text-xs text-gray-500">{kpi.title}</span>
               </div>
-              <p className="text-xl font-bold text-white">{kpi.value}</p>
+              <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
               <span className="text-xs text-emerald-400">{kpi.change}</span>
             </motion.div>
           )
@@ -165,22 +165,22 @@ export default function WhatsAppBroadcastPage() {
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
-          className="bg-zinc-900/50 border border-green-500/30 rounded-xl p-6"
+          className="bg-white/50 border border-green-500/30 rounded-xl p-6"
         >
-          <h3 className="text-sm font-semibold text-white mb-4">Criar Broadcast</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Criar Broadcast</h3>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Nome do Broadcast</label>
+                <label className="block text-xs text-gray-500 mb-1.5">Nome do Broadcast</label>
                 <input
                   type="text"
                   placeholder="Ex: Promoção de Março"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-green-500"
+                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-green-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Tipo de Mensagem</label>
+                <label className="block text-xs text-gray-500 mb-1.5">Tipo de Mensagem</label>
                 <div className="flex gap-2">
                   {templateTypes.map((t) => {
                     const Icon = t.icon
@@ -191,7 +191,7 @@ export default function WhatsAppBroadcastPage() {
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
                           selectedType === t.type
                             ? 'border-green-500 bg-green-500/5 text-white'
-                            : 'border-zinc-700 text-zinc-400 hover:border-zinc-600'
+                            : 'border-gray-200 text-gray-500 hover:border-gray-200'
                         }`}
                       >
                         <Icon size={16} />
@@ -203,18 +203,18 @@ export default function WhatsAppBroadcastPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Mensagem</label>
+                <label className="block text-xs text-gray-500 mb-1.5">Mensagem</label>
                 <textarea
                   rows={4}
                   placeholder="Digite sua mensagem... Use {{nome}} para personalizar"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-green-500 resize-none"
+                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-green-500 resize-none"
                 />
-                <p className="text-xs text-zinc-600 mt-1">Variáveis: {'{{nome}}'}, {'{{produto}}'}, {'{{valor}}'}, {'{{cupom}}'}, {'{{link}}'}</p>
+                <p className="text-xs text-gray-400 mt-1">Variáveis: {'{{nome}}'}, {'{{produto}}'}, {'{{valor}}'}, {'{{cupom}}'}, {'{{link}}'}</p>
               </div>
 
               <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Audiência</label>
-                <select className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500">
+                <label className="block text-xs text-gray-500 mb-1.5">Audiência</label>
+                <select className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-green-500">
                   <option>Compradores Recorrentes (3.420)</option>
                   <option>Alto Valor - VIP (1.840)</option>
                   <option>Novos Leads 7d (820)</option>
@@ -226,23 +226,23 @@ export default function WhatsAppBroadcastPage() {
 
             {/* Preview */}
             <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">Preview</label>
+              <label className="block text-xs text-gray-500 mb-1.5">Preview</label>
               <div className="bg-[#0B141A] rounded-xl p-4">
-                <div className="flex items-center gap-3 pb-3 border-b border-zinc-800/50 mb-4">
+                <div className="flex items-center gap-3 pb-3 border-b border-gray-200/50 mb-4">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center">
                     <WhatsappLogo size={16} className="text-white" weight="fill" />
                   </div>
                   <div>
-                    <p className="text-sm text-white font-medium">Sua Loja</p>
-                    <p className="text-xs text-zinc-500">Business Account</p>
+                    <p className="text-sm text-gray-700 font-medium">Sua Loja</p>
+                    <p className="text-xs text-gray-500">Business Account</p>
                   </div>
                 </div>
                 <div className="flex justify-start">
                   <div className="bg-[#202C33] rounded-lg rounded-tl-none px-3 py-2 max-w-[260px]">
-                    <p className="text-sm text-zinc-300 leading-relaxed">
+                    <p className="text-sm text-gray-700 leading-relaxed">
                       Olá {'{{nome}}'}! 🎉 Temos uma promoção exclusiva para você. Use o cupom {'{{cupom}}'} e ganhe desconto especial!
                     </p>
-                    <p className="text-xs text-zinc-500 text-right mt-1">14:32 ✓✓</p>
+                    <p className="text-xs text-gray-500 text-right mt-1">14:32 ✓✓</p>
                   </div>
                 </div>
               </div>
@@ -252,7 +252,7 @@ export default function WhatsAppBroadcastPage() {
                   <Warning size={16} className="text-yellow-400 mt-0.5" />
                   <div>
                     <p className="text-xs text-yellow-400 font-medium">Atenção</p>
-                    <p className="text-xs text-zinc-500">Templates de broadcast precisam ser aprovados pela Meta antes do envio.</p>
+                    <p className="text-xs text-gray-500">Templates de broadcast precisam ser aprovados pela Meta antes do envio.</p>
                   </div>
                 </div>
               </div>
@@ -261,7 +261,7 @@ export default function WhatsAppBroadcastPage() {
                 <button className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:opacity-90 text-sm font-medium">
                   Enviar Agora
                 </button>
-                <button className="px-4 py-2 bg-zinc-800 text-zinc-400 rounded-lg hover:bg-zinc-700 text-sm">
+                <button className="px-4 py-2 bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 text-sm">
                   Agendar
                 </button>
               </div>
@@ -271,8 +271,8 @@ export default function WhatsAppBroadcastPage() {
       )}
 
       {/* Weekly Performance */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4">Performance Semanal</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Performance Semanal</h3>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={weeklyData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
@@ -290,20 +290,20 @@ export default function WhatsAppBroadcastPage() {
       </div>
 
       {/* Broadcasts Table */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-zinc-800">
-          <h3 className="text-sm font-semibold text-white">Broadcasts Recentes</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl overflow-hidden">
+        <div className="p-4 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-900">Broadcasts Recentes</h3>
         </div>
         <table className="w-full">
           <thead>
-            <tr className="border-b border-zinc-800">
-              <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">Broadcast</th>
-              <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">Status</th>
-              <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">Audiência</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Enviados</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Lidos</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Respostas</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Receita</th>
+            <tr className="border-b border-gray-200">
+              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Broadcast</th>
+              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Status</th>
+              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Audiência</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Enviados</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Lidos</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Respostas</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Receita</th>
             </tr>
           </thead>
           <tbody>
@@ -311,11 +311,11 @@ export default function WhatsAppBroadcastPage() {
               const status = statusConfig[bc.status]
               const TypeIcon = templateTypes.find(t => t.type === bc.type)?.icon || FileText
               return (
-                <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors cursor-pointer">
+                <tr key={i} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors cursor-pointer">
                   <td className="p-4">
                     <div className="flex items-center gap-2">
-                      <TypeIcon size={16} className="text-zinc-500" />
-                      <span className="text-sm text-white font-medium">{bc.name}</span>
+                      <TypeIcon size={16} className="text-gray-500" />
+                      <span className="text-sm text-gray-700 font-medium">{bc.name}</span>
                     </div>
                   </td>
                   <td className="p-4">
@@ -323,10 +323,10 @@ export default function WhatsAppBroadcastPage() {
                       {status.label}
                     </span>
                   </td>
-                  <td className="p-4 text-sm text-zinc-400">{bc.audience}</td>
-                  <td className="p-4 text-sm text-zinc-400 text-right">{bc.sent.toLocaleString('pt-BR')}</td>
-                  <td className="p-4 text-sm text-zinc-400 text-right">{bc.read.toLocaleString('pt-BR')}</td>
-                  <td className="p-4 text-sm text-zinc-400 text-right">{bc.replied.toLocaleString('pt-BR')}</td>
+                  <td className="p-4 text-sm text-gray-500">{bc.audience}</td>
+                  <td className="p-4 text-sm text-gray-500 text-right">{bc.sent.toLocaleString('pt-BR')}</td>
+                  <td className="p-4 text-sm text-gray-500 text-right">{bc.read.toLocaleString('pt-BR')}</td>
+                  <td className="p-4 text-sm text-gray-500 text-right">{bc.replied.toLocaleString('pt-BR')}</td>
                   <td className="p-4 text-sm text-emerald-400 font-medium text-right">{bc.revenue}</td>
                 </tr>
               )

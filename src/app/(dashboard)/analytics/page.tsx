@@ -97,24 +97,24 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display text-white">Analytics</h1>
-          <p className="text-sm text-zinc-400 mt-1">Visão geral de performance de todos os canais</p>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Analytics</h1>
+          <p className="text-sm text-gray-500 mt-1">Visão geral de performance de todos os canais</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex bg-zinc-800/50 rounded-lg p-1">
+          <div className="flex bg-gray-50/50 rounded-lg p-1">
             {periods.map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  period === p ? 'bg-[#F26B2A] text-white' : 'text-zinc-400 hover:text-white'
+                  period === p ? 'bg-[#F26B2A] text-white' : 'text-gray-500 hover:text-white'
                 }`}
               >
                 {p}
               </button>
             ))}
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors text-sm">
+          <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors text-sm">
             <Export size={16} />
             Exportar
           </button>
@@ -131,13 +131,13 @@ export default function AnalyticsPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4"
+              className="bg-white/50 border border-gray-200 rounded-xl p-4"
             >
               <div className="flex items-center gap-2 mb-2">
-                <Icon size={16} className="text-zinc-500" />
-                <span className="text-xs text-zinc-500">{kpi.title}</span>
+                <Icon size={16} className="text-gray-500" />
+                <span className="text-xs text-gray-500">{kpi.title}</span>
               </div>
-              <p className="text-lg font-bold text-white">{kpi.value}</p>
+              <p className="text-lg font-bold text-gray-900">{kpi.value}</p>
               <span className={`text-xs ${kpi.positive ? 'text-emerald-400' : 'text-red-400'}`}>
                 {kpi.change}
               </span>
@@ -149,13 +149,13 @@ export default function AnalyticsPage() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Chart */}
-        <div className="lg:col-span-2 bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+        <div className="lg:col-span-2 bg-white/50 border border-gray-200 rounded-xl p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex gap-2">
               <button
                 onClick={() => setChartView('revenue')}
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  chartView === 'revenue' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
+                  chartView === 'revenue' ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
                 }`}
               >
                 Receita
@@ -163,7 +163,7 @@ export default function AnalyticsPage() {
               <button
                 onClick={() => setChartView('engagement')}
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  chartView === 'engagement' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
+                  chartView === 'engagement' ? 'bg-gray-100 text-white' : 'text-gray-500 hover:text-white'
                 }`}
               >
                 Engajamento
@@ -217,8 +217,8 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Channel Breakdown */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4">Receita por Canal</h3>
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Receita por Canal</h3>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie
@@ -245,9 +245,9 @@ export default function AnalyticsPage() {
               <div key={ch.name} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ch.color }} />
-                  <span className="text-zinc-400">{ch.name}</span>
+                  <span className="text-gray-500">{ch.name}</span>
                 </div>
-                <span className="text-white font-medium">{ch.value}%</span>
+                <span className="text-gray-900 font-medium">{ch.value}%</span>
               </div>
             ))}
           </div>
@@ -255,9 +255,9 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Top Campaigns Table */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-white">Top Campanhas por Receita</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Top Campanhas por Receita</h3>
           <button className="text-xs text-[#F26B2A] hover:text-[#F5A623] transition-colors">
             Ver todas →
           </button>
@@ -265,21 +265,21 @@ export default function AnalyticsPage() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-zinc-800">
-                <th className="text-left text-xs text-zinc-500 font-medium pb-3">Campanha</th>
-                <th className="text-left text-xs text-zinc-500 font-medium pb-3">Canal</th>
-                <th className="text-right text-xs text-zinc-500 font-medium pb-3">Envios</th>
-                <th className="text-right text-xs text-zinc-500 font-medium pb-3">Aberturas</th>
-                <th className="text-right text-xs text-zinc-500 font-medium pb-3">Cliques</th>
-                <th className="text-right text-xs text-zinc-500 font-medium pb-3">Receita</th>
+              <tr className="border-b border-gray-200">
+                <th className="text-left text-xs text-gray-500 font-medium pb-3">Campanha</th>
+                <th className="text-left text-xs text-gray-500 font-medium pb-3">Canal</th>
+                <th className="text-right text-xs text-gray-500 font-medium pb-3">Envios</th>
+                <th className="text-right text-xs text-gray-500 font-medium pb-3">Aberturas</th>
+                <th className="text-right text-xs text-gray-500 font-medium pb-3">Cliques</th>
+                <th className="text-right text-xs text-gray-500 font-medium pb-3">Receita</th>
               </tr>
             </thead>
             <tbody>
               {topCampaigns.map((camp, i) => {
                 const ChannelIcon = channelIcon[camp.channel] || EnvelopeSimple
                 return (
-                  <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
-                    <td className="py-3 text-sm text-white">{camp.name}</td>
+                  <tr key={i} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors">
+                    <td className="py-3 text-sm text-gray-700">{camp.name}</td>
                     <td className="py-3">
                       <ChannelIcon
                         size={18}
@@ -289,9 +289,9 @@ export default function AnalyticsPage() {
                         }
                       />
                     </td>
-                    <td className="py-3 text-sm text-zinc-400 text-right">{camp.sent.toLocaleString('pt-BR')}</td>
-                    <td className="py-3 text-sm text-zinc-400 text-right">{camp.opened.toLocaleString('pt-BR')}</td>
-                    <td className="py-3 text-sm text-zinc-400 text-right">{camp.clicked.toLocaleString('pt-BR')}</td>
+                    <td className="py-3 text-sm text-gray-500 text-right">{camp.sent.toLocaleString('pt-BR')}</td>
+                    <td className="py-3 text-sm text-gray-500 text-right">{camp.opened.toLocaleString('pt-BR')}</td>
+                    <td className="py-3 text-sm text-gray-500 text-right">{camp.clicked.toLocaleString('pt-BR')}</td>
                     <td className="py-3 text-sm text-emerald-400 font-medium text-right">{camp.revenue}</td>
                   </tr>
                 )

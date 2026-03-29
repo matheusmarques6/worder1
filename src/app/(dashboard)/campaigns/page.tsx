@@ -117,7 +117,7 @@ export default function CampaignsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display text-white">Campanhas</h1>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Campanhas</h1>
           <p className="text-sm text-gray-500 mt-1">Crie e gerencie campanhas multicanal</p>
         </div>
         <Link href="/campaigns/create" className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20">
@@ -140,7 +140,7 @@ export default function CampaignsPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-white mt-1 font-display">{kpi.value}</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1 font-display">{kpi.value}</p>
                 </div>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${kpi.color}15` }}>
                   <Icon className="w-5 h-5" style={{ color: kpi.color }} weight="duotone" />
@@ -160,7 +160,7 @@ export default function CampaignsPage() {
             placeholder="Buscar campanhas..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
           />
         </div>
         <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-500 hover:text-white hover:border-white/[0.12] transition-colors">
@@ -180,7 +180,7 @@ export default function CampaignsPage() {
       {!loading && filteredCampaigns.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Megaphone className="w-16 h-16 text-gray-600 mb-4" weight="duotone" />
-          <h3 className="text-lg font-semibold text-white mb-1">Nenhuma campanha encontrada</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Nenhuma campanha encontrada</h3>
           <p className="text-sm text-gray-500">Crie sua primeira campanha para começar.</p>
         </div>
       )}
@@ -217,7 +217,7 @@ export default function CampaignsPage() {
 
                 return (
                   <tr key={campaign.id} onClick={() => window.location.href = `/campaigns/${campaign.id}`} className="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer">
-                    <td className="px-5 py-4 text-sm font-medium text-white">{campaign.name}</td>
+                    <td className="px-5 py-4 text-sm font-medium text-gray-900">{campaign.name}</td>
                     <td className="px-5 py-4">{channelIcons[channel] || channelIcons.email}</td>
                     <td className="px-5 py-4">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusColor}`}>
@@ -227,7 +227,7 @@ export default function CampaignsPage() {
                     <td className="px-5 py-4 text-sm text-gray-600">{sent > 0 ? sent.toLocaleString('pt-BR') : '-'}</td>
                     <td className="px-5 py-4 text-sm text-gray-600">{openRatePct}</td>
                     <td className="px-5 py-4 text-sm text-gray-600">{clickRatePct}</td>
-                    <td className="px-5 py-4 text-sm font-medium text-white">{revenue > 0 ? `R$ ${revenue.toLocaleString('pt-BR')}` : '-'}</td>
+                    <td className="px-5 py-4 text-sm font-medium text-gray-900">{revenue > 0 ? `R$ ${revenue.toLocaleString('pt-BR')}` : '-'}</td>
                     <td className="px-5 py-4 text-sm text-gray-500">{formattedDate}</td>
                   </tr>
                 )

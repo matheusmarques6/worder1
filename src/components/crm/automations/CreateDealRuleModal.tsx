@@ -531,7 +531,7 @@ export function CreateDealRuleModal({
             {/* Options */}
             <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl">
               <div>
-                <p className="text-sm text-white">Evitar duplicados</p>
+                <p className="text-sm text-gray-700">Evitar duplicados</p>
                 <p className="text-xs text-gray-400">Não criar deal se já existir um aberto para o contato</p>
               </div>
               <button
@@ -550,7 +550,7 @@ export function CreateDealRuleModal({
             {/* Active Toggle */}
             <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl">
               <div>
-                <p className="text-sm text-white">Regra Ativa</p>
+                <p className="text-sm text-gray-700">Regra Ativa</p>
                 <p className="text-xs text-gray-400">Regras inativas não criam deals</p>
               </div>
               <button

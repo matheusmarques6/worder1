@@ -241,7 +241,7 @@ const IntegrationCard = ({
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-white">{integration.name}</h3>
+            <h3 className="font-semibold text-gray-900">{integration.name}</h3>
             {integration.connected ? (
               <Badge variant={integration.status === 'healthy' ? 'success' : integration.status === 'warning' ? 'warning' : 'error'}>
                 {integration.status === 'healthy' ? 'Conectado' : integration.status === 'warning' ? 'Atenção' : 'Erro'}
@@ -258,7 +258,7 @@ const IntegrationCard = ({
               {Object.entries(integration.stats).map(([key, value]) => (
                 <span key={key} className="text-gray-600">
                   <span className="capitalize">{key}:</span>{' '}
-                  <span className="font-semibold text-white">{value}</span>
+                  <span className="font-semibold text-gray-900">{value}</span>
                 </span>
               ))}
             </div>
@@ -399,7 +399,7 @@ const KlaviyoConfigModal = ({
               }}
               placeholder="pk_xxxxxxxxxxxxxxxx"
               className={cn(
-                "w-full px-4 py-2 bg-white border rounded-xl text-white placeholder-dark-500 focus:outline-none transition-colors",
+                "w-full px-4 py-2 bg-white border rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none transition-colors",
                 error && !privateKey.trim() ? "border-red-500/50 focus:border-red-500" : "border-gray-200 focus:border-primary-500"
               )}
             />
@@ -423,7 +423,7 @@ const KlaviyoConfigModal = ({
               placeholder="XXXXXX"
               maxLength={6}
               className={cn(
-                "w-full px-4 py-2 bg-white border rounded-xl text-white placeholder-dark-500 focus:outline-none transition-colors font-mono tracking-wider",
+                "w-full px-4 py-2 bg-white border rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none transition-colors font-mono tracking-wider",
                 error && !publicKey.trim() ? "border-red-500/50 focus:border-red-500" : "border-gray-200 focus:border-primary-500"
               )}
             />
@@ -838,7 +838,7 @@ function SettingsContent() {
                   className={cn(
                     'w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-colors',
                     activeTab === tab.id
-                      ? 'bg-gray-100 text-white'
+                      ? 'bg-gray-100 text-gray-900'
                       : 'text-gray-500 hover:text-white hover:bg-gray-100'
                   )}
                 >
@@ -974,10 +974,10 @@ function SettingsContent() {
                       {stores.map((store) => (
                         <div key={store.id} className="flex items-center gap-4 p-4 bg-gray-100 rounded-xl">
                           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                            <Store className="w-6 h-6 text-white" />
+                            <Store className="w-6 h-6 text-gray-700" />
                           </div>
                           <div className="flex-1">
-                            <p className="font-medium text-white">{store.name}</p>
+                            <p className="font-medium text-gray-900">{store.name}</p>
                             <p className="text-sm text-gray-500">{store.domain}</p>
                           </div>
                           <Badge variant="success">Ativa</Badge>
@@ -1115,11 +1115,11 @@ function SettingsContent() {
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-500">Requisições</span>
-                              <span className="text-white">{key.total_requests.toLocaleString()}</span>
+                              <span className="text-gray-900">{key.total_requests.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-500">Tokens usados</span>
-                              <span className="text-white">{key.total_tokens_used.toLocaleString()}</span>
+                              <span className="text-gray-900">{key.total_tokens_used.toLocaleString()}</span>
                             </div>
                           </div>
 
@@ -1146,7 +1146,7 @@ function SettingsContent() {
                         <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mb-3 group-hover:bg-brand-100 transition-colors">
                           <Plus className="w-6 h-6 text-gray-500 group-hover:text-brand-600" />
                         </div>
-                        <p className="text-gray-500 group-hover:text-white font-medium">Adicionar API Key</p>
+                        <p className="text-gray-500 group-hover:text-gray-900 font-medium">Adicionar API Key</p>
                         <p className="text-gray-400 text-sm mt-1">{availableProviders.length} providers disponíveis</p>
                       </button>
                     )}
@@ -1256,7 +1256,7 @@ function SettingsContent() {
                               value={newKeyValue}
                               onChange={(e) => setNewKeyValue(e.target.value)}
                               placeholder={`Cole sua ${aiProviderConfig[newKeyProvider]?.name || newKeyProvider} API key aqui`}
-                              className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 pr-12"
+                              className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500 pr-12"
                             />
                             <button
                               type="button"
@@ -1319,19 +1319,19 @@ function SettingsContent() {
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-xl font-bold text-white">Configurações de E-mail</h2>
+                  <h2 className="text-xl font-bold text-gray-900">Configurações de E-mail</h2>
                   <p className="text-sm text-gray-500 mt-1">Gerencie domínios de envio e configurações de e-mail marketing</p>
                 </div>
 
                 {/* Sending Domains */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <h3 className="text-base font-semibold text-white mb-4">Domínios de Envio</h3>
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Domínios de Envio</h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-4 bg-white/50 rounded-lg border border-gray-100">
                       <div className="flex items-center gap-3">
                         <div className="w-2 h-2 rounded-full bg-green-500" />
                         <div>
-                          <p className="text-sm font-medium text-white">mail.sualoja.com.br</p>
+                          <p className="text-sm font-medium text-gray-900">mail.sualoja.com.br</p>
                           <p className="text-xs text-gray-500">SPF, DKIM, DMARC configurados</p>
                         </div>
                       </div>
@@ -1346,15 +1346,15 @@ function SettingsContent() {
 
                 {/* Sender Settings */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <h3 className="text-base font-semibold text-white mb-4">Remetente Padrão</h3>
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Remetente Padrão</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1.5">Nome do Remetente</label>
-                      <input type="text" placeholder="Sua Loja" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                      <input type="text" placeholder="Sua Loja" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
                     </div>
                     <div>
                       <label className="block text-xs text-gray-500 mb-1.5">E-mail do Remetente</label>
-                      <input type="email" placeholder="contato@sualoja.com.br" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                      <input type="email" placeholder="contato@sualoja.com.br" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
                     </div>
                   </div>
                   <button className="mt-4 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity">
@@ -1374,20 +1374,20 @@ function SettingsContent() {
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-xl font-bold text-white">WhatsApp Business API</h2>
+                  <h2 className="text-xl font-bold text-gray-900">WhatsApp Business API</h2>
                   <p className="text-sm text-gray-500 mt-1">Gerencie a conexão com WhatsApp e configurações da IA</p>
                 </div>
 
                 {/* Connection Status */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <h3 className="text-base font-semibold text-white mb-4">Conexão</h3>
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Conexão</h3>
                   <div className="flex items-center justify-between p-4 bg-white/50 rounded-lg border border-gray-100">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-[#25D366]/10 flex items-center justify-center">
                         <Phone className="w-5 h-5 text-[#25D366]" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-white">+55 11 99999-0000</p>
+                        <p className="text-sm font-medium text-gray-900">+55 11 99999-0000</p>
                         <p className="text-xs text-gray-500">WhatsApp Business API — Conectado</p>
                       </div>
                     </div>
@@ -1397,15 +1397,15 @@ function SettingsContent() {
 
                 {/* IA Persona */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <h3 className="text-base font-semibold text-white mb-4">Persona da IA</h3>
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Persona da IA</h3>
                   <div className="space-y-4">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1.5">Nome do Agente</label>
-                      <input type="text" placeholder="Ex: Ana da Sua Loja" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                      <input type="text" placeholder="Ex: Ana da Sua Loja" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
                     </div>
                     <div>
                       <label className="block text-xs text-gray-500 mb-1.5">Tom de Voz</label>
-                      <select className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary-500/50 transition-colors">
+                      <select className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-primary-500/50 transition-colors">
                         <option>Amigável e profissional</option>
                         <option>Formal</option>
                         <option>Casual e descontraído</option>
@@ -1413,7 +1413,7 @@ function SettingsContent() {
                     </div>
                     <div>
                       <label className="block text-xs text-gray-500 mb-1.5">Limite máximo de desconto (%)</label>
-                      <input type="number" placeholder="15" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                      <input type="number" placeholder="15" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
                     </div>
                   </div>
                   <button className="mt-4 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity">
@@ -1433,13 +1433,13 @@ function SettingsContent() {
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-xl font-bold text-white">Dados & Rastreamento</h2>
+                  <h2 className="text-xl font-bold text-gray-900">Dados & Rastreamento</h2>
                   <p className="text-sm text-gray-500 mt-1">Configure tracking, atribuição e consentimento</p>
                 </div>
 
                 {/* Tracking Settings */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-                  <h3 className="text-base font-semibold text-white">Rastreamento</h3>
+                  <h3 className="text-base font-semibold text-gray-900">Rastreamento</h3>
                   {[
                     { label: 'Tracking de visitantes anônimos', desc: 'Identifica visitantes antes do login/compra', enabled: true },
                     { label: 'Eventos comportamentais', desc: 'Pageviews, product_viewed, add_to_cart', enabled: true },
@@ -1447,7 +1447,7 @@ function SettingsContent() {
                   ].map((item) => (
                     <div key={item.label} className="flex items-center justify-between p-4 bg-white/50 rounded-lg border border-gray-100">
                       <div>
-                        <p className="text-sm font-medium text-white">{item.label}</p>
+                        <p className="text-sm font-medium text-gray-900">{item.label}</p>
                         <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
                       </div>
                       <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-primary-500' : 'bg-gray-200'}`}>
@@ -1459,7 +1459,7 @@ function SettingsContent() {
 
                 {/* Attribution */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-                  <h3 className="text-base font-semibold text-white">Atribuição de Receita</h3>
+                  <h3 className="text-base font-semibold text-gray-900">Atribuição de Receita</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {[
                       { channel: 'E-mail', window: '5 dias' },
@@ -1469,7 +1469,7 @@ function SettingsContent() {
                     ].map((item) => (
                       <div key={item.channel} className="flex items-center justify-between p-3 bg-white/50 rounded-lg border border-gray-100">
                         <span className="text-sm text-gray-600">{item.channel}</span>
-                        <select className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
+                        <select className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600 focus:outline-none">
                           <option>{item.window}</option>
                           <option>1 dia</option>
                           <option>3 dias</option>
@@ -1485,7 +1485,7 @@ function SettingsContent() {
 
                 {/* UTM Tracking */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <h3 className="text-base font-semibold text-white mb-4">Rastreamento UTM</h3>
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Rastreamento UTM</h3>
                   <p className="text-sm text-gray-500 mb-4">Parâmetros UTM são automaticamente capturados e vinculados aos perfis de clientes</p>
                   <div className="flex flex-wrap gap-2">
                     {['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].map((param) => (
@@ -1506,7 +1506,7 @@ function SettingsContent() {
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-xl font-bold text-white">Segurança</h2>
+                  <h2 className="text-xl font-bold text-gray-900">Segurança</h2>
                   <p className="text-sm text-gray-500 mt-1">Autenticação, permissões e auditoria</p>
                 </div>
 
@@ -1514,7 +1514,7 @@ function SettingsContent() {
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-base font-semibold text-white">Autenticação em Duas Etapas (2FA)</h3>
+                      <h3 className="text-base font-semibold text-gray-900">Autenticação em Duas Etapas (2FA)</h3>
                       <p className="text-sm text-gray-500 mt-1">Adicione uma camada extra de segurança à sua conta</p>
                     </div>
                     <button className="px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity">
@@ -1525,7 +1525,7 @@ function SettingsContent() {
 
                 {/* Users & Permissions */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <h3 className="text-base font-semibold text-white mb-4">Usuários & Permissões</h3>
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Usuários & Permissões</h3>
                   <div className="space-y-3">
                     {[
                       { name: 'Você', email: 'admin@loja.com', role: 'Admin', status: 'online' },
@@ -1541,7 +1541,7 @@ function SettingsContent() {
                             <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-gray-200 ${u.status === 'online' ? 'bg-green-500' : 'bg-gray-200'}`} />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-white">{u.name}</p>
+                            <p className="text-sm font-medium text-gray-900">{u.name}</p>
                             <p className="text-xs text-gray-500">{u.email}</p>
                           </div>
                         </div>
@@ -1563,7 +1563,7 @@ function SettingsContent() {
 
                 {/* Audit Log */}
                 <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <h3 className="text-base font-semibold text-white mb-4">Log de Auditoria</h3>
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Log de Auditoria</h3>
                   <p className="text-sm text-gray-500 mb-4">Últimas ações realizadas na plataforma</p>
                   <div className="space-y-2">
                     {[
@@ -1573,7 +1573,7 @@ function SettingsContent() {
                     ].map((log, i) => (
                       <div key={i} className="flex items-center justify-between p-3 bg-white/30 rounded-lg">
                         <div>
-                          <p className="text-sm text-white">{log.action}</p>
+                          <p className="text-sm text-gray-700">{log.action}</p>
                           <p className="text-xs text-gray-500">{log.user}</p>
                         </div>
                         <span className="text-xs text-gray-500">{log.time}</span>
@@ -1797,7 +1797,7 @@ function ProfileTab() {
             
             {uploadingAvatar && (
               <div className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-white" />
+                <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
               </div>
             )}
           </div>
@@ -1839,7 +1839,7 @@ function ProfileTab() {
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               placeholder="Seu nome"
-              className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-xl text-white focus:outline-none focus:border-primary-500 placeholder:text-gray-400"
+              className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500 placeholder:text-gray-400"
             />
           </div>
           <div>
@@ -1849,7 +1849,7 @@ function ProfileTab() {
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               placeholder="Seu sobrenome"
-              className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-xl text-white focus:outline-none focus:border-primary-500 placeholder:text-gray-400"
+              className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500 placeholder:text-gray-400"
             />
           </div>
           <div>
@@ -1885,7 +1885,7 @@ function ProfileTab() {
               <Shield className="w-5 h-5 text-brand-600" />
               <div>
                 <p className="text-sm text-gray-500">Cargo</p>
-                <p className="text-white font-medium">{getRoleLabel(profile?.role)}</p>
+                <p className="text-gray-900 font-medium">{getRoleLabel(profile?.role)}</p>
               </div>
             </div>
             <span className={cn(
@@ -1926,7 +1926,7 @@ function ProfileTab() {
           <div className="flex items-center gap-3">
             <Lock className="w-5 h-5 text-gray-500" />
             <div>
-              <p className="text-white font-medium">Senha</p>
+              <p className="text-gray-900 font-medium">Senha</p>
               <p className="text-sm text-gray-500">Altere sua senha de acesso</p>
             </div>
           </div>

@@ -247,7 +247,7 @@ export function TaskDetailModal({
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Atribuído a</p>
-                    <p className="text-white font-medium">{task.assigned_to_name}</p>
+                    <p className="text-gray-900 font-medium">{task.assigned_to_name}</p>
                   </div>
                 </div>
               )}
@@ -269,7 +269,7 @@ export function TaskDetailModal({
                       </div>
                     )}
                     <div className="flex-1">
-                      <p className="font-medium text-white">
+                      <p className="font-medium text-gray-900">
                         {task.contact.name || task.contact.phone_number}
                       </p>
                       <p className="text-sm text-gray-500">{task.contact.phone_number}</p>
@@ -307,7 +307,7 @@ export function TaskDetailModal({
                         <DollarSign className="w-5 h-5 text-brand-600" />
                       </div>
                       <div>
-                        <p className="font-medium text-white">{task.deal.title}</p>
+                        <p className="font-medium text-gray-900">{task.deal.title}</p>
                         <p className="text-lg font-bold text-brand-600">
                           {formatCurrency(task.deal.value)}
                         </p>

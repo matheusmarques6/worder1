@@ -145,7 +145,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             </h4>
             
             <div className="space-y-2">
-              <label className="text-xs text-white/60">Nome do Nó</label>
+              <label className="text-xs text-gray-600/60">Nome do Nó</label>
               <input
                 type="text"
                 value={selectedNode.data.label || ''}
@@ -154,14 +154,14 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 className={cn(
                   'w-full px-3 py-2 rounded-lg',
                   'bg-[#0a0a0a] border border-gray-200',
-                  'text-sm text-white placeholder-white/30',
+                  'text-sm text-gray-700 placeholder-white/30',
                   'focus:outline-none focus:border-blue-500/50'
                 )}
               />
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs text-white/60">Descrição (opcional)</label>
+              <label className="text-xs text-gray-600/60">Descrição (opcional)</label>
               <textarea
                 value={selectedNode.data.description || ''}
                 onChange={(e) => handleDescriptionChange(e.target.value)}
@@ -170,7 +170,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 className={cn(
                   'w-full px-3 py-2 rounded-lg resize-none',
                   'bg-[#0a0a0a] border border-gray-200',
-                  'text-sm text-white placeholder-white/30',
+                  'text-sm text-gray-700 placeholder-white/30',
                   'focus:outline-none focus:border-blue-500/50'
                 )}
               />
@@ -198,7 +198,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'trigger_date' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Campo de Data</label>
+                  <label className="text-xs text-gray-600/60">Campo de Data</label>
                   <SelectField
                     value={selectedNode.data.config?.dateField || 'birth_date'}
                     onChange={(v) => handleUpdate('dateField', v)}
@@ -212,7 +212,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
 
                 {selectedNode.data.config?.dateField === 'custom_date' && (
                   <div className="space-y-2">
-                    <label className="text-xs text-white/60">Nome do Campo</label>
+                    <label className="text-xs text-gray-600/60">Nome do Campo</label>
                     <input
                       type="text"
                       value={selectedNode.data.config?.customFieldName || ''}
@@ -221,7 +221,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       className={cn(
                         'w-full px-3 py-2 rounded-lg',
                         'bg-[#0a0a0a] border border-gray-200',
-                        'text-sm text-white placeholder-white/30',
+                        'text-sm text-gray-700 placeholder-white/30',
                         'focus:outline-none focus:border-blue-500/50'
                       )}
                     />
@@ -229,7 +229,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Quando Disparar?</label>
+                  <label className="text-xs text-gray-600/60">Quando Disparar?</label>
                   <SelectField
                     value={selectedNode.data.config?.timing || 'on_date'}
                     onChange={(v) => handleUpdate('timing', v)}
@@ -243,7 +243,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Horário de Disparo</label>
+                  <label className="text-xs text-gray-600/60">Horário de Disparo</label>
                   <input
                     type="time"
                     value={selectedNode.data.config?.triggerTime || '09:00'}
@@ -251,7 +251,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-gray-200',
-                      'text-sm text-white',
+                      'text-sm text-gray-700',
                       'focus:outline-none focus:border-blue-500/50',
                       '[color-scheme:dark]'
                     )}
@@ -270,7 +270,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'trigger_whatsapp' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Tipo de Mensagem</label>
+                  <label className="text-xs text-gray-600/60">Tipo de Mensagem</label>
                   <SelectField
                     value={selectedNode.data.config?.messageType || 'any'}
                     onChange={(v) => handleUpdate('messageType', v)}
@@ -285,7 +285,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Contém Palavra-chave (opcional)</label>
+                  <label className="text-xs text-gray-600/60">Contém Palavra-chave (opcional)</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.keyword || ''}
@@ -294,7 +294,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-gray-200',
-                      'text-sm text-white placeholder-white/30',
+                      'text-sm text-gray-700 placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
@@ -311,7 +311,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       onChange={(e) => handleUpdate('onlyFirstMessage', e.target.checked)}
                       className="w-4 h-4 rounded border-white/20 bg-transparent text-green-500"
                     />
-                    <span className="text-xs text-white/60">
+                    <span className="text-xs text-gray-600/60">
                       Apenas primeira mensagem (novo contato)
                     </span>
                   </label>
@@ -358,7 +358,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'trigger_deal_stage' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Pipeline</label>
+                  <label className="text-xs text-gray-600/60">Pipeline</label>
                   <SelectField
                     value={selectedNode.data.config?.pipelineId || ''}
                     onChange={(v) => {
@@ -377,7 +377,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 {selectedPipeline && (
                   <>
                     <div className="space-y-2">
-                      <label className="text-xs text-white/60">De qual estágio? (opcional)</label>
+                      <label className="text-xs text-gray-600/60">De qual estágio? (opcional)</label>
                       <SelectField
                         value={selectedNode.data.config?.fromStageId || ''}
                         onChange={(v) => handleUpdate('fromStageId', v)}
@@ -392,7 +392,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     </div>
                     
                     <div className="space-y-2">
-                      <label className="text-xs text-white/60">Para qual estágio?</label>
+                      <label className="text-xs text-gray-600/60">Para qual estágio?</label>
                       <SelectField
                         value={selectedNode.data.config?.stageId || ''}
                         onChange={(v) => handleUpdate('stageId', v)}
@@ -422,7 +422,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               selectedNode.data.nodeType === 'action_remove_tag' ||
               selectedNode.data.nodeType === 'condition_has_tag') && (
               <div className="space-y-2">
-                <label className="text-xs text-white/60">Nome da Tag</label>
+                <label className="text-xs text-gray-600/60">Nome da Tag</label>
                 <input
                   type="text"
                   value={selectedNode.data.config?.tagName || ''}
@@ -431,7 +431,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   className={cn(
                     'w-full px-3 py-2 rounded-lg',
                     'bg-[#0a0a0a] border border-gray-200',
-                    'text-sm text-white placeholder-white/30',
+                    'text-sm text-gray-700 placeholder-white/30',
                     'focus:outline-none focus:border-blue-500/50'
                   )}
                 />
@@ -441,7 +441,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {/* TRIGGER: DEAL CREATED - Pipeline Filter */}
             {selectedNode.data.nodeType === 'trigger_deal_created' && (
               <div className="space-y-2">
-                <label className="text-xs text-white/60">Pipeline (opcional)</label>
+                <label className="text-xs text-gray-600/60">Pipeline (opcional)</label>
                 <SelectField
                   value={selectedNode.data.config?.pipelineId || ''}
                   onChange={(v) => handleUpdate('pipelineId', v)}
@@ -460,7 +460,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {/* TRIGGER: DEAL WON - Pipeline Filter */}
             {selectedNode.data.nodeType === 'trigger_deal_won' && (
               <div className="space-y-2">
-                <label className="text-xs text-white/60">Pipeline (opcional)</label>
+                <label className="text-xs text-gray-600/60">Pipeline (opcional)</label>
                 <SelectField
                   value={selectedNode.data.config?.pipelineId || ''}
                   onChange={(v) => handleUpdate('pipelineId', v)}
@@ -480,7 +480,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'trigger_deal_lost' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Pipeline (opcional)</label>
+                  <label className="text-xs text-gray-600/60">Pipeline (opcional)</label>
                   <SelectField
                     value={selectedNode.data.config?.pipelineId || ''}
                     onChange={(v) => handleUpdate('pipelineId', v)}
@@ -492,7 +492,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Motivo da Perda (opcional)</label>
+                  <label className="text-xs text-gray-600/60">Motivo da Perda (opcional)</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.lostReason || ''}
@@ -501,7 +501,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-gray-200',
-                      'text-sm text-white placeholder-white/30',
+                      'text-sm text-gray-700 placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
@@ -522,7 +522,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               selectedNode.data.nodeType === 'logic_delay') && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Tempo</label>
+                  <label className="text-xs text-gray-600/60">Tempo</label>
                   <input
                     type="number"
                     min="1"
@@ -531,13 +531,13 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-gray-200',
-                      'text-sm text-white',
+                      'text-sm text-gray-700',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Unidade</label>
+                  <label className="text-xs text-gray-600/60">Unidade</label>
                   <SelectField
                     value={selectedNode.data.config?.unit || 'hours'}
                     onChange={(v) => handleUpdate('unit', v)}
@@ -555,7 +555,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'control_delay_until' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Tipo de Espera</label>
+                  <label className="text-xs text-gray-600/60">Tipo de Espera</label>
                   <SelectField
                     value={selectedNode.data.config?.waitType || 'datetime'}
                     onChange={(v) => handleUpdate('waitType', v)}
@@ -568,7 +568,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
 
                 {selectedNode.data.config?.waitType === 'time' ? (
                   <div className="space-y-2">
-                    <label className="text-xs text-white/60">Horário</label>
+                    <label className="text-xs text-gray-600/60">Horário</label>
                     <input
                       type="time"
                       value={selectedNode.data.config?.time || '09:00'}
@@ -576,7 +576,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       className={cn(
                         'w-full px-3 py-2 rounded-lg',
                         'bg-[#0a0a0a] border border-gray-200',
-                        'text-sm text-white',
+                        'text-sm text-gray-700',
                         'focus:outline-none focus:border-blue-500/50'
                       )}
                     />
@@ -586,7 +586,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <label className="text-xs text-white/60">Data e Hora</label>
+                    <label className="text-xs text-gray-600/60">Data e Hora</label>
                     <input
                       type="datetime-local"
                       value={selectedNode.data.config?.datetime || ''}
@@ -594,7 +594,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       className={cn(
                         'w-full px-3 py-2 rounded-lg',
                         'bg-[#0a0a0a] border border-gray-200',
-                        'text-sm text-white',
+                        'text-sm text-gray-700',
                         'focus:outline-none focus:border-blue-500/50',
                         '[color-scheme:dark]'
                       )}
@@ -621,7 +621,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 />
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs text-white/60">Assunto</label>
+                    <label className="text-xs text-gray-600/60">Assunto</label>
                     <VariableButton
                       triggerType={triggerType}
                       onSelect={(v) => handleUpdate('subject', (selectedNode.data.config?.subject || '') + v)}
@@ -636,7 +636,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-gray-200',
-                      'text-sm text-white placeholder-white/30',
+                      'text-sm text-gray-700 placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
@@ -650,7 +650,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   rows={6}
                 />
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Template ID (opcional)</label>
+                  <label className="text-xs text-gray-600/60">Template ID (opcional)</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.templateId || ''}
@@ -659,7 +659,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-gray-200',
-                      'text-sm text-white placeholder-white/30',
+                      'text-sm text-gray-700 placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
@@ -690,7 +690,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               selectedNode.data.nodeType === 'trigger_deal_stage') && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Pipeline</label>
+                  <label className="text-xs text-gray-600/60">Pipeline</label>
                   <SelectField
                     value={selectedNode.data.config?.pipelineId || ''}
                     onChange={(v) => handleUpdate('pipelineId', v)}
@@ -704,7 +704,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 
                 {selectedPipeline && (
                   <div className="space-y-2">
-                    <label className="text-xs text-white/60">Estágio</label>
+                    <label className="text-xs text-gray-600/60">Estágio</label>
                     <SelectField
                       value={selectedNode.data.config?.stageId || ''}
                       onChange={(v) => handleUpdate('stageId', v)}
@@ -722,7 +722,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 {selectedNode.data.nodeType === 'action_create_deal' && (
                   <>
                     <div className="space-y-2">
-                      <label className="text-xs text-white/60">Título do Deal</label>
+                      <label className="text-xs text-gray-600/60">Título do Deal</label>
                       <input
                         type="text"
                         value={selectedNode.data.config?.title || ''}
@@ -731,13 +731,13 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                         className={cn(
                           'w-full px-3 py-2 rounded-lg',
                           'bg-[#0a0a0a] border border-gray-200',
-                          'text-sm text-white placeholder-white/30',
+                          'text-sm text-gray-700 placeholder-white/30',
                           'focus:outline-none focus:border-blue-500/50'
                         )}
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs text-white/60">Valor</label>
+                      <label className="text-xs text-gray-600/60">Valor</label>
                       <input
                         type="number"
                         value={selectedNode.data.config?.value || 0}
@@ -746,7 +746,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                         className={cn(
                           'w-full px-3 py-2 rounded-lg',
                           'bg-[#0a0a0a] border border-gray-200',
-                          'text-sm text-white placeholder-white/30',
+                          'text-sm text-gray-700 placeholder-white/30',
                           'focus:outline-none focus:border-blue-500/50'
                         )}
                       />
@@ -760,7 +760,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'condition_field' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Campo</label>
+                  <label className="text-xs text-gray-600/60">Campo</label>
                   <SelectField
                     value={selectedNode.data.config?.field || ''}
                     onChange={(v) => handleUpdate('field', v)}
@@ -776,7 +776,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Operador</label>
+                  <label className="text-xs text-gray-600/60">Operador</label>
                   <SelectField
                     value={selectedNode.data.config?.operator || 'equals'}
                     onChange={(v) => handleUpdate('operator', v)}
@@ -790,7 +790,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Valor</label>
+                  <label className="text-xs text-gray-600/60">Valor</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.value || ''}
@@ -799,7 +799,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-gray-200',
-                      'text-sm text-white placeholder-white/30',
+                      'text-sm text-gray-700 placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
@@ -811,7 +811,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'condition_order_value' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Operador</label>
+                  <label className="text-xs text-gray-600/60">Operador</label>
                   <SelectField
                     value={selectedNode.data.config?.operator || 'greater_than'}
                     onChange={(v) => handleUpdate('operator', v)}
@@ -826,7 +826,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Valor (R$)</label>
+                  <label className="text-xs text-gray-600/60">Valor (R$)</label>
                   <input
                     type="number"
                     min="0"
@@ -837,7 +837,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-gray-200',
-                      'text-sm text-white placeholder-white/30',
+                      'text-sm text-gray-700 placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
@@ -854,7 +854,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'condition_deal_value' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Operador</label>
+                  <label className="text-xs text-gray-600/60">Operador</label>
                   <SelectField
                     value={selectedNode.data.config?.operator || 'greater_than'}
                     onChange={(v) => handleUpdate('operator', v)}
@@ -869,7 +869,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Valor (R$)</label>
+                  <label className="text-xs text-gray-600/60">Valor (R$)</label>
                   <input
                     type="number"
                     min="0"
@@ -880,7 +880,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-gray-200',
-                      'text-sm text-white placeholder-white/30',
+                      'text-sm text-gray-700 placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
@@ -906,7 +906,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {/* A/B SPLIT */}
             {selectedNode.data.nodeType === 'logic_split' && (
               <div className="space-y-2">
-                <label className="text-xs text-white/60">
+                <label className="text-xs text-gray-600/60">
                   Porcentagem A: {selectedNode.data.config?.percentageA || 50}%
                 </label>
                 <input
@@ -934,7 +934,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   label="Autenticação (opcional)"
                 />
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">URL</label>
+                  <label className="text-xs text-gray-600/60">URL</label>
                   <input
                     type="url"
                     value={selectedNode.data.config?.url || ''}
@@ -943,13 +943,13 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
                       'bg-[#0a0a0a] border border-gray-200',
-                      'text-sm text-white placeholder-white/30',
+                      'text-sm text-gray-700 placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Método</label>
+                  <label className="text-xs text-gray-600/60">Método</label>
                   <SelectField
                     value={selectedNode.data.config?.method || 'POST'}
                     onChange={(v) => handleUpdate('method', v)}
@@ -963,7 +963,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Headers (JSON)</label>
+                  <label className="text-xs text-gray-600/60">Headers (JSON)</label>
                   <textarea
                     value={selectedNode.data.config?.headers || '{}'}
                     onChange={(e) => handleUpdate('headers', e.target.value)}
@@ -978,7 +978,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/60">Body (JSON)</label>
+                  <label className="text-xs text-gray-600/60">Body (JSON)</label>
                   <textarea
                     value={selectedNode.data.config?.body || ''}
                     onChange={(e) => handleUpdate('body', e.target.value)}
@@ -1062,7 +1062,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             className={cn(
               'flex-1 flex items-center justify-center gap-2 py-2 rounded-lg',
               'bg-gray-50 hover:bg-white/10',
-              'text-sm text-white/60 hover:text-white',
+              'text-sm text-gray-700/60 hover:text-white',
               'transition-colors'
             )}
           >
@@ -1108,7 +1108,7 @@ function SelectField({ value, onChange, options, loading }: SelectFieldProps) {
         className={cn(
           'w-full px-3 py-2 rounded-lg appearance-none',
           'bg-[#0a0a0a] border border-gray-200',
-          'text-sm text-white',
+          'text-sm text-gray-700',
           'focus:outline-none focus:border-blue-500/50',
           'disabled:opacity-50 disabled:cursor-not-allowed'
         )}
@@ -1178,7 +1178,7 @@ function ContactFieldsEditor({ fields, onFieldsChange }: ContactFieldsEditorProp
               onChange={() => handleFieldToggle(field.key)}
               className="w-4 h-4 rounded border-white/20 bg-transparent text-blue-500 focus:ring-blue-500/30"
             />
-            <span className="text-xs text-white/60">{field.label}</span>
+            <span className="text-xs text-gray-600/60">{field.label}</span>
           </label>
           
           {selectedFields.includes(field.key) && (
@@ -1191,7 +1191,7 @@ function ContactFieldsEditor({ fields, onFieldsChange }: ContactFieldsEditorProp
                 className={cn(
                   'w-full px-3 py-2 rounded-lg resize-none',
                   'bg-[#0a0a0a] border border-gray-200',
-                  'text-sm text-white placeholder-white/30',
+                  'text-sm text-gray-700 placeholder-white/30',
                   'focus:outline-none focus:border-blue-500/50'
                 )}
               />
@@ -1204,7 +1204,7 @@ function ContactFieldsEditor({ fields, onFieldsChange }: ContactFieldsEditorProp
                 className={cn(
                   'w-full px-3 py-2 rounded-lg',
                   'bg-[#0a0a0a] border border-gray-200',
-                  'text-sm text-white placeholder-white/30',
+                  'text-sm text-gray-700 placeholder-white/30',
                   'focus:outline-none focus:border-blue-500/50'
                 )}
               />
@@ -1293,7 +1293,7 @@ function FilterConditionsEditor({
     <div className="space-y-3">
       {/* Logic Operator */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-white/60">Combinar condições com:</span>
+        <span className="text-xs text-gray-600/60">Combinar condições com:</span>
         <div className="flex gap-1">
           <button
             onClick={() => onLogicOperatorChange('and')}
@@ -1444,7 +1444,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
     <div className="space-y-4">
       {/* Store Filter */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Loja (opcional)</label>
+        <label className="text-xs text-gray-600/60">Loja (opcional)</label>
         <div className="relative">
           <select
             value={config.storeId || ''}
@@ -1453,7 +1453,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
             className={cn(
               'w-full px-3 py-2 rounded-lg appearance-none',
               'bg-[#0a0a0a] border border-gray-200',
-              'text-sm text-white',
+              'text-sm text-gray-700',
               'focus:outline-none focus:border-blue-500/50',
               'disabled:opacity-50'
             )}
@@ -1474,9 +1474,9 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
 
       {/* Minimum Value Filter */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Valor Mínimo (opcional)</label>
+        <label className="text-xs text-gray-600/60">Valor Mínimo (opcional)</label>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-white/40">R$</span>
+          <span className="text-sm text-gray-700/40">R$</span>
           <input
             type="number"
             min="0"
@@ -1487,7 +1487,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
             className={cn(
               'flex-1 px-3 py-2 rounded-lg',
               'bg-[#0a0a0a] border border-gray-200',
-              'text-sm text-white placeholder-white/30',
+              'text-sm text-gray-700 placeholder-white/30',
               'focus:outline-none focus:border-blue-500/50'
             )}
           />
@@ -1500,7 +1500,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
       {/* Status Filter for Order Paid */}
       {label === 'Pedido Pago' && (
         <div className="space-y-2">
-          <label className="text-xs text-white/60">Status de Pagamento</label>
+          <label className="text-xs text-gray-600/60">Status de Pagamento</label>
           <div className="relative">
             <select
               value={config.paymentStatus || 'paid'}
@@ -1508,7 +1508,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
               className={cn(
                 'w-full px-3 py-2 rounded-lg appearance-none',
                 'bg-[#0a0a0a] border border-gray-200',
-                'text-sm text-white',
+                'text-sm text-gray-700',
                 'focus:outline-none focus:border-blue-500/50'
               )}
             >
@@ -1587,7 +1587,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
     <div className="space-y-4">
       {/* Title */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Título da Notificação</label>
+        <label className="text-xs text-gray-600/60">Título da Notificação</label>
         <input
           type="text"
           value={config.title || ''}
@@ -1596,7 +1596,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
           className={cn(
             'w-full px-3 py-2 rounded-lg',
             'bg-[#0a0a0a] border border-gray-200',
-            'text-sm text-white placeholder-white/30',
+            'text-sm text-gray-700 placeholder-white/30',
             'focus:outline-none focus:border-blue-500/50'
           )}
         />
@@ -1604,7 +1604,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
 
       {/* Message */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Mensagem</label>
+        <label className="text-xs text-gray-600/60">Mensagem</label>
         <textarea
           value={config.message || ''}
           onChange={(e) => onUpdate('message', e.target.value)}
@@ -1613,7 +1613,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
           className={cn(
             'w-full px-3 py-2 rounded-lg resize-none',
             'bg-[#0a0a0a] border border-gray-200',
-            'text-sm text-white placeholder-white/30',
+            'text-sm text-gray-700 placeholder-white/30',
             'focus:outline-none focus:border-blue-500/50'
           )}
         />
@@ -1622,7 +1622,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
       {/* User Selection */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-xs text-white/60">Notificar Usuários</label>
+          <label className="text-xs text-gray-600/60">Notificar Usuários</label>
           <div className="flex gap-2">
             <button
               type="button"
@@ -1643,9 +1643,9 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
         
         <div className="max-h-40 overflow-y-auto space-y-1 p-2 bg-[#0a0a0a] rounded-lg border border-gray-200">
           {loadingUsers ? (
-            <p className="text-xs text-white/40 text-center py-2">Carregando...</p>
+            <p className="text-xs text-gray-600/40 text-center py-2">Carregando...</p>
           ) : users.length === 0 ? (
-            <p className="text-xs text-white/40 text-center py-2">Nenhum usuário encontrado</p>
+            <p className="text-xs text-gray-600/40 text-center py-2">Nenhum usuário encontrado</p>
           ) : (
             users.map((user) => (
               <label
@@ -1658,7 +1658,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
                   onChange={() => toggleUser(user.id)}
                   className="w-4 h-4 rounded border-white/20 bg-transparent text-blue-500"
                 />
-                <span className="text-xs text-white/80">
+                <span className="text-xs text-gray-600/80">
                   {user.name || user.email}
                 </span>
               </label>
@@ -1720,7 +1720,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
     <div className="space-y-4">
       {/* Store Filter */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Loja (opcional)</label>
+        <label className="text-xs text-gray-600/60">Loja (opcional)</label>
         <div className="relative">
           <select
             value={config.storeId || ''}
@@ -1729,7 +1729,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             className={cn(
               'w-full px-3 py-2 rounded-lg appearance-none',
               'bg-[#0a0a0a] border border-gray-200',
-              'text-sm text-white',
+              'text-sm text-gray-700',
               'focus:outline-none focus:border-blue-500/50',
               'disabled:opacity-50'
             )}
@@ -1747,7 +1747,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
 
       {/* Abandonment Time */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Tempo de Abandono</label>
+        <label className="text-xs text-gray-600/60">Tempo de Abandono</label>
         <div className="grid grid-cols-2 gap-2">
           <input
             type="number"
@@ -1757,7 +1757,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             className={cn(
               'px-3 py-2 rounded-lg',
               'bg-[#0a0a0a] border border-gray-200',
-              'text-sm text-white',
+              'text-sm text-gray-700',
               'focus:outline-none focus:border-blue-500/50'
             )}
           />
@@ -1768,7 +1768,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
               className={cn(
                 'w-full px-3 py-2 rounded-lg appearance-none',
                 'bg-[#0a0a0a] border border-gray-200',
-                'text-sm text-white',
+                'text-sm text-gray-700',
                 'focus:outline-none focus:border-blue-500/50'
               )}
             >
@@ -1785,9 +1785,9 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
 
       {/* Minimum Value */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Valor Mínimo do Carrinho (opcional)</label>
+        <label className="text-xs text-gray-600/60">Valor Mínimo do Carrinho (opcional)</label>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-white/40">R$</span>
+          <span className="text-sm text-gray-700/40">R$</span>
           <input
             type="number"
             min="0"
@@ -1798,7 +1798,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             className={cn(
               'flex-1 px-3 py-2 rounded-lg',
               'bg-[#0a0a0a] border border-gray-200',
-              'text-sm text-white placeholder-white/30',
+              'text-sm text-gray-700 placeholder-white/30',
               'focus:outline-none focus:border-blue-500/50'
             )}
           />
@@ -1814,7 +1814,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             onChange={(e) => onUpdate('onlyWithEmail', e.target.checked)}
             className="w-4 h-4 rounded border-white/20 bg-transparent text-amber-500"
           />
-          <span className="text-xs text-white/60">
+          <span className="text-xs text-gray-600/60">
             Apenas carrinhos com email identificado
           </span>
         </label>
@@ -1826,7 +1826,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             onChange={(e) => onUpdate('excludeRecovered', e.target.checked)}
             className="w-4 h-4 rounded border-white/20 bg-transparent text-amber-500"
           />
-          <span className="text-xs text-white/60">
+          <span className="text-xs text-gray-600/60">
             Não disparar se carrinho já foi recuperado
           </span>
         </label>
@@ -1876,7 +1876,7 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
 
       {/* Message Preview / Editor Button */}
       <div className="space-y-2">
-        <label className="text-xs text-white/60">Mensagem WhatsApp</label>
+        <label className="text-xs text-gray-600/60">Mensagem WhatsApp</label>
 
         {hasMessage ? (
           <div
@@ -1903,7 +1903,7 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
               </div>
             )}
 
-            <p className="text-xs text-white/70 line-clamp-3">
+            <p className="text-xs text-gray-600/70 line-clamp-3">
               {(config.message || config.bodyText || '').substring(0, 150)}
               {(config.message || config.bodyText || '').length > 150 ? '...' : ''}
             </p>

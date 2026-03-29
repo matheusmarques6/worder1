@@ -369,7 +369,7 @@ export default function ShopifyConnect() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h4 className="font-semibold text-white">{store.name}</h4>
+                        <h4 className="font-semibold text-gray-900">{store.name}</h4>
                         <span className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium border ${statusConfig.color} ${statusConfig.bgColor}`}>
                           {statusConfig.icon}
                           {statusConfig.label}
@@ -482,7 +482,7 @@ export default function ShopifyConnect() {
       {showNewStore && (
         <div id="new-store-form" className="p-5 bg-white border border-gray-200 rounded-xl space-y-5">
           <div className="flex items-center justify-between">
-            <h3 className="font-medium text-white">
+            <h3 className="font-medium text-gray-900">
               {reconnectingStore ? `Reconectar: ${reconnectingStore.name}` : 'Conectar Nova Loja'}
             </h3>
             <button

@@ -129,7 +129,7 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                   <div className="p-1.5 rounded-lg bg-gray-100">
                     <suggestion.icon className="w-4 h-4 text-gray-500" />
                   </div>
-                  <span className="text-sm text-white">{suggestion.label}</span>
+                  <span className="text-sm text-gray-700">{suggestion.label}</span>
                   <span className="ml-auto text-xs text-gray-400 capitalize">
                     {suggestion.type === 'page' ? 'Página' : 'Ação'}
                   </span>
@@ -236,7 +236,7 @@ function NotificationsDropdown({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-white">Notificações</h3>
+            <h3 className="font-semibold text-gray-900">Notificações</h3>
             {unreadCount > 0 && (
               <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded-full">
                 {unreadCount} nova{unreadCount > 1 ? 's' : ''}
@@ -812,7 +812,7 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-red-500 rounded-full text-[10px] font-medium text-white flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-red-500 rounded-full text-[10px] font-medium text-gray-900 flex items-center justify-center">
                     {unreadCount > 99 ? '99+' : unreadCount}
                   </span>
                 )}
@@ -846,7 +846,7 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
                   size="sm" 
                 />
                 <div className="hidden sm:block text-left">
-                  <p className="text-xs font-medium text-white truncate max-w-[100px]">
+                  <p className="text-xs font-medium text-gray-900 truncate max-w-[100px]">
                     {userData.name}
                   </p>
                   <p className="text-[10px] text-gray-500">

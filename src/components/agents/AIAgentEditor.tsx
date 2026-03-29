@@ -309,7 +309,7 @@ export default function AIAgentEditor({
                 <Bot className={`w-5 h-5 ${agent.is_active ? 'text-purple-400' : 'text-gray-400'}`} />
               </div>
               <div>
-                <h2 className="text-white font-semibold">{agent.name}</h2>
+                <h2 className="text-gray-900 font-semibold">{agent.name}</h2>
                 <p className="text-xs text-gray-500">
                   {agent.provider} • {agent.model}
                 </p>

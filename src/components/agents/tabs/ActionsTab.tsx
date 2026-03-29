@@ -194,7 +194,7 @@ export default function ActionsTab({
           <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
             <Zap className="w-8 h-8 text-gray-400" />
           </div>
-          <h4 className="text-lg font-medium text-white mb-2">Nenhuma ação configurada</h4>
+          <h4 className="text-lg font-medium text-gray-900 mb-2">Nenhuma ação configurada</h4>
           <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
             Crie regras para definir como o agente deve responder em situações específicas,
             como transferir para um humano quando o cliente está frustrado.
@@ -302,7 +302,7 @@ function ActionCard({
           </div>
           
           <div className="flex-1 min-w-0">
-            <h4 className="text-white font-medium truncate">{action.name}</h4>
+            <h4 className="text-gray-900 font-medium truncate">{action.name}</h4>
             <p className="text-xs text-gray-400">
               {conditionsCount} {conditionsCount === 1 ? 'condição' : 'condições'} → {actionsCount} {actionsCount === 1 ? 'ação' : 'ações'}
             </p>

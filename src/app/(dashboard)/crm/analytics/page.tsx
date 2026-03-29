@@ -270,7 +270,7 @@ function PipelineSelector({
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white hover:bg-white transition-colors min-w-[200px]"
+        className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 hover:bg-white transition-colors min-w-[200px]"
       >
         <BarChart3 className="w-4 h-4 text-gray-500" />
         <span className="flex-1 text-left font-medium">{displayText}</span>
@@ -325,7 +325,7 @@ function PipelineSelector({
                       className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: pipeline.color || '#6366f1' }}
                     />
-                    <span className="text-sm text-white">{pipeline.name}</span>
+                    <span className="text-sm text-gray-700">{pipeline.name}</span>
                   </button>
                 ))}
               </div>
@@ -426,7 +426,7 @@ function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
                     <span className="text-sm font-medium text-gray-900">{pipeline.name}</span>
                   </div>
                 </td>
-                <td className="text-right px-5 py-3 text-sm text-white font-medium">
+                <td className="text-right px-5 py-3 text-sm text-gray-700 font-medium">
                   {formatCurrency(pipeline.metrics.totalValue)}
                 </td>
                 <td className="text-right px-5 py-3">
@@ -449,15 +449,15 @@ function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
               <td className="px-5 py-3">
                 <span className="text-sm font-semibold text-gray-900">Total</span>
               </td>
-              <td className="text-right px-5 py-3 text-sm text-white font-semibold">
+              <td className="text-right px-5 py-3 text-sm text-gray-900 font-semibold">
                 {formatCurrency(totals.totalValue)}
               </td>
-              <td className="text-right px-5 py-3 text-sm text-white font-semibold">
+              <td className="text-right px-5 py-3 text-sm text-gray-900 font-semibold">
                 {avgWinRate.toFixed(1)}%
               </td>
               <td className="text-right px-5 py-3 text-sm text-gray-600">-</td>
               <td className="text-right px-5 py-3 text-sm text-gray-600">-</td>
-              <td className="text-right px-5 py-3 text-sm text-white font-semibold">
+              <td className="text-right px-5 py-3 text-sm text-gray-900 font-semibold">
                 {totals.totalDeals}
               </td>
             </tr>
@@ -577,7 +577,7 @@ function SalesFunnel({ data }: { data: FunnelStage[] }) {
                 style={{ backgroundColor: stage.color || '#6366f1' }}
               />
               <div className="absolute inset-0 flex items-center px-3">
-                <span className="text-xs text-white/80">
+                <span className="text-xs text-gray-600/80">
                   Ponderado: {formatCurrency(stage.weightedValue)}
                 </span>
               </div>
@@ -661,7 +661,7 @@ function VelocitySection({ data }: { data: VelocityStage[] }) {
         {data.map((stage, index) => (
           <div key={stage.stageId}>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-white">{stage.stageName}</span>
+              <span className="text-sm text-gray-700">{stage.stageName}</span>
               <span className="text-sm font-medium text-gray-600">{stage.avgDays.toFixed(1)} dias</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -773,7 +773,7 @@ function InsightsSection({ insights }: { insights: Insight[] }) {
             className={`flex items-start gap-3 p-3 rounded-xl border ${bgMap[insight.type]}`}
           >
             <div className="mt-0.5">{iconMap[insight.type]}</div>
-            <p className="text-sm text-white">{insight.message}</p>
+            <p className="text-sm text-gray-700">{insight.message}</p>
           </div>
         ))}
       </div>
@@ -880,7 +880,7 @@ export default function AnalyticsPage() {
           <div className="relative">
             <button
               onClick={() => setShowPeriodDropdown(!showPeriodDropdown)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white hover:bg-white transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 hover:bg-white transition-colors"
             >
               <span className="font-medium">{periods.find(p => p.value === period)?.label}</span>
               <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showPeriodDropdown ? 'rotate-180' : ''}`} />

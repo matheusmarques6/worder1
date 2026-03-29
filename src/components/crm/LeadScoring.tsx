@@ -238,7 +238,7 @@ export function LeadScoring({ organizationId }: LeadScoringProps) {
             </div>
             <div>
               <p className="text-sm text-slate-400">Score Medio</p>
-              <p className="text-2xl font-bold text-white">{stats.average}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.average}</p>
             </div>
           </div>
         </motion.div>
@@ -340,7 +340,7 @@ export function LeadScoring({ organizationId }: LeadScoringProps) {
                   {/* Lead Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-lg font-medium text-white truncate">
+                      <h3 className="text-lg font-medium text-gray-900 truncate">
                         {score.deals?.title || 'Lead sem titulo'}
                       </h3>
                     </div>
@@ -357,17 +357,17 @@ export function LeadScoring({ organizationId }: LeadScoringProps) {
                       <div className="flex items-center gap-1.5">
                         <Activity className="w-4 h-4 text-emerald-400" />
                         <span className="text-slate-400">Engajamento:</span>
-                        <span className="text-white font-medium">{score.engagement_score}</span>
+                        <span className="text-gray-900 font-medium">{score.engagement_score}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Target className="w-4 h-4 text-violet-400" />
                         <span className="text-slate-400">Fit:</span>
-                        <span className="text-white font-medium">{score.fit_score}</span>
+                        <span className="text-gray-900 font-medium">{score.fit_score}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Zap className="w-4 h-4 text-yellow-400" />
                         <span className="text-slate-400">Intencao:</span>
-                        <span className="text-white font-medium">{score.intent_score}</span>
+                        <span className="text-gray-900 font-medium">{score.intent_score}</span>
                       </div>
                     </div>
                   </div>
@@ -419,7 +419,7 @@ export function LeadScoring({ organizationId }: LeadScoringProps) {
             className="text-center py-12"
           >
             <Target className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchQuery || filterCategory !== 'all'
                 ? 'Nenhum lead encontrado'
                 : 'Nenhum score calculado'}
@@ -511,7 +511,7 @@ function ScoreDetailsModal({
               {getScoreIcon(label)}
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">
+              <h2 className="text-lg font-semibold text-gray-900">
                 {score.deals?.title || 'Lead Score'}
               </h2>
               <p className="text-sm text-slate-400">
@@ -534,7 +534,7 @@ function ScoreDetailsModal({
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-slate-700/30 rounded-lg p-4 text-center">
                 <Activity className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
-                <p className="text-2xl font-bold text-white">{score.engagement_score}</p>
+                <p className="text-2xl font-bold text-gray-900">{score.engagement_score}</p>
                 <p className="text-sm text-slate-400">Engajamento</p>
                 <div className="w-full h-2 bg-slate-700 rounded-full mt-2 overflow-hidden">
                   <div
@@ -546,7 +546,7 @@ function ScoreDetailsModal({
 
               <div className="bg-slate-700/30 rounded-lg p-4 text-center">
                 <Target className="w-6 h-6 text-violet-400 mx-auto mb-2" />
-                <p className="text-2xl font-bold text-white">{score.fit_score}</p>
+                <p className="text-2xl font-bold text-gray-900">{score.fit_score}</p>
                 <p className="text-sm text-slate-400">Fit</p>
                 <div className="w-full h-2 bg-slate-700 rounded-full mt-2 overflow-hidden">
                   <div
@@ -558,7 +558,7 @@ function ScoreDetailsModal({
 
               <div className="bg-slate-700/30 rounded-lg p-4 text-center">
                 <Zap className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-                <p className="text-2xl font-bold text-white">{score.intent_score}</p>
+                <p className="text-2xl font-bold text-gray-900">{score.intent_score}</p>
                 <p className="text-sm text-slate-400">Intencao</p>
                 <div className="w-full h-2 bg-slate-700 rounded-full mt-2 overflow-hidden">
                   <div
@@ -584,7 +584,7 @@ function ScoreDetailsModal({
                       {getIntentSignalIcon(signal.type)}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm text-white">{signal.description}</p>
+                      <p className="text-sm text-gray-700">{signal.description}</p>
                       <p className="text-xs text-slate-400">{formatDate(signal.detected_at)}</p>
                     </div>
                     <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 rounded text-xs font-medium">
@@ -605,7 +605,7 @@ function ScoreDetailsModal({
                   <Mail className="w-4 h-4 text-blue-400" />
                   <span className="text-sm text-slate-300">Emails Abertos</span>
                 </div>
-                <span className="font-medium text-white">{factors.email_opens}</span>
+                <span className="font-medium text-gray-900">{factors.email_opens}</span>
               </div>
 
               <div className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">
@@ -613,7 +613,7 @@ function ScoreDetailsModal({
                   <MousePointer className="w-4 h-4 text-cyan-400" />
                   <span className="text-sm text-slate-300">Cliques</span>
                 </div>
-                <span className="font-medium text-white">{factors.email_clicks}</span>
+                <span className="font-medium text-gray-900">{factors.email_clicks}</span>
               </div>
 
               <div className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">
@@ -621,7 +621,7 @@ function ScoreDetailsModal({
                   <MessageSquare className="w-4 h-4 text-emerald-400" />
                   <span className="text-sm text-slate-300">Mensagens Recebidas</span>
                 </div>
-                <span className="font-medium text-white">{factors.messages_received}</span>
+                <span className="font-medium text-gray-900">{factors.messages_received}</span>
               </div>
 
               <div className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">
@@ -629,7 +629,7 @@ function ScoreDetailsModal({
                   <Eye className="w-4 h-4 text-violet-400" />
                   <span className="text-sm text-slate-300">Visitas ao Site</span>
                 </div>
-                <span className="font-medium text-white">{factors.website_visits}</span>
+                <span className="font-medium text-gray-900">{factors.website_visits}</span>
               </div>
 
               <div className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">

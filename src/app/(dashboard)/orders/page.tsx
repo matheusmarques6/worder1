@@ -135,7 +135,7 @@ const OrderDetailsModal = ({ order, onClose }: { order: Order; onClose: () => vo
         <div className="mb-6">
           <h3 className="text-sm font-medium text-gray-500 mb-3">Cliente</h3>
           <div className="p-4 bg-gray-50 rounded-xl">
-            <p className="text-white font-medium">{order.customer.name}</p>
+            <p className="text-gray-900 font-medium">{order.customer.name}</p>
             <p className="text-gray-500 text-sm">{order.customer.email}</p>
             {order.customer.phone && (
               <p className="text-gray-500 text-sm">{order.customer.phone}</p>
@@ -149,14 +149,14 @@ const OrderDetailsModal = ({ order, onClose }: { order: Order; onClose: () => vo
             {order.line_items?.map((item: any) => (
               <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                 <div className="flex-1">
-                  <p className="text-white font-medium text-sm">{item.title}</p>
+                  <p className="text-gray-900 font-medium text-sm">{item.title}</p>
                   {item.variant_title && item.variant_title !== 'Default Title' && (
                     <p className="text-gray-500 text-xs">{item.variant_title}</p>
                   )}
                   {item.sku && <p className="text-gray-400 text-xs">SKU: {item.sku}</p>}
                 </div>
                 <div className="text-right">
-                  <p className="text-white text-sm">{item.quantity}x {formatCurrency(item.price)}</p>
+                  <p className="text-gray-700 text-sm">{item.quantity}x {formatCurrency(item.price)}</p>
                   <p className="text-gray-500 text-xs">{formatCurrency(item.quantity * item.price)}</p>
                 </div>
               </div>
@@ -173,7 +173,7 @@ const OrderDetailsModal = ({ order, onClose }: { order: Order; onClose: () => vo
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Subtotal</span>
-              <span className="text-white">{formatCurrency(order.subtotal_price)}</span>
+              <span className="text-gray-900">{formatCurrency(order.subtotal_price)}</span>
             </div>
             {order.total_discounts > 0 && (
               <div className="flex justify-between">
@@ -183,17 +183,17 @@ const OrderDetailsModal = ({ order, onClose }: { order: Order; onClose: () => vo
             )}
             <div className="flex justify-between">
               <span className="text-gray-500">Frete</span>
-              <span className="text-white">{formatCurrency(order.total_shipping)}</span>
+              <span className="text-gray-900">{formatCurrency(order.total_shipping)}</span>
             </div>
             {order.total_tax > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-500">Impostos</span>
-                <span className="text-white">{formatCurrency(order.total_tax)}</span>
+                <span className="text-gray-900">{formatCurrency(order.total_tax)}</span>
               </div>
             )}
             <div className="flex justify-between pt-2 border-t border-gray-200">
-              <span className="text-white font-semibold">Total</span>
-              <span className="text-white font-semibold text-lg">{formatCurrency(order.total_price)}</span>
+              <span className="text-gray-900 font-semibold">Total</span>
+              <span className="text-gray-900 font-semibold text-lg">{formatCurrency(order.total_price)}</span>
             </div>
           </div>
         </div>
@@ -329,14 +329,14 @@ export default function OrdersPage() {
             placeholder="Buscar por número, cliente ou email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
           />
         </div>
 
         <select
           value={selectedStatus}
           onChange={(e) => setSelectedStatus(e.target.value)}
-          className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+          className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
         >
           <option value="">Todos os status</option>
           <option value="paid">Pago</option>
@@ -378,13 +378,13 @@ export default function OrdersPage() {
                   >
                     <td className="px-6 py-4">
                       <div>
-                        <p className="font-medium text-white">{order.name}</p>
+                        <p className="font-medium text-gray-900">{order.name}</p>
                         <p className="text-xs text-gray-500">{formatDate(order.created_at)}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <p className="text-white">{order.customer.name}</p>
+                        <p className="text-gray-900">{order.customer.name}</p>
                         <p className="text-xs text-gray-500">{order.customer.email}</p>
                       </div>
                     </td>
@@ -395,7 +395,7 @@ export default function OrdersPage() {
                       <StatusBadge status={order.fulfillment_status} type="fulfillment" />
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <p className="font-medium text-white">{formatCurrency(order.total_price)}</p>
+                      <p className="font-medium text-gray-900">{formatCurrency(order.total_price)}</p>
                       <p className="text-xs text-gray-500">{order.line_items_count} itens</p>
                     </td>
                     <td className="px-6 py-4 text-right">

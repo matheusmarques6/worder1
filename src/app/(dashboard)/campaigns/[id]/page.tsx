@@ -64,7 +64,7 @@ interface CampaignData {
 const statusConfig: Record<string, { label: string; color: string }> = {
   sent: { label: 'Enviada', color: 'bg-emerald-500/10 text-emerald-400' },
   active: { label: 'Ativa', color: 'bg-blue-500/10 text-blue-400' },
-  draft: { label: 'Rascunho', color: 'bg-zinc-500/10 text-zinc-400' },
+  draft: { label: 'Rascunho', color: 'bg-zinc-500/10 text-gray-500' },
   scheduled: { label: 'Agendada', color: 'bg-yellow-500/10 text-yellow-400' },
   sending: { label: 'Enviando', color: 'bg-blue-500/10 text-blue-400' },
 }
@@ -122,11 +122,11 @@ export default function CampaignDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center py-32 text-center">
         <EnvelopeSimple className="w-16 h-16 text-gray-600 mb-4" weight="duotone" />
-        <h3 className="text-lg font-semibold text-white mb-1">Campanha não encontrada</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Campanha não encontrada</h3>
         <p className="text-sm text-gray-500 mb-4">A campanha solicitada não existe ou foi removida.</p>
         <button
           onClick={() => router.push('/campaigns')}
-          className="flex items-center gap-2 px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-sm"
         >
           <ArrowLeft size={16} />
           Voltar para Campanhas
@@ -177,25 +177,25 @@ export default function CampaignDetailPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push('/campaigns')}
-            className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
           >
             <ArrowLeft size={18} weight="bold" />
           </button>
           <div>
             <div className="flex items-center gap-3">
               <ChannelIcon size={20} className="text-[#F26B2A]" weight="fill" />
-              <h1 className="text-2xl font-bold font-display text-white">{campaign.name}</h1>
+              <h1 className="text-2xl font-bold font-display text-gray-900">{campaign.name}</h1>
               <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${status.color}`}>{status.label}</span>
             </div>
-            <p className="text-sm text-zinc-400 mt-0.5">{sentAtFormatted} · {sent.toLocaleString('pt-BR')} destinatários</p>
+            <p className="text-sm text-gray-500 mt-0.5">{sentAtFormatted} · {sent.toLocaleString('pt-BR')} destinatários</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-xs">
+          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
             <Copy size={14} />
             Duplicar
           </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-xs">
+          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
             <Export size={14} />
             Exportar
           </button>
@@ -216,12 +216,12 @@ export default function CampaignDetailPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5"
+              className="bg-white/50 border border-gray-200 rounded-xl p-5"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500 font-medium">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-white mt-1">{kpi.value}</p>
+                  <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{kpi.value}</p>
                   {kpi.change && <p className="text-xs text-emerald-400 mt-0.5">{kpi.change}</p>}
                 </div>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${kpi.color}15` }}>
@@ -234,49 +234,49 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* Delivery Details */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4">Detalhes da Entrega</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Detalhes da Entrega</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {deliveryDetails.map((item) => (
-            <div key={item.label} className="bg-zinc-800/30 rounded-xl p-4">
-              <p className="text-xs text-zinc-500">{item.label}</p>
+            <div key={item.label} className="bg-gray-50/30 rounded-xl p-4">
+              <p className="text-xs text-gray-500">{item.label}</p>
               <p className={`text-2xl font-bold mt-1 ${item.color}`}>{item.value}</p>
-              <p className="text-xs text-zinc-500 mt-0.5">{item.pct}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{item.pct}</p>
             </div>
           ))}
         </div>
       </div>
 
       {/* Campaign Info */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4">Informações da Campanha</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Informações da Campanha</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
-            <p className="text-xs text-zinc-500 mb-1">Assunto</p>
-            <p className="text-sm text-white">{campaign.subject || '-'}</p>
+            <p className="text-xs text-gray-500 mb-1">Assunto</p>
+            <p className="text-sm text-gray-700">{campaign.subject || '-'}</p>
           </div>
           <div>
-            <p className="text-xs text-zinc-500 mb-1">Remetente</p>
-            <p className="text-sm text-white font-mono">{campaign.sender_email || '-'}</p>
+            <p className="text-xs text-gray-500 mb-1">Remetente</p>
+            <p className="text-sm text-gray-700 font-mono">{campaign.sender_email || '-'}</p>
           </div>
           <div>
-            <p className="text-xs text-zinc-500 mb-1">Reply-to</p>
-            <p className="text-sm text-white font-mono">{campaign.reply_to || '-'}</p>
+            <p className="text-xs text-gray-500 mb-1">Reply-to</p>
+            <p className="text-sm text-gray-700 font-mono">{campaign.reply_to || '-'}</p>
           </div>
           <div>
-            <p className="text-xs text-zinc-500 mb-1">Canal</p>
+            <p className="text-xs text-gray-500 mb-1">Canal</p>
             <div className="flex items-center gap-2">
               <ChannelIcon size={16} className="text-[#F26B2A]" weight="fill" />
-              <p className="text-sm text-white capitalize">{campaign.channel || 'email'}</p>
+              <p className="text-sm text-gray-700 capitalize">{campaign.channel || 'email'}</p>
             </div>
           </div>
           <div>
-            <p className="text-xs text-zinc-500 mb-1">Criada em</p>
-            <p className="text-sm text-white">{new Date(campaign.created_at).toLocaleDateString('pt-BR')}</p>
+            <p className="text-xs text-gray-500 mb-1">Criada em</p>
+            <p className="text-sm text-gray-700">{new Date(campaign.created_at).toLocaleDateString('pt-BR')}</p>
           </div>
           <div>
-            <p className="text-xs text-zinc-500 mb-1">ID da Campanha</p>
-            <p className="text-sm text-zinc-400 font-mono">{params.id}</p>
+            <p className="text-xs text-gray-500 mb-1">ID da Campanha</p>
+            <p className="text-sm text-gray-500 font-mono">{params.id}</p>
           </div>
         </div>
       </div>

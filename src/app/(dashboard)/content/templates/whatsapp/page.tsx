@@ -54,15 +54,15 @@ export default function WhatsAppTemplatesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/content" className="p-2 rounded-lg hover:bg-zinc-800 transition-colors">
-            <ArrowLeft size={18} className="text-zinc-400" />
+          <Link href="/content" className="p-2 rounded-lg hover:bg-gray-50 transition-colors">
+            <ArrowLeft size={18} className="text-gray-500" />
           </Link>
           <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
             <WhatsappLogo size={22} className="text-green-400" weight="fill" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-display text-white">Templates WhatsApp</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">Templates aprovados pela Meta para envio em massa</p>
+            <h1 className="text-2xl font-bold font-display text-gray-900">Templates WhatsApp</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Templates aprovados pela Meta para envio em massa</p>
           </div>
         </div>
         <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium">
@@ -76,20 +76,20 @@ export default function WhatsAppTemplatesPage() {
         <Warning size={18} className="text-yellow-400 mt-0.5" />
         <div>
           <p className="text-sm text-yellow-400 font-medium">Templates precisam de aprovação</p>
-          <p className="text-xs text-zinc-500 mt-0.5">Todos os templates de WhatsApp Business precisam ser aprovados pela Meta antes do uso. O processo leva de 1 a 24 horas.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Todos os templates de WhatsApp Business precisam ser aprovados pela Meta antes do uso. O processo leva de 1 a 24 horas.</p>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
-          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             type="text"
             placeholder="Buscar templates..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-800/50 border border-zinc-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-green-500"
+            className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-green-500"
           />
         </div>
         <div className="flex gap-1">
@@ -98,7 +98,7 @@ export default function WhatsAppTemplatesPage() {
               key={cat}
               onClick={() => setCategory(cat)}
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                category === cat ? 'bg-green-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                category === cat ? 'bg-green-500 text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
               }`}
             >
               {cat}
@@ -118,28 +118,28 @@ export default function WhatsAppTemplatesPage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.03 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700 transition-all cursor-pointer"
+              className="bg-white/50 border border-gray-200 rounded-xl p-5 hover:border-gray-200 transition-all cursor-pointer"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <h4 className="text-sm font-medium text-white">{tmpl.name}</h4>
+                    <h4 className="text-sm font-medium text-gray-900">{tmpl.name}</h4>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${status.color}`}>{status.label}</span>
-                    <span className="px-2 py-0.5 rounded bg-zinc-800 text-[10px] text-zinc-500 font-medium">{tmpl.category}</span>
+                    <span className="px-2 py-0.5 rounded bg-gray-50 text-[10px] text-gray-500 font-medium">{tmpl.category}</span>
                   </div>
-                  <div className="bg-zinc-800/50 rounded-lg p-3 mb-3">
-                    <p className="text-xs text-zinc-400 leading-relaxed">{tmpl.preview}</p>
+                  <div className="bg-gray-50/50 rounded-lg p-3 mb-3">
+                    <p className="text-xs text-gray-500 leading-relaxed">{tmpl.preview}</p>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-zinc-500">
+                  <div className="flex items-center gap-4 text-xs text-gray-500">
                     <span className="flex items-center gap-1"><TypeIcon size={12} /> {tmpl.type === 'text' ? 'Texto' : tmpl.type === 'image' ? 'Imagem' : 'Vídeo'}</span>
                     {tmpl.sends > 0 && <span>{tmpl.sends.toLocaleString('pt-BR')} envios</span>}
                     {tmpl.replyRate > 0 && <span className="text-emerald-400">{tmpl.replyRate}% resposta</span>}
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <button className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"><Eye size={16} className="text-zinc-500" /></button>
-                  <button className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"><Copy size={16} className="text-zinc-500" /></button>
-                  <button className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"><PencilSimple size={16} className="text-zinc-500" /></button>
+                  <button className="p-2 rounded-lg hover:bg-gray-50 transition-colors"><Eye size={16} className="text-gray-500" /></button>
+                  <button className="p-2 rounded-lg hover:bg-gray-50 transition-colors"><Copy size={16} className="text-gray-500" /></button>
+                  <button className="p-2 rounded-lg hover:bg-gray-50 transition-colors"><PencilSimple size={16} className="text-gray-500" /></button>
                 </div>
               </div>
             </motion.div>

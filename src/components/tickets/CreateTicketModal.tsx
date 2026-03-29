@@ -164,7 +164,7 @@ export function CreateTicketModal({
             {(contactName || orderNumber) && (
               <div className="flex flex-wrap gap-2 p-3 bg-gray-100 rounded-xl">
                 {contactName && (
-                  <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-200 rounded-lg text-sm text-white">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-200 rounded-lg text-sm text-gray-700">
                     <User className="w-3.5 h-3.5 text-brand-600" />
                     {contactName}
                   </span>

@@ -155,7 +155,7 @@ export default function ChangePasswordPage() {
                   type={showPasswords.current ? 'text' : 'password'}
                   value={formData.currentPassword}
                   onChange={(e) => setFormData({ ...formData, currentPassword: e.target.value })}
-                  className="w-full pl-11 pr-11 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-11 pr-11 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   placeholder="••••••••"
                 />
                 <button
@@ -179,7 +179,7 @@ export default function ChangePasswordPage() {
                   type={showPasswords.new ? 'text' : 'password'}
                   value={formData.newPassword}
                   onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-                  className="w-full pl-11 pr-11 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-11 pr-11 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   placeholder="••••••••"
                 />
                 <button
@@ -208,7 +208,7 @@ export default function ChangePasswordPage() {
                   type={showPasswords.confirm ? 'text' : 'password'}
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className={`w-full pl-11 pr-11 py-3 bg-white border rounded-xl text-white placeholder-dark-500 focus:outline-none focus:ring-2 transition-all ${
+                  className={`w-full pl-11 pr-11 py-3 bg-white border rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:ring-2 transition-all ${
                     formData.confirmPassword && formData.confirmPassword !== formData.newPassword
                       ? 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20'
                       : formData.confirmPassword && formData.confirmPassword === formData.newPassword

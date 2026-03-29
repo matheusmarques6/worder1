@@ -422,7 +422,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
             <h2 className="text-lg font-semibold text-gray-900">
               {selectedRun ? 'Detalhes da Execução' : 'Histórico'}
             </h2>
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-gray-600/50">
               {selectedRun 
                 ? formatDate(selectedRun.started_at)
                 : `${stats.total} execuções`
@@ -462,14 +462,14 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
               <div className="flex items-center gap-3 mb-4">
                 {getStatusIcon(selectedRun.status, 'md')}
                 <div className="flex-1">
-                  <p className="font-semibold text-white capitalize">
+                  <p className="font-semibold text-gray-900 capitalize">
                     {selectedRun.status === 'completed' || selectedRun.status === 'success' 
                       ? 'Concluído' 
                       : selectedRun.status === 'failed' || selectedRun.status === 'error'
                       ? 'Falhou'
                       : selectedRun.status}
                   </p>
-                  <p className="text-sm text-white/60">
+                  <p className="text-sm text-gray-700/60">
                     {formatTriggerType(selectedRun.trigger_type)}
                   </p>
                 </div>
@@ -486,11 +486,11 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                 <div className="flex items-center gap-2 p-2 rounded-lg bg-black/20 mb-3">
                   <User className="w-4 h-4 text-white/40" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white truncate">
+                    <p className="text-sm text-gray-700 truncate">
                       {selectedRun.contact.name || selectedRun.contact.email}
                     </p>
                     {selectedRun.contact.name && (
-                      <p className="text-xs text-white/40 truncate">
+                      <p className="text-xs text-gray-600/40 truncate">
                         {selectedRun.contact.email}
                       </p>
                     )}
@@ -501,13 +501,13 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
               {/* Stats Grid */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="p-2 rounded-lg bg-black/20 text-center">
-                  <p className="text-lg font-bold text-white">
+                  <p className="text-lg font-bold text-gray-900">
                     {selectedRun.completed_steps}/{selectedRun.total_steps}
                   </p>
                   <p className="text-[10px] text-white/50 uppercase tracking-wider">Passos</p>
                 </div>
                 <div className="p-2 rounded-lg bg-black/20 text-center">
-                  <p className="text-lg font-bold text-white">
+                  <p className="text-lg font-bold text-gray-900">
                     {formatDuration(selectedRun.duration_ms)}
                   </p>
                   <p className="text-[10px] text-white/50 uppercase tracking-wider">Duração</p>
@@ -656,12 +656,12 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                               <p className="text-sm font-medium text-gray-900 truncate">
                                 {step.node_label || node?.data?.label || step.node_id}
                               </p>
-                              <p className="text-xs text-white/40">
+                              <p className="text-xs text-gray-600/40">
                                 {(step.node_type || '').replace('trigger_', '').replace('action_', '').replace('logic_', '')}
                               </p>
                             </div>
                             {step.duration_ms !== undefined && (
-                              <span className="text-xs text-white/40 bg-gray-50 px-2 py-0.5 rounded">
+                              <span className="text-xs text-gray-600/40 bg-gray-50 px-2 py-0.5 rounded">
                                 {step.duration_ms}ms
                               </span>
                             )}
@@ -694,7 +694,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                                       <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">
                                         Input
                                       </p>
-                                      <pre className="text-xs text-white/60 overflow-x-auto bg-black/40 p-2 rounded max-h-32">
+                                      <pre className="text-xs text-gray-600/60 overflow-x-auto bg-black/40 p-2 rounded max-h-32">
                                         {JSON.stringify(step.input_data, null, 2)}
                                       </pre>
                                     </div>
@@ -705,7 +705,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                                       <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">
                                         Output
                                       </p>
-                                      <pre className="text-xs text-white/60 overflow-x-auto bg-black/40 p-2 rounded max-h-32">
+                                      <pre className="text-xs text-gray-600/60 overflow-x-auto bg-black/40 p-2 rounded max-h-32">
                                         {JSON.stringify(step.output_data, null, 2)}
                                       </pre>
                                     </div>
@@ -739,7 +739,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
               <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
                 <div className="flex items-center justify-between mb-1">
                   <Activity className="w-4 h-4 text-white/40" />
-                  <span className="text-lg font-bold text-white">{stats.total}</span>
+                  <span className="text-lg font-bold text-gray-900">{stats.total}</span>
                 </div>
                 <p className="text-[10px] text-white/50 uppercase tracking-wider">Total</p>
               </div>
@@ -882,11 +882,11 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                           </span>
                         </div>
                         {run.contact && (
-                          <p className="text-xs text-white/50 truncate">
+                          <p className="text-xs text-gray-600/50 truncate">
                             {run.contact.name || run.contact.email}
                           </p>
                         )}
-                        <div className="flex items-center gap-3 mt-2 text-xs text-white/40">
+                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-600/40">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {formatDate(run.started_at)}

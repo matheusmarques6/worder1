@@ -331,7 +331,7 @@ export default function PermissionsEditor({
                         <Phone className="w-4 h-4 text-green-400" />
                       </div>
                       <div className="text-left">
-                        <h3 className="text-white font-medium">WhatsApp</h3>
+                        <h3 className="text-gray-900 font-medium">WhatsApp</h3>
                         <p className="text-xs text-gray-500">
                           {permissions.whatsapp_access_all
                             ? 'Acesso a todos os números'
@@ -363,7 +363,7 @@ export default function PermissionsEditor({
                               ) : (
                                 <Lock className="w-4 h-4 text-gray-500" />
                               )}
-                              <span className="text-sm text-white">Acesso a todos os números</span>
+                              <span className="text-sm text-gray-700">Acesso a todos os números</span>
                             </div>
                             <input
                               type="checkbox"
@@ -404,7 +404,7 @@ export default function PermissionsEditor({
                                           className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500 focus:ring-green-500/50"
                                         />
                                         <div className="flex-1">
-                                          <p className="text-sm text-white">
+                                          <p className="text-sm text-gray-700">
                                             {number.display_name || number.phone_number}
                                           </p>
                                           <p className="text-xs text-gray-400">
@@ -470,7 +470,7 @@ export default function PermissionsEditor({
                         <Users className="w-4 h-4 text-purple-400" />
                       </div>
                       <div className="text-left">
-                        <h3 className="text-white font-medium">CRM & Pipelines</h3>
+                        <h3 className="text-gray-900 font-medium">CRM & Pipelines</h3>
                         <p className="text-xs text-gray-500">
                           {permissions.can_access_crm ? 'Acesso ao CRM liberado' : 'Sem acesso ao CRM'}
                         </p>
@@ -496,7 +496,7 @@ export default function PermissionsEditor({
                           <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
                             <div className="flex items-center gap-3">
                               <Users className="w-4 h-4 text-purple-400" />
-                              <span className="text-sm text-white">Pode acessar o CRM</span>
+                              <span className="text-sm text-gray-700">Pode acessar o CRM</span>
                             </div>
                             <input
                               type="checkbox"
@@ -567,7 +567,7 @@ export default function PermissionsEditor({
                                       ) : (
                                         <Lock className="w-4 h-4 text-gray-500" />
                                       )}
-                                      <span className="text-sm text-white">Acesso a todas as pipelines</span>
+                                      <span className="text-sm text-gray-700">Acesso a todas as pipelines</span>
                                     </div>
                                     <input
                                       type="checkbox"
@@ -606,7 +606,7 @@ export default function PermissionsEditor({
                                                   className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-purple-500 focus:ring-purple-500/50"
                                                 />
                                                 <div className="flex-1">
-                                                  <p className="text-sm text-white">{pipeline.name}</p>
+                                                  <p className="text-sm text-gray-700">{pipeline.name}</p>
                                                   {pipeline.stages_count && (
                                                     <p className="text-xs text-gray-400">
                                                       {pipeline.stages_count} etapas
@@ -657,7 +657,7 @@ export default function PermissionsEditor({
                         <Eye className="w-4 h-4 text-blue-400" />
                       </div>
                       <div className="text-left">
-                        <h3 className="text-white font-medium">Analytics</h3>
+                        <h3 className="text-gray-900 font-medium">Analytics</h3>
                         <p className="text-xs text-gray-500">
                           {permissions.can_view_analytics ? 'Pode ver relatórios' : 'Sem acesso a analytics'}
                         </p>
@@ -682,7 +682,7 @@ export default function PermissionsEditor({
                           <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
                             <div className="flex items-center gap-3">
                               <Eye className="w-4 h-4 text-blue-400" />
-                              <span className="text-sm text-white">Pode ver Analytics</span>
+                              <span className="text-sm text-gray-700">Pode ver Analytics</span>
                             </div>
                             <input
                               type="checkbox"

@@ -177,7 +177,7 @@ export function TaskCard({
                           handleComplete()
                           setShowMenu(false)
                         }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-200"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200"
                       >
                         <CheckCircle className="w-4 h-4" />
                         Concluir
@@ -188,7 +188,7 @@ export function TaskCard({
                             onEdit(task)
                             setShowMenu(false)
                           }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-200"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200"
                         >
                           <Pencil className="w-4 h-4" />
                           Editar

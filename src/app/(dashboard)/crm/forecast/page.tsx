@@ -204,7 +204,7 @@ function VelocityTable({ velocity }: { velocity: ForecastData['velocity'] }) {
     <div className="space-y-2">
       {velocity.map(v => (
         <div key={v.stageId} className="flex items-center justify-between p-3 bg-gray-100/30 rounded-lg">
-          <span className="text-sm text-white">{v.stageName}</span>
+          <span className="text-sm text-gray-700">{v.stageName}</span>
           <div className="text-right">
             <span className="text-sm font-medium text-brand-600">{formatTime(v.avgTimeHours)}</span>
             <span className="text-xs text-gray-400 ml-2">({v.dealsCount} deals)</span>
@@ -326,7 +326,7 @@ export default function ForecastPage() {
             <select
               value={period}
               onChange={(e) => setPeriod(e.target.value as any)}
-              className="appearance-none bg-white border border-gray-200 rounded-lg px-4 py-2 pr-10 text-white focus:outline-none focus:border-primary-500"
+              className="appearance-none bg-white border border-gray-200 rounded-lg px-4 py-2 pr-10 text-gray-900 focus:outline-none focus:border-primary-500"
             >
               <option value="month">Este Mês</option>
               <option value="quarter">Este Trimestre</option>

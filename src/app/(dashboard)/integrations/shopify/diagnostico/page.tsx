@@ -130,7 +130,7 @@ export default function ShopifyDiagnosticoPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex items-center gap-3">
           <RefreshCw className="w-6 h-6 animate-spin text-brand-500" />
-          <span className="text-white">Carregando diagnóstico...</span>
+          <span className="text-gray-700">Carregando diagnóstico...</span>
         </div>
       </div>
     )
@@ -269,7 +269,7 @@ export default function ShopifyDiagnosticoPage() {
               <StatusIcon ok={data.summary.storeConnected} />
               <span className="text-gray-500 text-sm">Loja Conectada</span>
             </div>
-            <p className="text-white font-semibold">
+            <p className="text-gray-900 font-semibold">
               {data.summary.storeConnected ? 'Sim' : 'Não'}
             </p>
           </div>
@@ -279,7 +279,7 @@ export default function ShopifyDiagnosticoPage() {
               <Webhook className="w-5 h-5 text-brand-600" />
               <span className="text-gray-500 text-sm">Webhooks</span>
             </div>
-            <p className="text-white font-semibold">
+            <p className="text-gray-900 font-semibold">
               {data.summary.webhooksRegistered} registrados
             </p>
           </div>
@@ -289,7 +289,7 @@ export default function ShopifyDiagnosticoPage() {
               <Users className="w-5 h-5 text-blue-400" />
               <span className="text-gray-500 text-sm">Contatos</span>
             </div>
-            <p className="text-white font-semibold">
+            <p className="text-gray-900 font-semibold">
               {data.summary.contactsCreated} do Shopify
             </p>
           </div>
@@ -299,7 +299,7 @@ export default function ShopifyDiagnosticoPage() {
               <ShoppingBag className="w-5 h-5 text-emerald-400" />
               <span className="text-gray-500 text-sm">Pedidos</span>
             </div>
-            <p className="text-white font-semibold">
+            <p className="text-gray-900 font-semibold">
               {data.summary.ordersImported} importados
             </p>
           </div>
@@ -313,7 +313,7 @@ export default function ShopifyDiagnosticoPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-gray-500 text-sm">Domínio</p>
-              <p className="text-white font-medium flex items-center gap-2">
+              <p className="text-gray-900 font-medium flex items-center gap-2">
                 {data.store.shop_domain}
                 <a
                   href={`https://${data.store.shop_domain}/admin`}
@@ -327,7 +327,7 @@ export default function ShopifyDiagnosticoPage() {
             </div>
             <div>
               <p className="text-gray-500 text-sm">Nome</p>
-              <p className="text-white font-medium">{data.store.shop_name || '-'}</p>
+              <p className="text-gray-900 font-medium">{data.store.shop_name || '-'}</p>
             </div>
             <div>
               <p className="text-gray-500 text-sm">Status</p>
@@ -352,13 +352,13 @@ export default function ShopifyDiagnosticoPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between py-2 border-b border-gray-200">
               <span className="text-gray-500">Pipeline padrão</span>
-              <span className={`font-medium ${data.config.default_pipeline_id ? 'text-white' : 'text-red-400'}`}>
+              <span className={`font-medium ${data.config.default_pipeline_id ? 'text-gray-900' : 'text-red-400'}`}>
                 {data.pipeline?.name || (data.config.default_pipeline_id ? data.config.default_pipeline_id : '❌ Não configurado')}
               </span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-gray-200">
               <span className="text-gray-500">Tipo de contato</span>
-              <span className="text-white font-medium">{data.config.contact_type}</span>
+              <span className="text-gray-900 font-medium">{data.config.contact_type}</span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-gray-200">
               <span className="text-gray-500">Sincronizar clientes</span>
@@ -401,7 +401,7 @@ export default function ShopifyDiagnosticoPage() {
                   className="flex items-center justify-between p-3 bg-white rounded-lg"
                 >
                   <div>
-                    <p className="text-white font-medium">{webhook.topic}</p>
+                    <p className="text-gray-900 font-medium">{webhook.topic}</p>
                     <p className="text-gray-400 text-xs truncate max-w-md">{webhook.address}</p>
                   </div>
                   {webhook.address.includes('/api/webhooks/shopify') ? (
@@ -449,7 +449,7 @@ export default function ShopifyDiagnosticoPage() {
                 className="flex items-center justify-between p-3 bg-white rounded-lg"
               >
                 <div>
-                  <p className="text-white font-medium">
+                  <p className="text-gray-900 font-medium">
                     {contact.first_name} {contact.last_name}
                   </p>
                   <p className="text-gray-400 text-sm">{contact.email}</p>

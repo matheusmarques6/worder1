@@ -263,7 +263,7 @@ export default function CampaignDetailsPage() {
           {/* Template Preview */}
           {campaign.template && (
             <div className="p-6 bg-gray-50 border border-gray-200 rounded-2xl">
-              <h3 className="font-semibold text-white mb-4">Preview da Mensagem</h3>
+              <h3 className="font-semibold text-gray-900 mb-4">Preview da Mensagem</h3>
               <div className="bg-white border border-gray-200 rounded-xl p-4 max-w-sm">
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">{campaign.template.body_text}</p>
                 {campaign.template.buttons?.length > 0 && (
@@ -281,7 +281,7 @@ export default function CampaignDetailsPage() {
 
           {/* Timeline */}
           <div className="p-6 bg-gray-50 border border-gray-200 rounded-2xl">
-            <h3 className="font-semibold text-white mb-4">Histórico</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">Histórico</h3>
             <div className="space-y-4">
               {logs.length > 0 ? logs.slice(0, 10).map((log) => (
                 <div key={log.id} className="flex items-start gap-3">
@@ -291,7 +291,7 @@ export default function CampaignDetailsPage() {
                     log.log_type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
                   }`} />
                   <div className="flex-1">
-                    <p className="text-sm text-white">{log.message}</p>
+                    <p className="text-sm text-gray-700">{log.message}</p>
                     <p className="text-xs text-gray-400">{formatDate(log.created_at)}</p>
                   </div>
                 </div>
@@ -306,15 +306,15 @@ export default function CampaignDetailsPage() {
         <div className="space-y-6">
           {/* Campaign Info */}
           <div className="p-6 bg-gray-50 border border-gray-200 rounded-2xl">
-            <h3 className="font-semibold text-white mb-4">Informações</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">Informações</h3>
             <div className="space-y-4">
               <div>
                 <p className="text-xs text-gray-400 mb-1">Tipo</p>
-                <p className="text-sm text-white capitalize">{campaign.type}</p>
+                <p className="text-sm text-gray-700 capitalize">{campaign.type}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-400 mb-1">Audiência</p>
-                <p className="text-sm text-white capitalize">{campaign.audience_type === 'all' ? 'Todos os contatos' : campaign.audience_type}</p>
+                <p className="text-sm text-gray-700 capitalize">{campaign.audience_type === 'all' ? 'Todos os contatos' : campaign.audience_type}</p>
                 {campaign.audience_tags && campaign.audience_tags.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
                     {campaign.audience_tags.map((tag, i) => (
@@ -326,19 +326,19 @@ export default function CampaignDetailsPage() {
               {campaign.scheduled_at && (
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Agendada para</p>
-                  <p className="text-sm text-white">{formatDate(campaign.scheduled_at)}</p>
+                  <p className="text-sm text-gray-700">{formatDate(campaign.scheduled_at)}</p>
                 </div>
               )}
               {campaign.started_at && (
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Iniciada em</p>
-                  <p className="text-sm text-white">{formatDate(campaign.started_at)}</p>
+                  <p className="text-sm text-gray-700">{formatDate(campaign.started_at)}</p>
                 </div>
               )}
               {campaign.completed_at && (
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Concluída em</p>
-                  <p className="text-sm text-white">{formatDate(campaign.completed_at)}</p>
+                  <p className="text-sm text-gray-700">{formatDate(campaign.completed_at)}</p>
                 </div>
               )}
             </div>
@@ -347,7 +347,7 @@ export default function CampaignDetailsPage() {
           {/* Revenue Attribution */}
           {(campaign.attributed_revenue > 0 || campaign.attributed_orders > 0) && (
             <div className="p-6 bg-gradient-to-br from-green-500/10 to-primary-500/10 border border-green-500/20 rounded-2xl">
-              <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-green-400" />
                 Receita Atribuída
               </h3>
@@ -368,7 +368,7 @@ export default function CampaignDetailsPage() {
 
           {/* Cost */}
           <div className="p-6 bg-gray-50 border border-gray-200 rounded-2xl">
-            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-gray-500" />
               Custo
             </h3>

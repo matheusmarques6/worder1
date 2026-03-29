@@ -42,9 +42,9 @@ const activityIconMap: Record<string, { icon: React.ComponentType<any>; color: s
   conversation_started: { icon: ChatCircle, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
   conversation_closed: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
   message_sent: { icon: PaperPlaneTilt, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-  message_received: { icon: ChatCircle, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
+  message_received: { icon: ChatCircle, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' },
   tag_added: { icon: Tag, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' },
-  tag_removed: { icon: Tag, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
+  tag_removed: { icon: Tag, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' },
   deal_created: { icon: CurrencyDollar, color: 'text-[#F26B2A]', bgColor: 'bg-[#F26B2A]/10' },
   deal_won: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
   deal_lost: { icon: Warning, color: 'text-red-400', bgColor: 'bg-red-500/10' },
@@ -55,17 +55,17 @@ const activityIconMap: Record<string, { icon: React.ComponentType<any>; color: s
   cart_recovered: { icon: ShoppingCart, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
   task_created: { icon: ClipboardText, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
   task_completed: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-  note_added: { icon: PencilSimple, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
-  comment_added: { icon: PencilSimple, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
+  note_added: { icon: PencilSimple, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' },
+  comment_added: { icon: PencilSimple, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' },
   contact_created: { icon: UserCircle, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-  contact_updated: { icon: PencilSimple, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' },
+  contact_updated: { icon: PencilSimple, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' },
   campaign_sent: { icon: Megaphone, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
   campaign_clicked: { icon: CursorClick, color: 'text-[#F26B2A]', bgColor: 'bg-[#F26B2A]/10' },
   bot_interaction: { icon: Lightning, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
   blocked: { icon: Warning, color: 'text-red-400', bgColor: 'bg-red-500/10' },
 }
 
-const defaultActivityIcon = { icon: Eye, color: 'text-zinc-400', bgColor: 'bg-zinc-500/10' }
+const defaultActivityIcon = { icon: Eye, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' }
 
 const tagColors = [
   'bg-yellow-500/10 text-yellow-400',
@@ -160,7 +160,7 @@ export default function ContactDetailPage() {
   if (isLoading && !contact) {
     return (
       <div className="flex items-center justify-center py-32">
-        <ArrowsClockwise size={32} className="animate-spin text-zinc-500" />
+        <ArrowsClockwise size={32} className="animate-spin text-gray-500" />
       </div>
     )
   }
@@ -170,16 +170,16 @@ export default function ContactDetailPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/contacts')} className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
+          <button onClick={() => router.push('/contacts')} className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors">
             <ArrowLeft size={18} weight="bold" />
           </button>
-          <h1 className="text-2xl font-bold font-display text-white">Contato</h1>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Contato</h1>
         </div>
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-12 text-center">
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-12 text-center">
           <Warning size={32} className="text-red-400 mx-auto mb-3" weight="duotone" />
-          <p className="text-sm text-zinc-400">Erro ao carregar contato</p>
-          <p className="text-xs text-zinc-600 mt-1">{error}</p>
-          <button onClick={() => fetchContact(contactId)} className="mt-4 px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-sm">
+          <p className="text-sm text-gray-500">Erro ao carregar contato</p>
+          <p className="text-xs text-gray-400 mt-1">{error}</p>
+          <button onClick={() => fetchContact(contactId)} className="mt-4 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-sm">
             Tentar novamente
           </button>
         </div>
@@ -203,23 +203,23 @@ export default function ContactDetailPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push('/contacts')}
-            className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
           >
             <ArrowLeft size={18} weight="bold" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold font-display text-white">{contactName}</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">
+            <h1 className="text-2xl font-bold font-display text-gray-900">{contactName}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
               Contato desde {new Date(contact.created_at).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-xs">
+          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
             <PencilSimple size={14} />
             Editar
           </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-xs">
+          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
             <Export size={14} />
             Exportar
           </button>
@@ -234,7 +234,7 @@ export default function ContactDetailPage() {
         {/* Left Panel — Contact Info */}
         <div className="space-y-4">
           {/* Avatar & Basic Info */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
             <div className="flex flex-col items-center text-center">
               {contact.avatar_url || contact.profile_picture_url ? (
                 <img
@@ -244,12 +244,12 @@ export default function ContactDetailPage() {
                 />
               ) : (
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center mb-4">
-                  <span className="text-2xl font-bold text-white">{initials}</span>
+                  <span className="text-2xl font-bold text-gray-900">{initials}</span>
                 </div>
               )}
-              <h2 className="text-lg font-bold text-white">{contactName}</h2>
+              <h2 className="text-lg font-bold text-gray-900">{contactName}</h2>
               {contact.company && (
-                <p className="text-xs text-zinc-500 mt-0.5">{contact.position ? `${contact.position} · ` : ''}{contact.company}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{contact.position ? `${contact.position} · ` : ''}{contact.company}</p>
               )}
               <span className={`mt-2 px-2.5 py-1 rounded-full text-xs font-medium ${
                 contact.is_blocked
@@ -263,46 +263,46 @@ export default function ContactDetailPage() {
             <div className="mt-6 space-y-3">
               {contact.email && (
                 <div className="flex items-center gap-3">
-                  <EnvelopeSimple size={16} className="text-zinc-500 flex-shrink-0" />
-                  <span className="text-sm text-zinc-300 truncate">{contact.email}</span>
+                  <EnvelopeSimple size={16} className="text-gray-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-700 truncate">{contact.email}</span>
                 </div>
               )}
               {(contact.phone || contact.phone_number) && (
                 <div className="flex items-center gap-3">
-                  <Phone size={16} className="text-zinc-500 flex-shrink-0" />
-                  <span className="text-sm text-zinc-300">{contact.phone || contact.phone_number}</span>
+                  <Phone size={16} className="text-gray-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-700">{contact.phone || contact.phone_number}</span>
                 </div>
               )}
               {(contact.whatsapp || contact.phone_number) && (
                 <div className="flex items-center gap-3">
                   <WhatsappLogo size={16} className="text-[#25D366] flex-shrink-0" />
-                  <span className="text-sm text-zinc-300">{contact.whatsapp || contact.phone_number}</span>
+                  <span className="text-sm text-gray-700">{contact.whatsapp || contact.phone_number}</span>
                 </div>
               )}
               {city && (
                 <div className="flex items-center gap-3">
-                  <MapPin size={16} className="text-zinc-500 flex-shrink-0" />
-                  <span className="text-sm text-zinc-300">{city}</span>
+                  <MapPin size={16} className="text-gray-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-700">{city}</span>
                 </div>
               )}
               {contact.source && (
                 <div className="flex items-center gap-3">
-                  <Calendar size={16} className="text-zinc-500 flex-shrink-0" />
-                  <span className="text-sm text-zinc-300">Origem: {contact.source}</span>
+                  <Calendar size={16} className="text-gray-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-700">Origem: {contact.source}</span>
                 </div>
               )}
             </div>
           </div>
 
           {/* Tags */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                 <Tag size={14} className="text-[#F26B2A]" />
                 Tags
               </h3>
-              <button className="p-1 rounded hover:bg-zinc-800 transition-colors">
-                <Plus size={14} className="text-zinc-500" />
+              <button className="p-1 rounded hover:bg-gray-50 transition-colors">
+                <Plus size={14} className="text-gray-500" />
               </button>
             </div>
             {contact.tags && contact.tags.length > 0 ? (
@@ -317,24 +317,24 @@ export default function ContactDetailPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-zinc-600">Nenhuma tag adicionada</p>
+              <p className="text-xs text-gray-400">Nenhuma tag adicionada</p>
             )}
           </div>
 
           {/* Custom Fields */}
           {contact.custom_fields && Object.keys(contact.custom_fields).length > 0 && (
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+            <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-white">Propriedades</h3>
-                <button className="p-1 rounded hover:bg-zinc-800 transition-colors">
-                  <PencilSimple size={14} className="text-zinc-500" />
+                <h3 className="text-sm font-semibold text-gray-900">Propriedades</h3>
+                <button className="p-1 rounded hover:bg-gray-50 transition-colors">
+                  <PencilSimple size={14} className="text-gray-500" />
                 </button>
               </div>
               <div className="space-y-3">
                 {Object.entries(contact.custom_fields).map(([key, value]) => (
                   <div key={key}>
-                    <p className="text-xs text-zinc-500">{key}</p>
-                    <p className="text-sm text-zinc-300 mt-0.5">{String(value)}</p>
+                    <p className="text-xs text-gray-500">{key}</p>
+                    <p className="text-sm text-gray-700 mt-0.5">{String(value)}</p>
                   </div>
                 ))}
               </div>
@@ -342,33 +342,33 @@ export default function ContactDetailPage() {
           )}
 
           {/* Subscriptions */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3">
               <ListBullets size={14} className="text-[#F26B2A]" />
               Canais
             </h3>
             <div className="space-y-2">
               <div className="flex items-center justify-between py-1.5">
-                <span className="text-sm text-zinc-300 flex items-center gap-2">
-                  <EnvelopeSimple size={14} className="text-zinc-500" /> E-mail
+                <span className="text-sm text-gray-700 flex items-center gap-2">
+                  <EnvelopeSimple size={14} className="text-gray-500" /> E-mail
                 </span>
-                <span className={`text-xs ${contact.is_subscribed_email !== false ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                <span className={`text-xs ${contact.is_subscribed_email !== false ? 'text-emerald-400' : 'text-gray-400'}`}>
                   {contact.is_subscribed_email !== false ? 'Inscrito' : 'Não inscrito'}
                 </span>
               </div>
               <div className="flex items-center justify-between py-1.5">
-                <span className="text-sm text-zinc-300 flex items-center gap-2">
+                <span className="text-sm text-gray-700 flex items-center gap-2">
                   <WhatsappLogo size={14} className="text-[#25D366]" /> WhatsApp
                 </span>
-                <span className={`text-xs ${contact.is_subscribed_whatsapp !== false ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                <span className={`text-xs ${contact.is_subscribed_whatsapp !== false ? 'text-emerald-400' : 'text-gray-400'}`}>
                   {contact.is_subscribed_whatsapp !== false ? 'Inscrito' : 'Não inscrito'}
                 </span>
               </div>
               <div className="flex items-center justify-between py-1.5">
-                <span className="text-sm text-zinc-300 flex items-center gap-2">
-                  <Phone size={14} className="text-zinc-500" /> SMS
+                <span className="text-sm text-gray-700 flex items-center gap-2">
+                  <Phone size={14} className="text-gray-500" /> SMS
                 </span>
-                <span className={`text-xs ${contact.is_subscribed_sms ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                <span className={`text-xs ${contact.is_subscribed_sms ? 'text-emerald-400' : 'text-gray-400'}`}>
                   {contact.is_subscribed_sms ? 'Inscrito' : 'Não inscrito'}
                 </span>
               </div>
@@ -378,14 +378,14 @@ export default function ContactDetailPage() {
 
         {/* Center — Timeline/Notes/Tasks */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl">
-            <div className="flex border-b border-zinc-800">
+          <div className="bg-white/50 border border-gray-200 rounded-xl">
+            <div className="flex border-b border-gray-200">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex-1 px-4 py-3 text-sm font-medium transition-colors relative ${
-                    activeTab === tab.id ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
+                    activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   {tab.label}
@@ -406,7 +406,7 @@ export default function ContactDetailPage() {
                   {activities.length === 0 ? (
                     <div className="text-center py-8">
                       <Clock size={24} className="text-zinc-700 mx-auto mb-2" weight="duotone" />
-                      <p className="text-sm text-zinc-500">Nenhuma atividade registrada</p>
+                      <p className="text-sm text-gray-500">Nenhuma atividade registrada</p>
                     </div>
                   ) : (
                     activities.map((activity, i) => {
@@ -418,12 +418,12 @@ export default function ContactDetailPage() {
                             <div className={`w-8 h-8 rounded-full ${iconCfg.bgColor} flex items-center justify-center flex-shrink-0`}>
                               <Icon size={16} className={iconCfg.color} weight="fill" />
                             </div>
-                            {i < activities.length - 1 && <div className="w-px h-full bg-zinc-800 min-h-[24px]" />}
+                            {i < activities.length - 1 && <div className="w-px h-full bg-gray-50 min-h-[24px]" />}
                           </div>
                           <div className="pb-5">
-                            <p className="text-sm text-white">{activity.title}</p>
-                            {activity.description && <p className="text-xs text-zinc-500 mt-0.5">{activity.description}</p>}
-                            <p className="text-xs text-zinc-600 mt-1 flex items-center gap-1">
+                            <p className="text-sm text-gray-700">{activity.title}</p>
+                            {activity.description && <p className="text-xs text-gray-500 mt-0.5">{activity.description}</p>}
+                            <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
                               <Clock size={10} />
                               {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true, locale: ptBR })}
                             </p>
@@ -445,7 +445,7 @@ export default function ContactDetailPage() {
                       value={noteText}
                       onChange={(e) => setNoteText(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddNote()}
-                      className="flex-1 bg-zinc-800/50 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#F26B2A]"
+                      className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500"
                     />
                     <button
                       onClick={handleAddNote}
@@ -458,24 +458,24 @@ export default function ContactDetailPage() {
                   {notes.length === 0 ? (
                     <div className="text-center py-8">
                       <PencilSimple size={24} className="text-zinc-700 mx-auto mb-2" weight="duotone" />
-                      <p className="text-sm text-zinc-500">Nenhuma nota adicionada</p>
+                      <p className="text-sm text-gray-500">Nenhuma nota adicionada</p>
                     </div>
                   ) : (
                     notes.map((note) => (
-                      <div key={note.id} className="bg-zinc-800/30 rounded-lg p-4 group">
+                      <div key={note.id} className="bg-gray-50/30 rounded-lg p-4 group">
                         <div className="flex items-start justify-between gap-3">
-                          <p className="text-sm text-zinc-300 leading-relaxed flex-1">{note.content}</p>
+                          <p className="text-sm text-gray-700 leading-relaxed flex-1">{note.content}</p>
                           <button
                             onClick={() => deleteNote(contactId, note.id)}
-                            className="p-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                            className="p-1 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                           >
                             <Trash size={12} />
                           </button>
                         </div>
                         <div className="flex items-center gap-3 mt-3">
-                          <span className="text-xs text-zinc-500">{note.created_by_name || 'Sistema'}</span>
-                          <span className="text-xs text-zinc-600">·</span>
-                          <span className="text-xs text-zinc-600">
+                          <span className="text-xs text-gray-500">{note.created_by_name || 'Sistema'}</span>
+                          <span className="text-xs text-gray-400">·</span>
+                          <span className="text-xs text-gray-400">
                             {formatDistanceToNow(new Date(note.created_at), { addSuffix: true, locale: ptBR })}
                           </span>
                         </div>
@@ -491,39 +491,39 @@ export default function ContactDetailPage() {
                   {tasks.length === 0 ? (
                     <div className="text-center py-8">
                       <ClipboardText size={24} className="text-zinc-700 mx-auto mb-2" weight="duotone" />
-                      <p className="text-sm text-zinc-500">Nenhuma tarefa criada</p>
+                      <p className="text-sm text-gray-500">Nenhuma tarefa criada</p>
                     </div>
                   ) : (
                     tasks.map((task) => {
                       const isCompleted = task.status === 'completed'
                       return (
-                        <div key={task.id} className="bg-zinc-800/30 rounded-lg p-4 flex items-start gap-3 group">
+                        <div key={task.id} className="bg-gray-50/30 rounded-lg p-4 flex items-start gap-3 group">
                           {isCompleted ? (
                             <CheckCircle size={18} className="text-emerald-400 mt-0.5 flex-shrink-0" weight="fill" />
                           ) : (
                             <button
                               onClick={() => completeTask(task.id)}
-                              className="w-[18px] h-[18px] rounded-full border-2 border-zinc-600 mt-0.5 flex-shrink-0 hover:border-emerald-400 transition-colors"
+                              className="w-[18px] h-[18px] rounded-full border-2 border-gray-200 mt-0.5 flex-shrink-0 hover:border-emerald-400 transition-colors"
                             />
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className={`text-sm ${isCompleted ? 'text-zinc-400 line-through' : 'text-white'}`}>
+                            <p className={`text-sm ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
                               {task.title}
                             </p>
                             {task.description && (
-                              <p className="text-xs text-zinc-600 mt-0.5">{task.description}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">{task.description}</p>
                             )}
                             <div className="flex items-center gap-3 mt-1">
                               {task.due_date && (
-                                <span className={`text-xs ${task.is_overdue ? 'text-red-400' : 'text-zinc-600'}`}>
+                                <span className={`text-xs ${task.is_overdue ? 'text-red-400' : 'text-gray-400'}`}>
                                   Prazo: {new Date(task.due_date).toLocaleDateString('pt-BR')}
                                 </span>
                               )}
                               {task.assigned_to_name && (
-                                <span className="text-xs text-zinc-600">· {task.assigned_to_name}</span>
+                                <span className="text-xs text-gray-400">· {task.assigned_to_name}</span>
                               )}
                               {isCompleted && task.completed_at && (
-                                <span className="text-xs text-zinc-600">
+                                <span className="text-xs text-gray-400">
                                   Concluída {formatDistanceToNow(new Date(task.completed_at), { addSuffix: true, locale: ptBR })}
                                 </span>
                               )}
@@ -531,7 +531,7 @@ export default function ContactDetailPage() {
                           </div>
                           <button
                             onClick={() => deleteTask(task.id)}
-                            className="p-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                            className="p-1 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
                           >
                             <Trash size={12} />
                           </button>
@@ -548,31 +548,31 @@ export default function ContactDetailPage() {
         {/* Right Panel — Orders & Metrics */}
         <div className="space-y-4">
           {/* Engagement Metrics */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-white mb-4">Engajamento</h3>
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Engajamento</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Total de mensagens</span>
-                <span className="text-sm text-white font-medium">{contact.total_messages_sent + contact.total_messages_received}</span>
+                <span className="text-xs text-gray-500">Total de mensagens</span>
+                <span className="text-sm text-gray-700 font-medium">{contact.total_messages_sent + contact.total_messages_received}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Mensagens enviadas</span>
+                <span className="text-xs text-gray-500">Mensagens enviadas</span>
                 <span className="text-sm text-blue-400 font-medium">{contact.total_messages_sent}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Mensagens recebidas</span>
+                <span className="text-xs text-gray-500">Mensagens recebidas</span>
                 <span className="text-sm text-emerald-400 font-medium">{contact.total_messages_received}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Conversas</span>
+                <span className="text-xs text-gray-500">Conversas</span>
                 <span className="text-sm text-[#F26B2A] font-medium">{contact.total_conversations}</span>
               </div>
               {contact.last_message_at && (
                 <>
-                  <div className="w-full h-px bg-zinc-800 my-1" />
+                  <div className="w-full h-px bg-gray-50 my-1" />
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-zinc-500">Última mensagem</span>
-                    <span className="text-xs text-zinc-400">
+                    <span className="text-xs text-gray-500">Última mensagem</span>
+                    <span className="text-xs text-gray-500">
                       {formatDistanceToNow(new Date(contact.last_message_at), { addSuffix: true, locale: ptBR })}
                     </span>
                   </div>
@@ -582,24 +582,24 @@ export default function ContactDetailPage() {
           </div>
 
           {/* Lifetime Value */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-4">
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-4">
               <TrendUp size={14} className="text-emerald-400" />
               Valor do Cliente
             </h3>
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-zinc-800/30 rounded-lg p-3">
-                <p className="text-xs text-zinc-500">Total Gasto</p>
-                <p className="text-lg font-bold text-white mt-1">
+              <div className="bg-gray-50/30 rounded-lg p-3">
+                <p className="text-xs text-gray-500">Total Gasto</p>
+                <p className="text-lg font-bold text-gray-900 mt-1">
                   R$ {totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               </div>
-              <div className="bg-zinc-800/30 rounded-lg p-3">
-                <p className="text-xs text-zinc-500">Pedidos</p>
-                <p className="text-lg font-bold text-white mt-1">{totalOrders}</p>
+              <div className="bg-gray-50/30 rounded-lg p-3">
+                <p className="text-xs text-gray-500">Pedidos</p>
+                <p className="text-lg font-bold text-gray-900 mt-1">{totalOrders}</p>
               </div>
-              <div className="bg-zinc-800/30 rounded-lg p-3 col-span-2">
-                <p className="text-xs text-zinc-500">Ticket Médio</p>
+              <div className="bg-gray-50/30 rounded-lg p-3 col-span-2">
+                <p className="text-xs text-gray-500">Ticket Médio</p>
                 <p className="text-lg font-bold text-[#F26B2A] mt-1">
                   R$ {avgOrder.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
@@ -609,22 +609,22 @@ export default function ContactDetailPage() {
 
           {/* Deals */}
           {deals.length > 0 && (
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-4">
+            <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-4">
                 <CurrencyDollar size={14} className="text-[#F26B2A]" />
                 Negociações
               </h3>
               <div className="space-y-3">
                 {deals.slice(0, 5).map((deal) => (
-                  <div key={deal.id} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
+                  <div key={deal.id} className="flex items-center justify-between py-2 border-b border-gray-200/50 last:border-0">
                     <div>
-                      <p className="text-sm text-white font-medium">{deal.title}</p>
-                      <p className="text-xs text-zinc-600 mt-0.5">
+                      <p className="text-sm text-gray-700 font-medium">{deal.title}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
                         {deal.stage?.name || 'Sem etapa'} · {deal.status === 'won' ? 'Ganho' : deal.status === 'lost' ? 'Perdido' : 'Aberto'}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-white font-medium">R$ {deal.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      <p className="text-sm text-gray-700 font-medium">R$ {deal.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                       <p className={`text-xs ${deal.status === 'won' ? 'text-emerald-400' : deal.status === 'lost' ? 'text-red-400' : 'text-blue-400'}`}>
                         {deal.status === 'won' ? 'Ganho' : deal.status === 'lost' ? 'Perdido' : 'Aberto'}
                       </p>
@@ -637,26 +637,26 @@ export default function ContactDetailPage() {
 
           {/* Recent Orders */}
           {orders.length > 0 && (
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+            <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                   <ShoppingCart size={14} className="text-[#F26B2A]" />
                   Pedidos Recentes
                 </h3>
               </div>
               <div className="space-y-3">
                 {orders.slice(0, 5).map((order) => {
-                  const status = orderStatusConfig[order.financial_status] || orderStatusConfig[order.fulfillment_status || ''] || { label: order.financial_status, color: 'text-zinc-400' }
+                  const status = orderStatusConfig[order.financial_status] || orderStatusConfig[order.fulfillment_status || ''] || { label: order.financial_status, color: 'text-gray-500' }
                   return (
-                    <div key={order.id} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
+                    <div key={order.id} className="flex items-center justify-between py-2 border-b border-gray-200/50 last:border-0">
                       <div>
-                        <p className="text-sm text-white font-medium">#{order.order_number}</p>
-                        <p className="text-xs text-zinc-600 mt-0.5">
+                        <p className="text-sm text-gray-700 font-medium">#{order.order_number}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
                           {new Date(order.created_at).toLocaleDateString('pt-BR')} · {order.line_items?.length || 0} {(order.line_items?.length || 0) === 1 ? 'item' : 'itens'}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-white font-medium">
+                        <p className="text-sm text-gray-700 font-medium">
                           {order.currency === 'BRL' ? 'R$ ' : `${order.currency} `}{order.total_price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </p>
                         <p className={`text-xs ${status.color}`}>{status.label}</p>

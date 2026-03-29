@@ -174,8 +174,8 @@ const MetricCard = ({
             <Icon className={`w-5 h-5 ${highlight ? 'text-white' : 'text-brand-600'}`} />
           </div>
           <div>
-            <p className={`text-sm font-medium ${highlight ? 'text-white/80' : 'text-gray-500'}`}>{title}</p>
-            <p className="text-2xl font-bold mt-0.5 text-white">{value}{suffix}</p>
+            <p className={`text-sm font-medium ${highlight ? 'text-gray-600' : 'text-gray-500'}`}>{title}</p>
+            <p className="text-2xl font-bold mt-0.5 text-gray-900">{value}{suffix}</p>
           </div>
         </div>
         {change !== undefined && (
@@ -210,7 +210,7 @@ const RateCard = ({
   >
     <div className="flex items-center justify-between mb-3">
       <span className="text-sm text-gray-500">{title}</span>
-      <span className="text-lg font-bold text-white">{formatPercent(value)}</span>
+      <span className="text-lg font-bold text-gray-900">{formatPercent(value)}</span>
     </div>
     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
       <motion.div
@@ -236,7 +236,7 @@ const AgentCard = ({ agent }: { agent: Agent }) => (
           <Bot className="w-5 h-5 text-purple-400" />
         </div>
         <div>
-          <h4 className="font-semibold text-white">{agent.name}</h4>
+          <h4 className="font-semibold text-gray-900">{agent.name}</h4>
           <p className="text-xs text-gray-500">{agent.provider} • {agent.model}</p>
         </div>
       </div>
@@ -252,7 +252,7 @@ const AgentCard = ({ agent }: { agent: Agent }) => (
     <div className="grid grid-cols-2 gap-3">
       <div className="bg-gray-100/30 rounded-lg p-3">
         <p className="text-xs text-gray-500 mb-1">Interações</p>
-        <p className="text-lg font-bold text-white">{formatNumber(agent.interactions)}</p>
+        <p className="text-lg font-bold text-gray-900">{formatNumber(agent.interactions)}</p>
       </div>
       <div className="bg-gray-100/30 rounded-lg p-3">
         <p className="text-xs text-gray-500 mb-1">Taxa Sucesso</p>
@@ -260,7 +260,7 @@ const AgentCard = ({ agent }: { agent: Agent }) => (
       </div>
       <div className="bg-gray-100/30 rounded-lg p-3">
         <p className="text-xs text-gray-500 mb-1">Latência</p>
-        <p className="text-lg font-bold text-white">{formatLatency(agent.avgLatency)}</p>
+        <p className="text-lg font-bold text-gray-900">{formatLatency(agent.avgLatency)}</p>
       </div>
       <div className="bg-gray-100/30 rounded-lg p-3">
         <p className="text-xs text-gray-500 mb-1">Custo</p>
@@ -303,7 +303,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <div key={index} className="flex items-center gap-2 text-sm">
           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
           <span className="text-gray-600">{item.name}:</span>
-          <span className="font-medium text-white">{formatNumber(item.value)}</span>
+          <span className="font-medium text-gray-900">{formatNumber(item.value)}</span>
         </div>
       ))}
     </div>
@@ -677,7 +677,7 @@ export default function WhatsAppAnalyticsPage() {
                   <p className="text-sm text-gray-500 mt-1">Ordenado por taxa de resposta no período</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <select className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500">
+                  <select className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-primary-500">
                     <option value="response">Taxa de Resposta</option>
                     <option value="read">Taxa de Leitura</option>
                     <option value="delivery">Taxa de Entrega</option>
@@ -723,7 +723,7 @@ export default function WhatsAppAnalyticsPage() {
                       </td>
                       <td className="py-4 px-6">
                         <div>
-                          <p className="font-medium text-white">{campaign.name}</p>
+                          <p className="font-medium text-gray-900">{campaign.name}</p>
                           <p className="text-xs text-gray-500">
                             {new Date(campaign.sentAt).toLocaleDateString('pt-BR', { 
                               day: '2-digit', 
@@ -753,16 +753,16 @@ export default function WhatsAppAnalyticsPage() {
                         </span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <span className="text-white font-medium">{formatNumber(campaign.enviadas)}</span>
+                        <span className="text-gray-900 font-medium">{formatNumber(campaign.enviadas)}</span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <span className="text-white">{formatNumber(campaign.entregues)}</span>
+                        <span className="text-gray-900">{formatNumber(campaign.entregues)}</span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <span className="text-white">{formatNumber(campaign.lidas)}</span>
+                        <span className="text-gray-900">{formatNumber(campaign.lidas)}</span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <span className="text-white">{formatNumber(campaign.respondidas)}</span>
+                        <span className="text-gray-900">{formatNumber(campaign.respondidas)}</span>
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">

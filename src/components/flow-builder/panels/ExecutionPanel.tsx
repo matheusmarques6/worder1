@@ -397,7 +397,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
           </div>
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Testar Automação</h2>
-            <p className="text-xs text-white/50">Simule a execução visualmente</p>
+            <p className="text-xs text-gray-600/50">Simule a execução visualmente</p>
           </div>
         </div>
         <button
@@ -436,7 +436,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
               <div className="p-4 pt-0 space-y-4">
                 {/* Data Source */}
                 <div>
-                  <label className="text-xs font-medium text-white/50 block mb-2">
+                  <label className="text-xs font-medium text-gray-900/50 block mb-2">
                     Fonte de Dados
                   </label>
                   <div className="flex gap-2">
@@ -468,7 +468,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                 {/* Contact Select */}
                 {!useSampleData && (
                   <div>
-                    <label className="text-xs font-medium text-white/50 block mb-2">
+                    <label className="text-xs font-medium text-gray-900/50 block mb-2">
                       Contato
                     </label>
                     <select
@@ -492,7 +492,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
 
                 {/* Speed */}
                 <div>
-                  <label className="text-xs font-medium text-white/50 block mb-2">
+                  <label className="text-xs font-medium text-gray-900/50 block mb-2">
                     Velocidade da Simulação
                   </label>
                   <div className="flex gap-2">
@@ -515,7 +515,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
 
                 {/* Trigger Data */}
                 <div>
-                  <label className="text-xs font-medium text-white/50 block mb-2">
+                  <label className="text-xs font-medium text-gray-900/50 block mb-2">
                     Dados do Gatilho (JSON)
                   </label>
                   <textarea
@@ -591,12 +591,12 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                       <p className="text-sm font-medium text-gray-900 truncate">
                         {step.nodeLabel}
                       </p>
-                      <p className="text-xs text-white/40">
+                      <p className="text-xs text-gray-600/40">
                         {(step.nodeType || '').replace('trigger_', '').replace('action_', '').replace('logic_', '')}
                       </p>
                     </div>
                     {step.duration !== undefined && (
-                      <span className="text-xs text-white/40 bg-gray-50 px-2 py-0.5 rounded">
+                      <span className="text-xs text-gray-600/40 bg-gray-50 px-2 py-0.5 rounded">
                         {step.duration}ms
                       </span>
                     )}
@@ -632,7 +632,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                               <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">
                                 Output
                               </p>
-                              <pre className="text-xs text-white/60 overflow-x-auto bg-black/40 p-2 rounded max-h-40">
+                              <pre className="text-xs text-gray-600/60 overflow-x-auto bg-black/40 p-2 rounded max-h-40">
                                 {JSON.stringify(step.output, null, 2)}
                               </pre>
                             </div>
@@ -681,7 +681,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                 <p className={cn('font-medium', success ? 'text-green-300' : 'text-red-300')}>
                   {success ? 'Teste concluído com sucesso!' : 'Teste falhou'}
                 </p>
-                <p className="text-sm text-white/50">
+                <p className="text-sm text-gray-700/50">
                   {steps.filter((s) => s.status === 'success').length}/{steps.length} passos • {totalDuration}ms
                 </p>
               </div>

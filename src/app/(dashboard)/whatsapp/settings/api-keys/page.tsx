@@ -147,7 +147,7 @@ const providerConfig: Record<string, {
   },
   ollama: {
     name: 'Ollama',
-    color: 'text-white',
+    color: 'text-gray-900',
     bgColor: 'bg-white/20',
     icon: '🦙',
     docsUrl: 'https://ollama.ai/docs',
@@ -209,7 +209,7 @@ export default function ApiKeysPage() {
         <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
           <Link href="/whatsapp/settings" className="hover:text-white">Configurações</Link>
           <ChevronRight className="w-4 h-4" />
-          <span className="text-white">API Keys</span>
+          <span className="text-gray-900">API Keys</span>
         </div>
         <div className="flex items-center justify-between">
           <div>
@@ -354,7 +354,7 @@ export default function ApiKeysPage() {
               <div className="w-12 h-12 rounded-xl bg-gray-100 group-hover:bg-brand-100 flex items-center justify-center mb-3 transition-colors">
                 <Plus className="w-6 h-6 text-gray-500 group-hover:text-brand-600" />
               </div>
-              <p className="text-gray-500 group-hover:text-white font-medium">Adicionar API Key</p>
+              <p className="text-gray-500 group-hover:text-gray-900 font-medium">Adicionar API Key</p>
               <p className="text-xs text-gray-400 mt-1">
                 {availableProviders.length} providers disponíveis
               </p>
@@ -369,7 +369,7 @@ export default function ApiKeysPage() {
           <div className="w-20 h-20 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4">
             <Key className="w-10 h-10 text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">Nenhuma API key configurada</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma API key configurada</h3>
           <p className="text-gray-500 mb-6 max-w-md mx-auto">
             Configure suas API keys para usar agentes de IA. Você paga diretamente aos providers.
           </p>
@@ -568,7 +568,7 @@ function AddApiKeyModal({
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder={`Cole sua ${config?.name || provider} API key aqui`}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-brand-400 pr-12 font-mono text-sm"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-brand-400 pr-12 font-mono text-sm"
                 />
                 <button
                   type="button"

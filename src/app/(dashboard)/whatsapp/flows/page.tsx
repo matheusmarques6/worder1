@@ -113,7 +113,7 @@ export default function FlowsPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input type="text" placeholder="Buscar fluxos..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-slate-700/50 rounded-xl text-white text-sm placeholder-slate-400 focus:outline-none focus:border-violet-500/50" />
+              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 text-sm placeholder-slate-400 focus:outline-none focus:border-violet-500/50" />
           </div>
         </div>
 
@@ -134,7 +134,7 @@ export default function FlowsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-white truncate">{flow.name}</p>
+                      <p className="font-medium text-gray-900 truncate">{flow.name}</p>
                       {flow.is_active && <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] rounded">ATIVO</span>}
                     </div>
                     <p className="text-xs text-gray-500">{(flow.nodes || []).length} nós</p>
@@ -202,7 +202,7 @@ export default function FlowsPage() {
                             <div className={`p-1.5 rounded-lg bg-${nodeType.color}-500/20`}>
                               <nodeType.icon className={`w-4 h-4 text-${nodeType.color}-400`} />
                             </div>
-                            <span className="font-medium text-white text-sm">{node.data?.label || nodeType.label}</span>
+                            <span className="font-medium text-gray-900 text-sm">{node.data?.label || nodeType.label}</span>
                           </div>
                           <div className="flex gap-1">
                             <button onClick={() => { setEditingNode(node); setNodeForm({ type: node.type, label: node.data?.label || '', content: node.data?.content || '', delay: node.data?.delay || 0, options: node.data?.options || [''] }); setShowNodeModal(true) }}
@@ -245,8 +245,8 @@ export default function FlowsPage() {
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="w-full max-w-md bg-white rounded-2xl border border-slate-800/50" onClick={e => e.stopPropagation()}>
               <div className="p-6 border-b border-slate-800/50"><h2 className="text-xl font-semibold text-gray-900">Novo Fluxo</h2></div>
               <div className="p-6 space-y-4">
-                <div><label className="block text-sm font-medium text-gray-600 mb-2">Nome</label><input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Ex: Atendimento Inicial" className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-violet-500/50" /></div>
-                <div><label className="block text-sm font-medium text-gray-600 mb-2">Descrição</label><textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Descrição do fluxo" rows={3} className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-violet-500/50 resize-none" /></div>
+                <div><label className="block text-sm font-medium text-gray-600 mb-2">Nome</label><input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Ex: Atendimento Inicial" className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-400 focus:outline-none focus:border-violet-500/50" /></div>
+                <div><label className="block text-sm font-medium text-gray-600 mb-2">Descrição</label><textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Descrição do fluxo" rows={3} className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-400 focus:outline-none focus:border-violet-500/50 resize-none" /></div>
               </div>
               <div className="p-6 border-t border-slate-800/50 flex gap-3">
                 <button onClick={() => setShowCreateModal(false)} className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200">Cancelar</button>
@@ -264,19 +264,19 @@ export default function FlowsPage() {
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="w-full max-w-md bg-white rounded-2xl border border-slate-800/50" onClick={e => e.stopPropagation()}>
               <div className="p-6 border-b border-slate-800/50"><h2 className="text-xl font-semibold text-gray-900">Editar Nó</h2></div>
               <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                <div><label className="block text-sm font-medium text-gray-600 mb-2">Título</label><input type="text" value={nodeForm.label} onChange={e => setNodeForm({ ...nodeForm, label: e.target.value })} className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-violet-500/50" /></div>
+                <div><label className="block text-sm font-medium text-gray-600 mb-2">Título</label><input type="text" value={nodeForm.label} onChange={e => setNodeForm({ ...nodeForm, label: e.target.value })} className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 focus:outline-none focus:border-violet-500/50" /></div>
                 {['MESSAGE', 'QUESTION'].includes(nodeForm.type) && (
-                  <div><label className="block text-sm font-medium text-gray-600 mb-2">Conteúdo</label><textarea value={nodeForm.content} onChange={e => setNodeForm({ ...nodeForm, content: e.target.value })} rows={4} placeholder="Texto da mensagem..." className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-violet-500/50 resize-none" /></div>
+                  <div><label className="block text-sm font-medium text-gray-600 mb-2">Conteúdo</label><textarea value={nodeForm.content} onChange={e => setNodeForm({ ...nodeForm, content: e.target.value })} rows={4} placeholder="Texto da mensagem..." className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-400 focus:outline-none focus:border-violet-500/50 resize-none" /></div>
                 )}
                 {nodeForm.type === 'DELAY' && (
-                  <div><label className="block text-sm font-medium text-gray-600 mb-2">Tempo (segundos)</label><input type="number" value={nodeForm.delay} onChange={e => setNodeForm({ ...nodeForm, delay: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-violet-500/50" /></div>
+                  <div><label className="block text-sm font-medium text-gray-600 mb-2">Tempo (segundos)</label><input type="number" value={nodeForm.delay} onChange={e => setNodeForm({ ...nodeForm, delay: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 focus:outline-none focus:border-violet-500/50" /></div>
                 )}
                 {nodeForm.type === 'QUESTION' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-2">Opções de Resposta</label>
                     {nodeForm.options.map((opt, i) => (
                       <div key={i} className="flex gap-2 mb-2">
-                        <input type="text" value={opt} onChange={e => { const opts = [...nodeForm.options]; opts[i] = e.target.value; setNodeForm({ ...nodeForm, options: opts }) }} placeholder={`Opção ${i + 1}`} className="flex-1 px-4 py-2 bg-gray-50 border border-slate-700/50 rounded-xl text-white text-sm focus:outline-none focus:border-violet-500/50" />
+                        <input type="text" value={opt} onChange={e => { const opts = [...nodeForm.options]; opts[i] = e.target.value; setNodeForm({ ...nodeForm, options: opts }) }} placeholder={`Opção ${i + 1}`} className="flex-1 px-4 py-2 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 text-sm focus:outline-none focus:border-violet-500/50" />
                         {i > 0 && <button onClick={() => setNodeForm({ ...nodeForm, options: nodeForm.options.filter((_, idx) => idx !== i) })} className="p-2 text-red-400 hover:text-red-300"><X className="w-4 h-4" /></button>}
                       </div>
                     ))}

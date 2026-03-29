@@ -504,7 +504,7 @@ export default function AutomationsPage() {
             className={cn(
               'w-full pl-10 pr-4 py-2.5 rounded-xl',
               'bg-white border border-gray-200',
-              'text-white placeholder-dark-500',
+              'text-gray-900 placeholder-dark-500',
               'focus:outline-none focus:border-brand-400',
               'transition-colors'
             )}
@@ -767,7 +767,7 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
                 <Plus className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-white group-hover:text-brand-600 transition-colors">
+                <h3 className="font-semibold text-gray-900 group-hover:text-brand-600 transition-colors">
                   Começar do Zero
                 </h3>
                 <p className="text-sm text-gray-500">Criar uma automação em branco</p>
@@ -791,7 +791,7 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
                   )}
                 >
                   <div className="text-2xl mb-2">{template.icon}</div>
-                  <h4 className="font-medium text-white group-hover:text-brand-600 transition-colors">
+                  <h4 className="font-medium text-gray-900 group-hover:text-brand-600 transition-colors">
                     {template.name}
                   </h4>
                   <p className="text-xs text-gray-400 mt-1">{template.description}</p>

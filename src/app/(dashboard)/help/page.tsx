@@ -178,7 +178,7 @@ export default function HelpPage() {
               placeholder="Pesquise por perguntas, artigos ou tutoriais..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 rounded-xl bg-white backdrop-blur-sm border border-gray-200 text-white placeholder-dark-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20"
+              className="w-full pl-12 pr-4 py-4 rounded-xl bg-white backdrop-blur-sm border border-gray-200 text-gray-900 placeholder-dark-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20"
             />
           </div>
 
@@ -258,7 +258,7 @@ export default function HelpPage() {
                   <Zap className="w-4 h-4 text-brand-600" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-white group-hover:text-brand-600 transition-colors">
+                  <h3 className="font-medium text-gray-900 group-hover:text-brand-600 transition-colors">
                     {faq.question}
                   </h3>
                   <p className="text-sm text-gray-500 mt-1 line-clamp-2">{faq.answer}</p>
@@ -274,7 +274,7 @@ export default function HelpPage() {
         {groupedFaqs.length === 0 ? (
           <div className="text-center py-12 bg-gray-50 border border-gray-200 rounded-xl">
             <HelpCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">Nenhum resultado encontrado</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum resultado encontrado</h3>
             <p className="text-gray-500">
               Tente buscar por outros termos ou entre em contato com nosso suporte.
             </p>
@@ -306,7 +306,7 @@ export default function HelpPage() {
                         onClick={() => toggleFaq(faq.id)}
                         className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-100/30 transition-all"
                       >
-                        <span className="font-medium text-white group-hover:text-brand-600 transition-colors pr-4">
+                        <span className="font-medium text-gray-900 group-hover:text-brand-600 transition-colors pr-4">
                           {faq.question}
                         </span>
                         <ChevronDown
@@ -424,7 +424,7 @@ export default function HelpPage() {
             <CheckCircle className="w-4 h-4" />
             <span>+50 vídeos disponíveis</span>
           </div>
-          <button className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-purple-500 hover:bg-purple-600 text-white font-medium transition-all">
+          <button className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-purple-500 hover:bg-purple-600 text-gray-900 font-medium transition-all">
             <Video className="w-4 h-4" />
             Ver Tutoriais
           </button>

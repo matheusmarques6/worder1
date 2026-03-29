@@ -239,13 +239,13 @@ function InvoiceCard({
             </span>
           </div>
 
-          <p className="text-sm text-white font-medium mb-1">
+          <p className="text-sm text-gray-700 font-medium mb-1">
             {invoice.invoice_number || invoice.invoice_key?.slice(-8) || 'Sem número'}
           </p>
 
           <div className="flex items-center gap-3 text-xs text-gray-500">
             <span>{formatDate(invoice.issue_date)}</span>
-            <span className="text-white font-medium">
+            <span className="text-gray-900 font-medium">
               {formatCurrency(invoice.total_value || 0)}
             </span>
           </div>

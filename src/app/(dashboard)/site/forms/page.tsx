@@ -92,7 +92,7 @@ const formTypeConfig: Record<FormType, { label: string; icon: React.ComponentTyp
 
 const statusConfig: Record<FormStatus, { label: string; color: string; dotColor: string }> = {
   live: { label: 'Ativo', color: 'bg-emerald-500/10 text-emerald-400', dotColor: 'bg-emerald-400' },
-  draft: { label: 'Rascunho', color: 'bg-zinc-500/10 text-zinc-400', dotColor: 'bg-zinc-400' },
+  draft: { label: 'Rascunho', color: 'bg-zinc-500/10 text-gray-500', dotColor: 'bg-zinc-400' },
   paused: { label: 'Pausado', color: 'bg-yellow-500/10 text-yellow-400', dotColor: 'bg-yellow-400' },
 }
 
@@ -296,13 +296,13 @@ export default function FormsPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push('/site')}
-            className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
           >
             <ArrowLeft size={18} weight="bold" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold font-display text-white">Formulários de Captura</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">
+            <h1 className="text-2xl font-bold font-display text-gray-900">Formulários de Captura</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
               Pop-ups, flyouts, banners e formulários inline para captura de leads
             </p>
           </div>
@@ -326,12 +326,12 @@ export default function FormsPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5"
+              className="bg-white/50 border border-gray-200 rounded-xl p-5"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500 font-medium">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-white mt-1">{kpi.value}</p>
+                  <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{kpi.value}</p>
                   {kpi.change && (
                     <div className="flex items-center gap-1 mt-0.5">
                       <TrendUp size={12} className="text-emerald-400" weight="bold" />
@@ -351,13 +351,13 @@ export default function FormsPage() {
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
-          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             type="text"
             placeholder="Buscar formulários..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-800/50 border border-zinc-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#F26B2A]"
+            className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500"
           />
         </div>
 
@@ -366,7 +366,7 @@ export default function FormsPage() {
           <button
             onClick={() => setTypeFilter('all')}
             className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-              typeFilter === 'all' ? 'bg-[#F26B2A] text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'
+              typeFilter === 'all' ? 'bg-[#F26B2A] text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
             }`}
           >
             Todos
@@ -376,7 +376,7 @@ export default function FormsPage() {
               key={type}
               onClick={() => setTypeFilter(type)}
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                typeFilter === type ? 'bg-[#F26B2A] text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                typeFilter === type ? 'bg-[#F26B2A] text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
               }`}
             >
               {cfg.label}
@@ -396,7 +396,7 @@ export default function FormsPage() {
               key={s.id}
               onClick={() => setStatusFilter(s.id)}
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                statusFilter === s.id ? 'bg-zinc-700 text-white' : 'bg-zinc-800/50 text-zinc-500 hover:text-zinc-300'
+                statusFilter === s.id ? 'bg-gray-100 text-white' : 'bg-gray-50/50 text-gray-500 hover:text-gray-700'
               }`}
             >
               {s.label}
@@ -408,7 +408,7 @@ export default function FormsPage() {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-          className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+          className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-900 focus:outline-none"
         >
           <option value="submitRate">Maior conversão</option>
           <option value="submissions">Mais inscrições</option>
@@ -418,19 +418,19 @@ export default function FormsPage() {
       </div>
 
       {/* Forms Table */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
+      <div className="bg-white/50 border border-gray-200 rounded-xl overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-zinc-800">
-              <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">Formulário</th>
-              <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">Tipo</th>
-              <th className="text-left text-xs text-zinc-500 font-medium p-4 pb-3">Status</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Visualizações</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Inscrições</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Taxa</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Receita</th>
-              <th className="text-center text-xs text-zinc-500 font-medium p-4 pb-3">Performance</th>
-              <th className="text-right text-xs text-zinc-500 font-medium p-4 pb-3">Ações</th>
+            <tr className="border-b border-gray-200">
+              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Formulário</th>
+              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Tipo</th>
+              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Status</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Visualizações</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Inscrições</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Taxa</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Receita</th>
+              <th className="text-center text-xs text-gray-500 font-medium p-4 pb-3">Performance</th>
+              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -441,17 +441,17 @@ export default function FormsPage() {
               const TypeIcon = typeC.icon
               const PerfIcon = perfC.icon
               return (
-                <tr key={form.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors group">
+                <tr key={form.id} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors group">
                   <td className="p-4">
                     <div>
-                      <p className="text-sm text-white font-medium">{form.name}</p>
-                      <p className="text-xs text-zinc-600 mt-0.5">Lista: {form.list}</p>
+                      <p className="text-sm text-gray-700 font-medium">{form.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Lista: {form.list}</p>
                     </div>
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-2">
                       <TypeIcon size={14} className={typeC.color} weight="fill" />
-                      <span className="text-xs text-zinc-400">{typeC.label}</span>
+                      <span className="text-xs text-gray-500">{typeC.label}</span>
                     </div>
                   </td>
                   <td className="p-4">
@@ -463,28 +463,28 @@ export default function FormsPage() {
                     </div>
                   </td>
                   <td className="p-4 text-right">
-                    <span className="text-sm text-zinc-300">{form.views.toLocaleString('pt-BR')}</span>
+                    <span className="text-sm text-gray-700">{form.views.toLocaleString('pt-BR')}</span>
                   </td>
                   <td className="p-4 text-right">
-                    <span className="text-sm text-white font-medium">{form.submissions.toLocaleString('pt-BR')}</span>
+                    <span className="text-sm text-gray-700 font-medium">{form.submissions.toLocaleString('pt-BR')}</span>
                   </td>
                   <td className="p-4 text-right">
                     <span className={`text-sm font-semibold ${
                       form.submitRate >= 15 ? 'text-emerald-400' :
                       form.submitRate >= 8 ? 'text-blue-400' :
                       form.submitRate >= 4 ? 'text-yellow-400' :
-                      'text-zinc-400'
+                      'text-gray-500'
                     }`}>
                       {form.submitRate.toFixed(1)}%
                     </span>
                   </td>
                   <td className="p-4 text-right">
                     {form.revenue > 0 ? (
-                      <span className="text-sm text-white font-medium">
+                      <span className="text-sm text-gray-700 font-medium">
                         R$ {form.revenue.toLocaleString('pt-BR')}
                       </span>
                     ) : (
-                      <span className="text-xs text-zinc-600">—</span>
+                      <span className="text-xs text-gray-400">—</span>
                     )}
                   </td>
                   <td className="p-4 text-center">
@@ -495,17 +495,17 @@ export default function FormsPage() {
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1.5 rounded hover:bg-zinc-800 transition-colors" title="Editar">
-                        <PencilSimple size={14} className="text-zinc-500 hover:text-white" />
+                      <button className="p-1.5 rounded hover:bg-gray-50 transition-colors" title="Editar">
+                        <PencilSimple size={14} className="text-gray-500 hover:text-white" />
                       </button>
-                      <button className="p-1.5 rounded hover:bg-zinc-800 transition-colors" title="Duplicar">
-                        <Copy size={14} className="text-zinc-500 hover:text-white" />
+                      <button className="p-1.5 rounded hover:bg-gray-50 transition-colors" title="Duplicar">
+                        <Copy size={14} className="text-gray-500 hover:text-white" />
                       </button>
-                      <button className="p-1.5 rounded hover:bg-zinc-800 transition-colors" title="Analytics">
-                        <ChartLineUp size={14} className="text-zinc-500 hover:text-white" />
+                      <button className="p-1.5 rounded hover:bg-gray-50 transition-colors" title="Analytics">
+                        <ChartLineUp size={14} className="text-gray-500 hover:text-white" />
                       </button>
                       <button className="p-1.5 rounded hover:bg-red-500/10 transition-colors" title="Excluir">
-                        <Trash size={14} className="text-zinc-500 hover:text-red-400" />
+                        <Trash size={14} className="text-gray-500 hover:text-red-400" />
                       </button>
                     </div>
                   </td>
@@ -518,38 +518,38 @@ export default function FormsPage() {
         {filtered.length === 0 && (
           <div className="py-16 text-center">
             <FileText size={32} className="text-zinc-700 mx-auto mb-3" weight="duotone" />
-            <p className="text-sm text-zinc-400">Nenhum formulário encontrado</p>
-            <p className="text-xs text-zinc-600 mt-1">Ajuste os filtros ou crie um novo formulário</p>
+            <p className="text-sm text-gray-500">Nenhum formulário encontrado</p>
+            <p className="text-xs text-gray-400 mt-1">Ajuste os filtros ou crie um novo formulário</p>
           </div>
         )}
       </div>
 
       {/* Tips Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-3">
             <Target size={20} className="text-emerald-400" weight="duotone" />
           </div>
-          <h4 className="text-sm font-semibold text-white mb-1">Segmentação Inteligente</h4>
-          <p className="text-xs text-zinc-500 leading-relaxed">
+          <h4 className="text-sm font-semibold text-gray-900 mb-1">Segmentação Inteligente</h4>
+          <p className="text-xs text-gray-500 leading-relaxed">
             Exiba formulários diferentes para visitantes novos vs. recorrentes. Taxa de conversão aumenta em até 40%.
           </p>
         </div>
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
           <div className="w-10 h-10 rounded-xl bg-[#F26B2A]/10 flex items-center justify-center mb-3">
             <Timer size={20} className="text-[#F26B2A]" weight="duotone" />
           </div>
-          <h4 className="text-sm font-semibold text-white mb-1">Exit Intent</h4>
-          <p className="text-xs text-zinc-500 leading-relaxed">
+          <h4 className="text-sm font-semibold text-gray-900 mb-1">Exit Intent</h4>
+          <p className="text-xs text-gray-500 leading-relaxed">
             Capture visitantes que estão prestes a sair com pop-ups de exit intent. Recupere até 15% de abandono.
           </p>
         </div>
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
           <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center mb-3">
             <Star size={20} className="text-purple-400" weight="duotone" />
           </div>
-          <h4 className="text-sm font-semibold text-white mb-1">Gamificação</h4>
-          <p className="text-xs text-zinc-500 leading-relaxed">
+          <h4 className="text-sm font-semibold text-gray-900 mb-1">Gamificação</h4>
+          <p className="text-xs text-gray-500 leading-relaxed">
             Formulários com Spin the Wheel têm taxa de conversão 3x maior que pop-ups tradicionais.
           </p>
         </div>
@@ -570,24 +570,24 @@ export default function FormsPage() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-[#111111] border border-zinc-800 rounded-2xl w-full max-w-4xl mx-4 mb-8 overflow-hidden shadow-2xl"
+              className="bg-[#111111] border border-gray-200 rounded-2xl w-full max-w-4xl mx-4 mb-8 overflow-hidden shadow-2xl"
             >
               {/* Modal Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                 <div>
-                  <h2 className="text-lg font-bold text-white">Criar Novo Formulário</h2>
-                  <p className="text-xs text-zinc-500 mt-0.5">Escolha um template para começar ou comece do zero</p>
+                  <h2 className="text-lg font-bold text-gray-900">Criar Novo Formulário</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Escolha um template para começar ou comece do zero</p>
                 </div>
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-white transition-colors"
+                  className="p-2 rounded-lg hover:bg-gray-50 text-gray-500 hover:text-white transition-colors"
                 >
                   <X size={18} />
                 </button>
               </div>
 
               {/* Template Categories */}
-              <div className="px-6 pt-4 pb-2 border-b border-zinc-800/50">
+              <div className="px-6 pt-4 pb-2 border-b border-gray-200/50">
                 <div className="flex gap-1 overflow-x-auto pb-2">
                   {templateCategories.map((cat) => (
                     <button
@@ -596,7 +596,7 @@ export default function FormsPage() {
                       className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
                         templateCategory === cat.id
                           ? 'bg-[#F26B2A] text-white'
-                          : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                          : 'bg-gray-50 text-gray-500 hover:text-white'
                       }`}
                     >
                       {cat.label}
@@ -614,18 +614,18 @@ export default function FormsPage() {
                     return (
                       <button
                         key={template.id}
-                        className="relative bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-left hover:border-[#F26B2A]/40 hover:bg-[#F26B2A]/[0.02] transition-all group"
+                        className="relative bg-white/50 border border-gray-200 rounded-xl p-4 text-left hover:border-[#F26B2A]/40 hover:bg-[#F26B2A]/[0.02] transition-all group"
                       >
                         {template.popular && (
                           <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 bg-[#F26B2A] text-white text-[9px] font-bold rounded-full">
                             Popular
                           </span>
                         )}
-                        <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center mb-3 group-hover:bg-[#F26B2A]/10 transition-colors">
-                          <Icon size={20} className="text-zinc-400 group-hover:text-[#F26B2A] transition-colors" weight="duotone" />
+                        <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center mb-3 group-hover:bg-[#F26B2A]/10 transition-colors">
+                          <Icon size={20} className="text-gray-500 group-hover:text-[#F26B2A] transition-colors" weight="duotone" />
                         </div>
-                        <p className="text-sm text-white font-medium">{template.name}</p>
-                        <p className="text-[11px] text-zinc-600 mt-1 leading-relaxed">{template.preview}</p>
+                        <p className="text-sm text-gray-700 font-medium">{template.name}</p>
+                        <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">{template.preview}</p>
                         <div className="flex items-center gap-1.5 mt-2.5">
                           <span className={`text-[10px] ${typeC.color}`}>{typeC.label}</span>
                         </div>
@@ -636,18 +636,18 @@ export default function FormsPage() {
               </div>
 
               {/* Modal Footer */}
-              <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800 bg-zinc-900/30">
-                <p className="text-xs text-zinc-600">
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-white/30">
+                <p className="text-xs text-gray-400">
                   {filteredTemplates.length} templates disponíveis
                 </p>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setShowCreateModal(false)}
-                    className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                    className="px-4 py-2 text-sm text-gray-500 hover:text-white transition-colors"
                   >
                     Cancelar
                   </button>
-                  <button className="flex items-center gap-2 px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 text-sm">
+                  <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-sm">
                     <FileText size={14} />
                     Começar em Branco
                   </button>

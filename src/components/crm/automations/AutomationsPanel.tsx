@@ -319,7 +319,7 @@ export function AutomationsPanel() {
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h4 className="font-medium text-white truncate">{rule.name}</h4>
+              <h4 className="font-medium text-gray-900 truncate">{rule.name}</h4>
               {!rule.is_enabled && (
                 <span className="text-xs text-gray-400">(inativo)</span>
               )}
@@ -427,7 +427,7 @@ export function AutomationsPanel() {
               <Icon className="w-5 h-5" />
             </div>
             <div className="text-left">
-              <h4 className="font-medium text-white">{name}</h4>
+              <h4 className="font-medium text-gray-900">{name}</h4>
               <p className="text-xs text-gray-500">
                 {activeCount} regra{activeCount !== 1 ? 's' : ''} ativa{activeCount !== 1 ? 's' : ''}
               </p>
@@ -581,7 +581,7 @@ export function AutomationsPanel() {
           {connectedSources.length === 0 ? (
             <div className="p-8 bg-gray-50 border border-gray-200 rounded-xl text-center">
               <Zap className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <h4 className="font-medium text-white mb-2">Nenhuma integração conectada</h4>
+              <h4 className="font-medium text-gray-900 mb-2">Nenhuma integração conectada</h4>
               <p className="text-sm text-gray-500 mb-4">
                 Conecte uma integração para configurar automações
               </p>

@@ -382,7 +382,7 @@ export default function FormBuilderPage() {
           <button
             onClick={saveFields}
             disabled={isSaving}
-            className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 text-white rounded-xl font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 text-gray-900 rounded-xl font-medium transition-colors"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Salvar
@@ -403,7 +403,7 @@ export default function FormBuilderPage() {
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               activeTab === tab.id
-                ? 'bg-gray-100 text-white'
+                ? 'bg-gray-100 text-gray-900'
                 : 'text-gray-500 hover:text-white'
             }`}
           >
@@ -473,7 +473,7 @@ export default function FormBuilderPage() {
                                 type="text"
                                 value={field.label}
                                 onChange={(e) => updateField(field.id, { label: e.target.value })}
-                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                               />
                             </div>
                             <div>
@@ -482,7 +482,7 @@ export default function FormBuilderPage() {
                                 type="text"
                                 value={field.placeholder || ''}
                                 onChange={(e) => updateField(field.id, { placeholder: e.target.value })}
-                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                               />
                             </div>
                             <div>
@@ -490,7 +490,7 @@ export default function FormBuilderPage() {
                               <select
                                 value={field.map_to_contact_field || ''}
                                 onChange={(e) => updateField(field.id, { map_to_contact_field: e.target.value || null })}
-                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                               >
                                 {contactFieldOptions.map(opt => (
                                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -525,7 +525,7 @@ export default function FormBuilderPage() {
                                         newOptions[optIndex] = { ...newOptions[optIndex], label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, '_') }
                                         updateField(field.id, { options: newOptions })
                                       }}
-                                      className="flex-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                                      className="flex-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                                     />
                                     <button
                                       onClick={() => {
@@ -630,7 +630,7 @@ export default function FormBuilderPage() {
                                 type="text"
                                 value={event.name}
                                 onChange={(e) => updateEvent(event.id, { name: e.target.value })}
-                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                               />
                             </div>
                             <div>
@@ -638,7 +638,7 @@ export default function FormBuilderPage() {
                               <select
                                 value={event.event_name}
                                 onChange={(e) => updateEvent(event.id, { event_name: e.target.value })}
-                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                               >
                                 <option value="Lead">Lead</option>
                                 <option value="CompleteRegistration">CompleteRegistration (Lead Qualificado)</option>
@@ -653,7 +653,7 @@ export default function FormBuilderPage() {
                               <select
                                 value={event.trigger_type}
                                 onChange={(e) => updateEvent(event.id, { trigger_type: e.target.value })}
-                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                               >
                                 <option value="on_submit">Quando formulario e submetido</option>
                                 <option value="on_condition">Quando condicoes sao atendidas</option>
@@ -668,7 +668,7 @@ export default function FormBuilderPage() {
                                 value={event.event_value || ''}
                                 onChange={(e) => updateEvent(event.id, { event_value: e.target.value ? parseFloat(e.target.value) : null })}
                                 placeholder="Opcional"
-                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                               />
                             </div>
                           </div>
@@ -717,7 +717,7 @@ export default function FormBuilderPage() {
                                       newConds[condIndex] = { ...newConds[condIndex], field_id: e.target.value }
                                       updateEvent(event.id, { conditions: newConds })
                                     }}
-                                    className="flex-1 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-white"
+                                    className="flex-1 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-600"
                                   >
                                     <option value="">Selecione campo</option>
                                     {fields.map(f => (
@@ -731,7 +731,7 @@ export default function FormBuilderPage() {
                                       newConds[condIndex] = { ...newConds[condIndex], operator: e.target.value }
                                       updateEvent(event.id, { conditions: newConds })
                                     }}
-                                    className="px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-white"
+                                    className="px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-600"
                                   >
                                     <option value="equals">Igual a</option>
                                     <option value="contains">Contem</option>
@@ -750,7 +750,7 @@ export default function FormBuilderPage() {
                                       updateEvent(event.id, { conditions: newConds })
                                     }}
                                     placeholder="Valor"
-                                    className="flex-1 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-white"
+                                    className="flex-1 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-600"
                                   />
                                   <button
                                     onClick={() => {
@@ -797,14 +797,14 @@ export default function FormBuilderPage() {
             <div className="space-y-6">
               {/* Pipeline Config */}
               <div className="p-5 bg-white border border-gray-200 rounded-xl">
-                <h3 className="text-base font-semibold text-white mb-4">Pipeline CRM</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-4">Pipeline CRM</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Pipeline</label>
                     <select
                       value={form.pipeline_id || ''}
                       onChange={(e) => saveFormSettings({ pipeline_id: e.target.value || null })}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                     >
                       <option value="">Nenhum pipeline</option>
                       {pipelines.map(p => (
@@ -818,7 +818,7 @@ export default function FormBuilderPage() {
                       <select
                         value={form.stage_id || ''}
                         onChange={(e) => saveFormSettings({ stage_id: e.target.value || null })}
-                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                       >
                         <option value="">Primeiro estagio</option>
                         {pipelines.find(p => p.id === form.pipeline_id)?.stages?.map((s: any) => (
@@ -832,7 +832,7 @@ export default function FormBuilderPage() {
 
               {/* Tracking Pixels */}
               <div className="p-5 bg-white border border-gray-200 rounded-xl">
-                <h3 className="text-base font-semibold text-white mb-4">Pixels de Rastreamento</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-4">Pixels de Rastreamento</h3>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Facebook Pixel ID</label>
@@ -842,7 +842,7 @@ export default function FormBuilderPage() {
                       onChange={(e) => setForm(prev => prev ? { ...prev, facebook_pixel_id: e.target.value } : null)}
                       onBlur={(e) => saveFormSettings({ facebook_pixel_id: e.target.value || null })}
                       placeholder="Ex: 1234567890"
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                     />
                   </div>
                   <div>
@@ -853,7 +853,7 @@ export default function FormBuilderPage() {
                       onChange={(e) => setForm(prev => prev ? { ...prev, google_ads_id: e.target.value } : null)}
                       onBlur={(e) => saveFormSettings({ google_ads_id: e.target.value || null })}
                       placeholder="Ex: AW-123456789"
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                     />
                   </div>
                   <div>
@@ -864,7 +864,7 @@ export default function FormBuilderPage() {
                       onChange={(e) => setForm(prev => prev ? { ...prev, google_analytics_id: e.target.value } : null)}
                       onBlur={(e) => saveFormSettings({ google_analytics_id: e.target.value || null })}
                       placeholder="Ex: G-XXXXXXXXXX"
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                     />
                   </div>
                 </div>
@@ -872,7 +872,7 @@ export default function FormBuilderPage() {
 
               {/* Success Config */}
               <div className="p-5 bg-white border border-gray-200 rounded-xl">
-                <h3 className="text-base font-semibold text-white mb-4">Apos Envio</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-4">Apos Envio</h3>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Mensagem de Sucesso</label>
@@ -881,7 +881,7 @@ export default function FormBuilderPage() {
                       onChange={(e) => setForm(prev => prev ? { ...prev, success_message: e.target.value } : null)}
                       onBlur={(e) => saveFormSettings({ success_message: e.target.value })}
                       rows={3}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500 resize-none"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500 resize-none"
                     />
                   </div>
                   <div>
@@ -892,7 +892,7 @@ export default function FormBuilderPage() {
                       onChange={(e) => setForm(prev => prev ? { ...prev, redirect_url: e.target.value } : null)}
                       onBlur={(e) => saveFormSettings({ redirect_url: e.target.value || null })}
                       placeholder="https://seusite.com/obrigado"
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
                     />
                     <p className="text-xs text-gray-400 mt-1">Se preenchido, o lead sera redirecionado para esta URL apos o envio. Use para paginas de obrigado com eventos de &quot;Reuniao Marcada&quot;.</p>
                   </div>
@@ -916,7 +916,7 @@ export default function FormBuilderPage() {
 
               {/* iFrame embed */}
               <div className="p-5 bg-white border border-gray-200 rounded-xl">
-                <h3 className="text-base font-semibold text-white mb-2">Incorporar via iFrame</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-2">Incorporar via iFrame</h3>
                 <p className="text-xs text-gray-500 mb-4">Cole este codigo no HTML do seu site onde deseja exibir o formulario.</p>
                 <div className="relative">
                   <pre className="p-4 bg-white rounded-lg text-xs text-green-400 overflow-x-auto whitespace-pre-wrap">
@@ -933,7 +933,7 @@ export default function FormBuilderPage() {
 
               {/* Direct link */}
               <div className="p-5 bg-white border border-gray-200 rounded-xl">
-                <h3 className="text-base font-semibold text-white mb-2">Link Direto</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-2">Link Direto</h3>
                 <p className="text-xs text-gray-500 mb-4">Compartilhe este link diretamente com seus leads.</p>
                 <div className="flex items-center gap-2">
                   <input
@@ -958,7 +958,7 @@ export default function FormBuilderPage() {
         <div className="lg:col-span-1">
           <div className="sticky top-20">
             <div className="p-5 bg-white border border-gray-200 rounded-xl">
-              <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+              <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <Eye className="w-4 h-4" />
                 Preview
               </h3>

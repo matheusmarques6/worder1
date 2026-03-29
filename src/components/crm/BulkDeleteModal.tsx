@@ -174,7 +174,7 @@ export function BulkDeleteModal({
                 <div className="p-4 bg-green-500/20 rounded-full mb-4">
                   <CheckCircle className="w-12 h-12 text-green-400" />
                 </div>
-                <p className="text-lg font-medium text-white">
+                <p className="text-lg font-medium text-gray-900">
                   Contatos excluídos com sucesso!
                 </p>
               </div>
@@ -245,7 +245,7 @@ export function BulkDeleteModal({
                       className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500"
                     />
                     <div className="flex-1">
-                      <p className="text-sm text-white">Excluir deals associados</p>
+                      <p className="text-sm text-gray-700">Excluir deals associados</p>
                       <p className="text-xs text-gray-400">
                         {deleteDeals 
                           ? `${preview.dealsCount} deal(s) serão excluídos`
@@ -263,7 +263,7 @@ export function BulkDeleteModal({
                       className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500"
                     />
                     <div className="flex-1">
-                      <p className="text-sm text-white">Excluir conversas WhatsApp</p>
+                      <p className="text-sm text-gray-700">Excluir conversas WhatsApp</p>
                       <p className="text-xs text-gray-400">
                         {deleteConversations 
                           ? `${preview.conversationsCount} conversa(s) e mensagens serão excluídas`

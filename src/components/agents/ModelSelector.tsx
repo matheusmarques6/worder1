@@ -150,7 +150,7 @@ export default function ModelSelector({
                   <Brain className={`w-4 h-4 ${currentProviderInfo.color}`} />
                 </div>
                 <div className="text-left">
-                  <p className="text-sm text-white">{currentModel?.name || model}</p>
+                  <p className="text-sm text-gray-700">{currentModel?.name || model}</p>
                   {currentModel?.description && (
                     <p className="text-xs text-gray-400">{currentModel.description}</p>
                   )}
@@ -182,7 +182,7 @@ export default function ModelSelector({
                     >
                       <Brain className={`w-4 h-4 ${model === m.id ? 'text-brand-600' : 'text-gray-400'}`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white">{m.name}</p>
+                        <p className="text-sm text-gray-700">{m.name}</p>
                         {m.description && (
                           <p className="text-xs text-gray-400 truncate">{m.description}</p>
                         )}

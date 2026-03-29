@@ -87,7 +87,7 @@ export function HourlyHeatmap({
               >
                 {/* Tooltip */}
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                  <p className="font-medium text-white">{item.hour.toString().padStart(2, '0')}:00</p>
+                  <p className="font-medium text-gray-900">{item.hour.toString().padStart(2, '0')}:00</p>
                   {item.sent !== undefined && (
                     <p className="text-gray-600">Enviadas: {item.sent?.toLocaleString()}</p>
                   )}
@@ -145,13 +145,13 @@ export function HourlyHeatmap({
         <div className="flex items-center gap-4 text-xs">
           <div>
             <span className="text-gray-500">Pico: </span>
-            <span className="text-white font-medium">
+            <span className="text-gray-900 font-medium">
               {findPeakHour(data, metric)}
             </span>
           </div>
           <div>
             <span className="text-gray-500">Baixa: </span>
-            <span className="text-white font-medium">
+            <span className="text-gray-900 font-medium">
               {findLowHour(data, metric)}
             </span>
           </div>

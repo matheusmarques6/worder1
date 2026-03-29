@@ -368,7 +368,7 @@ export default function EvolutionConnect() {
       <form onSubmit={handleCreate} className="p-6 bg-white border border-gray-200 rounded-xl space-y-5">
         <div className="flex items-center gap-3">
           <Plus className="w-5 h-5 text-green-400" />
-          <h3 className="font-semibold text-white">Nova Instância</h3>
+          <h3 className="font-semibold text-gray-900">Nova Instância</h3>
         </div>
         
         <div>
@@ -443,7 +443,7 @@ export default function EvolutionConnect() {
 
       {/* Instances List */}
       <div className="space-y-4">
-        <h3 className="font-semibold text-white">Instâncias</h3>
+        <h3 className="font-semibold text-gray-900">Instâncias</h3>
         
         {instances.length === 0 ? (
           <div className="text-center py-16 bg-gray-50 border border-gray-200 rounded-xl">
@@ -467,7 +467,7 @@ export default function EvolutionConnect() {
                       }`} />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-white">{instance.title || instance.instance_name}</h4>
+                      <h4 className="font-semibold text-gray-900">{instance.title || instance.instance_name}</h4>
                       <p className="text-sm text-gray-500">
                         {instance.phone_number || 'Não conectado'}
                       </p>

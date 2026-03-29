@@ -64,16 +64,16 @@ export default function DeliverabilityPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display text-white">Entregabilidade</h1>
-          <p className="text-sm text-zinc-400 mt-1">Monitore a saúde dos seus envios e reputação de domínio</p>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Entregabilidade</h1>
+          <p className="text-sm text-gray-500 mt-1">Monitore a saúde dos seus envios e reputação de domínio</p>
         </div>
-        <div className="flex bg-zinc-800/50 rounded-lg p-1">
+        <div className="flex bg-gray-50/50 rounded-lg p-1">
           {['7d', '30d', '90d'].map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
               className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                period === p ? 'bg-[#F26B2A] text-white' : 'text-zinc-400 hover:text-white'
+                period === p ? 'bg-[#F26B2A] text-white' : 'text-gray-500 hover:text-white'
               }`}
             >
               {p}
@@ -92,13 +92,13 @@ export default function DeliverabilityPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4"
+              className="bg-white/50 border border-gray-200 rounded-xl p-4"
             >
               <div className="flex items-center gap-2 mb-2">
-                <Icon size={16} className="text-zinc-500" />
-                <span className="text-xs text-zinc-500">{kpi.title}</span>
+                <Icon size={16} className="text-gray-500" />
+                <span className="text-xs text-gray-500">{kpi.title}</span>
               </div>
-              <p className="text-xl font-bold text-white">{kpi.value}</p>
+              <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
               <span className={`text-xs ${kpi.positive ? 'text-emerald-400' : 'text-red-400'}`}>
                 {kpi.change}
               </span>
@@ -108,8 +108,8 @@ export default function DeliverabilityPage() {
       </div>
 
       {/* Delivery Chart */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4">Volume de Entrega</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Volume de Entrega</h3>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={deliveryData}>
             <defs>
@@ -134,25 +134,25 @@ export default function DeliverabilityPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* ISP Breakdown */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4">Performance por Provedor</h3>
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Performance por Provedor</h3>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-zinc-800">
-                  <th className="text-left text-xs text-zinc-500 font-medium pb-3">Provedor</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium pb-3">Entrega</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium pb-3">Aberturas</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium pb-3">Inbox</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium pb-3">Spam</th>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left text-xs text-gray-500 font-medium pb-3">Provedor</th>
+                  <th className="text-right text-xs text-gray-500 font-medium pb-3">Entrega</th>
+                  <th className="text-right text-xs text-gray-500 font-medium pb-3">Aberturas</th>
+                  <th className="text-right text-xs text-gray-500 font-medium pb-3">Inbox</th>
+                  <th className="text-right text-xs text-gray-500 font-medium pb-3">Spam</th>
                 </tr>
               </thead>
               <tbody>
                 {ispData.map((isp) => (
-                  <tr key={isp.name} className="border-b border-zinc-800/50">
-                    <td className="py-3 text-sm text-white font-medium">{isp.name}</td>
-                    <td className="py-3 text-sm text-zinc-400 text-right">{isp.delivered}%</td>
-                    <td className="py-3 text-sm text-zinc-400 text-right">{isp.opens}%</td>
+                  <tr key={isp.name} className="border-b border-gray-200/50">
+                    <td className="py-3 text-sm text-gray-700 font-medium">{isp.name}</td>
+                    <td className="py-3 text-sm text-gray-500 text-right">{isp.delivered}%</td>
+                    <td className="py-3 text-sm text-gray-500 text-right">{isp.opens}%</td>
                     <td className="py-3 text-sm text-emerald-400 text-right">{isp.inbox}%</td>
                     <td className="py-3 text-sm text-red-400 text-right">{isp.spam}%</td>
                   </tr>
@@ -163,15 +163,15 @@ export default function DeliverabilityPage() {
         </div>
 
         {/* Domain Health */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4">Saúde do Domínio</h3>
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Saúde do Domínio</h3>
           <div className="space-y-4">
             {domainHealth.map((domain) => (
-              <div key={domain.domain} className="bg-zinc-800/30 rounded-lg p-4">
+              <div key={domain.domain} className="bg-gray-50/30 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Globe size={16} className="text-zinc-400" />
-                    <span className="text-sm text-white font-medium">{domain.domain}</span>
+                    <Globe size={16} className="text-gray-500" />
+                    <span className="text-sm text-gray-700 font-medium">{domain.domain}</span>
                   </div>
                   <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs rounded-full">
                     Saudável
@@ -182,25 +182,25 @@ export default function DeliverabilityPage() {
                     <div className={`mx-auto w-8 h-8 rounded-full flex items-center justify-center ${domain.spf ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
                       <ShieldCheck size={16} className={domain.spf ? 'text-emerald-400' : 'text-red-400'} />
                     </div>
-                    <span className="text-xs text-zinc-500 mt-1 block">SPF</span>
+                    <span className="text-xs text-gray-500 mt-1 block">SPF</span>
                   </div>
                   <div className="text-center">
                     <div className={`mx-auto w-8 h-8 rounded-full flex items-center justify-center ${domain.dkim ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
                       <ShieldCheck size={16} className={domain.dkim ? 'text-emerald-400' : 'text-red-400'} />
                     </div>
-                    <span className="text-xs text-zinc-500 mt-1 block">DKIM</span>
+                    <span className="text-xs text-gray-500 mt-1 block">DKIM</span>
                   </div>
                   <div className="text-center">
                     <div className={`mx-auto w-8 h-8 rounded-full flex items-center justify-center ${domain.dmarc ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
                       <ShieldCheck size={16} className={domain.dmarc ? 'text-emerald-400' : 'text-red-400'} />
                     </div>
-                    <span className="text-xs text-zinc-500 mt-1 block">DMARC</span>
+                    <span className="text-xs text-gray-500 mt-1 block">DMARC</span>
                   </div>
                   <div className="text-center">
-                    <div className="mx-auto w-8 h-8 rounded-full flex items-center justify-center bg-zinc-700">
-                      <span className="text-xs font-bold text-white">{domain.reputation}</span>
+                    <div className="mx-auto w-8 h-8 rounded-full flex items-center justify-center bg-gray-100">
+                      <span className="text-xs font-bold text-gray-900">{domain.reputation}</span>
                     </div>
-                    <span className="text-xs text-zinc-500 mt-1 block">Score</span>
+                    <span className="text-xs text-gray-500 mt-1 block">Score</span>
                   </div>
                 </div>
               </div>

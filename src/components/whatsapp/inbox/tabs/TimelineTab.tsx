@@ -336,7 +336,7 @@ function TimelineItem({ item }: { item: any }) {
       {/* Conteúdo */}
       <div className="flex-1 min-w-0 pb-3">
         <div className="p-3 bg-gray-50 rounded-xl">
-          <p className="text-sm text-white">
+          <p className="text-sm text-gray-700">
             {item.title}
           </p>
           

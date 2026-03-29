@@ -59,13 +59,13 @@ export default function FunnelPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold font-display text-white">Funil de Conversão</h1>
-        <p className="text-sm text-zinc-400 mt-1">Acompanhe cada etapa do funil de marketing</p>
+        <h1 className="text-2xl font-bold font-display text-gray-900">Funil de Conversão</h1>
+        <p className="text-sm text-gray-500 mt-1">Acompanhe cada etapa do funil de marketing</p>
       </div>
 
       {/* Visual Funnel */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-6">Funil Geral — Últimos 30 dias</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-6">Funil Geral — Últimos 30 dias</h3>
         <div className="space-y-3">
           {funnelSteps.map((step, i) => (
             <motion.div
@@ -75,9 +75,9 @@ export default function FunnelPage() {
               transition={{ delay: i * 0.1 }}
               className="flex items-center gap-4"
             >
-              <span className="text-sm text-zinc-400 w-24 text-right">{step.label}</span>
+              <span className="text-sm text-gray-500 w-24 text-right">{step.label}</span>
               <div className="flex-1 relative">
-                <div className="h-10 bg-zinc-800/30 rounded-lg overflow-hidden">
+                <div className="h-10 bg-gray-50/30 rounded-lg overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${step.pct}%` }}
@@ -85,15 +85,15 @@ export default function FunnelPage() {
                     className="h-full rounded-lg flex items-center justify-end pr-3"
                     style={{ backgroundColor: step.color + '30', borderLeft: `3px solid ${step.color}` }}
                   >
-                    <span className="text-sm font-medium text-white">
+                    <span className="text-sm font-medium text-gray-900">
                       {step.value.toLocaleString('pt-BR')}
                     </span>
                   </motion.div>
                 </div>
               </div>
-              <span className="text-sm font-medium text-zinc-300 w-16">{step.pct}%</span>
+              <span className="text-sm font-medium text-gray-700 w-16">{step.pct}%</span>
               {i < funnelSteps.length - 1 && (
-                <span className="text-xs text-zinc-600 w-20">
+                <span className="text-xs text-gray-400 w-20">
                   ↓ {((funnelSteps[i + 1].value / step.value) * 100).toFixed(1)}%
                 </span>
               )}
@@ -104,31 +104,31 @@ export default function FunnelPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Funnel by Channel */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4">Funil por Canal</h3>
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Funil por Canal</h3>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-zinc-800">
-                  <th className="text-left text-xs text-zinc-500 font-medium pb-3">Canal</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium pb-3">Envios</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium pb-3">Aberturas</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium pb-3">Cliques</th>
-                  <th className="text-right text-xs text-zinc-500 font-medium pb-3">Conv.</th>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left text-xs text-gray-500 font-medium pb-3">Canal</th>
+                  <th className="text-right text-xs text-gray-500 font-medium pb-3">Envios</th>
+                  <th className="text-right text-xs text-gray-500 font-medium pb-3">Aberturas</th>
+                  <th className="text-right text-xs text-gray-500 font-medium pb-3">Cliques</th>
+                  <th className="text-right text-xs text-gray-500 font-medium pb-3">Conv.</th>
                 </tr>
               </thead>
               <tbody>
                 {funnelByChannel.map((ch) => (
-                  <tr key={ch.channel} className="border-b border-zinc-800/50">
-                    <td className="py-3 text-sm text-white font-medium">{ch.channel}</td>
-                    <td className="py-3 text-sm text-zinc-400 text-right">{ch.sent.toLocaleString('pt-BR')}</td>
-                    <td className="py-3 text-sm text-zinc-400 text-right">
+                  <tr key={ch.channel} className="border-b border-gray-200/50">
+                    <td className="py-3 text-sm text-gray-700 font-medium">{ch.channel}</td>
+                    <td className="py-3 text-sm text-gray-500 text-right">{ch.sent.toLocaleString('pt-BR')}</td>
+                    <td className="py-3 text-sm text-gray-500 text-right">
                       {ch.opened.toLocaleString('pt-BR')}
-                      <span className="text-zinc-600 text-xs ml-1">({((ch.opened / ch.sent) * 100).toFixed(1)}%)</span>
+                      <span className="text-gray-400 text-xs ml-1">({((ch.opened / ch.sent) * 100).toFixed(1)}%)</span>
                     </td>
-                    <td className="py-3 text-sm text-zinc-400 text-right">
+                    <td className="py-3 text-sm text-gray-500 text-right">
                       {ch.clicked.toLocaleString('pt-BR')}
-                      <span className="text-zinc-600 text-xs ml-1">({((ch.clicked / ch.sent) * 100).toFixed(1)}%)</span>
+                      <span className="text-gray-400 text-xs ml-1">({((ch.clicked / ch.sent) * 100).toFixed(1)}%)</span>
                     </td>
                     <td className="py-3 text-sm text-emerald-400 font-medium text-right">
                       {ch.converted.toLocaleString('pt-BR')}
@@ -142,26 +142,26 @@ export default function FunnelPage() {
         </div>
 
         {/* Conversion by Source */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4">Conversões por Origem</h3>
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Conversões por Origem</h3>
           <div className="space-y-3">
             {conversionBySource.map((src) => (
-              <div key={src.source} className="flex items-center justify-between py-2 border-b border-zinc-800/50">
+              <div key={src.source} className="flex items-center justify-between py-2 border-b border-gray-200/50">
                 <div>
-                  <span className="text-sm text-white">{src.source}</span>
+                  <span className="text-sm text-gray-700">{src.source}</span>
                   <div className="flex items-center gap-3 mt-0.5">
-                    <span className="text-xs text-zinc-500">{src.conversions} conv.</span>
+                    <span className="text-xs text-gray-500">{src.conversions} conv.</span>
                     <span className="text-xs text-emerald-400">R$ {src.revenue.toLocaleString('pt-BR')}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-20 h-2 bg-zinc-800 rounded-full overflow-hidden">
+                  <div className="w-20 h-2 bg-gray-50 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-[#F26B2A] rounded-full"
                       style={{ width: `${Math.min(src.rate * 5, 100)}%` }}
                     />
                   </div>
-                  <span className="text-sm text-zinc-300 font-medium w-12 text-right">{src.rate}%</span>
+                  <span className="text-sm text-gray-700 font-medium w-12 text-right">{src.rate}%</span>
                 </div>
               </div>
             ))}
@@ -170,8 +170,8 @@ export default function FunnelPage() {
       </div>
 
       {/* Weekly Conversions Chart */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4">Conversões Semanais por Canal</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Conversões Semanais por Canal</h3>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={weeklyConversions}>
             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />

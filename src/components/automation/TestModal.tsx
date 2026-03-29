@@ -149,7 +149,7 @@ export function TestModal({
                   )} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-white">Usar dados de exemplo</p>
+                  <p className="font-medium text-gray-900">Usar dados de exemplo</p>
                   <p className="text-sm text-gray-500">
                     João Silva • cliente.teste@exemplo.com
                   </p>
@@ -205,11 +205,11 @@ export function TestModal({
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-semibold text-sm">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-gray-900 font-semibold text-sm">
                         {(contact.first_name?.[0] || contact.email[0]).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-white truncate">
+                        <p className="font-medium text-gray-900 truncate">
                           {contact.first_name} {contact.last_name}
                         </p>
                         <div className="flex items-center gap-3 text-xs text-gray-500">
@@ -333,7 +333,7 @@ export function TestResultPanel({
             )}
           </div>
           <div>
-            <h3 className="font-semibold text-white">
+            <h3 className="font-semibold text-gray-900">
               {success ? 'Teste concluído!' : 'Teste com erros'}
             </h3>
             <p className="text-xs text-gray-500">
@@ -353,18 +353,18 @@ export function TestResultPanel({
       <div className="flex items-center gap-4 p-4 border-b border-[#222222]">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-500" />
-          <span className="text-sm text-white">{successCount} sucesso</span>
+          <span className="text-sm text-gray-700">{successCount} sucesso</span>
         </div>
         {errorCount > 0 && (
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-red-500" />
-            <span className="text-sm text-white">{errorCount} erro</span>
+            <span className="text-sm text-gray-700">{errorCount} erro</span>
           </div>
         )}
         {skippedCount > 0 && (
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-gray-300" />
-            <span className="text-sm text-white">{skippedCount} pulado</span>
+            <span className="text-sm text-gray-700">{skippedCount} pulado</span>
           </div>
         )}
       </div>

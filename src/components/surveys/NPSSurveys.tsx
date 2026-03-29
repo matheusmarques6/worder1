@@ -255,7 +255,7 @@ export function NPSSurveys({ organizationId, storeId }: NPSSurveysProps) {
             </div>
             <div>
               <p className="text-sm text-slate-400">Pesquisas Ativas</p>
-              <p className="text-2xl font-bold text-white">{overallStats.activeSurveys}</p>
+              <p className="text-2xl font-bold text-gray-900">{overallStats.activeSurveys}</p>
             </div>
           </div>
         </motion.div>
@@ -272,7 +272,7 @@ export function NPSSurveys({ organizationId, storeId }: NPSSurveysProps) {
             </div>
             <div>
               <p className="text-sm text-slate-400">Total Respostas</p>
-              <p className="text-2xl font-bold text-white">{overallStats.totalResponses}</p>
+              <p className="text-2xl font-bold text-gray-900">{overallStats.totalResponses}</p>
             </div>
           </div>
         </motion.div>
@@ -317,7 +317,7 @@ export function NPSSurveys({ organizationId, storeId }: NPSSurveysProps) {
             </div>
             <div>
               <p className="text-sm text-slate-400">Taxa de Resposta</p>
-              <p className="text-2xl font-bold text-white">{overallStats.avgResponseRate}%</p>
+              <p className="text-2xl font-bold text-gray-900">{overallStats.avgResponseRate}%</p>
             </div>
           </div>
         </motion.div>
@@ -356,17 +356,17 @@ export function NPSSurveys({ organizationId, storeId }: NPSSurveysProps) {
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-emerald-500" />
               <span className="text-slate-400">Promotores</span>
-              <span className="font-medium text-white">{overallStats.totalPromoters}</span>
+              <span className="font-medium text-gray-900">{overallStats.totalPromoters}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-yellow-500" />
               <span className="text-slate-400">Neutros</span>
-              <span className="font-medium text-white">{overallStats.totalPassives}</span>
+              <span className="font-medium text-gray-900">{overallStats.totalPassives}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-red-500" />
               <span className="text-slate-400">Detratores</span>
-              <span className="font-medium text-white">{overallStats.totalDetractors}</span>
+              <span className="font-medium text-gray-900">{overallStats.totalDetractors}</span>
             </div>
           </div>
         </div>
@@ -464,7 +464,7 @@ export function NPSSurveys({ organizationId, storeId }: NPSSurveysProps) {
                 {/* Survey Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-medium text-white truncate">{survey.name}</h3>
+                    <h3 className="text-lg font-medium text-gray-900 truncate">{survey.name}</h3>
                     <span className={`px-2 py-0.5 text-xs rounded-full ${
                       survey.is_active
                         ? 'bg-emerald-500/20 text-emerald-400'
@@ -501,7 +501,7 @@ export function NPSSurveys({ organizationId, storeId }: NPSSurveysProps) {
                 {/* Response Rate */}
                 <div className="flex-shrink-0 text-right">
                   <p className="text-sm text-slate-400 mb-1">Taxa de Resposta</p>
-                  <p className="text-xl font-semibold text-white">
+                  <p className="text-xl font-semibold text-gray-900">
                     {typeof survey.response_rate === 'number'
                       ? `${survey.response_rate}%`
                       : isNaN(parseFloat(String(survey.response_rate)))
@@ -567,7 +567,7 @@ export function NPSSurveys({ organizationId, storeId }: NPSSurveysProps) {
             className="text-center py-12"
           >
             <BarChart3 className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchQuery || filterActive !== 'all'
                 ? 'Nenhuma pesquisa encontrada'
                 : 'Nenhuma pesquisa criada'}
@@ -721,7 +721,7 @@ function SurveyModal({ isOpen, onClose, survey, onSave }: SurveyModalProps) {
         className="w-full max-w-lg bg-slate-800 border border-slate-700 rounded-xl shadow-xl"
       >
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
-          <h2 className="text-lg font-semibold text-white">
+          <h2 className="text-lg font-semibold text-gray-900">
             {survey ? 'Editar Pesquisa' : 'Nova Pesquisa NPS'}
           </h2>
           <button
@@ -885,7 +885,7 @@ function ResponsesModal({ isOpen, onClose, survey, responses }: ResponsesModalPr
       >
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div>
-            <h2 className="text-lg font-semibold text-white">{survey.name}</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{survey.name}</h2>
             <p className="text-sm text-slate-400">{responses.length} respostas</p>
           </div>
           <button
@@ -1062,7 +1062,7 @@ function SendSurveyModal({ isOpen, onClose, survey, onSend }: SendSurveyModalPro
       >
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div>
-            <h2 className="text-lg font-semibold text-white">Enviar Pesquisa</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Enviar Pesquisa</h2>
             <p className="text-sm text-slate-400">{survey.name}</p>
           </div>
           <button

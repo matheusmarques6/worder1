@@ -107,7 +107,7 @@ export function ReportsDashboard({ organizationId, pipelineId }: ReportsDashboar
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Relatorios</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Relatorios</h2>
           <p className="text-slate-400">Analise completa de performance e ROI</p>
         </div>
 
@@ -242,7 +242,7 @@ function OverviewTab({ report }: { report: FullReport }) {
           className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Progresso da Meta</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Progresso da Meta</h3>
             <span className="text-sm text-slate-400">
               Meta: {formatCurrency(revenue.target)}
             </span>
@@ -262,7 +262,7 @@ function OverviewTab({ report }: { report: FullReport }) {
             />
           </div>
           <div className="flex items-center justify-between mt-2">
-            <span className="text-2xl font-bold text-white">
+            <span className="text-2xl font-bold text-gray-900">
               {formatCurrency(revenue.total)}
             </span>
             <span className={`text-lg font-semibold ${
@@ -282,7 +282,7 @@ function OverviewTab({ report }: { report: FullReport }) {
           transition={{ delay: 0.1 }}
           className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Tendencias</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Tendencias</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trends}>
@@ -342,7 +342,7 @@ function OverviewTab({ report }: { report: FullReport }) {
           transition={{ delay: 0.2 }}
           className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Funil de Conversao</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Funil de Conversao</h3>
           <div className="space-y-3">
             {[
               { label: 'Total Leads', value: conversions.total_leads, color: 'bg-slate-500' },
@@ -402,7 +402,7 @@ function SalesTab({ report }: { report: FullReport }) {
         animate={{ opacity: 1, y: 0 }}
         className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
       >
-        <h3 className="text-lg font-semibold text-white mb-4">Performance por Agente</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance por Agente</h3>
 
         {sales.by_agent.length === 0 ? (
           <p className="text-slate-400 text-center py-8">Nenhum dado de agentes disponivel</p>
@@ -480,7 +480,7 @@ function SalesTab({ report }: { report: FullReport }) {
           transition={{ delay: 0.1 }}
           className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Desempenho por Etapa</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Desempenho por Etapa</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {sales.by_stage.map((stage) => (
               <div
@@ -488,7 +488,7 @@ function SalesTab({ report }: { report: FullReport }) {
                 className="bg-slate-700/30 rounded-lg p-4"
               >
                 <p className="text-sm text-slate-400 mb-1">{stage.stage_name}</p>
-                <p className="text-2xl font-bold text-white">{stage.deals_count}</p>
+                <p className="text-2xl font-bold text-gray-900">{stage.deals_count}</p>
                 <div className="flex items-center justify-between mt-2 text-sm">
                   <span className="text-slate-400">Valor total</span>
                   <span className="text-violet-400">{formatCurrency(stage.total_value)}</span>
@@ -558,7 +558,7 @@ function ROITab({ report }: { report: FullReport }) {
         animate={{ opacity: 1, y: 0 }}
         className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
       >
-        <h3 className="text-lg font-semibold text-white mb-4">Investimento vs Retorno</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Investimento vs Retorno</h3>
         <div className="grid grid-cols-2 gap-8">
           <div className="text-center">
             <p className="text-sm text-slate-400 mb-2">Investimento Total</p>
@@ -585,7 +585,7 @@ function ROITab({ report }: { report: FullReport }) {
           transition={{ delay: 0.1 }}
           className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Performance de Campanhas</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance de Campanhas</h3>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -653,7 +653,7 @@ function ChannelsTab({ report }: { report: FullReport }) {
           animate={{ opacity: 1, y: 0 }}
           className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Receita por Canal</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Receita por Canal</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -691,7 +691,7 @@ function ChannelsTab({ report }: { report: FullReport }) {
           transition={{ delay: 0.1 }}
           className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Leads e Conversoes por Canal</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Leads e Conversoes por Canal</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={channels.channels}>
@@ -721,7 +721,7 @@ function ChannelsTab({ report }: { report: FullReport }) {
         transition={{ delay: 0.2 }}
         className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
       >
-        <h3 className="text-lg font-semibold text-white mb-4">Detalhes por Canal</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Detalhes por Canal</h3>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -801,7 +801,7 @@ function MetricCard({ title, value, change, subtitle, icon: Icon, color }: Metri
       </div>
       <div className="mt-3">
         <p className="text-sm text-slate-400">{title}</p>
-        <p className="text-2xl font-bold text-white mt-1">{value}</p>
+        <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
         {subtitle && <p className="text-xs text-slate-500 mt-1">{subtitle}</p>}
       </div>
     </motion.div>

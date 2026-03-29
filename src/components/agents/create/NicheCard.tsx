@@ -31,7 +31,7 @@ export function NicheCard({
         relative p-4 rounded-xl border-2 text-left transition-all duration-200
         ${selected 
           ? 'border-blue-500 bg-blue-500/10 ring-2 ring-blue-500/20' 
-          : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600 hover:bg-zinc-800'
+          : 'border-gray-200 bg-gray-50/50 hover:border-gray-200 hover:bg-gray-50'
         }
       `}
       style={{
@@ -60,8 +60,8 @@ export function NicheCard({
       </div>
 
       {/* Content */}
-      <h3 className="font-semibold text-white mb-1">{name}</h3>
-      <p className="text-sm text-zinc-400 line-clamp-2">{description}</p>
+      <h3 className="font-semibold text-gray-900 mb-1">{name}</h3>
+      <p className="text-sm text-gray-500 line-clamp-2">{description}</p>
     </motion.button>
   );
 }

@@ -122,14 +122,14 @@ const kpis = [
 
 const statusConfig: Record<string, { label: string; color: string; dotColor: string }> = {
   active: { label: 'Ativo', color: 'bg-emerald-500/10 text-emerald-400', dotColor: 'bg-emerald-400' },
-  draft: { label: 'Rascunho', color: 'bg-zinc-500/10 text-zinc-400', dotColor: 'bg-zinc-400' },
+  draft: { label: 'Rascunho', color: 'bg-zinc-500/10 text-gray-500', dotColor: 'bg-zinc-400' },
   paused: { label: 'Pausado', color: 'bg-yellow-500/10 text-yellow-400', dotColor: 'bg-yellow-400' },
 }
 
 const channelIcons: Record<string, { icon: React.ComponentType<any>; color: string }> = {
   whatsapp: { icon: WhatsappLogo, color: 'text-[#25D366]' },
   email: { icon: EnvelopeSimple, color: 'text-blue-400' },
-  chat: { icon: Globe, color: 'text-zinc-400' },
+  chat: { icon: Globe, color: 'text-gray-500' },
 }
 
 export default function SettingsAgentsPage() {
@@ -142,7 +142,7 @@ export default function SettingsAgentsPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push('/settings')}
-            className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
           >
             <ArrowLeft size={18} weight="bold" />
           </button>
@@ -150,8 +150,8 @@ export default function SettingsAgentsPage() {
             <Robot size={22} className="text-[#F26B2A]" weight="fill" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-display text-white">Agentes de IA</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">Configure agentes inteligentes para atendimento automático</p>
+            <h1 className="text-2xl font-bold font-display text-gray-900">Agentes de IA</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Configure agentes inteligentes para atendimento automático</p>
           </div>
         </div>
         <Link
@@ -173,12 +173,12 @@ export default function SettingsAgentsPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5"
+              className="bg-white/50 border border-gray-200 rounded-xl p-5"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500 font-medium">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-white mt-1">{kpi.value}</p>
+                  <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{kpi.value}</p>
                   {kpi.change && (
                     <div className="flex items-center gap-1 mt-0.5">
                       <TrendUp size={12} className="text-emerald-400" weight="bold" />
@@ -205,7 +205,7 @@ export default function SettingsAgentsPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 hover:border-zinc-700 transition-colors"
+              className="bg-white/50 border border-gray-200 rounded-xl p-6 hover:border-gray-200 transition-colors"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4 flex-1">
@@ -214,18 +214,18 @@ export default function SettingsAgentsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1">
-                      <h3 className="text-base font-semibold text-white">{agent.name}</h3>
+                      <h3 className="text-base font-semibold text-gray-900">{agent.name}</h3>
                       <div className="flex items-center gap-1.5">
                         <div className={`w-1.5 h-1.5 rounded-full ${status.dotColor} ${agent.status === 'active' ? 'animate-pulse' : ''}`} />
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.color}`}>{status.label}</span>
                       </div>
                     </div>
-                    <p className="text-sm text-zinc-400 leading-relaxed">{agent.description}</p>
+                    <p className="text-sm text-gray-500 leading-relaxed">{agent.description}</p>
 
                     {/* Channels & Model */}
                     <div className="flex items-center gap-4 mt-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-zinc-600">Canais:</span>
+                        <span className="text-xs text-gray-400">Canais:</span>
                         <div className="flex items-center gap-1">
                           {agent.channels.map((ch) => {
                             const cfg = channelIcons[ch]
@@ -237,28 +237,28 @@ export default function SettingsAgentsPage() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Sparkle size={12} className="text-purple-400" weight="fill" />
-                        <span className="text-xs text-zinc-500">{agent.model}</span>
+                        <span className="text-xs text-gray-500">{agent.model}</span>
                       </div>
-                      <span className="text-xs text-zinc-600">Último: {agent.lastActive}</span>
+                      <span className="text-xs text-gray-400">Último: {agent.lastActive}</span>
                     </div>
 
                     {/* Stats */}
                     {agent.status !== 'draft' && (
                       <div className="flex items-center gap-6 mt-4">
                         <div>
-                          <p className="text-xs text-zinc-600">Conversas</p>
-                          <p className="text-sm text-white font-medium">{agent.totalConversations.toLocaleString('pt-BR')}</p>
+                          <p className="text-xs text-gray-400">Conversas</p>
+                          <p className="text-sm text-gray-700 font-medium">{agent.totalConversations.toLocaleString('pt-BR')}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-zinc-600">Tempo de Resposta</p>
+                          <p className="text-xs text-gray-400">Tempo de Resposta</p>
                           <p className="text-sm text-emerald-400 font-medium">{agent.avgResponseTime}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-zinc-600">Resolução</p>
+                          <p className="text-xs text-gray-400">Resolução</p>
                           <p className="text-sm text-blue-400 font-medium">{agent.resolvedRate}%</p>
                         </div>
                         <div>
-                          <p className="text-xs text-zinc-600">Satisfação</p>
+                          <p className="text-xs text-gray-400">Satisfação</p>
                           <div className="flex items-center gap-1">
                             <p className="text-sm text-[#F26B2A] font-medium">{agent.satisfaction}%</p>
                             {agent.satisfaction >= 90 && <TrendUp size={12} className="text-emerald-400" weight="bold" />}
@@ -271,23 +271,23 @@ export default function SettingsAgentsPage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-1 flex-shrink-0 ml-4">
-                  <button className="p-2 rounded-lg hover:bg-zinc-800 transition-colors" title="Editar">
-                    <PencilSimple size={16} className="text-zinc-500 hover:text-white" />
+                  <button className="p-2 rounded-lg hover:bg-gray-50 transition-colors" title="Editar">
+                    <PencilSimple size={16} className="text-gray-500 hover:text-white" />
                   </button>
-                  <button className="p-2 rounded-lg hover:bg-zinc-800 transition-colors" title="Duplicar">
-                    <Copy size={16} className="text-zinc-500 hover:text-white" />
+                  <button className="p-2 rounded-lg hover:bg-gray-50 transition-colors" title="Duplicar">
+                    <Copy size={16} className="text-gray-500 hover:text-white" />
                   </button>
                   {agent.status === 'active' ? (
                     <button className="p-2 rounded-lg hover:bg-yellow-500/10 transition-colors" title="Pausar">
-                      <Pause size={16} className="text-zinc-500 hover:text-yellow-400" weight="fill" />
+                      <Pause size={16} className="text-gray-500 hover:text-yellow-400" weight="fill" />
                     </button>
                   ) : agent.status !== 'draft' ? (
                     <button className="p-2 rounded-lg hover:bg-emerald-500/10 transition-colors" title="Ativar">
-                      <Play size={16} className="text-zinc-500 hover:text-emerald-400" weight="fill" />
+                      <Play size={16} className="text-gray-500 hover:text-emerald-400" weight="fill" />
                     </button>
                   ) : null}
                   <button className="p-2 rounded-lg hover:bg-red-500/10 transition-colors" title="Excluir">
-                    <Trash size={16} className="text-zinc-500 hover:text-red-400" />
+                    <Trash size={16} className="text-gray-500 hover:text-red-400" />
                   </button>
                 </div>
               </div>
@@ -297,8 +297,8 @@ export default function SettingsAgentsPage() {
       </div>
 
       {/* Global Settings */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <GearSix size={16} className="text-[#F26B2A]" />
           Configurações Globais
         </h3>
@@ -312,10 +312,10 @@ export default function SettingsAgentsPage() {
           ].map((item) => (
             <div key={item.label} className="flex items-center justify-between py-2">
               <div>
-                <p className="text-sm text-white font-medium">{item.label}</p>
-                <p className="text-xs text-zinc-500 mt-0.5">{item.desc}</p>
+                <p className="text-sm text-gray-700 font-medium">{item.label}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
               </div>
-              <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-[#F26B2A]' : 'bg-zinc-700'}`}>
+              <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-[#F26B2A]' : 'bg-gray-100'}`}>
                 <div className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform ${item.enabled ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
               </button>
             </div>

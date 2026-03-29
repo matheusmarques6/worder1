@@ -222,8 +222,8 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
               }}
               className="w-full flex items-center gap-2 p-2 rounded-lg text-left hover:bg-white/10 transition-colors"
             >
-              <span className="text-sm text-white/80">Sem filtro</span>
-              <span className="text-xs text-white/40 ml-auto">
+              <span className="text-sm text-gray-700/80">Sem filtro</span>
+              <span className="text-xs text-gray-600/40 ml-auto">
                 {`{{${selectedVariable}}}`}
               </span>
             </button>
@@ -234,8 +234,8 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
                 className="w-full flex items-center justify-between p-2 rounded-lg text-left hover:bg-white/10 transition-colors"
               >
                 <div>
-                  <span className="text-sm text-white/80">{filter.name}</span>
-                  <p className="text-xs text-white/40">{filter.description}</p>
+                  <span className="text-sm text-gray-700/80">{filter.name}</span>
+                  <p className="text-xs text-gray-600/40">{filter.description}</p>
                 </div>
               </button>
             ))}
@@ -244,7 +244,7 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
                 setShowFilters(false);
                 setSelectedVariable(null);
               }}
-              className="w-full p-2 text-sm text-white/60 hover:text-white transition-colors"
+              className="w-full p-2 text-sm text-gray-700/60 hover:text-white transition-colors"
             >
               ← Voltar
             </button>
@@ -266,7 +266,7 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
                     )}
                   />
                   <span className="text-sm font-medium text-gray-900/80">{group.label}</span>
-                  <span className="text-xs text-white/30 ml-auto">
+                  <span className="text-xs text-gray-600/30 ml-auto">
                     {group.variables.length}
                   </span>
                 </button>
@@ -288,8 +288,8 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
                             className="w-full flex items-center justify-between p-2 rounded-lg text-left hover:bg-white/10 transition-colors group"
                           >
                             <div className="min-w-0">
-                              <span className="text-sm text-white/80">{variable.label}</span>
-                              <p className="text-xs text-white/40 truncate">
+                              <span className="text-sm text-gray-700/80">{variable.label}</span>
+                              <p className="text-xs text-gray-600/40 truncate">
                                 {variable.example || variable.description || variable.path}
                               </p>
                             </div>
@@ -314,7 +314,7 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
             ))}
 
             {filteredGroups.length === 0 && (
-              <p className="text-sm text-white/40 text-center py-4">
+              <p className="text-sm text-gray-700/40 text-center py-4">
                 Nenhuma variável encontrada
               </p>
             )}

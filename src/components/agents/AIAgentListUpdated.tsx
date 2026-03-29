@@ -157,16 +157,16 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
 
   return (
     <>
-      <div className="h-full flex flex-col bg-zinc-900">
+      <div className="h-full flex flex-col bg-white">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
               <Bot className="w-5 h-5 text-blue-400" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Agentes de IA</h2>
-              <p className="text-sm text-zinc-500">Gerencie seus assistentes inteligentes</p>
+              <p className="text-sm text-gray-500">Gerencie seus assistentes inteligentes</p>
             </div>
           </div>
 
@@ -180,7 +180,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
         </div>
 
         {/* Stats */}
-        <div className="p-4 border-b border-zinc-800">
+        <div className="p-4 border-b border-gray-200">
           {loading ? (
             <StatsGridSkeleton />
           ) : (
@@ -189,9 +189,9 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0 }}
-                className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
+                className="bg-gray-50/50 rounded-xl p-4 border border-gray-200/50"
               >
-                <div className="flex items-center gap-2 text-zinc-400 mb-1">
+                <div className="flex items-center gap-2 text-gray-500 mb-1">
                   <Bot className="w-4 h-4" />
                   <span className="text-xs">Total de Agentes</span>
                 </div>
@@ -202,7 +202,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
+                className="bg-gray-50/50 rounded-xl p-4 border border-gray-200/50"
               >
                 <div className="flex items-center gap-2 text-green-400 mb-1">
                   <Power className="w-4 h-4" />
@@ -215,7 +215,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
+                className="bg-gray-50/50 rounded-xl p-4 border border-gray-200/50"
               >
                 <div className="flex items-center gap-2 text-blue-400 mb-1">
                   <MessageSquare className="w-4 h-4" />
@@ -228,7 +228,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50"
+                className="bg-gray-50/50 rounded-xl p-4 border border-gray-200/50"
               >
                 <div className="flex items-center gap-2 text-purple-400 mb-1">
                   <TrendingUp className="w-4 h-4" />
@@ -266,18 +266,18 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
         <div className="flex items-center gap-4 p-4">
           {/* Search */}
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar agentes..."
-              className="w-full pl-10 pr-4 py-2.5 bg-zinc-800/50 border border-zinc-700/50 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500/50 transition-colors"
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50/50 border border-gray-200/50 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500/50 transition-colors"
             />
           </div>
 
           {/* Status Filter */}
-          <div className="flex bg-zinc-800/50 rounded-lg p-1 border border-zinc-700/50">
+          <div className="flex bg-gray-50/50 rounded-lg p-1 border border-gray-200/50">
             {(['all', 'active', 'inactive'] as const).map((status) => (
               <button
                 key={status}
@@ -285,7 +285,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                 className={`px-3 py-1.5 text-sm rounded-md transition-all ${
                   filterStatus === status
                     ? 'bg-blue-600 text-white'
-                    : 'text-zinc-400 hover:text-white'
+                    : 'text-gray-500 hover:text-white'
                 }`}
               >
                 {status === 'all' ? 'Todos' : status === 'active' ? 'Ativos' : 'Inativos'}
@@ -306,10 +306,10 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
             >
               <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
               <p className="text-white mb-2">Erro ao carregar agentes</p>
-              <p className="text-sm text-zinc-400 mb-4">{error}</p>
+              <p className="text-sm text-gray-500 mb-4">{error}</p>
               <button
                 onClick={fetchAgents}
-                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-xl transition-colors"
+                className="px-4 py-2 bg-gray-100 hover:bg-zinc-600 text-white rounded-xl transition-colors"
               >
                 Tentar novamente
               </button>
@@ -323,12 +323,12 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 flex items-center justify-center mb-4">
                 <Sparkles className="w-10 h-10 text-blue-400" />
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
                 {searchQuery || filterStatus !== 'all'
                   ? 'Nenhum agente encontrado'
                   : 'Crie seu primeiro agente'}
               </h3>
-              <p className="text-sm text-zinc-400 text-center max-w-md mb-6">
+              <p className="text-sm text-gray-500 text-center max-w-md mb-6">
                 {searchQuery || filterStatus !== 'all'
                   ? 'Tente ajustar os filtros de busca.'
                   : 'Agentes de IA podem responder automaticamente às mensagens dos seus clientes, 24 horas por dia.'}
@@ -355,10 +355,10 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                     transition={{ delay: index * 0.05 }}
                     whileHover={{ scale: 1.01 }}
                     onClick={() => setSelectedAgentId(agent.id)}
-                    className={`bg-zinc-800/50 border rounded-xl p-4 cursor-pointer transition-all ${
+                    className={`bg-gray-50/50 border rounded-xl p-4 cursor-pointer transition-all ${
                       agent.is_active
-                        ? 'border-zinc-700/50 hover:border-blue-500/30'
-                        : 'border-zinc-800 opacity-70 hover:opacity-100'
+                        ? 'border-gray-200/50 hover:border-blue-500/30'
+                        : 'border-gray-200 opacity-70 hover:opacity-100'
                     }`}
                   >
                     <div className="flex items-start gap-4">
@@ -367,23 +367,23 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                         className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
                           agent.is_active
                             ? 'bg-gradient-to-br from-blue-500/20 to-purple-500/20'
-                            : 'bg-zinc-700'
+                            : 'bg-gray-100'
                         }`}
                       >
                         <Bot
-                          className={`w-6 h-6 ${agent.is_active ? 'text-blue-400' : 'text-zinc-500'}`}
+                          className={`w-6 h-6 ${agent.is_active ? 'text-blue-400' : 'text-gray-500'}`}
                         />
                       </div>
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-white font-medium truncate">{agent.name}</h3>
+                          <h3 className="text-gray-900 font-medium truncate">{agent.name}</h3>
                           <span
                             className={`text-xs px-2 py-0.5 rounded-full ${
                               agent.is_active
                                 ? 'bg-green-500/20 text-green-400'
-                                : 'bg-zinc-700 text-zinc-500'
+                                : 'bg-gray-100 text-gray-500'
                             }`}
                           >
                             {agent.is_active ? 'Ativo' : 'Inativo'}
@@ -391,10 +391,10 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                         </div>
 
                         {agent.description && (
-                          <p className="text-sm text-zinc-400 truncate mb-2">{agent.description}</p>
+                          <p className="text-sm text-gray-500 truncate mb-2">{agent.description}</p>
                         )}
 
-                        <div className="flex items-center gap-4 text-xs text-zinc-500">
+                        <div className="flex items-center gap-4 text-xs text-gray-500">
                           <span className="flex items-center gap-1">
                             <Sparkles className="w-3 h-3" />
                             {agent.provider} • {agent.model}
@@ -418,7 +418,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                           className={`p-2 rounded-lg transition-colors ${
                             agent.is_active
                               ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                              : 'bg-zinc-700 text-zinc-500 hover:text-white'
+                              : 'bg-gray-100 text-gray-500 hover:text-white'
                           }`}
                           title={agent.is_active ? 'Desativar' : 'Ativar'}
                         >
@@ -437,7 +437,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                               e.stopPropagation();
                               setMenuOpenId(menuOpenId === agent.id ? null : agent.id);
                             }}
-                            className="p-2 rounded-lg bg-zinc-700/50 text-zinc-400 hover:text-white transition-colors"
+                            className="p-2 rounded-lg bg-gray-100/50 text-gray-500 hover:text-white transition-colors"
                           >
                             <MoreVertical className="w-4 h-4" />
                           </button>
@@ -448,7 +448,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
-                                className="absolute right-0 top-full mt-1 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-10"
+                                className="absolute right-0 top-full mt-1 bg-gray-50 border border-gray-200 rounded-xl shadow-xl overflow-hidden z-10"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <button
@@ -456,7 +456,7 @@ export default function AIAgentListUpdated({ organizationId }: AIAgentListProps)
                                     setSelectedAgentId(agent.id);
                                     setMenuOpenId(null);
                                   }}
-                                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors"
+                                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:text-white hover:bg-gray-100 transition-colors"
                                 >
                                   <Settings className="w-4 h-4" />
                                   Configurar

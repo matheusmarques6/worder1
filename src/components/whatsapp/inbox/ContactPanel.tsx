@@ -256,7 +256,7 @@ export function ContactPanel({
         ) : (
           <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary-500 to-accent-500 
                           flex items-center justify-center mb-4 ring-4 ring-primary-500/20">
-            <span className="text-white font-bold text-2xl">
+            <span className="text-gray-900 font-bold text-2xl">
               {getInitials(contact.name || contact.first_name || contact.phone_number)}
             </span>
           </div>
@@ -326,7 +326,7 @@ export function ContactPanel({
                 <Phone className="w-5 h-5 text-gray-500" />
                 <div className="flex-1">
                   <p className="text-xs text-gray-400">Telefone</p>
-                  <p className="text-sm text-white">{contact.phone_number || contact.whatsapp}</p>
+                  <p className="text-sm text-gray-700">{contact.phone_number || contact.whatsapp}</p>
                 </div>
               </div>
 
@@ -334,7 +334,7 @@ export function ContactPanel({
                 <Calendar className="w-5 h-5 text-gray-500" />
                 <div className="flex-1">
                   <p className="text-xs text-gray-400">Contato desde</p>
-                  <p className="text-sm text-white">{formatDate(contact.created_at)}</p>
+                  <p className="text-sm text-gray-700">{formatDate(contact.created_at)}</p>
                 </div>
               </div>
             </div>
@@ -376,7 +376,7 @@ export function ContactPanel({
                       onChange={(e) => setNewTag(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
                       placeholder="Nova tag"
-                      className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs text-white 
+                      className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs text-gray-600 
                                  placeholder:text-gray-400 focus:outline-none focus:border-primary-500 w-24"
                       autoFocus
                     />
@@ -425,7 +425,7 @@ export function ContactPanel({
                     {activeDeal.stage?.name || 'Em progresso'}
                   </span>
                 </div>
-                <h4 className="font-semibold text-white mb-1">{activeDeal.title}</h4>
+                <h4 className="font-semibold text-gray-900 mb-1">{activeDeal.title}</h4>
                 <p className="text-2xl font-bold text-brand-600 mb-1">
                   {formatCurrency(activeDeal.value)}
                 </p>
@@ -482,7 +482,7 @@ export function ContactPanel({
                         deal.status === 'lost' ? 'bg-error-500' : 'bg-warning-500'
                       }`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white truncate">{deal.title}</p>
+                        <p className="text-sm text-gray-700 truncate">{deal.title}</p>
                         <p className="text-xs text-gray-500">
                           {formatCurrency(deal.value)}
                         </p>
@@ -554,7 +554,7 @@ export function ContactPanel({
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white">Pedido #{order.order_number}</p>
+                        <p className="text-sm text-gray-700">Pedido #{order.order_number}</p>
                         <p className="text-xs text-gray-500">
                           {order.line_items?.length || 0} itens
                         </p>

@@ -113,7 +113,7 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
                 <span className="text-xs font-mono text-gray-400">#{ticket.ticket_number}</span>
                 <span className="text-lg">{CATEGORY_EMOJI[ticket.category] || '📋'}</span>
               </div>
-              <h4 className="font-medium text-white mt-1">{ticket.title}</h4>
+              <h4 className="font-medium text-gray-900 mt-1">{ticket.title}</h4>
             </div>
 
             {/* Menu */}
@@ -132,7 +132,7 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
                       onStatusChange(ticket.id, 'in_progress')
                       setShowMenu(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-200"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200"
                   >
                     <Clock className="w-4 h-4" />
                     Em Andamento
@@ -142,7 +142,7 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
                       onStatusChange(ticket.id, 'waiting_customer')
                       setShowMenu(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-200"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200"
                   >
                     <User className="w-4 h-4" />
                     Aguard. Cliente
@@ -275,7 +275,7 @@ export default function TicketsPage() {
           <button
             onClick={handleRefresh}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-white rounded-xl 
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-900 rounded-xl 
                        hover:bg-gray-200 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -336,7 +336,7 @@ export default function TicketsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por título ou #número..."
             className="w-full pl-10 pr-4 py-2 bg-gray-100 border border-gray-300 rounded-xl 
-                       text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                       text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
           />
         </div>
 
@@ -368,7 +368,7 @@ export default function TicketsPage() {
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
           className="px-3 py-1.5 bg-gray-100 border border-gray-300 rounded-lg text-sm 
-                     text-white focus:outline-none"
+                     text-gray-900 focus:outline-none"
         >
           <option value="">Todas categorias</option>
           <option value="delivery">📦 Entrega</option>
@@ -400,7 +400,7 @@ export default function TicketsPage() {
           <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
             <Ticket className="w-8 h-8 text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
             Nenhum ticket encontrado
           </h3>
           <p className="text-gray-500 max-w-sm mx-auto mb-6">

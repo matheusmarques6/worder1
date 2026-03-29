@@ -525,7 +525,7 @@ export function MoveStageRuleModal({
             {/* Active Toggle */}
             <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl">
               <div>
-                <p className="text-sm text-white">Regra Ativa</p>
+                <p className="text-sm text-gray-700">Regra Ativa</p>
                 <p className="text-xs text-gray-400">Regras inativas não movem deals</p>
               </div>
               <button

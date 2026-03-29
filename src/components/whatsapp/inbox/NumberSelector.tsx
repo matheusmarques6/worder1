@@ -369,7 +369,7 @@ export function NumberSelectorCompact({
         <div className={`w-2 h-2 rounded-full ${
           selectedNumber?.is_connected ? 'bg-green-400' : 'bg-yellow-400'
         }`} />
-        <span className="text-sm text-white">
+        <span className="text-sm text-gray-700">
           {selectedNumber?.display_name || selectedNumber?.phone_number || 'Todos'}
         </span>
         <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -393,7 +393,7 @@ export function NumberSelectorCompact({
               }`}
             >
               <Users className="w-4 h-4 text-gray-500" />
-              <span className="text-sm text-white">Todos</span>
+              <span className="text-sm text-gray-700">Todos</span>
               {!selectedNumberId && <Check className="w-4 h-4 text-brand-600 ml-auto" />}
             </button>
 
@@ -411,7 +411,7 @@ export function NumberSelectorCompact({
                 <div className={`w-2 h-2 rounded-full ${
                   number.is_connected ? 'bg-green-400' : 'bg-red-400'
                 }`} />
-                <span className="text-sm text-white truncate">
+                <span className="text-sm text-gray-700 truncate">
                   {number.display_name || number.phone_number}
                 </span>
                 {selectedNumberId === number.id && (

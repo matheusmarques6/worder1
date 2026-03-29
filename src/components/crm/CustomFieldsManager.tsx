@@ -308,7 +308,7 @@ export function CustomFieldsManager({
                     
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-white">{field.label}</span>
+                        <span className="font-medium text-gray-900">{field.label}</span>
                         {field.isRequired && (
                           <span className="text-xs text-red-400">*</span>
                         )}
@@ -346,7 +346,7 @@ export function CustomFieldsManager({
                 {/* Add/Edit Form */}
                 {(showAddForm || editingField) && (
                   <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
-                    <h3 className="font-medium text-white">
+                    <h3 className="font-medium text-gray-900">
                       {editingField ? 'Editar Campo' : 'Novo Campo'}
                     </h3>
                     

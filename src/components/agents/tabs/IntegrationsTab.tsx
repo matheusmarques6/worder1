@@ -231,7 +231,7 @@ export default function IntegrationsTab({
           <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
             <ShoppingBag className="w-8 h-8 text-gray-400" />
           </div>
-          <h4 className="text-lg font-medium text-white mb-2">Nenhuma integração conectada</h4>
+          <h4 className="text-lg font-medium text-gray-900 mb-2">Nenhuma integração conectada</h4>
           <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
             Conecte sua loja virtual para que o agente possa consultar produtos,
             preços e status de pedidos em tempo real.
@@ -273,7 +273,7 @@ export default function IntegrationsTab({
 
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <h4 className="text-white font-medium">{typeConfig.name}</h4>
+                      <h4 className="text-gray-900 font-medium">{typeConfig.name}</h4>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
                         integration.sync_status === 'synced' 
                           ? 'bg-green-500/20 text-green-400' 
@@ -319,7 +319,7 @@ export default function IntegrationsTab({
                       <Clock className="w-4 h-4" />
                       <span className="text-xs">Última Sync</span>
                     </div>
-                    <p className="text-sm text-white">
+                    <p className="text-sm text-gray-700">
                       {integration.last_sync_at 
                         ? new Date(integration.last_sync_at).toLocaleDateString('pt-BR')
                         : 'Nunca'}
@@ -331,7 +331,7 @@ export default function IntegrationsTab({
                       <DollarSign className="w-4 h-4" />
                       <span className="text-xs">Preços</span>
                     </div>
-                    <p className="text-sm text-white">
+                    <p className="text-sm text-gray-700">
                       {integration.allow_price_info ? 'Habilitado' : 'Desabilitado'}
                     </p>
                   </div>
@@ -447,7 +447,7 @@ export default function IntegrationsTab({
                           <ShoppingBag className={`w-6 h-6 ${typeConfig.color}`} />
                         </div>
                         <div className="flex-1">
-                          <p className="text-white font-medium">{typeConfig.name}</p>
+                          <p className="text-gray-900 font-medium">{typeConfig.name}</p>
                           <p className="text-sm text-gray-400">{integration.name}</p>
                         </div>
                         <CheckCircle className="w-5 h-5 text-green-400" />

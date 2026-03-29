@@ -126,7 +126,7 @@ const MetricCard = ({
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-gray-500 mb-1">{title}</p>
-          <p className={`font-bold text-white ${small ? 'text-xl' : 'text-2xl'}`}>{formattedValue}</p>
+          <p className={`font-bold text-gray-900 ${small ? 'text-xl' : 'text-2xl'}`}>{formattedValue}</p>
         </div>
         {Icon && (
           <div className="p-2 rounded-lg bg-gray-100">
@@ -159,7 +159,7 @@ const DetailRow = ({
   <div className="flex items-center justify-between py-3 border-b border-gray-200/30 last:border-0">
     <span className={`text-sm ${isNegative ? 'text-red-400' : 'text-gray-600'}`}>{label}</span>
     <div className="flex items-center gap-3">
-      <span className={`font-medium ${isNegative ? 'text-red-400' : 'text-white'}`}>
+      <span className={`font-medium ${isNegative ? 'text-red-400' : 'text-gray-900'}`}>
         {isNegative ? '-' : ''}{formatCurrency(Math.abs(value))}
       </span>
       {change !== undefined && (
@@ -298,7 +298,7 @@ export default function ShopifyAnalyticsPage() {
                 onClick={() => setSelectedPeriod(period.id)}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
                   selectedPeriod === period.id
-                    ? 'bg-gray-100 text-white'
+                    ? 'bg-gray-100 text-gray-900'
                     : 'text-gray-500 hover:text-white'
                 }`}
               >
@@ -527,7 +527,7 @@ export default function ShopifyAnalyticsPage() {
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                   <span className="text-gray-600">{canal.nome}</span>
                 </div>
-                <span className="text-white font-medium">{formatCurrency(canal.vendas)}</span>
+                <span className="text-gray-900 font-medium">{formatCurrency(canal.vendas)}</span>
               </div>
             ))}
           </div>
@@ -573,7 +573,7 @@ export default function ShopifyAnalyticsPage() {
             {(data?.vendasPorProduto || []).slice(0, 5).map((produto: any, index: number) => (
               <div key={produto.nome} className="flex items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white truncate">{produto.nome}</p>
+                  <p className="text-sm text-gray-700 truncate">{produto.nome}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div

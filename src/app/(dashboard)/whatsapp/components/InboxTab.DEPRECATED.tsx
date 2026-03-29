@@ -1102,7 +1102,7 @@ export default function InboxTab() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && fetchConversations()}
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-brand-400"
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 text-sm focus:outline-none focus:border-brand-400"
             />
           </div>
           <div className="flex gap-2">
@@ -1187,7 +1187,7 @@ export default function InboxTab() {
                   {/* Unread Badge */}
                   {conv.unread_count > 0 && (
                     <div className="w-5 h-5 rounded-full bg-primary-500 flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-white">{conv.unread_count > 9 ? '9+' : conv.unread_count}</span>
+                      <span className="text-[10px] font-bold text-gray-900">{conv.unread_count > 9 ? '9+' : conv.unread_count}</span>
                     </div>
                   )}
                 </button>
@@ -1273,7 +1273,7 @@ export default function InboxTab() {
                             className={`max-w-[70%] p-3 rounded-2xl ${
                               msg.direction === 'outbound'
                                 ? 'bg-primary-500 text-white rounded-br-md'
-                                : 'bg-white text-white rounded-bl-md'
+                                : 'bg-white text-gray-900 rounded-bl-md'
                             }`}
                           >
                             {msg.sent_by_bot && msg.direction === 'outbound' && (
@@ -1442,7 +1442,7 @@ export default function InboxTab() {
                           <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center">
                             <FileText className="w-8 h-8 text-orange-400" />
                           </div>
-                          <p className="text-sm text-white font-medium">{mediaPreview.file.name}</p>
+                          <p className="text-sm text-gray-700 font-medium">{mediaPreview.file.name}</p>
                           <p className="text-xs text-gray-500">
                             {(mediaPreview.file.size / 1024).toFixed(1)} KB
                           </p>
@@ -1465,7 +1465,7 @@ export default function InboxTab() {
                           }
                         }}
                         placeholder="Adicionar legenda..."
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-brand-400"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 text-sm focus:outline-none focus:border-brand-400"
                       />
                     </div>
                     <button
@@ -1489,7 +1489,7 @@ export default function InboxTab() {
                   </button>
                   <div className="flex-1 flex items-center gap-3">
                     <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                    <span className="text-sm text-white font-medium">{formatRecordingTime(recordingTime)}</span>
+                    <span className="text-sm text-gray-700 font-medium">{formatRecordingTime(recordingTime)}</span>
                     <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full bg-red-500 animate-pulse" style={{ width: '100%' }} />
                     </div>
@@ -1553,7 +1553,7 @@ export default function InboxTab() {
                             <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
                               <Image className="w-4 h-4 text-purple-400" />
                             </div>
-                            <span className="text-sm text-white">Imagem</span>
+                            <span className="text-sm text-gray-700">Imagem</span>
                           </button>
                           <button
                             onClick={() => {
@@ -1567,7 +1567,7 @@ export default function InboxTab() {
                             <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
                               <Video className="w-4 h-4 text-blue-400" />
                             </div>
-                            <span className="text-sm text-white">Vídeo</span>
+                            <span className="text-sm text-gray-700">Vídeo</span>
                           </button>
                           <button
                             onClick={() => {
@@ -1581,7 +1581,7 @@ export default function InboxTab() {
                             <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center">
                               <FileText className="w-4 h-4 text-orange-400" />
                             </div>
-                            <span className="text-sm text-white">Documento</span>
+                            <span className="text-sm text-gray-700">Documento</span>
                           </button>
                           <button
                             onClick={() => {
@@ -1598,7 +1598,7 @@ export default function InboxTab() {
                             <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
                               <Camera className="w-4 h-4 text-green-400" />
                             </div>
-                            <span className="text-sm text-white">Câmera</span>
+                            <span className="text-sm text-gray-700">Câmera</span>
                           </button>
                         </motion.div>
                       )}
@@ -1614,7 +1614,7 @@ export default function InboxTab() {
                       onKeyDown={handleKeyDown}
                       placeholder="Digite sua mensagem..."
                       rows={1}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 text-sm focus:outline-none focus:border-brand-400 resize-none max-h-[120px]"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 text-sm focus:outline-none focus:border-brand-400 resize-none max-h-[120px]"
                     />
                   </div>
                   
@@ -1704,7 +1704,7 @@ export default function InboxTab() {
                           <Mail className="w-5 h-5 text-gray-500" />
                           <div className="flex-1">
                             <p className="text-xs text-gray-400">Email</p>
-                            <p className="text-sm text-white">{contact.email}</p>
+                            <p className="text-sm text-gray-700">{contact.email}</p>
                           </div>
                         </div>
                       )}
@@ -1712,7 +1712,7 @@ export default function InboxTab() {
                         <Phone className="w-5 h-5 text-gray-500" />
                         <div className="flex-1">
                           <p className="text-xs text-gray-400">Telefone</p>
-                          <p className="text-sm text-white">{contact.phone_number}</p>
+                          <p className="text-sm text-gray-700">{contact.phone_number}</p>
                         </div>
                       </div>
                       {contact.address?.city && (
@@ -1720,7 +1720,7 @@ export default function InboxTab() {
                           <MapPin className="w-5 h-5 text-gray-500" />
                           <div className="flex-1">
                             <p className="text-xs text-gray-400">Cidade</p>
-                            <p className="text-sm text-white">{contact.address.city}{contact.address.state ? `, ${contact.address.state}` : ''}</p>
+                            <p className="text-sm text-gray-700">{contact.address.city}{contact.address.state ? `, ${contact.address.state}` : ''}</p>
                           </div>
                         </div>
                       )}
@@ -1728,7 +1728,7 @@ export default function InboxTab() {
                         <Calendar className="w-5 h-5 text-gray-500" />
                         <div className="flex-1">
                           <p className="text-xs text-gray-400">Contato desde</p>
-                          <p className="text-sm text-white">{formatDate(contact.created_at)}</p>
+                          <p className="text-sm text-gray-700">{formatDate(contact.created_at)}</p>
                         </div>
                       </div>
                       <div>
@@ -1755,7 +1755,7 @@ export default function InboxTab() {
                                 onChange={(e) => setNewTag(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
                                 placeholder="Nova tag"
-                                className="w-24 px-2 py-1 text-xs bg-gray-100 border border-gray-300 rounded text-white placeholder-dark-400 focus:outline-none focus:border-primary-500"
+                                className="w-24 px-2 py-1 text-xs bg-gray-100 border border-gray-300 rounded text-gray-900 placeholder-dark-400 focus:outline-none focus:border-primary-500"
                                 autoFocus
                               />
                               <button onClick={handleAddTag} className="text-brand-600 hover:text-brand-500">
@@ -1789,7 +1789,7 @@ export default function InboxTab() {
                       {activeDeal ? (
                         <div className="p-4 bg-gradient-to-br from-primary-500/10 to-yellow-500/10 border border-primary-500/20 rounded-xl">
                           <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-medium text-white">Deal Ativo</h4>
+                            <h4 className="font-medium text-gray-900">Deal Ativo</h4>
                             <span className="px-2 py-0.5 bg-primary-500 text-white text-xs rounded">{activeDeal.stage?.name || 'Em andamento'}</span>
                           </div>
                           <p className="text-2xl font-bold text-gray-900 mb-1">{formatCurrency(activeDeal.value)}</p>
@@ -1808,7 +1808,7 @@ export default function InboxTab() {
                               <div key={deal.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                                 <div className={`w-2 h-2 rounded-full ${deal.status === 'won' ? 'bg-green-500' : deal.status === 'lost' ? 'bg-red-500' : 'bg-yellow-500'}`} />
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-white truncate">{deal.title}</p>
+                                  <p className="text-sm text-gray-700 truncate">{deal.title}</p>
                                   <p className="text-xs text-gray-500">{formatCurrency(deal.value)}</p>
                                 </div>
                               </div>
@@ -1845,7 +1845,7 @@ export default function InboxTab() {
                       {orders.length > 0 && (
                         <div className="p-4 bg-gray-50 rounded-xl">
                           <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-medium text-white">Último Pedido</h4>
+                            <h4 className="font-medium text-gray-900">Último Pedido</h4>
                             <span className={`px-2 py-0.5 text-xs rounded ${orders[0].fulfillment_status === 'fulfilled' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
                               {orders[0].fulfillment_status === 'fulfilled' ? 'Entregue' : 'Pendente'}
                             </span>
@@ -1870,7 +1870,7 @@ export default function InboxTab() {
                           value={newNote}
                           onChange={(e) => setNewNote(e.target.value)}
                           placeholder="Adicionar uma nota..."
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400 resize-none min-h-[80px]"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 focus:outline-none focus:border-brand-400 resize-none min-h-[80px]"
                         />
                         <button
                           onClick={handleAddNote}
@@ -2044,7 +2044,7 @@ export default function InboxTab() {
               {/* Close button */}
               <button
                 onClick={() => setLightboxImage(null)}
-                className="absolute -top-12 right-0 p-2 text-white/70 hover:text-white transition-colors"
+                className="absolute -top-12 right-0 p-2 text-gray-500 hover:text-white transition-colors"
               >
                 <X className="w-8 h-8" />
               </button>

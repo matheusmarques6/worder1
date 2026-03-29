@@ -82,7 +82,7 @@ function TemplateCard({
             {CATEGORY_ICONS[template.category] || <MessageSquare className="w-4 h-4" />}
           </div>
           <div>
-            <h3 className="font-medium text-white">{template.name}</h3>
+            <h3 className="font-medium text-gray-900">{template.name}</h3>
             <p className="text-xs text-gray-500">
               {CATEGORY_LABELS[template.category] || template.category}
             </p>
@@ -151,7 +151,7 @@ function TemplateCard({
           </button>
           <button
             onClick={() => onSelect(template)}
-            className="px-3 py-1.5 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+            className="px-3 py-1.5 text-xs font-medium text-gray-900 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
           >
             Usar
           </button>
@@ -182,7 +182,7 @@ function TemplateCard({
               >
                 <X className="w-5 h-5" />
               </button>
-              <h3 className="text-lg font-semibold text-white mb-4">{template.name}</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{template.name}</h3>
               <p className="text-gray-600 whitespace-pre-wrap">{template.content}</p>
             </motion.div>
           </motion.div>
@@ -255,7 +255,7 @@ function TemplateModal({ isOpen, template, onClose, onSave }: TemplateModalProps
       >
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-white">
+          <h2 className="text-xl font-semibold text-gray-900">
             {template ? 'Editar Template' : 'Novo Template'}
           </h2>
           <button
@@ -427,7 +427,7 @@ export function ChatTemplates({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Templates de Mensagem</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Templates de Mensagem</h2>
           <p className="text-gray-500 text-sm mt-1">
             Respostas rápidas com campos dinâmicos
           </p>

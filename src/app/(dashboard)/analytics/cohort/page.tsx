@@ -34,7 +34,7 @@ const channelRetention = [
 ]
 
 function getCellColor(value: number | null): string {
-  if (value === null) return 'bg-zinc-800/20'
+  if (value === null) return 'bg-gray-50/20'
   if (value >= 60) return 'bg-emerald-500/30 text-emerald-300'
   if (value >= 40) return 'bg-[#F26B2A]/30 text-[#F5A623]'
   if (value >= 25) return 'bg-yellow-500/20 text-yellow-300'
@@ -49,14 +49,14 @@ export default function CohortPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display text-white">Análise de Cohort</h1>
-          <p className="text-sm text-zinc-400 mt-1">Entenda a retenção e o comportamento dos contatos ao longo do tempo</p>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Análise de Cohort</h1>
+          <p className="text-sm text-gray-500 mt-1">Entenda a retenção e o comportamento dos contatos ao longo do tempo</p>
         </div>
-        <div className="flex bg-zinc-800/50 rounded-lg p-1">
+        <div className="flex bg-gray-50/50 rounded-lg p-1">
           <button
             onClick={() => setMetric('retention')}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              metric === 'retention' ? 'bg-[#F26B2A] text-white' : 'text-zinc-400 hover:text-white'
+              metric === 'retention' ? 'bg-[#F26B2A] text-white' : 'text-gray-500 hover:text-white'
             }`}
           >
             Retenção
@@ -64,7 +64,7 @@ export default function CohortPage() {
           <button
             onClick={() => setMetric('revenue')}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              metric === 'revenue' ? 'bg-[#F26B2A] text-white' : 'text-zinc-400 hover:text-white'
+              metric === 'revenue' ? 'bg-[#F26B2A] text-white' : 'text-gray-500 hover:text-white'
             }`}
           >
             Receita
@@ -82,13 +82,13 @@ export default function CohortPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4"
+              className="bg-white/50 border border-gray-200 rounded-xl p-4"
             >
               <div className="flex items-center gap-2 mb-2">
-                <Icon size={16} className="text-zinc-500" />
-                <span className="text-xs text-zinc-500">{kpi.title}</span>
+                <Icon size={16} className="text-gray-500" />
+                <span className="text-xs text-gray-500">{kpi.title}</span>
               </div>
-              <p className="text-xl font-bold text-white">{kpi.value}</p>
+              <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
               <span className={`text-xs ${kpi.positive ? 'text-emerald-400' : 'text-red-400'}`}>
                 {kpi.change}
               </span>
@@ -98,21 +98,21 @@ export default function CohortPage() {
       </div>
 
       {/* Cohort Table */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4">
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">
           {metric === 'retention' ? 'Retenção de Engajamento (%)' : 'Receita por Cohort'}
         </h3>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-zinc-800">
-                <th className="text-left text-xs text-zinc-500 font-medium pb-3 pr-4">Cohort</th>
-                <th className="text-center text-xs text-zinc-500 font-medium pb-3 px-2">Contatos</th>
-                <th className="text-center text-xs text-zinc-500 font-medium pb-3 px-2">Mês 1</th>
-                <th className="text-center text-xs text-zinc-500 font-medium pb-3 px-2">Mês 2</th>
-                <th className="text-center text-xs text-zinc-500 font-medium pb-3 px-2">Mês 3</th>
-                <th className="text-center text-xs text-zinc-500 font-medium pb-3 px-2">Mês 4</th>
-                <th className="text-center text-xs text-zinc-500 font-medium pb-3 px-2">Mês 5</th>
+              <tr className="border-b border-gray-200">
+                <th className="text-left text-xs text-gray-500 font-medium pb-3 pr-4">Cohort</th>
+                <th className="text-center text-xs text-gray-500 font-medium pb-3 px-2">Contatos</th>
+                <th className="text-center text-xs text-gray-500 font-medium pb-3 px-2">Mês 1</th>
+                <th className="text-center text-xs text-gray-500 font-medium pb-3 px-2">Mês 2</th>
+                <th className="text-center text-xs text-gray-500 font-medium pb-3 px-2">Mês 3</th>
+                <th className="text-center text-xs text-gray-500 font-medium pb-3 px-2">Mês 4</th>
+                <th className="text-center text-xs text-gray-500 font-medium pb-3 px-2">Mês 5</th>
               </tr>
             </thead>
             <tbody>
@@ -122,10 +122,10 @@ export default function CohortPage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.05 }}
-                  className="border-b border-zinc-800/50"
+                  className="border-b border-gray-200/50"
                 >
-                  <td className="py-3 text-sm text-white font-medium pr-4">{row.month}</td>
-                  <td className="py-3 text-sm text-zinc-400 text-center px-2">
+                  <td className="py-3 text-sm text-gray-700 font-medium pr-4">{row.month}</td>
+                  <td className="py-3 text-sm text-gray-500 text-center px-2">
                     {row.users.toLocaleString('pt-BR')}
                   </td>
                   {[row.m1, row.m2, row.m3, row.m4, row.m5].map((val, j) => (
@@ -143,23 +143,23 @@ export default function CohortPage() {
       </div>
 
       {/* Channel Retention Comparison */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-white mb-4">Retenção por Estratégia de Canal</h3>
+      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Retenção por Estratégia de Canal</h3>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-zinc-800">
-                <th className="text-left text-xs text-zinc-500 font-medium pb-3">Estratégia</th>
-                <th className="text-center text-xs text-zinc-500 font-medium pb-3">Mês 1</th>
-                <th className="text-center text-xs text-zinc-500 font-medium pb-3">Mês 2</th>
-                <th className="text-center text-xs text-zinc-500 font-medium pb-3">Mês 3</th>
-                <th className="text-right text-xs text-zinc-500 font-medium pb-3">LTV Médio</th>
+              <tr className="border-b border-gray-200">
+                <th className="text-left text-xs text-gray-500 font-medium pb-3">Estratégia</th>
+                <th className="text-center text-xs text-gray-500 font-medium pb-3">Mês 1</th>
+                <th className="text-center text-xs text-gray-500 font-medium pb-3">Mês 2</th>
+                <th className="text-center text-xs text-gray-500 font-medium pb-3">Mês 3</th>
+                <th className="text-right text-xs text-gray-500 font-medium pb-3">LTV Médio</th>
               </tr>
             </thead>
             <tbody>
               {channelRetention.map((ch) => (
-                <tr key={ch.channel} className="border-b border-zinc-800/50">
-                  <td className="py-3 text-sm text-white font-medium">{ch.channel}</td>
+                <tr key={ch.channel} className="border-b border-gray-200/50">
+                  <td className="py-3 text-sm text-gray-700 font-medium">{ch.channel}</td>
                   <td className="py-3 px-2">
                     <div className={`text-center text-sm font-medium rounded-md py-1 ${getCellColor(ch.m1)}`}>
                       {ch.m1}%
@@ -181,7 +181,7 @@ export default function CohortPage() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-zinc-600 mt-3">
+        <p className="text-xs text-gray-400 mt-3">
           * Contatos engajados em múltiplos canais apresentam retenção significativamente maior
         </p>
       </div>

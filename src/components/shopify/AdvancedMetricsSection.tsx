@@ -133,7 +133,7 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
               <BarChart3 className="w-5 h-5 text-brand-600" />
             </div>
             <div className="text-left">
-              <h3 className="text-base font-semibold text-white">
+              <h3 className="text-base font-semibold text-gray-900">
                 Métricas Avançadas
               </h3>
               <p className="text-sm text-gray-500">

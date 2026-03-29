@@ -348,7 +348,7 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
             <input
               type="text"
               placeholder="Buscar conversas..."
-              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-dark-500 focus:outline-none focus:border-primary-500"
               value={filters.search || ''}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
             />

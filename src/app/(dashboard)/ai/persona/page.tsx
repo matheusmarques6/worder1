@@ -50,13 +50,13 @@ export default function PersonaPage() {
       <div className="flex items-center gap-3">
         <Link
           href="/ai"
-          className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
+          className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
         >
-          <ArrowLeft size={18} className="text-zinc-400" />
+          <ArrowLeft size={18} className="text-gray-500" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold font-display text-white">Persona da IA</h1>
-          <p className="text-sm text-zinc-400 mt-0.5">Configure como a IA se comunica com seus clientes</p>
+          <h1 className="text-2xl font-bold font-display text-gray-900">Persona da IA</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Configure como a IA se comunica com seus clientes</p>
         </div>
       </div>
 
@@ -64,27 +64,27 @@ export default function PersonaPage() {
         {/* Configuration */}
         <div className="space-y-6">
           {/* Identity */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Robot size={16} className="text-[#F26B2A]" />
               Identidade
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Nome da IA</label>
+                <label className="block text-xs text-gray-500 mb-1.5">Nome da IA</label>
                 <input
                   type="text"
                   value={personaName}
                   onChange={(e) => setPersonaName(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#F26B2A] transition-colors"
+                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-brand-500 transition-colors"
                 />
               </div>
             </div>
           </div>
 
           {/* Tone Selection */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Brain size={16} className="text-[#F26B2A]" />
               Tom de Voz
             </h3>
@@ -98,12 +98,12 @@ export default function PersonaPage() {
                     className={`text-left p-3 rounded-lg border transition-all ${
                       selectedTone === tone.id
                         ? 'border-[#F26B2A] bg-[#F26B2A]/5'
-                        : 'border-zinc-700 bg-zinc-800/30 hover:border-zinc-600'
+                        : 'border-gray-200 bg-gray-50/30 hover:border-gray-200'
                     }`}
                   >
-                    <Icon size={20} className={selectedTone === tone.id ? 'text-[#F26B2A]' : 'text-zinc-500'} />
-                    <p className="text-sm font-medium text-white mt-2">{tone.label}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">{tone.description}</p>
+                    <Icon size={20} className={selectedTone === tone.id ? 'text-[#F26B2A]' : 'text-gray-500'} />
+                    <p className="text-sm font-medium text-gray-900 mt-2">{tone.label}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{tone.description}</p>
                   </button>
                 )
               })}
@@ -111,8 +111,8 @@ export default function PersonaPage() {
           </div>
 
           {/* Behavior */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <ChatCircleDots size={16} className="text-[#F26B2A]" />
               Comportamento
             </h3>
@@ -123,11 +123,11 @@ export default function PersonaPage() {
                 { label: 'Usar nome do cliente', value: useCustomerName, setter: setUseCustomerName },
               ].map((toggle) => (
                 <div key={toggle.label} className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-300">{toggle.label}</span>
+                  <span className="text-sm text-gray-700">{toggle.label}</span>
                   <button
                     onClick={() => toggle.setter(!toggle.value)}
                     className={`w-10 h-5 rounded-full transition-colors relative ${
-                      toggle.value ? 'bg-[#F26B2A]' : 'bg-zinc-700'
+                      toggle.value ? 'bg-[#F26B2A]' : 'bg-gray-100'
                     }`}
                   >
                     <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${
@@ -137,7 +137,7 @@ export default function PersonaPage() {
                 </div>
               ))}
               <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">
+                <label className="block text-xs text-gray-500 mb-1.5">
                   <Clock size={12} className="inline mr-1" />
                   Delay de resposta (segundos)
                 </label>
@@ -149,9 +149,9 @@ export default function PersonaPage() {
                   onChange={(e) => setResponseDelay(Number(e.target.value))}
                   className="w-full accent-[#F26B2A]"
                 />
-                <div className="flex justify-between text-xs text-zinc-500">
+                <div className="flex justify-between text-xs text-gray-500">
                   <span>5s</span>
-                  <span className="text-white font-medium">{responseDelay}s</span>
+                  <span className="text-gray-900 font-medium">{responseDelay}s</span>
                   <span>120s</span>
                 </div>
               </div>
@@ -159,14 +159,14 @@ export default function PersonaPage() {
           </div>
 
           {/* Incentive Limits */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Tag size={16} className="text-[#F26B2A]" />
               Limites de Incentivo
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">
+                <label className="block text-xs text-gray-500 mb-1.5">
                   <Percent size={12} className="inline mr-1" />
                   Desconto máximo permitido
                 </label>
@@ -179,21 +179,21 @@ export default function PersonaPage() {
                     onChange={(e) => setMaxDiscount(Number(e.target.value))}
                     className="flex-1 accent-[#F26B2A]"
                   />
-                  <span className="text-sm font-medium text-white w-12 text-right">{maxDiscount}%</span>
+                  <span className="text-sm font-medium text-gray-900 w-12 text-right">{maxDiscount}%</span>
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">
+                <label className="block text-xs text-gray-500 mb-1.5">
                   <Truck size={12} className="inline mr-1" />
                   Frete grátis acima de
                 </label>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-zinc-500">R$</span>
+                  <span className="text-sm text-gray-500">R$</span>
                   <input
                     type="number"
                     value={freeShippingThreshold}
                     onChange={(e) => setFreeShippingThreshold(Number(e.target.value))}
-                    className="w-28 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#F26B2A] transition-colors"
+                    className="w-28 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-brand-500 transition-colors"
                   />
                 </div>
               </div>
@@ -203,18 +203,18 @@ export default function PersonaPage() {
 
         {/* Preview */}
         <div className="space-y-6">
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 sticky top-6">
-            <h3 className="text-sm font-semibold text-white mb-4">Preview da Mensagem</h3>
+          <div className="bg-white/50 border border-gray-200 rounded-xl p-6 sticky top-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Preview da Mensagem</h3>
 
             {/* Chat Preview */}
             <div className="bg-[#0B141A] rounded-xl p-4 min-h-[300px]">
               {/* WhatsApp Header */}
-              <div className="flex items-center gap-3 pb-3 border-b border-zinc-800/50 mb-4">
+              <div className="flex items-center gap-3 pb-3 border-b border-gray-200/50 mb-4">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center">
-                  <Robot size={16} className="text-white" weight="fill" />
+                  <Robot size={16} className="text-brand-500" weight="fill" />
                 </div>
                 <div>
-                  <p className="text-sm text-white font-medium">{personaName}</p>
+                  <p className="text-sm text-gray-700 font-medium">{personaName}</p>
                   <p className="text-xs text-emerald-400">online</p>
                 </div>
               </div>
@@ -227,10 +227,10 @@ export default function PersonaPage() {
                   animate={{ opacity: 1, scale: 1 }}
                   className="bg-[#202C33] rounded-lg rounded-tl-none px-3 py-2 max-w-[280px]"
                 >
-                  <p className="text-sm text-zinc-200 leading-relaxed">
+                  <p className="text-sm text-gray-800 leading-relaxed">
                     {sampleMessages[selectedTone]}
                   </p>
-                  <p className="text-xs text-zinc-500 text-right mt-1">14:32</p>
+                  <p className="text-xs text-gray-500 text-right mt-1">14:32</p>
                 </motion.div>
               </div>
 

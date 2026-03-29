@@ -365,7 +365,7 @@ function VariableItem({
                 className={cn(
                   'flex-1 px-3 py-2 rounded-lg',
                   'bg-white border border-gray-300',
-                  'text-sm text-white placeholder-dark-400',
+                  'text-sm text-gray-700 placeholder-dark-400',
                   'focus:outline-none focus:border-primary-500'
                 )}
                 onClick={(e) => e.stopPropagation()}
