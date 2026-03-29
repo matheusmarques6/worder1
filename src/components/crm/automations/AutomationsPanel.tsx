@@ -482,7 +482,7 @@ export function AutomationsPanel() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <RefreshCw className="w-8 h-8 text-brand-500 animate-spin" />
+        <RefreshCw className="w-8 h-8 text-primary-500 animate-spin" />
       </div>
     )
   }
@@ -580,7 +580,7 @@ export function AutomationsPanel() {
         <div className="space-y-3">
           {connectedSources.length === 0 ? (
             <div className="p-8 bg-gray-50 border border-gray-200 rounded-xl text-center">
-              <Zap className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+              <Zap className="w-12 h-12 text-gray-400 mx-auto mb-3" />
               <h4 className="font-medium text-white mb-2">Nenhuma integração conectada</h4>
               <p className="text-sm text-gray-500 mb-4">
                 Conecte uma integração para configurar automações
@@ -627,7 +627,7 @@ export function AutomationsPanel() {
         <div className="space-y-3">
           {connectedSources.length === 0 ? (
             <div className="p-8 bg-gray-50 border border-gray-200 rounded-xl text-center">
-              <ArrowRight className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+              <ArrowRight className="w-12 h-12 text-gray-400 mx-auto mb-3" />
               <p className="text-sm text-gray-500">
                 Configure integrações para mover deals automaticamente
               </p>
@@ -656,7 +656,7 @@ export function AutomationsPanel() {
         <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
           {recentLogs.length === 0 ? (
             <div className="p-8 text-center">
-              <History className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+              <History className="w-12 h-12 text-gray-400 mx-auto mb-3" />
               <p className="text-sm text-gray-500">Nenhum log registrado ainda</p>
             </div>
           ) : (

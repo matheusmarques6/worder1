@@ -247,7 +247,7 @@ export function PipelineAutomationConfig({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+        <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
       </div>
     );
   }
@@ -367,7 +367,7 @@ export function PipelineAutomationConfig({
                 type="checkbox"
                 checked={selectedEvents.includes(eventConfig.event)}
                 onChange={() => handleEventToggle(eventConfig.event)}
-                className="mt-0.5 w-5 h-5 rounded border-2 border-gray-300 bg-gray-100 text-brand-500 focus:ring-primary-500 focus:ring-offset-0 cursor-pointer"
+                className="mt-0.5 w-5 h-5 rounded border-2 border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500 focus:ring-offset-0 cursor-pointer"
                 style={{ accentColor: '#F97316' }}
               />
               <div>

@@ -56,8 +56,8 @@ function MessageStatus({ status }: { status: InboxMessage['status'] }) {
     case 'pending': return <Clock className="w-4 h-4 text-gray-400" />
     case 'sent': return <Check className="w-4 h-4 text-gray-400" />
     case 'delivered': return <CheckCheck className="w-4 h-4 text-gray-400" />
-    case 'read': return <CheckCheck className="w-4 h-4 text-blue-500" />
-    case 'failed': return <AlertCircle className="w-4 h-4 text-red-500" />
+    case 'read': return <CheckCheck className="w-4 h-4 text-cyan-400" />
+    case 'failed': return <AlertCircle className="w-4 h-4 text-error-400" />
     default: return <Clock className="w-4 h-4 text-gray-400" />
   }
 }
@@ -72,41 +72,41 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
   return (
     <div className={`flex gap-3 ${isOutbound ? 'justify-end' : 'justify-start'}`}>
       {!isOutbound && (
-        <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 mt-1">
-          <span className="text-orange-700 text-xs font-medium">{getInitials(contactName)}</span>
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0 mt-1">
+          <span className="text-white text-xs font-semibold">{getInitials(contactName)}</span>
         </div>
       )}
 
       <div className={`max-w-[70%] ${isOutbound ? 'items-end' : 'items-start'}`}>
-        <div className={`relative rounded-lg px-3 py-2 ${
-          isFailed
-            ? 'bg-red-50 border border-red-200 rounded-tr-none' // ❌ Estilo de erro
+        <div className={`relative rounded-2xl px-4 py-2.5 ${
+          isFailed 
+            ? 'bg-red-900/50 border border-red-500/50 rounded-tr-md' // ❌ Estilo de erro
             : isPending
-              ? 'bg-orange-50 border border-orange-100 opacity-70 rounded-tr-none' // ⏳ Estilo de enviando
-              : isOutbound
-                ? 'bg-orange-50 border border-orange-100 rounded-tr-none shadow-sm'
-                : 'bg-white border border-gray-200 rounded-tl-none shadow-sm'
+              ? 'bg-gray-100 opacity-70 rounded-tr-md' // ⏳ Estilo de enviando
+              : isOutbound 
+                ? isBot ? 'bg-gradient-to-r from-primary-500 to-primary-600 rounded-tr-md' : 'bg-primary-500 rounded-tr-md'
+                : 'bg-white border border-gray-200 rounded-tl-md'
         }`}>
-          {isBot && <div className="absolute top-2 right-2"><Bot className="w-3 h-3 text-orange-400/60" /></div>}
+          {isBot && <div className="absolute top-2 right-2"><Bot className="w-3 h-3 text-white/50" /></div>}
 
           {/* ✅ CORREÇÃO: Imagem com tamanho limitado + object-contain */}
           {message.message_type === 'image' && message.media_url && (
-            <img
-              src={message.media_url}
-              alt="Imagem"
+            <img 
+              src={message.media_url} 
+              alt="Imagem" 
               loading="lazy"
-              className="rounded-lg mb-2 cursor-pointer hover:opacity-90 w-full max-w-[320px] max-h-[360px] object-contain bg-gray-100"
-              onClick={() => window.open(message.media_url, '_blank')}
+              className="rounded-lg mb-2 cursor-pointer hover:opacity-90 w-full max-w-[320px] max-h-[360px] object-contain bg-white/30"
+              onClick={() => window.open(message.media_url, '_blank')} 
             />
           )}
           {/* ✅ CORREÇÃO: Vídeo com preload, playsInline e tamanho limitado */}
           {message.message_type === 'video' && message.media_url && (
-            <video
-              src={message.media_url}
-              controls
+            <video 
+              src={message.media_url} 
+              controls 
               preload="metadata"
               playsInline
-              className="rounded-lg mb-2 w-full max-w-[360px] max-h-[360px] object-contain bg-gray-100"
+              className="rounded-lg mb-2 w-full max-w-[360px] max-h-[360px] object-contain bg-white/30" 
             />
           )}
           {message.message_type === 'audio' && message.media_url && (
@@ -114,27 +114,27 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
           )}
           {message.message_type === 'document' && message.media_url && (
             <a href={message.media_url} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 bg-gray-100 rounded-lg mb-2 hover:bg-gray-200">
-              <FileText className="w-5 h-5 text-orange-500" />
-              <span className="text-sm text-gray-700 truncate">{message.media_filename || 'Documento'}</span>
+              className="flex items-center gap-2 p-2 bg-gray-100 rounded-lg mb-2 hover:bg-gray-100">
+              <FileText className="w-5 h-5 text-brand-600" />
+              <span className="text-sm text-white truncate">{message.media_filename || 'Documento'}</span>
             </a>
           )}
           {message.content && (
-            <p className={`text-sm whitespace-pre-wrap break-words ${isOutbound ? 'text-gray-800' : 'text-gray-800'}`}>
+            <p className={`text-sm whitespace-pre-wrap break-words ${isOutbound ? 'text-white' : 'text-gray-800'}`}>
               {message.content}
             </p>
           )}
-
+          
           {/* ❌ Mostrar erro e botão de retry quando falha */}
           {isFailed && (
-            <div className="mt-2 pt-2 border-t border-red-200">
-              <p className="text-xs text-red-500 mb-1">
+            <div className="mt-2 pt-2 border-t border-red-500/30">
+              <p className="text-xs text-red-300 mb-1">
                 {(message as any).error || message.error_message || 'Falha ao enviar'}
               </p>
               {onRetry && (
-                <button
+                <button 
                   onClick={() => onRetry(message)}
-                  className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                  className="text-xs text-red-300 hover:text-white flex items-center gap-1"
                 >
                   <RefreshCw className="w-3 h-3" /> Tentar novamente
                 </button>
@@ -144,7 +144,7 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
         </div>
 
         <div className={`flex items-center gap-1.5 mt-1 px-1 ${isOutbound ? 'justify-end' : 'justify-start'}`}>
-          {isPending && <span className="text-[10px] text-gray-400">Enviando...</span>}
+          {isPending && <span className="text-[10px] text-gray-500">Enviando...</span>}
           {isBot && isOutbound && !isPending && <span className="text-[10px] text-gray-400">via Bot</span>}
           <span className="text-[10px] text-gray-400">{formatMessageTime(message.created_at)}</span>
           {isOutbound && <MessageStatus status={message.status} />}
@@ -167,10 +167,10 @@ function DateSeparator({ date }: { date: string }) {
   }
 
   return (
-    <div className="flex items-center gap-4 my-2">
-      <div className="flex-1 h-px bg-gray-200" />
-      <span className="text-[10px] text-gray-400 bg-gray-50 px-3 py-1 rounded-full">{formatDate(date)}</span>
-      <div className="flex-1 h-px bg-gray-200" />
+    <div className="flex items-center gap-4 my-4">
+      <div className="flex-1 h-px bg-gray-100" />
+      <span className="text-xs text-gray-400 bg-white px-3 py-1 rounded-full">{formatDate(date)}</span>
+      <div className="flex-1 h-px bg-gray-100" />
     </div>
   )
 }
@@ -206,30 +206,30 @@ function MediaPreviewModal({ file, onClose, onSend, isSending }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-xl">
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h3 className="text-gray-900 font-semibold">Enviar {getMediaType()}</h3>
+          <h3 className="text-white font-semibold">Enviar {getMediaType()}</h3>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-            <X className="w-5 h-5 text-gray-400" />
+            <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
         <div className="p-4">
           {error ? (
-            <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <AlertCircle className="w-5 h-5 text-red-500" />
-              <span className="text-red-500">{error}</span>
+            <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-red-400" />
+              <span className="text-red-400">{error}</span>
             </div>
           ) : (
             <>
               {isImage && preview && <img src={preview} alt="Preview" className="max-h-64 mx-auto rounded-lg object-contain" />}
               {isVideo && preview && <video src={preview} controls className="max-h-64 mx-auto rounded-lg" />}
               {!isImage && !isVideo && (
-                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-                  <FileText className="w-10 h-10 text-orange-500" />
+                <div className="flex items-center gap-3 p-4 bg-gray-100 rounded-lg">
+                  <FileText className="w-10 h-10 text-brand-600" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-gray-900 font-medium truncate">{file.name}</p>
+                    <p className="text-white font-medium truncate">{file.name}</p>
                     <p className="text-sm text-gray-500">{formatFileSize(file.size)}</p>
                   </div>
                 </div>
@@ -242,16 +242,16 @@ function MediaPreviewModal({ file, onClose, onSend, isSending }: {
           <div className="px-4 pb-4">
             <input type="text" value={caption} onChange={(e) => setCaption(e.target.value)}
               placeholder="Adicionar legenda (opcional)"
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-orange-400" />
+              className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500" />
           </div>
         )}
 
         <div className="flex gap-3 p-4 border-t border-gray-200">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 text-white rounded-xl hover:bg-gray-200">
             Cancelar
           </button>
           <button onClick={() => !error && onSend(caption)} disabled={isSending || !!error}
-            className="flex-1 px-4 py-2.5 bg-orange-500 text-white rounded-xl hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2">
+            className="flex-1 px-4 py-2.5 bg-primary-500 text-white rounded-xl hover:bg-primary-600 disabled:opacity-50 flex items-center justify-center gap-2">
             {isSending ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : <><Send className="w-4 h-4" /> Enviar</>}
           </button>
         </div>
@@ -345,63 +345,63 @@ export function ChatPanel({
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-400">
+          <button onClick={onBack} className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-500">
             <ArrowLeft className="w-5 h-5" />
           </button>
 
           {conversation.contact_avatar ? (
             <img src={conversation.contact_avatar} alt={contactName} className="w-10 h-10 rounded-full object-cover" />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
-              <span className="text-orange-700 font-medium text-sm">{getInitials(contactName)}</span>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+              <span className="text-white font-semibold text-sm">{getInitials(contactName)}</span>
             </div>
           )}
 
           <div>
-            <h3 className="font-semibold text-gray-900">{contactName}</h3>
+            <h3 className="font-semibold text-white">{contactName}</h3>
             <p className="text-xs text-gray-500">{formatPhone(conversation.phone_number)}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <AIToggleButton conversationId={conversation.id} initialEnabled={conversation.ai_enabled !== false} variant="default" />
-
+          
           <button onClick={onToggleBot}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               conversation.is_bot_active
-                ? 'bg-orange-50 text-orange-600 border border-orange-200'
-                : 'bg-gray-100 text-gray-500 hover:text-gray-700'
+                ? 'bg-brand-50 text-brand-600 border border-brand-300'
+                : 'bg-gray-100 text-gray-500 hover:text-white'
             }`}>
             <Bot className="w-4 h-4" />
             <span className="hidden sm:inline">{conversation.is_bot_active ? 'Bot Ativo' : 'Bot Off'}</span>
           </button>
 
-          <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+          <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white">
             <UserPlus className="w-5 h-5" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+          <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white">
             <MoreVertical className="w-5 h-5" />
           </button>
-          <button onClick={onToggleContactPanel} className="hidden lg:block p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+          <button onClick={onToggleContactPanel} className="hidden lg:block p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white">
             {showContactPanel ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+            <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
-            <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+          <div className="flex flex-col items-center justify-center h-full text-gray-500">
+            <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
               <Send className="w-8 h-8 opacity-50" />
             </div>
-            <p className="text-sm text-gray-500">Nenhuma mensagem ainda</p>
+            <p className="text-sm">Nenhuma mensagem ainda</p>
           </div>
         ) : (
           <>
@@ -427,51 +427,51 @@ export function ChatPanel({
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-gray-200 bg-white">
+      <div className="p-4 border-t border-gray-200 bg-gray-50">
         {conversation.can_send_template_only && (
-          <div className="flex items-center gap-2 p-3 mb-3 bg-amber-50 border border-amber-200 rounded-xl">
-            <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-            <span className="text-sm text-amber-600">Janela de 24h expirada. Use um template.</span>
-            <button className="ml-auto text-sm text-orange-500 font-medium hover:underline">Enviar Template</button>
+          <div className="flex items-center gap-2 p-3 mb-3 bg-warning-500/10 border border-warning-500/20 rounded-xl">
+            <AlertCircle className="w-4 h-4 text-warning-400 flex-shrink-0" />
+            <span className="text-sm text-warning-400">Janela de 24h expirada. Use um template.</span>
+            <button className="ml-auto text-sm text-brand-600 font-medium hover:underline">Enviar Template</button>
           </div>
         )}
 
         <div className="flex items-end gap-2">
-          <button className="p-2.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+          <button className="p-2.5 rounded-xl hover:bg-gray-100 text-gray-500 hover:text-brand-600">
             <Smile className="w-5 h-5" />
           </button>
 
           {/* Attach Menu */}
           <div className="relative">
             <button onClick={() => setShowAttachMenu(!showAttachMenu)}
-              className={`p-2.5 rounded-xl ${showAttachMenu ? 'bg-orange-50 text-orange-500' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}>
+              className={`p-2.5 rounded-xl ${showAttachMenu ? 'bg-brand-100 text-brand-600' : 'hover:bg-gray-100 text-gray-500 hover:text-brand-600'}`}>
               <Paperclip className="w-5 h-5" />
             </button>
-
+            
             {showAttachMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowAttachMenu(false)} />
                 <div className="absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50">
                   <button onClick={() => handleFileTypeSelect('image')}
-                    className="flex items-center gap-3 w-full px-4 py-3 hover:bg-gray-50 text-left">
-                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                      <ImageIcon className="w-4 h-4 text-green-600" />
+                    className="flex items-center gap-3 w-full px-4 py-3 hover:bg-gray-100 text-left">
+                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                      <ImageIcon className="w-4 h-4 text-green-400" />
                     </div>
-                    <span className="text-gray-700">Imagem</span>
+                    <span className="text-white">Imagem</span>
                   </button>
                   <button onClick={() => handleFileTypeSelect('video')}
-                    className="flex items-center gap-3 w-full px-4 py-3 hover:bg-gray-50 text-left">
-                    <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
-                      <Film className="w-4 h-4 text-purple-600" />
+                    className="flex items-center gap-3 w-full px-4 py-3 hover:bg-gray-100 text-left">
+                    <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
+                      <Film className="w-4 h-4 text-purple-400" />
                     </div>
-                    <span className="text-gray-700">Vídeo</span>
+                    <span className="text-white">Vídeo</span>
                   </button>
                   <button onClick={() => handleFileTypeSelect('document')}
-                    className="flex items-center gap-3 w-full px-4 py-3 hover:bg-gray-50 text-left">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                      <FileText className="w-4 h-4 text-blue-600" />
+                    className="flex items-center gap-3 w-full px-4 py-3 hover:bg-gray-100 text-left">
+                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                      <FileText className="w-4 h-4 text-blue-400" />
                     </div>
-                    <span className="text-gray-700">Documento</span>
+                    <span className="text-white">Documento</span>
                   </button>
                 </div>
               </>
@@ -481,19 +481,19 @@ export function ChatPanel({
           <div className="flex-1">
             <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
               placeholder="Digite uma mensagem..." disabled={isSending} rows={1}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-orange-400 resize-none disabled:opacity-50"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400 resize-none disabled:opacity-50"
               style={{ maxHeight: '120px' }} />
           </div>
 
           <button onClick={handleSend} disabled={!input.trim() || isSending}
-            className="p-3 rounded-xl bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed">
+            className="p-3 rounded-xl bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed">
             {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </div>
 
         <div className="flex items-center gap-2 mt-2">
-          <button className="px-3 py-1.5 text-xs bg-gray-100 text-gray-500 rounded-lg hover:text-gray-700 hover:bg-gray-200">/atalhos</button>
-          <button className="px-3 py-1.5 text-xs bg-gray-100 text-gray-500 rounded-lg hover:text-gray-700 hover:bg-gray-200">📋 Templates</button>
+          <button className="px-3 py-1.5 text-xs bg-gray-100 text-gray-500 rounded-lg hover:text-white hover:bg-gray-100">/atalhos</button>
+          <button className="px-3 py-1.5 text-xs bg-gray-100 text-gray-500 rounded-lg hover:text-white hover:bg-gray-100">📋 Templates</button>
         </div>
       </div>
     </div>

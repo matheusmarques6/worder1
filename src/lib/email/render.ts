@@ -1,93 +1,137 @@
-import { mergeTags } from './merge-tags'
+// =============================================
+// WORDER: Email Rendering Pipeline
+// /src/lib/email/render.ts
+//
+// Merge tags, URL tracking, open pixel,
+// unsubscribe link, and full pipeline.
+// =============================================
 
-interface ContactData {
-  first_name?: string
-  last_name?: string
-  email?: string
-  phone?: string
-  company?: string
-  [key: string]: any
-}
-
-interface OrgData {
-  name?: string
-  domain?: string
-  [key: string]: any
-}
-
-/** Replace merge tags like {{first_name}} and {{first_name|fallback}} */
-export function renderMergeTags(html: string, data: Record<string, any>): string {
-  // Handle {{tag|fallback}} syntax
-  let result = html.replace(/\{\{(\w+)\|([^}]*)\}\}/g, (_, key, fallback) => {
-    const value = data[key]
-    return value != null && value !== '' ? String(value) : fallback
-  })
-  // Handle {{tag}} syntax
-  result = result.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    const value = data[key]
-    return value != null ? String(value) : ''
-  })
-  return result
-}
-
-/** Rewrite all <a href="..."> for click tracking */
-export function rewriteUrlsForTracking(html: string, emailSendId: string, baseUrl: string): string {
-  return html.replace(
-    /href="(https?:\/\/[^"]+)"/gi,
-    (match, url) => {
-      // Skip mailto: and anchor links
-      if (url.startsWith('mailto:') || url.startsWith('#') || url.includes('/api/t/') || url.includes('/unsubscribe/')) {
-        return match
-      }
-      const encodedUrl = encodeURIComponent(url)
-      return `href="${baseUrl}/api/t/c/${emailSendId}?url=${encodedUrl}"`
-    }
-  )
-}
-
-/** Inject 1x1 transparent GIF for open tracking */
-export function injectOpenPixel(html: string, emailSendId: string, baseUrl: string): string {
-  const pixel = `<img src="${baseUrl}/api/t/o/${emailSendId}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;" />`
-  if (html.includes('</body>')) {
-    return html.replace('</body>', `${pixel}</body>`)
-  }
-  return html + pixel
-}
-
-/** Add unsubscribe link if not present */
-export function addUnsubscribeLink(html: string, emailSendId: string, baseUrl: string): string {
-  if (html.includes('/unsubscribe/') || html.includes('descadastrar') || html.includes('cancelar inscrição')) {
-    return html
-  }
-  const unsubLink = `
-    <div style="text-align:center;padding:20px 0;font-size:12px;color:#6b7280;">
-      <p>Você está recebendo este email porque se inscreveu em nossa lista.</p>
-      <a href="${baseUrl}/api/unsubscribe/${emailSendId}" style="color:#6b7280;text-decoration:underline;">
-        Cancelar inscrição
-      </a>
-    </div>`
-  if (html.includes('</body>')) {
-    return html.replace('</body>', `${unsubLink}</body>`)
-  }
-  return html + unsubLink
-}
-
-/** Full pipeline: merge tags → tracking URLs → open pixel → unsubscribe */
-export function prepareEmailHtml(
+/**
+ * Replace {{tag}} and {{tag|fallback}} in HTML with data values.
+ */
+export function renderMergeTags(
   html: string,
-  contact: ContactData,
-  org: OrgData,
+  data: Record<string, string>
+): string {
+  // Replace {{tag|fallback}} first (with fallback)
+  let result = html.replace(
+    /\{\{([a-zA-Z0-9_.]+)\|([^}]*)\}\}/g,
+    (_, tag: string, fallback: string) => {
+      return data[tag] ?? fallback;
+    }
+  );
+
+  // Replace {{tag}} (no fallback)
+  result = result.replace(
+    /\{\{([a-zA-Z0-9_.]+)\}\}/g,
+    (_, tag: string) => {
+      return data[tag] ?? '';
+    }
+  );
+
+  return result;
+}
+
+/**
+ * Rewrite all <a href="..."> URLs to go through the click tracker.
+ * Excludes mailto:, tel:, #, and unsubscribe links.
+ */
+export function rewriteUrlsForTracking(
+  html: string,
   emailSendId: string,
   baseUrl: string
 ): string {
-  const data: Record<string, any> = {
-    ...contact,
-    store_name: org.name || '',
-    store_url: org.domain ? `https://${org.domain}` : '',
+  return html.replace(
+    /(<a\s[^>]*href=["'])([^"']+)(["'][^>]*>)/gi,
+    (match, prefix: string, url: string, suffix: string) => {
+      // Skip non-trackable URLs
+      if (
+        url.startsWith('mailto:') ||
+        url.startsWith('tel:') ||
+        url.startsWith('#') ||
+        url.includes('/unsubscribe/') ||
+        url.includes('/t/c/') ||
+        url.includes('/t/o/')
+      ) {
+        return match;
+      }
+
+      const encodedUrl = encodeURIComponent(url);
+      const trackingUrl = `${baseUrl}/api/t/c/${emailSendId}?url=${encodedUrl}`;
+      return `${prefix}${trackingUrl}${suffix}`;
+    }
+  );
+}
+
+/**
+ * Inject a 1x1 transparent pixel for open tracking before </body>.
+ */
+export function injectOpenPixel(
+  html: string,
+  emailSendId: string,
+  baseUrl: string
+): string {
+  const pixel = `<img src="${baseUrl}/api/t/o/${emailSendId}" width="1" height="1" alt="" style="display:none;border:0;" />`;
+
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${pixel}</body>`);
   }
-  let result = renderMergeTags(html, data)
-  result = rewriteUrlsForTracking(result, emailSendId, baseUrl)
-  result = injectOpenPixel(result, emailSendId, baseUrl)
-  result = addUnsubscribeLink(result, emailSendId, baseUrl)
-  return result
+
+  // If no </body> tag, append at the end
+  return html + pixel;
+}
+
+/**
+ * Add unsubscribe link in PT-BR before </body>.
+ */
+export function addUnsubscribeLink(
+  html: string,
+  emailSendId: string,
+  baseUrl: string
+): string {
+  const unsubscribeHtml = `
+<div style="text-align:center;padding:20px 0 10px;font-size:12px;color:#999;">
+  <a href="${baseUrl}/api/unsubscribe/${emailSendId}" style="color:#999;text-decoration:underline;">
+    Cancelar inscrição
+  </a>
+  &nbsp;|&nbsp;
+  Você recebeu este e-mail porque se inscreveu em nossa lista.
+</div>`;
+
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${unsubscribeHtml}</body>`);
+  }
+
+  return html + unsubscribeHtml;
+}
+
+/**
+ * Full email preparation pipeline.
+ */
+export function prepareEmailHtml({
+  html,
+  mergeData,
+  emailSendId,
+  baseUrl,
+}: {
+  html: string;
+  mergeData: Record<string, string>;
+  emailSendId: string;
+  baseUrl: string;
+}): string {
+  let result = html;
+
+  // 1. Replace merge tags
+  result = renderMergeTags(result, mergeData);
+
+  // 2. Add unsubscribe link (before tracking rewrites)
+  result = addUnsubscribeLink(result, emailSendId, baseUrl);
+
+  // 3. Rewrite URLs for click tracking
+  result = rewriteUrlsForTracking(result, emailSendId, baseUrl);
+
+  // 4. Inject open pixel
+  result = injectOpenPixel(result, emailSendId, baseUrl);
+
+  return result;
 }

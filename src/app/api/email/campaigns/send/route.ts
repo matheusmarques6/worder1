@@ -1,96 +1,177 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthClient } from '@/lib/api-utils'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { sendCampaignEmail } from '@/lib/email/send-campaign-email'
+// =============================================
+// WORDER: Send Campaign API
+// /src/app/api/email/campaigns/send/route.ts
+//
+// POST: resolve contacts, loop send, update stats.
+// =============================================
 
-export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthClient, authError } from '@/lib/api-utils';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sendCampaignEmail } from '@/lib/email/send-campaign-email';
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthClient()
-    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthClient();
+    if (!auth) return authError();
 
-    const { campaignId } = await req.json()
-    if (!campaignId) return NextResponse.json({ error: 'campaignId required' }, { status: 400 })
+    const { user } = auth;
+    const { campaign_id } = await request.json();
 
-    // Get campaign with template
-    const { data: campaign } = await supabaseAdmin
-      .from('email_campaigns')
-      .select('*, email_templates(*)')
-      .eq('id', campaignId)
-      .eq('organization_id', auth.user.organization_id)
-      .single()
-
-    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
-    if (!campaign.template_id || !campaign.email_templates) {
-      return NextResponse.json({ error: 'No template linked' }, { status: 400 })
+    if (!campaign_id) {
+      return NextResponse.json({ error: 'campaign_id is required' }, { status: 400 });
     }
 
-    // Get org info
-    const { data: org } = await supabaseAdmin
-      .from('organizations')
-      .select('id, name, domain')
-      .eq('id', auth.user.organization_id)
-      .single()
+    // Get campaign with template
+    const { data: campaign, error: campaignError } = await supabaseAdmin
+      .from('email_campaigns')
+      .select('*, email_templates(*)')
+      .eq('id', campaign_id)
+      .eq('organization_id', user.organization_id)
+      .single();
 
-    // Resolve contacts (subscribed only)
-    let contactsQuery = supabaseAdmin
+    if (campaignError || !campaign) {
+      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    }
+
+    if (campaign.status === 'sent' || campaign.status === 'sending') {
+      return NextResponse.json(
+        { error: `Campaign is already ${campaign.status}` },
+        { status: 400 }
+      );
+    }
+
+    const template = campaign.email_templates;
+    if (!template) {
+      return NextResponse.json({ error: 'Campaign template not found' }, { status: 404 });
+    }
+
+    // Update campaign status to 'sending'
+    await supabaseAdmin
+      .from('email_campaigns')
+      .update({ status: 'sending', sent_at: new Date().toISOString() })
+      .eq('id', campaign_id);
+
+    // Resolve contacts
+    let contactsQuery: any = supabaseAdmin
       .from('contacts')
-      .select('id, email, first_name, last_name, phone, company')
-      .eq('organization_id', auth.user.organization_id)
+      .select('id, email, first_name, last_name, phone')
+      .eq('organization_id', user.organization_id)
       .eq('is_subscribed_email', true)
-      .not('email', 'is', null)
+      .not('email', 'is', null);
 
-    // If segment_id, resolve segment contacts
+    // Filter by segment if specified
     if (campaign.segment_id) {
       const { data: segment } = await supabaseAdmin
         .from('segments')
         .select('conditions')
         .eq('id', campaign.segment_id)
-        .single()
-      // For now, use all subscribed contacts (segment filtering would need resolver)
+        .single();
+
+      if (segment?.conditions) {
+        // Apply basic segment conditions
+        for (const condition of segment.conditions) {
+          const { field, operator, value } = condition;
+          switch (operator) {
+            case 'eq':
+              contactsQuery = contactsQuery.eq(field, value);
+              break;
+            case 'neq':
+              contactsQuery = contactsQuery.neq(field, value);
+              break;
+            case 'contains':
+              contactsQuery = contactsQuery.ilike(field, `%${value}%`);
+              break;
+            case 'gt':
+              contactsQuery = contactsQuery.gt(field, value);
+              break;
+            case 'lt':
+              contactsQuery = contactsQuery.lt(field, value);
+              break;
+          }
+        }
+      }
     }
 
-    const { data: contacts } = await contactsQuery.limit(1000)
+    // Filter by store if specified
+    if (campaign.store_id) {
+      contactsQuery = contactsQuery.eq('store_id', campaign.store_id);
+    }
+
+    const { data: contacts, error: contactsError } = await contactsQuery;
+
+    if (contactsError) {
+      console.error('[SendCampaign] Error fetching contacts:', contactsError);
+      await supabaseAdmin
+        .from('email_campaigns')
+        .update({ status: 'failed' })
+        .eq('id', campaign_id);
+      return NextResponse.json({ error: 'Failed to resolve contacts' }, { status: 500 });
+    }
 
     if (!contacts || contacts.length === 0) {
-      return NextResponse.json({ error: 'No contacts to send to' }, { status: 400 })
+      await supabaseAdmin
+        .from('email_campaigns')
+        .update({ status: 'sent', total_sent: 0 })
+        .eq('id', campaign_id);
+      return NextResponse.json({ message: 'No contacts to send to', total: 0 });
     }
 
-    // Update campaign status
-    await supabaseAdmin
-      .from('email_campaigns')
-      .update({
-        status: 'sending',
-        sent_at: new Date().toISOString(),
-        total_recipients: contacts.length,
-      })
-      .eq('id', campaignId)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
 
-    // Send to each contact (in batches to avoid rate limits)
-    let sent = 0, failed = 0
+    // Get store info for merge tags
+    let storeName = '';
+    let storeUrl = '';
+    let storeEmail = '';
+    let storePhone = '';
+    if (campaign.store_id) {
+      const { data: store } = await supabaseAdmin
+        .from('shopify_stores')
+        .select('name, domain, email, phone')
+        .eq('id', campaign.store_id)
+        .single();
+      if (store) {
+        storeName = store.name || '';
+        storeUrl = store.domain ? `https://${store.domain}` : '';
+        storeEmail = store.email || '';
+        storePhone = store.phone || '';
+      }
+    }
+
+    // Send to each contact
+    let successCount = 0;
+    let failCount = 0;
+
     for (const contact of contacts) {
-      if (!contact.email) continue
+      const mergeData: Record<string, string> = {
+        'contact.first_name': contact.first_name || '',
+        'contact.last_name': contact.last_name || '',
+        'contact.email': contact.email || '',
+        'contact.phone': contact.phone || '',
+        'store.name': storeName,
+        'store.url': storeUrl,
+        'store.email': storeEmail,
+        'store.phone': storePhone,
+      };
 
       const result = await sendCampaignEmail({
-        campaignId,
+        campaignId: campaign_id,
         contactId: contact.id,
         contactEmail: contact.email,
-        contactData: contact,
-        orgData: org || { id: auth.user.organization_id },
-        templateHtml: campaign.email_templates.html || '',
+        mergeData,
+        templateHtml: template.html,
         subject: campaign.subject,
+        fromEmail: campaign.from_email,
         senderName: campaign.sender_name,
-        senderEmail: campaign.sender_email,
         replyTo: campaign.reply_to,
-      })
+        baseUrl,
+        organizationId: user.organization_id,
+      });
 
-      if (result.success) sent++
-      else failed++
-
-      // Rate limit: ~10 emails per second
-      if ((sent + failed) % 10 === 0) {
-        await new Promise(r => setTimeout(r, 1000))
+      if (result.success) {
+        successCount++;
+      } else {
+        failCount++;
       }
     }
 
@@ -99,13 +180,20 @@ export async function POST(req: NextRequest) {
       .from('email_campaigns')
       .update({
         status: 'sent',
-        total_sent: sent,
-        total_failed: failed,
+        total_sent: successCount,
+        total_failed: failCount,
+        total_recipients: contacts.length,
       })
-      .eq('id', campaignId)
+      .eq('id', campaign_id);
 
-    return NextResponse.json({ success: true, sent, failed, total: contacts.length })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({
+      success: true,
+      total: contacts.length,
+      sent: successCount,
+      failed: failCount,
+    });
+  } catch (error) {
+    console.error('[SendCampaign] Error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

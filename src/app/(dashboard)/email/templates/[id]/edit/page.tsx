@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Loader2 } from 'lucide-react'
 
@@ -9,66 +9,59 @@ const UnlayerEditor = dynamic(() => import('@/components/email/email-editor'), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-screen bg-white">
-      <div className="text-center">
-        <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
         <p className="text-sm text-gray-500">Carregando editor...</p>
       </div>
     </div>
   ),
 })
 
-interface Template {
+interface TemplateData {
   id: string
   name: string
   category: string
-  design_json?: Record<string, unknown>
+  design?: Record<string, any>
   html?: string
 }
 
 export default function EditTemplatePage() {
-  const router = useRouter()
   const params = useParams()
+  const router = useRouter()
   const templateId = params.id as string
 
-  const [template, setTemplate] = useState<Template | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [template, setTemplate] = useState<TemplateData | null>(null)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    const fetchTemplate = async () => {
-      try {
-        const res = await fetch(`/api/email/templates/${templateId}`)
-        const data = await res.json()
-        if (data.success && data.template) {
-          setTemplate(data.template)
-        } else {
-          setError('Template não encontrado')
-        }
-      } catch (err) {
-        setError('Erro ao carregar template')
-      } finally {
-        setIsLoading(false)
-      }
+  const fetchTemplate = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/email/templates/${templateId}`)
+      if (!res.ok) throw new Error('Template não encontrado')
+      const data = await res.json()
+      setTemplate(data)
+    } catch (err: any) {
+      setError(err.message || 'Erro ao carregar template')
+    } finally {
+      setLoading(false)
     }
-
-    if (templateId) fetchTemplate()
   }, [templateId])
 
-  const handleSave = async (design: Record<string, unknown>, html: string): Promise<boolean> => {
+  useEffect(() => {
+    fetchTemplate()
+  }, [fetchTemplate])
+
+  const handleSave = async (design: Record<string, any>, html: string) => {
     try {
       const res = await fetch(`/api/email/templates/${templateId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ design_json: design, html }),
+        body: JSON.stringify({ design, html }),
       })
-      const data = await res.json()
-      if (!data.success) {
-        alert('Erro ao salvar: ' + (data.error || 'Erro desconhecido'))
-        return false
-      }
+      if (!res.ok) throw new Error('Erro ao salvar')
       return true
     } catch (err) {
-      alert('Erro ao salvar template')
+      console.error('Save failed:', err)
       return false
     }
   }
@@ -77,24 +70,29 @@ export default function EditTemplatePage() {
     router.push('/email/templates')
   }
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-white">
-        <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+      <div className="flex items-center justify-center h-screen">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+          <p className="text-sm text-gray-500">Carregando template...</p>
+        </div>
       </div>
     )
   }
 
   if (error || !template) {
     return (
-      <div className="flex items-center justify-center h-screen bg-white">
+      <div className="flex items-center justify-center h-screen">
         <div className="text-center">
-          <p className="text-gray-900 font-medium mb-2">{error || 'Template não encontrado'}</p>
+          <p className="text-base font-medium text-gray-500 mb-2">
+            {error || 'Template não encontrado'}
+          </p>
           <button
             onClick={handleBack}
-            className="text-sm text-brand-500 hover:text-brand-600"
+            className="text-sm text-brand-500 hover:text-brand-600 font-medium"
           >
-            Voltar para templates
+            Voltar para Templates
           </button>
         </div>
       </div>
@@ -102,12 +100,12 @@ export default function EditTemplatePage() {
   }
 
   return (
-    <div className="h-screen">
+    <div className="fixed inset-0 z-50 bg-white">
       <UnlayerEditor
-        design={template.design_json}
+        templateName={template.name}
+        design={template.design}
         onSave={handleSave}
         onBack={handleBack}
-        templateName={template.name}
       />
     </div>
   )

@@ -228,7 +228,7 @@ function IntegrationCard({
         ) : (
           <button
             onClick={onInstall}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-transparent border-2 border-primary-500 text-brand-500 hover:bg-primary-500 hover:text-white rounded-xl text-sm font-medium transition-all duration-200"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-transparent border-2 border-primary-500 text-primary-500 hover:bg-primary-500 hover:text-white rounded-xl text-sm font-medium transition-all duration-200"
           >
             <Plus className="w-4 h-4" />
             Instalar
@@ -302,20 +302,12 @@ export default function IntegrationsPage() {
     }
   }
 
-  // Slugs de integrações que realmente funcionam no sistema
-  const implementedSlugs = ['shopify', 'whatsapp']
-
   // Filter integrations
   const filteredIntegrations = integrations.filter((int) => {
+    // Excluir WhatsApp da lista (já tem card nativo na seção Mensagens)
+    // Cobrir variações do slug: whatsapp, whatsapp-business, whatsappbusiness
     const slug = int.slug?.toLowerCase() || '';
     const name = int.name?.toLowerCase() || '';
-
-    // Excluir integrações que não têm implementação real
-    if (!implementedSlugs.includes(slug)) {
-      return false
-    }
-
-    // Excluir WhatsApp da lista (já tem card nativo na seção Mensagens)
     if (slug.includes('whatsapp') || name.includes('whatsapp')) {
       return false
     }
@@ -548,7 +540,7 @@ export default function IntegrationsPage() {
             </div>
           ) : (
             <div className="text-center py-20">
-              <Puzzle className="w-12 h-12 mx-auto mb-4 text-gray-500" />
+              <Puzzle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Nenhuma integração encontrada
               </h3>

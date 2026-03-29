@@ -346,7 +346,7 @@ export function ExecutionHistory({
       <div className="flex-1 overflow-y-auto">
         {loading && !refreshing ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+            <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-12 text-red-400">
@@ -358,7 +358,7 @@ export function ExecutionHistory({
           </div>
         ) : runs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-gray-500">
-            <PlayCircle className="w-12 h-12 mb-3 text-gray-500" />
+            <PlayCircle className="w-12 h-12 mb-3 text-gray-400" />
             <p className="text-lg font-medium text-white mb-1">Nenhuma execução</p>
             <p className="text-sm text-center max-w-md mb-4">
               {automationId 
@@ -420,7 +420,7 @@ export function ExecutionHistory({
                       </span>
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-500">—</span>
+                    <span className="text-xs text-gray-400">—</span>
                   )}
                 </div>
 
@@ -428,7 +428,7 @@ export function ExecutionHistory({
                 <div className="w-20 flex-shrink-0 hidden lg:block">
                   <div className="flex items-center gap-1 text-xs">
                     <span className="text-green-400">{run.completed_steps}</span>
-                    <span className="text-gray-500">/</span>
+                    <span className="text-gray-400">/</span>
                     <span className="text-gray-500">{run.total_steps}</span>
                     {run.failed_steps > 0 && (
                       <span className="text-red-400 ml-1">({run.failed_steps} erro)</span>
@@ -444,7 +444,7 @@ export function ExecutionHistory({
                 </div>
 
                 {/* Seta */}
-                <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
               </motion.div>
             ))}
           </div>

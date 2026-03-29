@@ -190,8 +190,8 @@ export default function WhatsAppConnectionManager({
   // ✅ NOVO: Mostrar mensagem se não tiver loja
   if (!storeId) {
     return (
-      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-        <p className="text-sm text-amber-700 text-center">
+      <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+        <p className="text-sm text-yellow-500 text-center">
           Selecione uma loja para ver as conexões
         </p>
       </div>
@@ -203,21 +203,21 @@ export default function WhatsAppConnectionManager({
       {/* Current Selection */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center gap-3 p-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
+        className="w-full flex items-center gap-3 p-2 bg-gray-50 hover:bg-white border border-gray-200 rounded-lg transition-colors"
       >
         {loading ? (
-          <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+          <Loader2 className="w-5 h-5 text-gray-500 animate-spin" />
         ) : selectedInstance ? (
           <>
             <div className="relative">
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                selectedInstance.status === 'connected' ? 'bg-green-100' : 'bg-gray-100'
+                selectedInstance.status === 'connected' ? 'bg-green-500/20' : 'bg-gray-100'
               }`}>
                 <Smartphone className={`w-5 h-5 ${
-                  selectedInstance.status === 'connected' ? 'text-green-600' : 'text-gray-400'
+                  selectedInstance.status === 'connected' ? 'text-green-400' : 'text-gray-500'
                 }`} />
               </div>
-              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
+              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-gray-200 ${
                 getStatusColor(selectedInstance.status)
               }`} />
             </div>
@@ -233,7 +233,7 @@ export default function WhatsAppConnectionManager({
         ) : instances.length === 0 ? (
           <>
             <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-              <Plus className="w-5 h-5 text-gray-400" />
+              <Plus className="w-5 h-5 text-gray-500" />
             </div>
             <div className="flex-1 text-left">
               <p className="text-sm font-medium text-gray-900">Conectar WhatsApp</p>
@@ -243,7 +243,7 @@ export default function WhatsAppConnectionManager({
         ) : (
           <>
             <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-              <Smartphone className="w-5 h-5 text-gray-400" />
+              <Smartphone className="w-5 h-5 text-gray-500" />
             </div>
             <div className="flex-1 text-left">
               <p className="text-sm font-medium text-gray-900">Selecione um número</p>
@@ -251,7 +251,7 @@ export default function WhatsAppConnectionManager({
             </div>
           </>
         )}
-        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown */}
@@ -261,7 +261,7 @@ export default function WhatsAppConnectionManager({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+            className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
           >
             {/* Instance List */}
             <div className="max-h-64 overflow-y-auto">
@@ -275,8 +275,8 @@ export default function WhatsAppConnectionManager({
                 instances.map((instance) => (
                   <div
                     key={instance.id}
-                    className={`flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer ${
-                      selectedInstance?.id === instance.id ? 'bg-orange-50' : ''
+                    className={`flex items-center gap-3 p-3 hover:bg-gray-100 cursor-pointer ${
+                      selectedInstance?.id === instance.id ? 'bg-brand-50' : ''
                     }`}
                   >
                     <div
@@ -288,13 +288,13 @@ export default function WhatsAppConnectionManager({
                     >
                       <div className="relative">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                          instance.status === 'connected' ? 'bg-green-100' : 'bg-gray-100'
+                          instance.status === 'connected' ? 'bg-green-500/20' : 'bg-gray-100'
                         }`}>
                           <Smartphone className={`w-4 h-4 ${
-                            instance.status === 'connected' ? 'text-green-600' : 'text-gray-400'
+                            instance.status === 'connected' ? 'text-green-400' : 'text-gray-500'
                           }`} />
                         </div>
-                        <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-gray-200 ${
                           getStatusColor(instance.status)
                         }`} />
                       </div>
@@ -307,7 +307,7 @@ export default function WhatsAppConnectionManager({
                         </p>
                       </div>
                       {selectedInstance?.id === instance.id && (
-                        <Check className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                        <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
                       )}
                     </div>
 
@@ -320,16 +320,16 @@ export default function WhatsAppConnectionManager({
                         }}
                         className="p-1 hover:bg-gray-200 rounded"
                       >
-                        <MoreVertical className="w-4 h-4 text-gray-400" />
+                        <MoreVertical className="w-4 h-4 text-gray-500" />
                       </button>
 
                       {menuOpen === instance.id && (
-                        <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                        <div className="absolute right-0 mt-1 w-40 bg-gray-100 border border-gray-300 rounded-lg shadow-xl z-10">
                           {instance.status === 'connected' && (
                             <button
                               onClick={() => handleDisconnect(instance.id)}
                               disabled={actionLoading === instance.id}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-amber-600 hover:bg-gray-50"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-yellow-400 hover:bg-gray-200"
                             >
                               {actionLoading === instance.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -342,7 +342,7 @@ export default function WhatsAppConnectionManager({
                           <button
                             onClick={() => handleDelete(instance.id)}
                             disabled={actionLoading === instance.id}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-gray-50"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-gray-200"
                           >
                             {actionLoading === instance.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -366,7 +366,7 @@ export default function WhatsAppConnectionManager({
                   setIsOpen(false)
                   onConnectClick()
                 }}
-                className="w-full flex items-center justify-center gap-2 p-2 text-sm text-orange-600 hover:bg-orange-50 rounded-lg"
+                className="w-full flex items-center justify-center gap-2 p-2 text-sm text-brand-600 hover:bg-gray-100 rounded-lg"
               >
                 <Plus className="w-4 h-4" />
                 Conectar novo WhatsApp

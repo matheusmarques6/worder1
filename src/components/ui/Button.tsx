@@ -36,10 +36,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white',
           'active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
           variants[variant],
-          variant === 'primary' && 'focus:ring-brand-500/50',
-          variant === 'secondary' && 'focus:ring-gray-300',
-          variant === 'danger' && 'focus:ring-red-500/50',
-          variant === 'success' && 'focus:ring-emerald-500/50',
+          variant === 'primary' && 'focus:ring-primary-500/50',
+          variant === 'secondary' && 'focus:ring-gray-300/50',
+          variant === 'danger' && 'focus:ring-error-500/50',
+          variant === 'success' && 'focus:ring-success-500/50',
           sizes[size],
           className
         )}

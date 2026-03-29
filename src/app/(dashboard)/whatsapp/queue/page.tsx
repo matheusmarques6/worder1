@@ -465,7 +465,7 @@ export default function QueuePage() {
           <div className="space-y-3">
             {agents.length === 0 ? (
               <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
-                <Users className="w-10 h-10 text-gray-500 mx-auto mb-2" />
+                <Users className="w-10 h-10 text-gray-400 mx-auto mb-2" />
                 <p className="text-gray-500 text-sm">Nenhum atendente</p>
               </div>
             ) : (

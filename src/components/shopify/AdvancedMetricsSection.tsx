@@ -133,7 +133,7 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
               <BarChart3 className="w-5 h-5 text-brand-600" />
             </div>
             <div className="text-left">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-white">
                 Métricas Avançadas
               </h3>
               <p className="text-sm text-gray-500">
@@ -180,7 +180,7 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
               {isLoading && (
                 <div className="flex items-center justify-center py-12">
                   <div className="flex items-center gap-3 text-gray-500">
-                    <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+                    <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
                     <span>Calculando métricas...</span>
                   </div>
                 </div>

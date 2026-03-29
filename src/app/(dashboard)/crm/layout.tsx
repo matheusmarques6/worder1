@@ -41,8 +41,8 @@ export default function CRMLayout({
                 className={`
                   flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors
                   ${active 
-                    ? 'border-primary-500 text-primary-400' 
-                    : 'border-transparent text-gray-500 hover:text-white hover:border-gray-200'
+                    ? 'border-primary-500 text-brand-600' 
+                    : 'border-transparent text-gray-500 hover:text-white hover:border-gray-300'
                   }
                 `}
               >

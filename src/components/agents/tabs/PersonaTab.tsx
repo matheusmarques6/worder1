@@ -333,7 +333,7 @@ export default function PersonaTab({ agent, onUpdate }: PersonaTabProps) {
                         exit={{ opacity: 0, y: -10 }}
                         className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg group"
                       >
-                        <GripVertical className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5 cursor-grab" />
+                        <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5 cursor-grab" />
                         <span className="text-yellow-400 text-sm">✓</span>
                         <p className="flex-1 text-sm text-gray-600">{guideline}</p>
                         <button

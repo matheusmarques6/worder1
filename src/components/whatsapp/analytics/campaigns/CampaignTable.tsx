@@ -165,12 +165,12 @@ function SortableHeader({ label, field, currentField, currentOrder, onSort, alig
         <div className="flex flex-col">
           <ChevronUp
             className={`w-3 h-3 -mb-1 ${
-              isActive && currentOrder === 'asc' ? 'text-brand-600' : 'text-gray-500'
+              isActive && currentOrder === 'asc' ? 'text-brand-600' : 'text-gray-400'
             }`}
           />
           <ChevronDown
             className={`w-3 h-3 ${
-              isActive && currentOrder === 'desc' ? 'text-brand-600' : 'text-gray-500'
+              isActive && currentOrder === 'desc' ? 'text-brand-600' : 'text-gray-400'
             }`}
           />
         </div>

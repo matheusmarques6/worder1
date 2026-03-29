@@ -1,50 +1,55 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { isSupabaseConfigured } from '@/lib/supabase-admin'
+// =============================================
+// WORDER: Click Tracker / Redirect
+// /src/app/api/t/c/[id]/route.ts
+//
+// Records click, logs to email_clicks, redirects.
+// =============================================
 
-export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const url = req.nextUrl.searchParams.get('url')
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const emailSendId = params.id;
+  const url = request.nextUrl.searchParams.get('url');
 
   if (!url) {
-    return NextResponse.redirect(new URL('/', req.url), 302)
+    return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 });
   }
 
+  const decodedUrl = decodeURIComponent(url);
+
+  // Record click asynchronously
   try {
-    const decodedUrl = decodeURIComponent(url)
+    const { isSupabaseConfigured } = await import('@/lib/supabase-admin');
 
     if (isSupabaseConfigured()) {
-      const { supabaseAdmin } = await import('@/lib/supabase-admin')
+      const { supabaseAdmin } = await import('@/lib/supabase-admin');
 
-      // Update clicked_at (first click only)
+      // Update first click timestamp on email_sends
       await supabaseAdmin
         .from('email_sends')
-        .update({
-          clicked_at: new Date().toISOString(),
-          status: 'clicked',
-        })
-        .eq('id', params.id)
-        .is('clicked_at', null)
+        .update({ clicked_at: new Date().toISOString() })
+        .eq('id', emailSendId)
+        .is('clicked_at', null);
 
-      // Also track individual click
-      // Track individual click (table may not exist yet)
+      // Log individual click to email_clicks
       try {
-        await supabaseAdmin
-          .from('email_clicks')
-          .insert({
-            email_send_id: params.id,
-            url: decodedUrl,
-            clicked_at: new Date().toISOString(),
-            user_agent: req.headers.get('user-agent') || null,
-          })
-      } catch {
-        // email_clicks table may not exist
+        await supabaseAdmin.from('email_clicks').insert({
+          email_send_id: emailSendId,
+          url: decodedUrl,
+          clicked_at: new Date().toISOString(),
+        });
+      } catch (clickError) {
+        // email_clicks table might not exist yet
+        console.error('[ClickTracker] Error logging click:', clickError);
       }
     }
-
-    return NextResponse.redirect(decodedUrl, 302)
-  } catch (err) {
-    console.error('[Tracking] Click error:', err)
-    return NextResponse.redirect(decodeURIComponent(url), 302)
+  } catch (error) {
+    console.error('[ClickTracker] Error recording click:', error);
   }
+
+  // 302 redirect to the original URL
+  return NextResponse.redirect(decodedUrl, 302);
 }

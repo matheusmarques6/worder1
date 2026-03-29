@@ -237,14 +237,8 @@ export default function InboxPage() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            {!storeId ? 'Selecione uma loja' : 'Erro de autenticação'}
-          </h2>
-          <p className="text-gray-500">
-            {!storeId
-              ? 'Escolha uma loja no menu para ver as conversas do WhatsApp.'
-              : 'Não foi possível identificar sua organização. Faça login novamente.'}
-          </p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Selecione uma loja</h2>
+          <p className="text-gray-500">Escolha uma loja no menu para ver as conversas do WhatsApp.</p>
         </div>
       </div>
     )
@@ -296,7 +290,7 @@ export default function InboxPage() {
           {/* ✅ CORREÇÃO: Só mostra spinner na PRIMEIRA carga (lista vazia) */}
           {conversationsLoading && conversations.length === 0 ? (
             <div className="flex items-center justify-center h-32">
-              <RefreshCw className="w-6 h-6 text-brand-500 animate-spin" />
+              <RefreshCw className="w-6 h-6 text-primary-500 animate-spin" />
             </div>
           ) : conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-gray-400">

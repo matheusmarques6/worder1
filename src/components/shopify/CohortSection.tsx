@@ -214,7 +214,7 @@ export function CohortSection({ data }: CohortSectionProps) {
                         if (period > monthsSinceCohort) {
                           return (
                             <td key={period} className="py-2 px-2 text-center">
-                              <div className="inline-flex items-center justify-center w-12 h-8 rounded bg-gray-100/30 text-gray-500 text-xs">
+                              <div className="inline-flex items-center justify-center w-12 h-8 rounded bg-gray-100/30 text-gray-400 text-xs">
                                 -
                               </div>
                             </td>

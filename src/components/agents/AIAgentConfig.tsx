@@ -442,7 +442,7 @@ export default function AIAgentConfig({
                     type="checkbox"
                     checked={config.transfer_to_queue}
                     onChange={(e) => setConfig(prev => ({ ...prev, transfer_to_queue: e.target.checked }))}
-                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500"
+                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500"
                   />
                 </label>
 
@@ -484,7 +484,7 @@ export default function AIAgentConfig({
                     type="checkbox"
                     checked={config.always_active}
                     onChange={(e) => setConfig(prev => ({ ...prev, always_active: e.target.checked }))}
-                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500"
+                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500"
                   />
                 </label>
 
@@ -498,7 +498,7 @@ export default function AIAgentConfig({
                     type="checkbox"
                     checked={config.only_when_no_human}
                     onChange={(e) => setConfig(prev => ({ ...prev, only_when_no_human: e.target.checked }))}
-                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500"
+                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500"
                   />
                 </label>
 
@@ -656,7 +656,7 @@ export default function AIAgentConfig({
                     type="checkbox"
                     checked={config.use_knowledge_base}
                     onChange={(e) => setConfig(prev => ({ ...prev, use_knowledge_base: e.target.checked }))}
-                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500"
+                    className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500"
                   />
                 </label>
 

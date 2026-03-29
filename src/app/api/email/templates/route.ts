@@ -1,50 +1,86 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthClient } from '@/lib/api-utils'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+// =============================================
+// WORDER: Email Templates API
+// /src/app/api/email/templates/route.ts
+//
+// GET: list templates, POST: create template.
+// =============================================
 
-export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthClient, authError } from '@/lib/api-utils';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const auth = await getAuthClient()
-    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthClient();
+    if (!auth) return authError();
 
-    const { data: templates } = await supabaseAdmin
+    const { user } = auth;
+    const { searchParams } = request.nextUrl;
+    const type = searchParams.get('type');
+
+    let query = supabaseAdmin
       .from('email_templates')
-      .select('id, name, category, thumbnail_url, updated_at, created_at')
-      .eq('organization_id', auth.user.organization_id)
-      .order('updated_at', { ascending: false })
+      .select('*')
+      .eq('organization_id', user.organization_id)
+      .order('created_at', { ascending: false });
 
-    return NextResponse.json({ success: true, templates: templates || [] })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    const { data: templates, error } = await query;
+
+    if (error) {
+      console.error('[EmailTemplates] Error fetching templates:', error);
+      return NextResponse.json({ error: 'Failed to fetch templates' }, { status: 500 });
+    }
+
+    return NextResponse.json({ templates: templates || [] });
+  } catch (error) {
+    console.error('[EmailTemplates] Error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthClient()
-    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthClient();
+    if (!auth) return authError();
 
-    const { name, category, design_json, html } = await req.json()
-    if (!name) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
+    const { user } = auth;
+    const body = await request.json();
 
-    const { data, error } = await supabaseAdmin
+    const { name, subject, html, type, thumbnail_url } = body;
+
+    if (!name || !subject || !html) {
+      return NextResponse.json(
+        { error: 'name, subject, and html are required' },
+        { status: 400 }
+      );
+    }
+
+    const { data: template, error } = await supabaseAdmin
       .from('email_templates')
       .insert({
-        organization_id: auth.user.organization_id,
+        organization_id: user.organization_id,
         name,
-        category: category || 'custom',
-        design_json: design_json || null,
-        html: html || '',
-        created_by: auth.user.id,
+        subject,
+        html,
+        type: type || 'campaign',
+        thumbnail_url: thumbnail_url || null,
+        created_by: user.id,
       })
       .select()
-      .single()
+      .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ success: true, template: data })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    if (error) {
+      console.error('[EmailTemplates] Error creating template:', error);
+      return NextResponse.json({ error: 'Failed to create template' }, { status: 500 });
+    }
+
+    return NextResponse.json({ template }, { status: 201 });
+  } catch (error) {
+    console.error('[EmailTemplates] Error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -420,7 +420,7 @@ export function CustomFieldsManager({
                         type="checkbox"
                         checked={formData.isRequired}
                         onChange={(e) => setFormData(prev => ({ ...prev, isRequired: e.target.checked }))}
-                        className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-brand-500"
+                        className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500"
                       />
                       <span className="text-sm text-gray-600">Campo obrigatório</span>
                     </label>

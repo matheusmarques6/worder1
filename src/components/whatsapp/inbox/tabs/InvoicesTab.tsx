@@ -122,7 +122,7 @@ export function InvoicesTab({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
       </div>
     )
   }
@@ -132,17 +132,17 @@ export function InvoicesTab({
       {/* Header */}
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2">
-          <FileText className="w-4 h-4 text-orange-500" />
+          <FileText className="w-4 h-4 text-brand-600" />
           Notas Fiscais
           {invoices.length > 0 && (
-            <span className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-md">
+            <span className="px-1.5 py-0.5 text-xs bg-gray-100 rounded-md">
               {invoices.length}
             </span>
           )}
         </h4>
         <button
           onClick={() => setShowUploadModal(true)}
-          className="p-1.5 text-orange-500 hover:bg-orange-50 rounded-lg transition-colors"
+          className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" />
         </button>
@@ -151,13 +151,13 @@ export function InvoicesTab({
       {/* Resumo */}
       {invoices.length > 0 && (
         <div className="grid grid-cols-2 gap-2">
-          <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+          <div className="p-3 bg-gray-50 rounded-xl">
             <p className="text-xs text-gray-500">Total em NFs</p>
             <p className="text-lg font-semibold text-gray-900">{formatCurrency(totals.value)}</p>
           </div>
-          <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+          <div className="p-3 bg-gray-50 rounded-xl">
             <p className="text-xs text-gray-500">Emitidas</p>
-            <p className="text-lg font-semibold text-green-600">{totals.issued}</p>
+            <p className="text-lg font-semibold text-green-400">{totals.issued}</p>
           </div>
         </div>
       )}
@@ -176,14 +176,14 @@ export function InvoicesTab({
         </div>
       ) : (
         <div className="text-center py-8">
-          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 
                           flex items-center justify-center">
             <FileText className="w-6 h-6 text-gray-400" />
           </div>
           <p className="text-sm text-gray-500 mb-3">Nenhuma nota fiscal</p>
           <button
             onClick={() => setShowUploadModal(true)}
-            className="text-sm text-orange-500 hover:text-orange-600 font-medium"
+            className="text-sm text-brand-600 hover:text-brand-500 font-medium"
           >
             Adicionar NF
           </button>
@@ -220,11 +220,11 @@ function InvoiceCard({
   const StatusIcon = statusConfig.icon
 
   return (
-    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+    <div className="p-3 bg-gray-50 rounded-xl">
       <div className="flex items-start gap-3">
         {/* Ícone */}
         <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-          <FileText className="w-5 h-5 text-orange-500" />
+          <FileText className="w-5 h-5 text-brand-600" />
         </div>
 
         {/* Conteúdo */}
@@ -239,13 +239,13 @@ function InvoiceCard({
             </span>
           </div>
 
-          <p className="text-sm text-gray-900 font-medium mb-1">
+          <p className="text-sm text-white font-medium mb-1">
             {invoice.invoice_number || invoice.invoice_key?.slice(-8) || 'Sem número'}
           </p>
 
           <div className="flex items-center gap-3 text-xs text-gray-500">
             <span>{formatDate(invoice.issue_date)}</span>
-            <span className="text-gray-900 font-medium">
+            <span className="text-white font-medium">
               {formatCurrency(invoice.total_value || 0)}
             </span>
           </div>
@@ -258,7 +258,7 @@ function InvoiceCard({
               href={invoice.pdf_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+              className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
               title="Ver PDF"
             >
               <Eye className="w-4 h-4" />
@@ -267,7 +267,7 @@ function InvoiceCard({
           <button
             onClick={onDelete}
             disabled={isDeleting}
-            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+            className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
             title="Remover"
           >
             {isDeleting ? (
@@ -363,7 +363,7 @@ function UploadInvoiceModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl border border-gray-200 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-gray-200 sticky top-0 bg-white">
           <h3 className="text-lg font-semibold text-gray-900">Adicionar Nota Fiscal</h3>
         </div>
@@ -371,7 +371,7 @@ function UploadInvoiceModal({
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Upload de arquivo */}
           <div>
-            <label className="block text-sm text-gray-600 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               Arquivo (PDF ou XML)
             </label>
             <input
@@ -385,18 +385,18 @@ function UploadInvoiceModal({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className={`w-full p-4 border-2 border-dashed rounded-xl transition-colors ${
-                file
-                  ? 'border-orange-400 bg-orange-50'
-                  : 'border-gray-300 hover:border-gray-400'
+                file 
+                  ? 'border-primary-500 bg-brand-50' 
+                  : 'border-gray-300 hover:border-gray-300'
               }`}
             >
               {file ? (
-                <div className="flex items-center justify-center gap-2 text-orange-600">
+                <div className="flex items-center justify-center gap-2 text-brand-600">
                   <File className="w-5 h-5" />
                   <span className="text-sm">{file.name}</span>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-2 text-gray-400">
+                <div className="flex flex-col items-center gap-2 text-gray-500">
                   <Upload className="w-6 h-6" />
                   <span className="text-sm">Clique para selecionar</span>
                 </div>
@@ -410,12 +410,12 @@ function UploadInvoiceModal({
           {/* Tipo e Número */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Tipo</label>
+              <label className="block text-sm text-gray-500 mb-1">Tipo</label>
               <select
                 value={invoiceType}
                 onChange={(e) => setInvoiceType(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
-                           text-gray-900 focus:outline-none focus:border-orange-400"
+                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
+                           text-white focus:outline-none focus:border-primary-500"
               >
                 <option value="nfe">NF-e</option>
                 <option value="nfce">NFC-e</option>
@@ -425,29 +425,29 @@ function UploadInvoiceModal({
             </div>
 
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Número</label>
+              <label className="block text-sm text-gray-500 mb-1">Número</label>
               <input
                 type="text"
                 value={invoiceNumber}
                 onChange={(e) => setInvoiceNumber(e.target.value)}
                 placeholder="123456"
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
-                           text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-orange-400"
+                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
+                           text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
               />
             </div>
           </div>
 
           {/* Chave de Acesso */}
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Chave de Acesso</label>
+            <label className="block text-sm text-gray-500 mb-1">Chave de Acesso</label>
             <input
               type="text"
               value={invoiceKey}
               onChange={(e) => setInvoiceKey(e.target.value)}
               placeholder="44 dígitos"
               maxLength={44}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
-                         text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-orange-400
+              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
+                         text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500
                          font-mono text-sm"
             />
           </div>
@@ -455,40 +455,40 @@ function UploadInvoiceModal({
           {/* Valor e Data */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Valor Total</label>
+              <label className="block text-sm text-gray-500 mb-1">Valor Total</label>
               <input
                 type="number"
                 step="0.01"
                 value={totalValue}
                 onChange={(e) => setTotalValue(e.target.value)}
                 placeholder="0.00"
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
-                           text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-orange-400"
+                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
+                           text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
               />
             </div>
 
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Data Emissão</label>
+              <label className="block text-sm text-gray-500 mb-1">Data Emissão</label>
               <input
                 type="date"
                 value={issueDate}
                 onChange={(e) => setIssueDate(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
-                           text-gray-900 focus:outline-none focus:border-orange-400"
+                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
+                           text-white focus:outline-none focus:border-primary-500"
               />
             </div>
           </div>
 
           {/* Observações */}
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Observações</label>
+            <label className="block text-sm text-gray-500 mb-1">Observações</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Anotações sobre esta NF..."
               rows={2}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg
-                         text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-orange-400
+              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg 
+                         text-white placeholder:text-gray-400 focus:outline-none focus:border-primary-500
                          resize-none"
             />
           </div>
@@ -498,15 +498,15 @@ function UploadInvoiceModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex-1 px-4 py-2 bg-gray-100 text-white rounded-lg hover:bg-gray-200 transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg
-                         hover:bg-orange-600 transition-colors disabled:opacity-50
+              className="flex-1 px-4 py-2 bg-primary-500 text-white rounded-lg 
+                         hover:bg-primary-600 transition-colors disabled:opacity-50
                          flex items-center justify-center gap-2"
             >
               {isSubmitting ? (

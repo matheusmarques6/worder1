@@ -806,7 +806,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                         <p className="text-white text-sm font-medium truncate">{deal.title}</p>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-gray-500">{deal.pipeline?.name || 'Pipeline'}</span>
-                          <span className="text-gray-500">•</span>
+                          <span className="text-gray-400">•</span>
                           <span 
                             className="text-xs px-1.5 py-0.5 rounded"
                             style={{ 
@@ -835,7 +835,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                 </div>
               ) : (
                 <div className="text-center py-4 border border-dashed border-gray-200 rounded-xl">
-                  <Briefcase className="w-6 h-6 mx-auto mb-2 text-gray-500" />
+                  <Briefcase className="w-6 h-6 mx-auto mb-2 text-gray-400" />
                   <p className="text-gray-400 text-sm">Nenhuma pipeline vinculada</p>
                   {pipelines.length > 0 && onCreateDeal && (
                     <button
@@ -1397,7 +1397,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                         {!isAutomatic && (
                           <button
                             onClick={() => openDeleteActivityConfirm(activity.id)}
-                            className="p-1 rounded text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                            className="p-1 rounded text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

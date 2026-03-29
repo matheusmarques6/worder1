@@ -213,7 +213,7 @@ export function TaskCard({
 
           {/* Description */}
           {task.description && (
-            <p className={`text-sm mt-1 line-clamp-2 ${isCompleted ? 'text-gray-500' : 'text-gray-500'}`}>
+            <p className={`text-sm mt-1 line-clamp-2 ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>
               {task.description}
             </p>
           )}

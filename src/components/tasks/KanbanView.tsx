@@ -243,7 +243,7 @@ function KanbanCard({
           </div>
           
           <div className="flex items-center gap-1">
-            <GripVertical className="w-4 h-4 text-gray-500 opacity-0 group-hover:opacity-100 cursor-grab" />
+            <GripVertical className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 cursor-grab" />
             
             <div className="relative">
               <button

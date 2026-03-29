@@ -1,54 +1,83 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthClient } from '@/lib/api-utils'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { sendEmail } from '@/lib/email/resend'
-import { renderMergeTags } from '@/lib/email/render'
-import { mergeTags } from '@/lib/email/merge-tags'
+// =============================================
+// WORDER: Test Campaign Email API
+// /src/app/api/email/campaigns/test/route.ts
+//
+// POST: send 1 test email with sample merge data.
+// =============================================
 
-export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthClient, authError } from '@/lib/api-utils';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sendEmail } from '@/lib/email/resend';
+import { prepareEmailHtml, renderMergeTags } from '@/lib/email/render';
+import { getSampleMergeData } from '@/lib/email/merge-tags';
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthClient()
-    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthClient();
+    if (!auth) return authError();
 
-    const { campaignId, testEmail } = await req.json()
-    if (!testEmail) return NextResponse.json({ error: 'testEmail required' }, { status: 400 })
+    const { user } = auth;
+    const body = await request.json();
 
-    // Get campaign + template
-    const { data: campaign } = await supabaseAdmin
+    const { campaign_id, to_email } = body;
+
+    if (!campaign_id) {
+      return NextResponse.json({ error: 'campaign_id is required' }, { status: 400 });
+    }
+
+    const testEmail = to_email || user.email;
+
+    // Get campaign with template
+    const { data: campaign, error: campaignError } = await supabaseAdmin
       .from('email_campaigns')
       .select('*, email_templates(*)')
-      .eq('id', campaignId)
-      .eq('organization_id', auth.user.organization_id)
-      .single()
+      .eq('id', campaign_id)
+      .eq('organization_id', user.organization_id)
+      .single();
 
-    if (!campaign || !campaign.email_templates) {
-      return NextResponse.json({ error: 'Campaign or template not found' }, { status: 404 })
+    if (campaignError || !campaign) {
+      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-    // Use sample data for merge tags
-    const sampleData: Record<string, string> = {}
-    for (const [key, tag] of Object.entries(mergeTags)) {
-      sampleData[key] = tag.sample
+    const template = campaign.email_templates;
+    if (!template) {
+      return NextResponse.json({ error: 'Campaign template not found' }, { status: 404 });
     }
 
-    const html = renderMergeTags(campaign.email_templates.html || '', sampleData)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    const sampleData = getSampleMergeData();
 
-    const result = await sendEmail({
+    // Use a fake emailSendId for test emails
+    const testSendId = 'test-' + Date.now();
+
+    const finalHtml = prepareEmailHtml({
+      html: template.html,
+      mergeData: sampleData,
+      emailSendId: testSendId,
+      baseUrl,
+    });
+
+    const finalSubject = `[TESTE] ${renderMergeTags(campaign.subject, sampleData)}`;
+
+    await sendEmail({
       to: testEmail,
-      from: campaign.sender_email || 'noreply@worder.com.br',
-      senderName: campaign.sender_name || 'Worder (Teste)',
-      subject: `[TESTE] ${campaign.subject || 'Sem assunto'}`,
-      html,
-    })
+      from: campaign.from_email,
+      senderName: campaign.sender_name,
+      subject: finalSubject,
+      html: finalHtml,
+      replyTo: campaign.reply_to,
+    });
 
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, message: 'Email de teste enviado!' })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({
+      success: true,
+      message: `E-mail de teste enviado para ${testEmail}`,
+    });
+  } catch (error: any) {
+    console.error('[TestCampaign] Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

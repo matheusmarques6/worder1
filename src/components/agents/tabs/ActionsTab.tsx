@@ -287,7 +287,7 @@ function ActionCard({
     >
       {/* Header */}
       <div className="flex items-center gap-3 p-4">
-        <button className="cursor-grab text-gray-500 hover:text-gray-500">
+        <button className="cursor-grab text-gray-400 hover:text-gray-500">
           <GripVertical className="w-4 h-4" />
         </button>
 

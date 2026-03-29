@@ -1,50 +1,72 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthClient } from '@/lib/api-utils'
-import { verifyDomain, getDomain } from '@/lib/email/resend'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+// =============================================
+// WORDER: Verify Email Domain
+// /src/app/api/email/domains/verify/route.ts
+//
+// POST: trigger domain verification via Resend.
+// =============================================
 
-export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthClient, authError } from '@/lib/api-utils';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { verifyDomain, getDomain } from '@/lib/email/resend';
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthClient()
-    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthClient();
+    if (!auth) return authError();
 
-    const { domainId } = await req.json()
-    if (!domainId) return NextResponse.json({ error: 'domainId required' }, { status: 400 })
+    const { user } = auth;
+    const { domainId } = await request.json();
 
-    // Get domain record
-    const { data: domainRecord } = await supabaseAdmin
+    if (!domainId) {
+      return NextResponse.json({ error: 'domainId is required' }, { status: 400 });
+    }
+
+    // Get domain from our DB
+    const { data: dbDomain, error: fetchError } = await supabaseAdmin
       .from('email_domains')
       .select('*')
       .eq('id', domainId)
-      .eq('organization_id', auth.user.organization_id)
-      .single()
+      .eq('organization_id', user.organization_id)
+      .single();
 
-    if (!domainRecord) return NextResponse.json({ error: 'Domain not found' }, { status: 404 })
+    if (fetchError || !dbDomain) {
+      return NextResponse.json({ error: 'Domain not found' }, { status: 404 });
+    }
 
-    // Verify in Resend
-    const verifyResult = await verifyDomain(domainRecord.resend_domain_id)
+    if (!dbDomain.resend_domain_id) {
+      return NextResponse.json({ error: 'Domain has no Resend ID' }, { status: 400 });
+    }
 
-    // Get updated status
-    const statusResult = await getDomain(domainRecord.resend_domain_id)
-    const newStatus = statusResult.domain?.status === 'verified' ? 'verified' : 'pending'
+    // Trigger verification in Resend
+    await verifyDomain(dbDomain.resend_domain_id);
 
-    // Update in DB
-    await supabaseAdmin
+    // Get updated status from Resend
+    const resendDomain = await getDomain(dbDomain.resend_domain_id);
+
+    // Update our DB
+    const { data: updatedDomain, error: updateError } = await supabaseAdmin
       .from('email_domains')
       .update({
-        status: newStatus,
-        verified_at: newStatus === 'verified' ? new Date().toISOString() : null,
+        status: resendDomain?.status || 'pending',
+        dns_records: resendDomain?.records || dbDomain.dns_records,
+        verified_at: resendDomain?.status === 'verified' ? new Date().toISOString() : null,
       })
       .eq('id', domainId)
+      .select()
+      .single();
 
-    return NextResponse.json({
-      success: true,
-      status: newStatus,
-      domain: statusResult.domain,
-    })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    if (updateError) {
+      console.error('[VerifyDomain] Error updating domain:', updateError);
+      return NextResponse.json({ error: 'Failed to update domain' }, { status: 500 });
+    }
+
+    return NextResponse.json({ domain: updatedDomain });
+  } catch (error: any) {
+    console.error('[VerifyDomain] Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

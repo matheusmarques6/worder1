@@ -343,7 +343,7 @@ export function ImportContactsModal({
                       type="checkbox"
                       checked={options.skipDuplicates}
                       onChange={(e) => setOptions(prev => ({ ...prev, skipDuplicates: e.target.checked }))}
-                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-brand-500 focus:ring-primary-500"
+                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500"
                     />
                     <span className="text-sm text-gray-600">Ignorar contatos que já existem</span>
                   </label>
@@ -367,7 +367,7 @@ export function ImportContactsModal({
                       type="checkbox"
                       checked={options.updateExisting}
                       onChange={(e) => setOptions(prev => ({ ...prev, updateExisting: e.target.checked }))}
-                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-brand-500 focus:ring-primary-500"
+                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500"
                     />
                     <span className="text-sm text-gray-600">Atualizar contatos existentes</span>
                   </label>

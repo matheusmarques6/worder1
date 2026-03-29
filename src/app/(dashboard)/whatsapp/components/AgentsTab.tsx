@@ -481,7 +481,7 @@ function AgentCard({
               <span className={`text-xs ${typeInfo.color}`}>{typeInfo.label}</span>
               {agent.type === 'ai' && agent.ai_config && (
                 <>
-                  <span className="text-gray-500">•</span>
+                  <span className="text-gray-400">•</span>
                   <span className="text-xs text-gray-500">{agent.ai_config.model}</span>
                 </>
               )}

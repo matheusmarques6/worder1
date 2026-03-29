@@ -174,7 +174,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
 
             {/* Quick prompts */}
             <div className="mt-6 space-y-2">
-              <p className="text-xs text-gray-500">Sugestões:</p>
+              <p className="text-xs text-gray-400">Sugestões:</p>
               <div className="flex flex-wrap gap-2 justify-center">
                 {[
                   'Olá, tudo bem?',
@@ -238,7 +238,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
 
                   {/* Metadata */}
                   {message.role === 'assistant' && message.metadata && (
-                    <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500">
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
                       {message.metadata.response_time_ms && (
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
@@ -332,7 +332,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
         </div>
 
         {/* Agent info */}
-        <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+        <div className="flex items-center justify-between mt-3 text-xs text-gray-400">
           <span>
             {agent.provider} • {agent.model}
           </span>

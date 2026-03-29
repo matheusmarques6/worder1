@@ -230,7 +230,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                             onClick={() => setPipelineColor(color)}
                             className={`w-7 h-7 rounded-lg transition-all ${
                               pipelineColor === color 
-                                ? 'ring-2 ring-white ring-offset-2 ring-offset-white scale-110' 
+                                ? 'ring-2 ring-white ring-offset-2 ring-offset-dark-900 scale-110' 
                                 : 'hover:scale-110'
                             }`}
                             style={{ backgroundColor: color }}
@@ -282,7 +282,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                               type="button"
                               onClick={() => moveStage(index, 'up')}
                               disabled={index === 0}
-                              className="p-0.5 text-gray-500 hover:text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="p-0.5 text-gray-400 hover:text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -292,7 +292,7 @@ export function PipelineModal({ isOpen, pipeline, onClose, onSave }: PipelineMod
                               type="button"
                               onClick={() => moveStage(index, 'down')}
                               disabled={index === stages.length - 1}
-                              className="p-0.5 text-gray-500 hover:text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="p-0.5 text-gray-400 hover:text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />

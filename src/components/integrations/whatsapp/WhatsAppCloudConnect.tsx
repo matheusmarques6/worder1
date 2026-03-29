@@ -424,7 +424,7 @@ export default function WhatsAppCloudConnect() {
       {/* Empty State */}
       {!config && !showForm && (
         <div className="text-center py-16 bg-gray-50 border border-gray-200 rounded-xl">
-          <Phone className="w-12 h-12 mx-auto mb-4 text-gray-500" />
+          <Phone className="w-12 h-12 mx-auto mb-4 text-gray-400" />
           <p className="text-gray-500 mb-4">Nenhum número conectado</p>
           <button
             onClick={() => setShowForm(true)}

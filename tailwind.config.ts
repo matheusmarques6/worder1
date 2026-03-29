@@ -9,26 +9,6 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Brand palette - Klaviyo-style orange
-        brand: {
-          50: '#FFF7ED',
-          100: '#FFEDD5',
-          200: '#FED7AA',
-          300: '#FDBA74',
-          400: '#FB923C',
-          500: '#F97316',
-          600: '#EA580C',
-          700: '#C2410C',
-          800: '#9A3412',
-          900: '#7C2D12',
-        },
-        // Sidebar - dark sidebar
-        sidebar: {
-          DEFAULT: '#1A1D21',
-          hover: '#2C3035',
-          active: '#35393E',
-          border: '#3f3f46',
-        },
         // Primary palette - Worder Orange
         primary: {
           50: '#fff7ed',
@@ -42,6 +22,26 @@ const config: Config = {
           800: '#9a3412',
           900: '#7c2d12',
           950: '#431407',
+        },
+        // Brand colors
+        brand: {
+          50: '#FFF7ED',
+          100: '#FFEDD5',
+          200: '#FED7AA',
+          300: '#FDBA74',
+          400: '#FB923C',
+          500: '#F97316',
+          600: '#EA580C',
+          700: '#C2410C',
+          800: '#9A3412',
+          900: '#7C2D12',
+        },
+        // Sidebar colors
+        sidebar: {
+          DEFAULT: '#1A1D21',
+          hover: '#2C3035',
+          active: '#35393E',
+          border: '#3f3f46',
         },
         // Accent - Worder Yellow/Gold
         accent: {
@@ -101,20 +101,9 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: [
-          '"DM Sans"',
-          'system-ui',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'sans-serif',
-        ],
+        sans: ['"DM Sans"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         mono: ['JetBrains Mono', 'Consolas', 'monospace'],
-        display: [
-          '"DM Sans"',
-          'system-ui',
-          '-apple-system',
-          'sans-serif',
-        ],
+        display: ['"DM Sans"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',

@@ -549,7 +549,7 @@ export default function TasksPage() {
       ) : filteredTasks.length === 0 ? (
         <div className="text-center py-12">
           <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
-            <ListTodo className="w-8 h-8 text-gray-500" />
+            <ListTodo className="w-8 h-8 text-gray-400" />
           </div>
           <h3 className="text-lg font-medium text-white mb-2">
             {hasActiveFilters ? 'Nenhuma tarefa encontrada' : 'Nenhuma tarefa ainda'}

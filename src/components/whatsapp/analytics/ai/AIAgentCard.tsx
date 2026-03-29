@@ -51,7 +51,7 @@ export function AIAgentCard({ agent, onClick, delay = 0 }: AIAgentCardProps) {
             : 'bg-gray-200 text-gray-500'
         }`}>
           <div className={`w-1.5 h-1.5 rounded-full ${
-            agent.is_active ? 'bg-emerald-400 animate-pulse' : 'bg-gray-200'
+            agent.is_active ? 'bg-emerald-400 animate-pulse' : 'bg-gray-300'
           }`} />
           {agent.is_active ? 'Ativo' : 'Inativo'}
         </div>
@@ -180,7 +180,7 @@ export function AIAgentsGrid({ agents, onAgentClick }: AIAgentsGridProps) {
         animate={{ opacity: 1 }}
         className="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center"
       >
-        <Bot className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+        <Bot className="w-12 h-12 text-gray-400 mx-auto mb-3" />
         <h3 className="text-lg font-medium text-white mb-1">Nenhum agente configurado</h3>
         <p className="text-gray-500 text-sm">
           Configure um agente de IA para começar a ver métricas aqui.

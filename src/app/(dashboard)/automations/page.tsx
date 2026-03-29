@@ -101,70 +101,6 @@ const AUTOMATION_TEMPLATES = [
     trigger: 'trigger_deal_created',
     icon: '💼',
   },
-  {
-    id: 'welcome-series',
-    name: 'Welcome Series',
-    description: 'Série de boas-vindas: 3 emails ao longo de 5 dias',
-    trigger: 'trigger_signup',
-    icon: '✉️',
-    channels: ['email'],
-  },
-  {
-    id: 'cart-recovery-multi',
-    name: 'Recuperação Carrinho (Multi)',
-    description: 'Email + WhatsApp para recuperar carrinhos abandonados',
-    trigger: 'trigger_abandon',
-    icon: '🛒',
-    channels: ['email', 'whatsapp'],
-  },
-  {
-    id: 'post-purchase',
-    name: 'Pós-Compra',
-    description: 'Confirmação + pedido de review por email',
-    trigger: 'trigger_order',
-    icon: '📬',
-    channels: ['email'],
-  },
-  {
-    id: 'winback',
-    name: 'Win-back',
-    description: 'Reengajar clientes inativos com email + WhatsApp',
-    trigger: 'trigger_segment',
-    icon: '💌',
-    channels: ['email', 'whatsapp'],
-  },
-  {
-    id: 'boleto-pix-reminder',
-    name: 'Lembrete Boleto/PIX',
-    description: 'Lembrar pagamento pendente via email e WhatsApp',
-    trigger: 'trigger_order',
-    icon: '💳',
-    channels: ['email', 'whatsapp'],
-  },
-  {
-    id: 'review-request',
-    name: 'Pedido de Review',
-    description: 'Solicitar avaliação após entrega do pedido',
-    trigger: 'trigger_order_paid',
-    icon: '⭐',
-    channels: ['email', 'whatsapp'],
-  },
-  {
-    id: 'vip-upgrade',
-    name: 'VIP Upgrade',
-    description: 'Boas-vindas ao programa VIP com benefícios',
-    trigger: 'trigger_segment',
-    icon: '👑',
-    channels: ['email'],
-  },
-  {
-    id: 'browse-abandonment',
-    name: 'Browse Abandonment',
-    description: 'Email para quem viu produto mas não comprou',
-    trigger: 'trigger_webhook',
-    icon: '👀',
-    channels: ['email'],
-  },
 ];
 
 // ============================================
@@ -442,14 +378,14 @@ export default function AutomationsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Automações</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Automações</h1>
           <p className="text-gray-500 mt-1">Gerencie seus fluxos automatizados</p>
         </div>
         <button
           onClick={() => setShowNewModal(true)}
           className={cn(
             'flex items-center gap-2 px-4 py-2.5 rounded-xl',
-            'bg-orange-500 hover:bg-orange-600 text-white font-medium',
+            'bg-primary-500 hover:bg-primary-600 text-white font-medium',
             'transition-colors'
           )}
         >
@@ -464,15 +400,15 @@ export default function AutomationsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white border border-gray-200 rounded-xl shadow-sm p-6"
+          className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <Zap className="w-5 h-5 text-primary-400" />
+              <Zap className="w-5 h-5 text-brand-600" />
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-100 rounded animate-pulse" />
               ) : (
                 <p className="text-xl font-bold text-gray-900">
                   {dashboardStats?.activeAutomations || 0}
@@ -488,15 +424,15 @@ export default function AutomationsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="bg-white border border-gray-200 rounded-xl shadow-sm p-6"
+          className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <Mail className="w-5 h-5 text-primary-400" />
+              <Mail className="w-5 h-5 text-brand-600" />
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-100 rounded animate-pulse" />
               ) : (
                 <p className="text-xl font-bold text-gray-900">
                   {formatNumber(dashboardStats?.processedToday || 0)}
@@ -512,15 +448,15 @@ export default function AutomationsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white border border-gray-200 rounded-xl shadow-sm p-6"
+          className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <Users className="w-5 h-5 text-primary-400" />
+              <Users className="w-5 h-5 text-brand-600" />
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-100 rounded animate-pulse" />
               ) : (
                 <p className="text-xl font-bold text-gray-900">
                   {formatNumber(dashboardStats?.conversions30d || 0)}
@@ -536,15 +472,15 @@ export default function AutomationsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="bg-white border border-gray-200 rounded-xl shadow-sm p-6"
+          className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <DollarSign className="w-5 h-5 text-primary-400" />
+              <DollarSign className="w-5 h-5 text-brand-600" />
             </div>
             <div>
               {statsLoading ? (
-                <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-100 rounded animate-pulse" />
               ) : (
                 <p className="text-xl font-bold text-gray-900">
                   {formatCurrency(dashboardStats?.revenue30d || 0)}
@@ -559,7 +495,7 @@ export default function AutomationsPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder="Buscar automações..."
@@ -567,9 +503,9 @@ export default function AutomationsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
               'w-full pl-10 pr-4 py-2.5 rounded-xl',
-              'bg-white/60 border border-gray-200',
+              'bg-white border border-gray-200',
               'text-white placeholder-dark-500',
-              'focus:outline-none focus:border-primary-500/50',
+              'focus:outline-none focus:border-brand-400',
               'transition-colors'
             )}
           />
@@ -577,7 +513,7 @@ export default function AutomationsPage() {
 
         <div className="flex items-center gap-2">
           {/* Status Filter */}
-          <div className="flex items-center bg-white/60 border border-gray-200 rounded-xl p-1">
+          <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1">
             {(['all', 'active', 'paused', 'draft'] as const).map((status) => (
               <button
                 key={status}
@@ -598,7 +534,7 @@ export default function AutomationsPage() {
           </div>
 
           {/* View Toggle */}
-          <div className="flex items-center bg-white/60 border border-gray-200 rounded-xl p-1">
+          <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1">
             <button
               onClick={() => setView('list')}
               className={cn(
@@ -632,7 +568,7 @@ export default function AutomationsPage() {
           <p className="text-gray-500">Nenhuma automação encontrada</p>
           <button
             onClick={() => setShowNewModal(true)}
-            className="mt-4 text-primary-400 hover:text-primary-300 text-sm"
+            className="mt-4 text-brand-600 hover:text-brand-500 text-sm"
           >
             Criar sua primeira automação
           </button>
@@ -684,9 +620,9 @@ interface AutomationCardProps {
 
 function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: AutomationCardProps) {
   const statusConfig = {
-    active: { label: 'Ativa', color: 'bg-green-100 text-green-700 border-green-200' },
-    paused: { label: 'Pausada', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-    draft: { label: 'Rascunho', color: 'bg-gray-100 text-gray-700 border-gray-200' },
+    active: { label: 'Ativa', color: 'bg-success-500/20 text-success-400 border-success-500/30' },
+    paused: { label: 'Pausada', color: 'bg-warning-500/20 text-warning-400 border-warning-500/30' },
+    draft: { label: 'Rascunho', color: 'bg-gray-200/50 text-gray-500 border-gray-300/30' },
   };
 
   const { label, color } = statusConfig[automation.status];
@@ -696,8 +632,8 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'bg-white/60 border border-gray-200 rounded-xl',
-        'hover:border-gray-200 transition-colors',
+        'bg-white border border-gray-200 rounded-xl',
+        'hover:border-gray-300 transition-colors',
         view === 'list' ? 'p-4' : 'p-5'
       )}
     >
@@ -705,7 +641,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
         {/* Info */}
         <div className={cn('flex items-center gap-4', view === 'grid' && 'w-full')}>
           <div className="p-3 bg-primary-500/15 rounded-xl">
-            <Zap className="w-5 h-5 text-primary-400" />
+            <Zap className="w-5 h-5 text-brand-600" />
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-gray-900 truncate">{automation.name}</h3>
@@ -805,7 +741,7 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
       >
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-white">Nova Automação</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Nova Automação</h2>
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
@@ -821,17 +757,17 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
             onClick={onSelectBlank}
             className={cn(
               'w-full p-4 rounded-xl text-left',
-              'bg-white/60 border border-gray-200',
-              'hover:border-primary-500/50 hover:bg-primary-500/5',
+              'bg-white border border-gray-200',
+              'hover:border-brand-400 hover:bg-primary-500/5',
               'transition-colors group'
             )}
           >
             <div className="flex items-center gap-4">
               <div className="p-3 bg-primary-500/15 rounded-xl">
-                <Plus className="w-5 h-5 text-primary-400" />
+                <Plus className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-white group-hover:text-primary-400 transition-colors">
+                <h3 className="font-semibold text-white group-hover:text-brand-600 transition-colors">
                   Começar do Zero
                 </h3>
                 <p className="text-sm text-gray-500">Criar uma automação em branco</p>
@@ -848,32 +784,17 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
                   key={template.id}
                   onClick={() => onSelectTemplate(template.id)}
                   className={cn(
-                    'bg-white border border-gray-200 rounded-lg p-4 text-left',
-                    'hover:border-brand-500 hover:shadow-md',
-                    'transition-all group'
+                    'p-4 rounded-xl text-left',
+                    'bg-white border border-gray-200',
+                    'hover:border-gray-300 hover:bg-gray-100/30',
+                    'transition-colors group'
                   )}
                 >
                   <div className="text-2xl mb-2">{template.icon}</div>
-                  <h4 className="font-medium text-gray-900 group-hover:text-primary-600 transition-colors">
+                  <h4 className="font-medium text-white group-hover:text-brand-600 transition-colors">
                     {template.name}
                   </h4>
-                  <p className="text-xs text-gray-500 mt-1">{template.description}</p>
-                  {'channels' in template && Array.isArray(template.channels) && template.channels.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {template.channels.map((channel: string) => (
-                        <span
-                          key={channel}
-                          className={cn(
-                            'px-1.5 py-0.5 rounded text-[10px] font-medium',
-                            channel === 'email' ? 'bg-blue-100 text-blue-700' : '',
-                            channel === 'whatsapp' ? 'bg-green-100 text-green-700' : ''
-                          )}
-                        >
-                          {channel === 'email' ? 'Email' : channel === 'whatsapp' ? 'WhatsApp' : channel}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  <p className="text-xs text-gray-400 mt-1">{template.description}</p>
                 </button>
               ))}
             </div>

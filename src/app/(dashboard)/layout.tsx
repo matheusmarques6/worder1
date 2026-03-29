@@ -20,8 +20,12 @@ import {
   Mail,
   ShoppingCart,
   HelpCircle,
+  Moon,
+  Sun,
   Menu,
   X,
+  DollarSign,
+  TrendingUp,
   Store,
   ChevronDown,
   Check,
@@ -38,15 +42,32 @@ import {
   RefreshCcw,
   FileText,
   Package,
-  Send,
-  Plug,
-  Briefcase,
-  MessageCircle,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 // Custom icons for ad platforms
+const FacebookIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+  </svg>
+)
+
+const GoogleIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg>
+)
+
+const TikTokIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z"/>
+  </svg>
+)
+
 import { useStoreStore, useAuthStore, useUIStore, type ShopifyStore } from '@/stores'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
 import { cn } from '@/lib/utils'
@@ -94,28 +115,28 @@ const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
   );
 };
 
-const mainNav = [
+const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Inbox', href: '/inbox', icon: MessageSquare },
-  { name: 'Contatos', href: '/contacts', icon: Users },
   { name: 'Email', href: '/email/campaigns', icon: Mail },
-  { name: 'WhatsApp', href: '/whatsapp', icon: MessageCircle },
-  { name: 'CRM', href: '/crm', icon: Briefcase },
-]
-
-const automationNav = [
+  { name: 'CRM', href: '/crm', icon: Users },
+  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare },
   { name: 'Automações', href: '/automations', icon: Zap },
   { name: 'Formulários', href: '/forms', icon: FileText },
-  { name: 'Segmentos', href: '/segments', icon: Target },
-  { name: 'Recuperação', href: '/recovery', icon: RefreshCcw },
 ]
 
 const analyticsNav = [
-  { name: 'Visão Geral', href: '/analytics/sales', icon: BarChart3 },
+  { name: 'Vendas/CRM', href: '/analytics/sales', icon: TrendingUp },
+  { name: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
+  { name: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
+  { name: 'E-mail', href: '/analytics/email', icon: Mail },
+  { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon },
+  { name: 'Google Ads', href: '/analytics/google', icon: GoogleIcon },
+  { name: 'TikTok Ads', href: '/analytics/tiktok', icon: TikTokIcon },
 ]
 
-const footerNav = [
-  { name: 'Integrações', href: '/integrations', icon: Plug },
+const systemNav = [
+  { name: 'Segmentos', href: '/segments', icon: Target },
+  { name: 'Recuperação', href: '/recovery', icon: RefreshCcw },
   { name: 'Configurações', href: '/settings', icon: Settings },
   { name: 'Ajuda', href: '/help', icon: HelpCircle },
 ]
@@ -433,7 +454,7 @@ export default function DashboardLayout({
               className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-brand-500 rounded-full"
             />
           )}
-          <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-brand-400' : ''}`} />
+          <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-brand-600' : ''}`} />
           <AnimatePresence mode="wait">
             {!collapsed && (
               <motion.span
@@ -473,46 +494,44 @@ export default function DashboardLayout({
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-5">
+      <div className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
         {/* Main */}
-        <nav className="space-y-0.5">
-          {mainNav.map((item) => (
-            <NavLink key={item.name} item={item} />
-          ))}
-        </nav>
-
-        {/* Automação */}
         <div>
           {!collapsed && (
-            <p className="px-3 pt-1 pb-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
-              Automação
+            <p className="px-3 mb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+              Principal
             </p>
           )}
-          <nav className="space-y-0.5">
-            {automationNav.map((item) => (
+          <nav className="space-y-1">
+            {navigation.map((item) => (
               <NavLink key={item.name} item={item} />
             ))}
           </nav>
         </div>
 
-        {/* Analytics */}
+        {/* Forecast */}
         <div>
           {!collapsed && (
-            <p className="px-3 pt-1 pb-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
-              Analytics
+            <p className="px-3 mb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+              Forecast
             </p>
           )}
-          <nav className="space-y-0.5">
+          <nav className="space-y-1">
             {analyticsNav.map((item) => (
               <NavLink key={item.name} item={item} />
             ))}
           </nav>
         </div>
 
-        {/* Footer nav */}
+        {/* System */}
         <div>
-          <nav className="space-y-0.5">
-            {footerNav.map((item) => (
+          {!collapsed && (
+            <p className="px-3 mb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+              Sistema
+            </p>
+          )}
+          <nav className="space-y-1">
+            {systemNav.map((item) => (
               <NavLink key={item.name} item={item} />
             ))}
           </nav>
@@ -533,8 +552,8 @@ export default function DashboardLayout({
             >
               {/* Stores List */}
               {stores.length > 0 && (
-                <div className="p-2 border-b border-gray-700/50">
-                  <p className="px-2 py-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div className="p-2 border-b border-gray-200">
+                  <p className="px-2 py-1 text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Suas Lojas
                   </p>
                   <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
@@ -553,7 +572,7 @@ export default function DashboardLayout({
                           }
                         `}
                       >
-                        <div className="w-8 h-8 rounded-lg bg-sidebar-hover text-gray-300 flex items-center justify-center text-xs font-bold">
+                        <div className="w-8 h-8 rounded-lg bg-sidebar-hover flex items-center justify-center text-xs font-bold text-gray-300">
                           {getInitials(store.name)}
                         </div>
                         <div className="flex-1 text-left min-w-0">
@@ -561,7 +580,7 @@ export default function DashboardLayout({
                           <p className="text-xs text-gray-500 truncate">{store.domain}</p>
                         </div>
                         {currentStore?.id === store.id && (
-                          <Check className="w-4 h-4 text-brand-400 flex-shrink-0" />
+                          <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
                         )}
                       </button>
                     ))}
@@ -576,9 +595,9 @@ export default function DashboardLayout({
                     setAddStoreModalOpen(true)
                     setStoreDropdownOpen(false)
                   }}
-                  className="w-full flex items-center gap-3 p-2 rounded-lg text-brand-400 hover:bg-brand-500/10 transition-colors"
+                  className="w-full flex items-center gap-3 p-2 rounded-lg text-brand-600 hover:bg-brand-50 transition-colors"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-brand-500/20 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center">
                     <Plus className="w-4 h-4" />
                   </div>
                   <span className="text-sm font-medium">Adicionar Nova Loja</span>
@@ -600,7 +619,7 @@ export default function DashboardLayout({
           className={`
             w-full flex items-center gap-3 p-2 rounded-xl transition-all
             bg-sidebar-hover/30 hover:bg-sidebar-hover
-            ${storeDropdownOpen ? 'ring-1 ring-brand-500/50' : ''}
+            ${storeDropdownOpen ? 'ring-1 ring-primary-500/50' : ''}
             ${collapsed ? 'justify-center' : ''}
           `}
         >
@@ -617,7 +636,7 @@ export default function DashboardLayout({
                 exit={{ opacity: 0 }}
                 className="flex-1 min-w-0 text-left"
               >
-                <p className="text-sm font-medium text-white truncate">
+                <p className="text-sm font-medium text-gray-900 truncate">
                   {currentStore?.name || 'Selecionar Loja'}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
@@ -629,7 +648,7 @@ export default function DashboardLayout({
 
           {!collapsed && (
             <ChevronDown
-              className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${storeDropdownOpen ? 'rotate-180' : ''}`}
+              className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ${storeDropdownOpen ? 'rotate-180' : ''}`}
             />
           )}
         </button>
@@ -639,7 +658,7 @@ export default function DashboardLayout({
       <div className="hidden lg:block p-3 pt-0">
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="w-full flex items-center justify-center gap-2 p-2 rounded-xl bg-sidebar-hover/30 hover:bg-sidebar-hover text-gray-400 hover:text-white transition-all"
+          className="w-full flex items-center justify-center gap-2 p-2 rounded-xl bg-sidebar-hover/30 hover:bg-sidebar-hover text-gray-500 hover:text-white transition-all"
         >
           {collapsed ? (
             <ChevronRight className="w-4 h-4" />
@@ -664,14 +683,14 @@ export default function DashboardLayout({
           initial={{ opacity: 0, y: 10, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 10, scale: 0.95 }}
-          className="absolute right-0 top-full mt-2 w-96 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden"
+          className="absolute right-0 top-full mt-2 w-96 bg-white border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-gray-900">Notificações</h3>
+              <h3 className="font-semibold text-white">Notificações</h3>
               {unreadCount > 0 && (
-                <span className="px-2 py-0.5 bg-brand-50 text-brand-600 text-xs font-medium rounded-full">
+                <span className="px-2 py-0.5 bg-brand-100 text-brand-600 text-xs font-medium rounded-full">
                   {unreadCount} nova{unreadCount > 1 ? 's' : ''}
                 </span>
               )}
@@ -679,7 +698,7 @@ export default function DashboardLayout({
             {unreadCount > 0 && (
               <button 
                 onClick={markAllAsRead}
-                className="text-xs text-brand-600 hover:text-brand-700 transition-colors flex items-center gap-1"
+                className="text-xs text-brand-600 hover:text-brand-500 transition-colors flex items-center gap-1"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 Marcar todas
@@ -691,12 +710,12 @@ export default function DashboardLayout({
           <div className="max-h-96 overflow-y-auto">
             {loadingNotifications ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
               </div>
             ) : notifications.length === 0 ? (
               <div className="px-4 py-12 text-center">
-                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <Bell className="w-6 h-6 text-gray-500" />
+                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Bell className="w-6 h-6 text-gray-400" />
                 </div>
                 <p className="text-sm text-gray-500">Nenhuma notificação</p>
                 <p className="text-xs text-gray-400 mt-1">
@@ -708,8 +727,8 @@ export default function DashboardLayout({
                 <div
                   key={notification.id}
                   className={`
-                    px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors
-                    ${!notification.read ? 'bg-brand-50/50' : ''}
+                    px-4 py-3 border-b border-gray-200 hover:bg-gray-50 transition-colors
+                    ${!notification.read ? 'bg-primary-500/5' : ''}
                   `}
                 >
                   <div className="flex items-start gap-3">
@@ -721,7 +740,7 @@ export default function DashboardLayout({
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <p className={`text-sm font-medium line-clamp-1 ${notification.read ? 'text-gray-500' : 'text-gray-900'}`}>
+                        <p className={`text-sm font-medium line-clamp-1 ${notification.read ? 'text-gray-600' : 'text-white'}`}>
                           {notification.title}
                         </p>
                         
@@ -771,7 +790,7 @@ export default function DashboardLayout({
                               markAsRead([notification.id])
                               setNotificationsOpen(false)
                             }}
-                            className="text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1 transition-colors"
+                            className="text-xs text-brand-600 hover:text-brand-500 flex items-center gap-1 transition-colors"
                           >
                             {notification.action_label ?? 'Ver mais'}
                             <ExternalLink className="w-3 h-3" />
@@ -788,10 +807,10 @@ export default function DashboardLayout({
           {/* Footer */}
           {notifications.length > 0 && (
             <div className="px-4 py-3 border-t border-gray-200">
-              <a
+              <a 
                 href="/notifications"
                 onClick={() => setNotificationsOpen(false)}
-                className="w-full text-center text-sm text-brand-600 hover:text-brand-700 transition-colors flex items-center justify-center gap-1"
+                className="w-full text-center text-sm text-brand-600 hover:text-brand-500 transition-colors flex items-center justify-center gap-1"
               >
                 Ver todas as notificações
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -806,12 +825,12 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white backdrop-blur-xl border-b border-gray-200">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
-              className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+              className="p-2 rounded-lg bg-gray-50 text-gray-500 hover:text-white transition-colors"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -822,11 +841,11 @@ export default function DashboardLayout({
             <div className="relative" ref={notificationsRef}>
               <button 
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors relative"
+                className="p-2 rounded-lg bg-gray-50 text-gray-500 hover:text-white transition-colors relative"
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-brand-500 rounded-full text-[10px] font-bold flex items-center justify-center text-white">
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-primary-500 rounded-full text-[10px] font-bold flex items-center justify-center text-white">
                     {unreadCount > 99 ? '99+' : unreadCount}
                   </span>
                 )}
@@ -857,7 +876,7 @@ export default function DashboardLayout({
             >
               <button
                 onClick={() => setMobileOpen(false)}
-                className="absolute top-4 right-4 p-2 rounded-lg bg-sidebar-hover/30 hover:bg-sidebar-hover text-gray-400 hover:text-white transition-colors"
+                className="absolute top-4 right-4 p-2 rounded-lg bg-sidebar-hover text-gray-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -892,13 +911,13 @@ export default function DashboardLayout({
         <header className="hidden lg:flex sticky top-0 z-30 items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
           <div className="flex-1 max-w-xl">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
               <input
                 type="text"
                 placeholder="Buscar em tudo..."
                 className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
               />
-              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-gray-200 rounded text-[10px] text-gray-500 font-mono">
+              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-gray-100 rounded text-[10px] text-gray-500 font-mono">
                 ⌘K
               </kbd>
             </div>
@@ -924,8 +943,8 @@ export default function DashboardLayout({
             <div className="w-px h-8 bg-gray-200" />
             
             {/* User Info */}
-            <button className="flex items-center gap-3 p-1.5 pr-4 rounded-xl hover:bg-gray-100 transition-all">
-              <div className="w-9 h-9 rounded-lg bg-brand-100 flex items-center justify-center">
+            <button className="flex items-center gap-3 p-1.5 pr-4 rounded-xl hover:bg-gray-50 transition-all">
+              <div className="w-9 h-9 rounded-lg bg-brand-500 flex items-center justify-center">
                 <span className="text-brand-700 font-semibold text-sm">{userInitials}</span>
               </div>
               <div className="text-left">

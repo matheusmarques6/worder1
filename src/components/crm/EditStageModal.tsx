@@ -207,7 +207,7 @@ export function EditStageModal({
                             onClick={() => setColor(c)}
                             className={`w-7 h-7 rounded-lg transition-all ${
                               color === c 
-                                ? 'ring-2 ring-white ring-offset-2 ring-offset-white scale-110' 
+                                ? 'ring-2 ring-white ring-offset-2 ring-offset-dark-900 scale-110' 
                                 : 'hover:scale-110'
                             }`}
                             style={{ backgroundColor: c }}
@@ -277,7 +277,7 @@ export function EditStageModal({
                           type="checkbox"
                           checked={isWon}
                           onChange={(e) => handleIsWonChange(e.target.checked)}
-                          className="w-5 h-5 rounded border-gray-300 bg-gray-100 text-green-500 focus:ring-green-500 focus:ring-offset-white"
+                          className="w-5 h-5 rounded border-gray-300 bg-gray-100 text-green-500 focus:ring-green-500 focus:ring-offset-dark-900"
                         />
                         <Trophy className={`w-5 h-5 ${isWon ? 'text-green-400' : 'text-gray-400'}`} />
                         <div className="flex-1">
@@ -300,7 +300,7 @@ export function EditStageModal({
                           type="checkbox"
                           checked={isLost}
                           onChange={(e) => handleIsLostChange(e.target.checked)}
-                          className="w-5 h-5 rounded border-gray-300 bg-gray-100 text-red-500 focus:ring-red-500 focus:ring-offset-white"
+                          className="w-5 h-5 rounded border-gray-300 bg-gray-100 text-red-500 focus:ring-red-500 focus:ring-offset-dark-900"
                         />
                         <XCircle className={`w-5 h-5 ${isLost ? 'text-red-400' : 'text-gray-400'}`} />
                         <div className="flex-1">

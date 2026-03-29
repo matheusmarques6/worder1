@@ -352,7 +352,7 @@ export default function ShopifyImportModal({
                 exit={{ opacity: 0 }}
                 className="flex flex-col items-center justify-center py-12"
               >
-                <Loader2 className="w-10 h-10 text-brand-500 animate-spin mb-4" />
+                <Loader2 className="w-10 h-10 text-primary-500 animate-spin mb-4" />
                 <p className="text-gray-500">Carregando dados...</p>
               </motion.div>
             )}
@@ -420,7 +420,7 @@ export default function ShopifyImportModal({
                           >
                             Selecionar todas
                           </button>
-                          <span className="text-gray-500">|</span>
+                          <span className="text-gray-400">|</span>
                           <button
                             onClick={clearAllTags}
                             className="text-xs text-gray-500 hover:text-gray-600"
@@ -497,7 +497,7 @@ export default function ShopifyImportModal({
                           >
                             Selecionar todos
                           </button>
-                          <span className="text-gray-500">|</span>
+                          <span className="text-gray-400">|</span>
                           <button
                             onClick={clearAllEmailStatus}
                             className="text-xs text-gray-500 hover:text-gray-600"
@@ -640,7 +640,7 @@ export default function ShopifyImportModal({
                       type="checkbox"
                       checked={createDeals}
                       onChange={(e) => setCreateDeals(e.target.checked)}
-                      className="w-5 h-5 mt-0.5 rounded border-gray-300 bg-gray-100 text-brand-500 focus:ring-primary-500 focus:ring-offset-0"
+                      className="w-5 h-5 mt-0.5 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500 focus:ring-offset-0"
                     />
                     <div>
                       <span className="block text-white font-medium">Criar deal para cada cliente</span>
@@ -671,7 +671,7 @@ export default function ShopifyImportModal({
                 className="space-y-6 py-4"
               >
                 <div className="text-center">
-                  <Loader2 className="w-12 h-12 text-brand-500 animate-spin mx-auto mb-4" />
+                  <Loader2 className="w-12 h-12 text-primary-500 animate-spin mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-1">Importando clientes...</h3>
                   <p className="text-sm text-gray-500">Isso pode levar alguns minutos</p>
                 </div>

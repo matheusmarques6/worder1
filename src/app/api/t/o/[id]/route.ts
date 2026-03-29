@@ -1,35 +1,48 @@
-import { NextRequest } from 'next/server'
-import { isSupabaseConfigured } from '@/lib/supabase-admin'
+// =============================================
+// WORDER: Open Pixel Tracker
+// /src/app/api/t/o/[id]/route.ts
+//
+// Returns 1x1 transparent GIF, records open.
+// =============================================
 
-const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
+import { NextRequest, NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic'
+// 1x1 transparent GIF
+const TRANSPARENT_GIF = Buffer.from(
+  'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+  'base64'
+);
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const emailSendId = params.id;
+
+  // Record open asynchronously - don't block the response
   try {
-    if (isSupabaseConfigured()) {
-      const { supabaseAdmin } = await import('@/lib/supabase-admin')
+    const { isSupabaseConfigured } = await import('@/lib/supabase-admin');
 
-      // Only update if not already opened
+    if (isSupabaseConfigured()) {
+      const { supabaseAdmin } = await import('@/lib/supabase-admin');
+
       await supabaseAdmin
         .from('email_sends')
-        .update({
-          opened_at: new Date().toISOString(),
-          status: 'opened',
-        })
-        .eq('id', params.id)
-        .is('opened_at', null)
+        .update({ opened_at: new Date().toISOString() })
+        .eq('id', emailSendId)
+        .is('opened_at', null); // Only update first open
     }
-  } catch (err) {
-    console.error('[Tracking] Open pixel error:', err)
+  } catch (error) {
+    console.error('[OpenPixel] Error recording open:', error);
   }
 
-  return new Response(PIXEL, {
+  return new NextResponse(TRANSPARENT_GIF, {
+    status: 200,
     headers: {
       'Content-Type': 'image/gif',
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
+      Pragma: 'no-cache',
+      Expires: '0',
     },
-  })
+  });
 }

@@ -162,45 +162,45 @@ export function NotesTab({
     <div className="flex flex-col h-full">
       {/* Input de nova nota */}
       <div className="p-4 border-b border-gray-200">
-        <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-gray-100 rounded-xl overflow-hidden">
           <textarea
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Adicionar uma nota..."
             rows={2}
-            className="w-full px-4 py-3 bg-transparent text-gray-900 placeholder:text-gray-400
+            className="w-full px-4 py-3 bg-transparent text-white placeholder:text-gray-400 
                        resize-none focus:outline-none text-sm"
           />
-
+          
           {/* Attachments preview */}
           {attachments.length > 0 && (
             <div className="px-4 pb-2">
               <div className="flex flex-wrap gap-2">
                 {attachments.map((att, index) => (
-                  <div
+                  <div 
                     key={index}
                     className="relative group bg-gray-200 rounded-lg overflow-hidden"
                   >
                     {att.type === 'image' ? (
-                      <img
-                        src={att.url}
+                      <img 
+                        src={att.url} 
                         alt={att.name}
                         className="w-16 h-16 object-cover"
                       />
                     ) : (
                       <div className="w-32 p-2 flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                        <FileText className="w-5 h-5 text-blue-400 flex-shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-xs text-gray-800 truncate">{att.name}</p>
+                          <p className="text-xs text-white truncate">{att.name}</p>
                           <p className="text-[10px] text-gray-500">{formatFileSize(att.size)}</p>
                         </div>
                       </div>
                     )}
                     <button
                       onClick={() => removeAttachment(index)}
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full
-                                 flex items-center justify-center opacity-0 group-hover:opacity-100
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full 
+                                 flex items-center justify-center opacity-0 group-hover:opacity-100 
                                  transition-opacity"
                     >
                       <X className="w-3 h-3 text-white" />
@@ -210,15 +210,15 @@ export function NotesTab({
               </div>
             </div>
           )}
-
+          
           {/* Toolbar */}
-          <div className="flex items-center justify-between px-3 py-2 border-t border-gray-200">
+          <div className="flex items-center justify-between px-3 py-2 border-t border-gray-300/50">
             <div className="flex items-center gap-1">
               {/* Anexar imagem */}
               <button
                 onClick={() => imageInputRef.current?.click()}
                 disabled={isUploading}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+                className="p-2 text-gray-500 hover:text-white hover:bg-gray-200 rounded-lg transition-colors"
                 title="Anexar imagem (preview local)"
               >
                 <Image className="w-4 h-4" />
@@ -231,12 +231,12 @@ export function NotesTab({
                 className="hidden"
                 onChange={(e) => handleFileUpload(e.target.files, 'image')}
               />
-
+              
               {/* Anexar documento */}
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+                className="p-2 text-gray-500 hover:text-white hover:bg-gray-200 rounded-lg transition-colors"
                 title="Anexar documento (preview local)"
               >
                 <Paperclip className="w-4 h-4" />
@@ -249,23 +249,23 @@ export function NotesTab({
                 className="hidden"
                 onChange={(e) => handleFileUpload(e.target.files, 'document')}
               />
-
+              
               {isUploading && (
-                <Loader2 className="w-4 h-4 text-gray-400 animate-spin ml-2" />
+                <Loader2 className="w-4 h-4 text-gray-500 animate-spin ml-2" />
               )}
-
+              
               {/* Aviso de que anexos são preview */}
               {attachments.length > 0 && (
-                <span className="text-[10px] text-amber-600 ml-2" title="Anexos não serão salvos até implementar upload">
+                <span className="text-[10px] text-yellow-500 ml-2" title="Anexos não serão salvos até implementar upload">
                   ⚠️ Preview
                 </span>
               )}
             </div>
-
+            
             <button
               onClick={handleSubmit}
               disabled={(!newNote.trim() && attachments.length === 0) || isSaving}
-              className="p-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600
+              className="p-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 
                          transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? (
@@ -285,20 +285,20 @@ export function NotesTab({
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+            <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
           </div>
         ) : notes.length === 0 ? (
           <div className="text-center py-8 text-gray-400">
             <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm text-gray-500">Nenhuma nota ainda</p>
-            <p className="text-xs mt-1 text-gray-400">Adicione notas para lembrar de informações importantes</p>
+            <p className="text-sm">Nenhuma nota ainda</p>
+            <p className="text-xs mt-1">Adicione notas para lembrar de informações importantes</p>
           </div>
         ) : (
           <>
             {/* Notas fixadas */}
             {pinnedNotes.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                <p className="text-xs text-gray-400 font-medium flex items-center gap-1">
                   <Pin className="w-3 h-3" /> Fixadas
                 </p>
                 {pinnedNotes.map((note) => (
@@ -380,13 +380,13 @@ function NoteCard({
   }
 
   return (
-    <div className={`bg-gray-50 border rounded-xl p-3 group ${isPinned ? 'border-orange-200' : 'border-gray-200'}`}>
+    <div className={`bg-gray-100 rounded-xl p-3 group ${isPinned ? 'border border-brand-300' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">
+          <p className="text-sm text-white whitespace-pre-wrap break-words">
             {note.content}
           </p>
-
+          
           {/* Attachments */}
           {(note as any).attachments && (note as any).attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
@@ -394,29 +394,29 @@ function NoteCard({
                 <div key={index} className="relative group/att">
                   {att.type === 'image' ? (
                     <a href={att.url} target="_blank" rel="noopener noreferrer">
-                      <img
-                        src={att.url}
+                      <img 
+                        src={att.url} 
                         alt={att.name}
                         className="w-20 h-20 object-cover rounded-lg hover:opacity-80 transition-opacity"
                       />
                     </a>
                   ) : (
-                    <a
-                      href={att.url}
-                      target="_blank"
+                    <a 
+                      href={att.url} 
+                      target="_blank" 
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 bg-gray-200 rounded-lg p-2 hover:bg-gray-300 transition-colors"
                     >
-                      <FileText className="w-4 h-4 text-blue-500" />
-                      <span className="text-xs text-gray-700 truncate max-w-[100px]">{att.name}</span>
-                      <Download className="w-3 h-3 text-gray-400" />
+                      <FileText className="w-4 h-4 text-blue-400" />
+                      <span className="text-xs text-white truncate max-w-[100px]">{att.name}</span>
+                      <Download className="w-3 h-3 text-gray-500" />
                     </a>
                   )}
                 </div>
               ))}
             </div>
           )}
-
+          
           <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
             <Clock className="w-3 h-3" />
             <span>{formatDate(note.created_at)}</span>
@@ -428,25 +428,25 @@ function NoteCard({
             )}
           </div>
         </div>
-
+        
         {(onDelete || onPin) && (
           <div className="relative">
             <button
               onClick={() => setMenuOpen(menuOpen === note.id ? null : note.id)}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-200 rounded-lg 
                          opacity-0 group-hover:opacity-100 transition-all"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
-
+            
             {menuOpen === note.id && (
-              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200
-                              rounded-lg shadow-lg py-1 min-w-[140px] z-10">
+              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 
+                              rounded-lg shadow-xl py-1 min-w-[140px] z-10">
                 {onPin && (
                   <button
                     onClick={handlePin}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600
-                               hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 
+                               hover:bg-gray-100 hover:text-white transition-colors"
                   >
                     <Pin className="w-4 h-4" />
                     {note.is_pinned ? 'Desafixar' : 'Fixar'}
@@ -456,8 +456,8 @@ function NoteCard({
                   <button
                     onClick={handleDelete}
                     disabled={isDeleting}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500
-                               hover:bg-red-50 transition-colors disabled:opacity-50"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 
+                               hover:bg-red-500/10 transition-colors disabled:opacity-50"
                   >
                     {isDeleting ? (
                       <Loader2 className="w-4 h-4 animate-spin" />

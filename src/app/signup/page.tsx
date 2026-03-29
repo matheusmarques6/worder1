@@ -368,7 +368,7 @@ export default function SignupPage() {
           {/* Trust Badge */}
           <div className="mt-12 pt-8 border-t border-gray-200">
             <p className="text-gray-400 text-sm mb-3">Confiado por empresas como:</p>
-            <div className="flex items-center gap-6 text-gray-500">
+            <div className="flex items-center gap-6 text-gray-400">
               <span className="font-semibold">Shopify</span>
               <span className="font-semibold">Nuvemshop</span>
               <span className="font-semibold">VTEX</span>

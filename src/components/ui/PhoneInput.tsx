@@ -66,7 +66,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
           placeholder="(11) 99999-9999"
           className={cn(
             'w-full px-4 py-2 bg-white border border-gray-300 rounded-xl text-gray-900',
-            'focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 ring-offset-white transition-colors',
+            'focus:outline-none focus:border-brand-500 transition-colors',
             'placeholder:text-gray-400',
             error && 'border-red-500 focus:border-red-500',
             className
@@ -74,7 +74,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
           {...props}
         />
         {error && (
-          <p className="mt-1 text-xs text-red-500">{error}</p>
+          <p className="mt-1 text-xs text-red-400">{error}</p>
         )}
       </div>
     );

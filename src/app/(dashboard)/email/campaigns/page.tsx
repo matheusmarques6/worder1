@@ -1,200 +1,290 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
+import { motion } from 'framer-motion'
 import {
-  Mail, Plus, Loader2, Send, Eye, MousePointerClick, FileText,
+  Mail,
+  Send,
+  Eye,
+  MousePointerClick,
+  Plus,
+  Search,
+  Loader2,
+  MoreVertical,
+  Calendar,
+  Users,
+  ChevronRight,
   BarChart3,
 } from 'lucide-react'
+import Link from 'next/link'
+import { useStoreStore } from '@/stores'
 
 interface Campaign {
   id: string
   name: string
-  status: string
   subject: string
-  sent_at: string | null
-  scheduled_at: string | null
-  created_at: string
-  total_recipients: number
-  total_sent: number
-  total_opened: number
-  total_clicked: number
+  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed'
+  recipients_count: number
+  sent_count: number
   open_rate: number
   click_rate: number
+  scheduled_at?: string
+  sent_at?: string
+  created_at: string
 }
 
-interface Stats {
+interface CampaignStats {
   total: number
   sent: number
-  draft: number
-  scheduled: number
+  avg_open_rate: number
+  avg_click_rate: number
 }
 
-const statusConfig: Record<string, { label: string; classes: string }> = {
-  draft: { label: 'Rascunho', classes: 'bg-gray-100 text-gray-600' },
-  scheduled: { label: 'Agendada', classes: 'bg-amber-50 text-amber-700' },
-  sending: { label: 'Enviando', classes: 'bg-orange-50 text-orange-700' },
-  sent: { label: 'Enviada', classes: 'bg-emerald-50 text-emerald-700' },
-  failed: { label: 'Falhou', classes: 'bg-red-50 text-red-700' },
+const statusConfig: Record<string, { label: string; className: string }> = {
+  draft: { label: 'Rascunho', className: 'bg-gray-50 text-gray-600 border border-gray-200' },
+  scheduled: { label: 'Agendada', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+  sending: { label: 'Enviando', className: 'bg-orange-50 text-orange-700 border border-orange-200' },
+  sent: { label: 'Enviada', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  failed: { label: 'Falhou', className: 'bg-red-50 text-red-700 border border-red-200' },
 }
+
+const formatNumber = (n: number) => new Intl.NumberFormat('pt-BR').format(n)
+const formatPercent = (n: number) => `${n.toFixed(1)}%`
 
 export default function CampaignsPage() {
-  const router = useRouter()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [stats, setStats] = useState<Stats>({ total: 0, sent: 0, draft: 0, scheduled: 0 })
-  const [isLoading, setIsLoading] = useState(true)
+  const [stats, setStats] = useState<CampaignStats>({ total: 0, sent: 0, avg_open_rate: 0, avg_click_rate: 0 })
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const { currentStore } = useStoreStore()
+
+  const fetchCampaigns = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (currentStore) params.set('store_id', currentStore?.id || '')
+      const res = await fetch(`/api/email/campaigns?${params}`)
+      if (res.ok) {
+        const data = await res.json()
+        setCampaigns(data.campaigns || [])
+        setStats(data.stats || { total: 0, sent: 0, avg_open_rate: 0, avg_click_rate: 0 })
+      }
+    } catch (err) {
+      console.error('Failed to fetch campaigns:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [currentStore])
 
   useEffect(() => {
-    const fetchCampaigns = async () => {
-      try {
-        const res = await fetch('/api/email/campaigns')
-        const data = await res.json()
-        if (data.success) {
-          setCampaigns(data.campaigns || [])
-          if (data.stats) setStats(data.stats)
-        }
-      } catch (err) {
-        console.error('Error fetching campaigns:', err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
     fetchCampaigns()
-  }, [])
+  }, [fetchCampaigns])
 
-  const avgOpenRate = campaigns.length > 0
-    ? campaigns.filter(c => c.status === 'sent').reduce((sum, c) => sum + (c.open_rate || 0), 0) /
-      Math.max(campaigns.filter(c => c.status === 'sent').length, 1)
-    : 0
-
-  const avgClickRate = campaigns.length > 0
-    ? campaigns.filter(c => c.status === 'sent').reduce((sum, c) => sum + (c.click_rate || 0), 0) /
-      Math.max(campaigns.filter(c => c.status === 'sent').length, 1)
-    : 0
+  const filtered = campaigns.filter((c) =>
+    c.name.toLowerCase().includes(search.toLowerCase())
+  )
 
   const kpis = [
-    { label: 'Total', value: stats.total, icon: FileText, color: 'text-gray-600' },
-    { label: 'Enviadas', value: stats.sent, icon: Send, color: 'text-emerald-600' },
-    { label: 'Taxa Abertura', value: `${avgOpenRate.toFixed(1)}%`, icon: Eye, color: 'text-brand-600' },
-    { label: 'Taxa Clique', value: `${avgClickRate.toFixed(1)}%`, icon: MousePointerClick, color: 'text-blue-600' },
+    {
+      label: 'TOTAL CAMPANHAS',
+      value: formatNumber(stats.total),
+      icon: Mail,
+      color: 'text-brand-500',
+      bg: 'bg-brand-50',
+    },
+    {
+      label: 'ENVIADAS',
+      value: formatNumber(stats.sent),
+      icon: Send,
+      color: 'text-emerald-500',
+      bg: 'bg-emerald-50',
+    },
+    {
+      label: 'TAXA ABERTURA',
+      value: formatPercent(stats.avg_open_rate),
+      icon: Eye,
+      color: 'text-blue-500',
+      bg: 'bg-blue-50',
+    },
+    {
+      label: 'TAXA CLIQUE',
+      value: formatPercent(stats.avg_click_rate),
+      icon: MousePointerClick,
+      color: 'text-purple-500',
+      bg: 'bg-purple-50',
+    },
   ]
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Campanhas de Email</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Campanhas de Email</h1>
           <p className="text-sm text-gray-500 mt-1">
             Gerencie e acompanhe suas campanhas de email marketing
           </p>
         </div>
-        <button
-          onClick={() => router.push('/email/campaigns/new')}
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors"
+        <Link
+          href="/email/campaigns/new"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-500 text-white text-sm font-medium rounded-lg hover:bg-brand-600 transition-colors"
         >
           <Plus className="w-4 h-4" />
           Nova Campanha
-        </button>
+        </Link>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {kpis.map((kpi) => (
-          <div
-            key={kpi.label}
-            className="bg-white border border-gray-200 rounded-lg shadow-sm p-4"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
-                <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((kpi, i) => {
+          const Icon = kpi.icon
+          return (
+            <motion.div
+              key={kpi.label}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="bg-white border border-gray-200 rounded-lg shadow-sm p-5"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 ${kpi.bg} rounded-full flex items-center justify-center`}>
+                  <Icon className={`w-5 h-5 ${kpi.color}`} />
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    {kpi.label}
+                  </p>
+                  <p className="text-2xl font-semibold text-gray-900">{kpi.value}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-gray-500 font-medium">{kpi.label}</p>
-                <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
-              </div>
-            </div>
-          </div>
-        ))}
+            </motion.div>
+          )
+        })}
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Buscar campanhas..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+        />
       </div>
 
       {/* Loading */}
-      {isLoading && (
+      {loading && (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
         </div>
       )}
 
       {/* Empty State */}
-      {!isLoading && campaigns.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-200 rounded-lg">
+      {!loading && filtered.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-            <Mail className="w-8 h-8 text-gray-400" />
+            <Send className="w-7 h-7 text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-1">Nenhuma campanha criada</h3>
-          <p className="text-sm text-gray-500 mb-4">
-            Comece criando sua primeira campanha de email
+          <h3 className="text-base font-medium text-gray-500 mb-1">
+            Nenhuma campanha encontrada
+          </h3>
+          <p className="text-sm text-gray-400 mb-6">
+            {search ? 'Tente ajustar sua busca' : 'Crie sua primeira campanha de email'}
           </p>
-          <button
-            onClick={() => router.push('/email/campaigns/new')}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Nova Campanha
-          </button>
+          {!search && (
+            <Link
+              href="/email/campaigns/new"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-500 text-white text-sm font-medium rounded-lg hover:bg-brand-600 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Nova Campanha
+            </Link>
+          )}
         </div>
       )}
 
       {/* Table */}
-      {!isLoading && campaigns.length > 0 && (
+      {!loading && filtered.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Nome</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Data Envio</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Destinatarios</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Abertos</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Clicados</th>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Campanha
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Status
+                  </th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Destinatários
+                  </th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Abertura
+                  </th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Cliques
+                  </th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Data
+                  </th>
+                  <th className="w-10 px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
-                {campaigns.map((campaign) => {
+                {filtered.map((campaign) => {
                   const status = statusConfig[campaign.status] || statusConfig.draft
                   return (
                     <tr
                       key={campaign.id}
-                      className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() => router.push(`/email/campaigns/${campaign.id}`)}
+                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{campaign.name}</p>
-                        {campaign.subject && (
-                          <p className="text-xs text-gray-500 truncate max-w-xs">{campaign.subject}</p>
-                        )}
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{campaign.name}</p>
+                          <p className="text-xs text-gray-500 truncate max-w-xs">
+                            {campaign.subject}
+                          </p>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${status.classes}`}>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full ${status.className}`}
+                        >
                           {status.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-500">
-                        {campaign.sent_at
-                          ? new Date(campaign.sent_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                          : campaign.scheduled_at
-                            ? new Date(campaign.scheduled_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                            : '-'}
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm text-gray-900">
+                          {formatNumber(campaign.recipients_count)}
+                        </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-900 font-medium">
-                        {campaign.total_recipients || campaign.total_sent || 0}
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm text-gray-900">
+                          {formatPercent(campaign.open_rate)}
+                        </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-900">
-                        {campaign.open_rate ? `${campaign.open_rate.toFixed(1)}%` : '-'}
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm text-gray-900">
+                          {formatPercent(campaign.click_rate)}
+                        </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-900">
-                        {campaign.click_rate ? `${campaign.click_rate.toFixed(1)}%` : '-'}
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm text-gray-500">
+                          {new Date(
+                            campaign.sent_at || campaign.scheduled_at || campaign.created_at
+                          ).toLocaleDateString('pt-BR')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/email/campaigns/${campaign.id}`}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Link>
                       </td>
                     </tr>
                   )

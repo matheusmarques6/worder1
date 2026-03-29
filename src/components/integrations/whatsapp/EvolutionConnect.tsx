@@ -6,7 +6,7 @@
 // =============================================
 
 import { useState, useEffect } from 'react';
-import { useAuthStore, useStoreStore } from '@/stores';
+import { useAuthStore } from '@/stores';
 import { 
   Phone, 
   CheckCircle, 
@@ -43,7 +43,6 @@ interface EvolutionInstance {
 
 export default function EvolutionConnect() {
   const { user } = useAuthStore();
-  const { currentStore } = useStoreStore();
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -83,7 +82,7 @@ export default function EvolutionConnect() {
       setLoading(true);
       
       const response = await fetch(
-        `/api/whatsapp/instances?organization_id=${user.organization_id}&store_id=${currentStore?.id}`
+        `/api/whatsapp/instances?organization_id=${user.organization_id}`
       );
 
       const data = await response.json();
@@ -149,7 +148,6 @@ export default function EvolutionConnect() {
         body: JSON.stringify({
           action: 'create',
           organization_id: user.organization_id,
-          store_id: currentStore?.id,
           title: instanceName,
           api_type: 'EVOLUTION',
           api_url: serverUrl || undefined,
@@ -159,7 +157,7 @@ export default function EvolutionConnect() {
 
       const data = await response.json();
 
-      if (response.ok && data.instance) {
+      if (response.ok && data.success) {
         // Se retornou QR code, mostrar
         if (data.qrCode || data.qrcode) {
           setQrCode(data.qrCode || data.qrcode);
@@ -223,7 +221,7 @@ export default function EvolutionConnect() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'disconnect',
+          action: 'logout',
           organization_id: user.organization_id,
           instance_id: instanceId,
         }),
@@ -449,7 +447,7 @@ export default function EvolutionConnect() {
         
         {instances.length === 0 ? (
           <div className="text-center py-16 bg-gray-50 border border-gray-200 rounded-xl">
-            <Phone className="w-12 h-12 mx-auto mb-4 text-gray-500" />
+            <Phone className="w-12 h-12 mx-auto mb-4 text-gray-400" />
             <p className="text-gray-500">Nenhuma instância criada</p>
           </div>
         ) : (

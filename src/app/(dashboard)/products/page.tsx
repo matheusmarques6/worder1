@@ -276,7 +276,7 @@ const BulkEditModal = ({
               type="checkbox"
               checked={applyToVariants}
               onChange={(e) => setApplyToVariants(e.target.checked)}
-              className="w-5 h-5 rounded border-gray-300 text-brand-500 focus:ring-primary-500"
+              className="w-5 h-5 rounded border-gray-300 text-primary-500 focus:ring-primary-500"
             />
             <div>
               <p className="text-white font-medium">Aplicar a todas as variantes</p>
@@ -394,7 +394,7 @@ const ProductRow = ({
 
   return (
     <>
-      <tr className={`border-b border-gray-200/30 hover:bg-gray-100/20 transition-colors ${isSelected ? 'bg-brand-50/50' : ''}`}>
+      <tr className={`border-b border-gray-200/30 hover:bg-gray-100/20 transition-colors ${isSelected ? 'bg-primary-500/5' : ''}`}>
         {/* Checkbox */}
         <td className="px-3 py-3">
           <button

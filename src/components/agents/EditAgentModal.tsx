@@ -346,7 +346,7 @@ export function EditAgentModal({
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 py-3 px-4 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
                 activeTab === tab.id
-                  ? 'text-brand-600 border-b-2 border-primary-500 bg-brand-50/50'
+                  ? 'text-brand-600 border-b-2 border-primary-500 bg-primary-500/5'
                   : 'text-gray-500 hover:text-white hover:bg-gray-100'
               }`}
             >
@@ -444,7 +444,7 @@ export function EditAgentModal({
                         type="checkbox"
                         checked={form.auto_assign}
                         onChange={(e) => setForm({ ...form, auto_assign: e.target.checked })}
-                        className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
+                        className="w-4 h-4 rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500/50"
                       />
                       <span className="text-sm text-gray-600">Atribuição automática</span>
                     </label>
@@ -485,7 +485,7 @@ export function EditAgentModal({
             <div className="space-y-6">
               {loadingData ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
+                  <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
                 </div>
               ) : (
                 <>
@@ -538,7 +538,7 @@ export function EditAgentModal({
                           whatsapp_access_all: e.target.checked,
                           whatsapp_number_ids: e.target.checked ? [] : permissions.whatsapp_number_ids
                         })}
-                        className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
+                        className="w-4 h-4 rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500/50"
                       />
                       <span className="text-sm text-gray-600">Acesso a todos os números</span>
                     </label>
@@ -569,7 +569,7 @@ export function EditAgentModal({
                                     })
                                   }
                                 }}
-                                className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
+                                className="w-4 h-4 rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500/50"
                               />
                               <div className="flex-1">
                                 <div className="text-sm text-white">{number.phone_number}</div>
@@ -602,7 +602,7 @@ export function EditAgentModal({
                             type="checkbox"
                             checked={permissions[perm.key as keyof AgentPermissions] as boolean}
                             onChange={(e) => setPermissions({ ...permissions, [perm.key]: e.target.checked })}
-                            className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
+                            className="w-4 h-4 rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500/50"
                           />
                           <span className="text-sm text-gray-600">{perm.label}</span>
                         </label>

@@ -182,11 +182,11 @@ export function TestModal({
             <div className="max-h-[240px] overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-dark-700">
               {loadingContacts ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
+                  <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
                 </div>
               ) : contacts.length === 0 ? (
                 <div className="text-center py-8">
-                  <User className="w-10 h-10 text-gray-500 mx-auto mb-2" />
+                  <User className="w-10 h-10 text-gray-400 mx-auto mb-2" />
                   <p className="text-gray-500 text-sm">Nenhum contato encontrado</p>
                 </div>
               ) : (

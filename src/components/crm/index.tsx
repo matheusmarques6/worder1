@@ -225,7 +225,7 @@ function KanbanColumn({
             <h3 className="font-semibold text-gray-800">{column.name}</h3>
             <div className="flex items-center gap-2 text-xs">
               <span className="text-gray-400">{safeDeals.length} deals</span>
-              <span className="text-gray-500">•</span>
+              <span className="text-gray-400">•</span>
               <span className="text-success-400 font-medium">
                 {formatCurrency(totalValue)}
               </span>

@@ -397,7 +397,7 @@ export function PipelineAutomationConfig({
                 {/* Integrações conectadas */}
                 {connectedIntegrations.length === 0 ? (
                   <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
-                    <AlertCircle className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+                    <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                     <p className="text-gray-500">Nenhuma integração conectada</p>
                     <p className="text-gray-400 text-sm mt-1">
                       Configure suas integrações na aba Integrações
@@ -492,7 +492,7 @@ export function PipelineAutomationConfig({
                                               )}
                                             </p>
                                           </div>
-                                          <span className="text-gray-500 text-xs">
+                                          <span className="text-gray-400 text-xs">
                                             {rule.deals_created_count} deals
                                           </span>
                                           <button
@@ -537,14 +537,14 @@ export function PipelineAutomationConfig({
                 {/* Integrações não configuradas */}
                 {notConfiguredIntegrations.length > 0 && (
                   <div className="pt-4 border-t border-gray-200">
-                    <p className="text-gray-500 text-xs mb-2">
+                    <p className="text-gray-400 text-xs mb-2">
                       Integrações não configuradas:
                     </p>
                     <div className="flex gap-2 flex-wrap">
                       {notConfiguredIntegrations.map(int => (
                         <span
                           key={int.type}
-                          className="px-2 py-1 bg-white border border-gray-200 rounded text-gray-500 text-xs"
+                          className="px-2 py-1 bg-white border border-gray-200 rounded text-gray-400 text-xs"
                         >
                           {int.name}
                         </span>
@@ -555,7 +555,7 @@ export function PipelineAutomationConfig({
               </div>
             ) : (
               <div className="text-center py-12">
-                <ArrowRight className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+                <ArrowRight className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-gray-500">Transições automáticas</p>
                 <p className="text-gray-400 text-sm mt-1">
                   Nenhuma transição automática configurada
@@ -660,7 +660,7 @@ function AddSourceModal({
                 <button
                   key={integration.id}
                   onClick={() => onSelect(integration.type)}
-                  className="p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-white transition-all text-left group"
+                  className="p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all text-left group"
                 >
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${colorClass.split(' ')[1]}`}>
                     <Icon className={`w-5 h-5 ${colorClass.split(' ')[0]}`} />
@@ -878,7 +878,7 @@ function RuleConfigModal({
                               [filter.id]: e.target.checked,
                             },
                           })}
-                          className="rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500"
+                          className="rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500"
                         />
                         <span className="text-sm text-gray-500">{filter.placeholder || 'Ativar'}</span>
                       </label>

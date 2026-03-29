@@ -280,11 +280,11 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
           <div className="flex-1 overflow-y-auto">
             {loading && logs.length === 0 ? (
               <div className="flex items-center justify-center py-20">
-                <RefreshCw className="w-8 h-8 text-brand-500 animate-spin" />
+                <RefreshCw className="w-8 h-8 text-primary-500 animate-spin" />
               </div>
             ) : logs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20">
-                <Zap className="w-16 h-16 text-gray-500 mb-4" />
+                <Zap className="w-16 h-16 text-gray-400 mb-4" />
                 <p className="text-gray-500">Nenhum log encontrado</p>
               </div>
             ) : (
@@ -320,7 +320,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
                             <span className="text-xs text-gray-500">{SOURCE_NAMES[log.source_type] || log.source_type}</span>
                             {log.rule_name && (
                               <>
-                                <span className="text-gray-500">•</span>
+                                <span className="text-gray-400">•</span>
                                 <span className="text-xs text-gray-500">{log.rule_name}</span>
                               </>
                             )}

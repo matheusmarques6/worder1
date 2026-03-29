@@ -372,7 +372,7 @@ export default function PermissionsEditor({
                                 ...prev,
                                 whatsapp_access_all: e.target.checked,
                               }))}
-                              className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500 focus:ring-primary-500/50"
+                              className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500 focus:ring-primary-500/50"
                             />
                           </label>
 
@@ -432,7 +432,7 @@ export default function PermissionsEditor({
                                   ...prev,
                                   whatsapp_can_send: e.target.checked,
                                 }))}
-                                className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-brand-500"
+                                className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                               />
                               <Send className="w-4 h-4 text-gray-500" />
                               <span className="text-sm text-gray-600">Enviar mensagens</span>
@@ -445,7 +445,7 @@ export default function PermissionsEditor({
                                   ...prev,
                                   whatsapp_can_transfer: e.target.checked,
                                 }))}
-                                className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-brand-500"
+                                className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                               />
                               <ArrowLeftRight className="w-4 h-4 text-gray-500" />
                               <span className="text-sm text-gray-600">Transferir chats</span>
@@ -505,7 +505,7 @@ export default function PermissionsEditor({
                                 ...prev,
                                 can_access_crm: e.target.checked,
                               }))}
-                              className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500 focus:ring-primary-500/50"
+                              className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500 focus:ring-primary-500/50"
                             />
                           </label>
 
@@ -521,7 +521,7 @@ export default function PermissionsEditor({
                                       ...prev,
                                       can_access_pipelines: e.target.checked,
                                     }))}
-                                    className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-brand-500"
+                                    className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                                   />
                                   <Layers className="w-4 h-4 text-gray-500" />
                                   <span className="text-sm text-gray-600">Pode acessar Pipelines</span>
@@ -535,7 +535,7 @@ export default function PermissionsEditor({
                                       ...prev,
                                       can_create_deals: e.target.checked,
                                     }))}
-                                    className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-brand-500"
+                                    className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                                   />
                                   <Edit className="w-4 h-4 text-gray-500" />
                                   <span className="text-sm text-gray-600">Pode criar deals</span>
@@ -549,7 +549,7 @@ export default function PermissionsEditor({
                                       ...prev,
                                       can_manage_tags: e.target.checked,
                                     }))}
-                                    className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-brand-500"
+                                    className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                                   />
                                   <span className="text-sm text-gray-600">Pode gerenciar tags</span>
                                 </label>
@@ -576,7 +576,7 @@ export default function PermissionsEditor({
                                         ...prev,
                                         pipeline_access_all: e.target.checked,
                                       }))}
-                                      className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500 focus:ring-primary-500/50"
+                                      className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500 focus:ring-primary-500/50"
                                     />
                                   </label>
 
@@ -629,7 +629,7 @@ export default function PermissionsEditor({
                                         ...prev,
                                         pipeline_can_edit: e.target.checked,
                                       }))}
-                                      className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-brand-500"
+                                      className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                                     />
                                     <Edit className="w-4 h-4 text-gray-500" />
                                     <span className="text-sm text-gray-600">Pode editar deals e mover entre etapas</span>
@@ -691,7 +691,7 @@ export default function PermissionsEditor({
                                 ...prev,
                                 can_view_analytics: e.target.checked,
                               }))}
-                              className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-brand-500 focus:ring-primary-500/50"
+                              className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500 focus:ring-primary-500/50"
                             />
                           </label>
 
@@ -704,7 +704,7 @@ export default function PermissionsEditor({
                                   ...prev,
                                   can_view_reports: e.target.checked,
                                 }))}
-                                className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-brand-500"
+                                className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                               />
                               <span className="text-sm text-gray-600">Pode ver relatórios detalhados</span>
                             </label>

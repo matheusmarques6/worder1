@@ -39,7 +39,7 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
-  /* Custom scrollbar - Light theme */
+  /* Custom scrollbar - Worder style */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -75,7 +75,7 @@
   }
 
   .glass-subtle {
-    @apply bg-gray-50/60 backdrop-blur-lg border border-gray-100;
+    @apply bg-gray-50/60 backdrop-blur-lg border border-gray-200;
   }
 
   /* Gradient borders - Worder orange/yellow */
@@ -132,7 +132,7 @@
       radial-gradient(ellipse at 50% 100%, rgba(249, 115, 22, 0.05) 0%, transparent 50%);
   }
 
-  /* Stat card - Klaviyo-style light */
+  /* Stat card - Financial dashboard style */
   .stat-card {
     @apply bg-white rounded-2xl p-5 border border-gray-200 shadow-sm
            transition-all duration-300 hover:border-brand-500/30
@@ -145,18 +145,18 @@
            transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/30;
   }
 
-  /* Button styles - Klaviyo-style */
+  /* Button styles - Worder orange */
   .btn-primary {
     @apply bg-brand-500 text-white font-medium px-6 py-2.5 rounded-lg
            hover:bg-brand-600 transition-all duration-300
-           focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:ring-offset-2
-           active:scale-[0.98];
+           focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:ring-offset-2 focus:ring-offset-white
+           active:scale-[0.98] shadow-sm;
   }
 
   .btn-secondary {
     @apply bg-white text-gray-700 font-medium px-6 py-2.5 rounded-lg border border-gray-300
            hover:bg-gray-50 transition-all duration-300
-           focus:outline-none focus:ring-2 focus:ring-gray-300/50 focus:ring-offset-2
+           focus:outline-none focus:ring-2 focus:ring-gray-300/50 focus:ring-offset-2 focus:ring-offset-white
            active:scale-[0.98];
   }
 
@@ -168,29 +168,29 @@
   }
 
   .btn-outline {
-    @apply border border-brand-500 text-brand-600 font-medium px-6 py-2.5 rounded-lg
-           hover:bg-brand-50 transition-all duration-300
+    @apply border border-brand-500/50 text-brand-600 font-medium px-6 py-2.5 rounded-lg
+           hover:bg-brand-50 hover:border-brand-400 transition-all duration-300
            focus:outline-none focus:ring-2 focus:ring-brand-500/30
            active:scale-[0.98];
   }
 
   /* Input styles */
   .input-field {
-    @apply w-full bg-white border border-gray-300 rounded-lg px-4 py-3
+    @apply w-full bg-white border border-gray-300 rounded-xl px-4 py-3
            text-gray-900 placeholder:text-gray-400
            focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
            transition-all duration-300;
   }
 
-  /* Metric card styles - Klaviyo-style */
+  /* Metric card styles */
   .metric-card {
     @apply bg-white rounded-xl p-4 border border-gray-200 shadow-sm
-           hover:shadow-md transition-all duration-200;
+           hover:border-gray-300 transition-all duration-200;
   }
 
   .metric-card-primary {
-    @apply bg-gradient-to-br from-primary-500/20 to-primary-600/10 rounded-xl p-4
-           border border-primary-500/30 hover:border-primary-400/50 transition-all duration-200;
+    @apply bg-gradient-to-br from-brand-500/10 to-brand-600/5 rounded-xl p-4
+           border border-brand-500/30 hover:border-brand-400/50 transition-all duration-200;
   }
 
   .metric-value {
@@ -202,14 +202,14 @@
   }
 
   .metric-change-positive {
-    @apply text-emerald-600 text-sm font-medium flex items-center gap-1;
+    @apply text-success-400 text-sm font-medium flex items-center gap-1;
   }
 
   .metric-change-negative {
-    @apply text-red-500 text-sm font-medium flex items-center gap-1;
+    @apply text-error-400 text-sm font-medium flex items-center gap-1;
   }
 
-  /* Table styles - Light theme */
+  /* Table styles */
   .data-table {
     @apply w-full border-collapse;
   }
@@ -243,18 +243,18 @@
     @apply bg-gradient-to-r from-error-500 to-error-400;
   }
 
-  /* Kanban styles - Light theme */
+  /* Kanban styles */
   .kanban-column {
     @apply bg-gray-50 rounded-2xl p-4 min-w-[320px] max-w-[320px];
   }
 
   .kanban-card {
     @apply bg-white rounded-xl p-4 cursor-grab active:cursor-grabbing
-           border border-gray-200 hover:border-gray-300
-           shadow-sm transition-all duration-200 hover:shadow-md;
+           border border-gray-200 shadow-sm hover:shadow-md
+           transition-all duration-200;
   }
 
-  /* Chat bubble */
+  /* Chat bubble - WhatsApp style */
   .chat-bubble-sent {
     @apply bg-primary-600 text-white rounded-2xl rounded-br-md px-4 py-2 max-w-[70%];
   }
@@ -263,7 +263,7 @@
     @apply bg-gray-100 text-gray-900 rounded-2xl rounded-bl-md px-4 py-2 max-w-[70%];
   }
 
-  /* Sidebar styles - Dark sidebar */
+  /* Sidebar styles - Worder */
   .sidebar-item {
     @apply flex items-center gap-3 px-4 py-3 rounded-xl text-gray-400
            hover:bg-sidebar-hover hover:text-gray-200 transition-all duration-200
@@ -274,7 +274,7 @@
     @apply bg-sidebar-active text-white border-l-[3px] border-brand-500;
   }
 
-  /* Badge styles - Light theme */
+  /* Badge styles */
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
@@ -296,26 +296,26 @@
   }
 
   .badge-accent {
-    @apply badge bg-accent-500/20 text-accent-400;
+    @apply badge bg-amber-50 text-amber-700 border border-amber-200;
   }
 
-  /* Flow node for automations - Light theme */
+  /* Flow node for automations */
   .flow-node {
     @apply bg-white border-2 border-gray-200 rounded-xl p-4 min-w-[200px]
-           hover:border-primary-500/50 transition-all duration-200 cursor-pointer
+           hover:border-brand-500/50 transition-all duration-200 cursor-pointer
            shadow-sm;
   }
 
   .flow-node.selected {
-    @apply border-primary-500 shadow-glow;
+    @apply border-brand-500 shadow-glow;
   }
 
   .flow-node.trigger {
-    @apply border-amber-300 bg-amber-50;
+    @apply border-accent-500/50 bg-gradient-to-br from-accent-500/10 to-transparent;
   }
 
   .flow-node.action {
-    @apply border-brand-300 bg-brand-50;
+    @apply border-brand-500/50 bg-gradient-to-br from-brand-500/10 to-transparent;
   }
 
   .flow-node.condition {
@@ -326,44 +326,44 @@
     @apply border-blue-500/50 bg-gradient-to-br from-blue-500/10 to-transparent;
   }
 
-  /* Tab styles - Light theme */
+  /* Tab styles */
   .tab-list {
     @apply flex gap-1 p-1 bg-gray-100 rounded-xl;
   }
 
   .tab-item {
-    @apply px-4 py-2 text-sm font-medium text-dark-400 rounded-lg
-           hover:text-dark-200 transition-all duration-200;
+    @apply px-4 py-2 text-sm font-medium text-gray-500 rounded-lg
+           hover:text-gray-700 transition-all duration-200;
   }
 
   .tab-item.active {
     @apply bg-white text-gray-900 shadow-sm;
   }
 
-  /* Date range selector - Light theme */
+  /* Date range selector */
   .date-selector {
     @apply flex items-center gap-1 bg-gray-100 rounded-lg p-1;
   }
 
   .date-selector-item {
-    @apply px-3 py-1.5 text-xs font-medium text-dark-400 rounded-md
-           hover:text-dark-200 transition-all duration-200 cursor-pointer;
+    @apply px-3 py-1.5 text-xs font-medium text-gray-500 rounded-md
+           hover:text-gray-700 transition-all duration-200 cursor-pointer;
   }
 
   .date-selector-item.active {
     @apply bg-white text-gray-900 shadow-sm;
   }
 
-  /* Chart container - Light theme */
+  /* Chart container */
   .chart-container {
     @apply bg-white rounded-xl p-5 border border-gray-200 shadow-sm;
   }
 
   .chart-title {
-    @apply text-sm font-semibold text-gray-900 mb-4;
+    @apply text-sm font-semibold text-gray-700 mb-4;
   }
 
-  /* Dropdown menu - Light theme */
+  /* Dropdown menu */
   .dropdown-menu {
     @apply bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden;
   }
@@ -372,7 +372,7 @@
     @apply px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer;
   }
 
-  /* Toggle switch - Light theme */
+  /* Toggle switch */
   .toggle {
     @apply relative inline-flex h-6 w-11 items-center rounded-full
            bg-gray-300 transition-colors duration-200;
@@ -391,13 +391,13 @@
     @apply translate-x-6;
   }
 
-  /* Notification badge - Light theme */
+  /* Notification badge */
   .notification-dot {
-    @apply absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary-500
+    @apply absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-brand-500
            ring-2 ring-white;
   }
 
-  /* Avatar group - Light theme */
+  /* Avatar group */
   .avatar-group {
     @apply flex -space-x-2;
   }
@@ -406,12 +406,12 @@
     @apply ring-2 ring-white;
   }
 
-  /* Loading skeleton - Light theme */
+  /* Loading skeleton */
   .skeleton {
     @apply animate-pulse bg-gray-200 rounded;
   }
 
-  /* Divider - Light theme */
+  /* Divider */
   .divider {
     @apply h-px bg-gray-200 my-4;
   }
@@ -436,7 +436,7 @@
   }
 
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-500 to-amber-500;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-400 to-accent-400;
   }
 
   .text-gradient-worder {
@@ -459,22 +459,22 @@
   .animation-delay-400 { animation-delay: 400ms; }
   .animation-delay-500 { animation-delay: 500ms; }
 
-  /* Grid patterns - Light theme */
+  /* Grid patterns */
   .grid-pattern {
     background-image:
-      linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+      linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
     background-size: 20px 20px;
   }
 
-  /* Dot pattern - Light theme */
+  /* Dot pattern */
   .dot-pattern {
-    background-image: radial-gradient(rgba(0, 0, 0, 0.07) 1px, transparent 1px);
+    background-image: radial-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px);
     background-size: 16px 16px;
   }
 }
 
-/* Recharts customization - Light theme */
+/* Recharts customization */
 .recharts-cartesian-grid line {
   stroke: rgba(0, 0, 0, 0.06) !important;
 }

@@ -220,7 +220,7 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
               key={index}
               className={`min-h-[120px] p-2 border-r border-b border-gray-200/30 
                           ${!currentMonth ? 'bg-white/30' : ''} 
-                          ${today ? 'bg-brand-50/50' : ''}`}
+                          ${today ? 'bg-primary-500/5' : ''}`}
             >
               {/* Day Number */}
               <div className={`text-sm mb-1 ${
@@ -228,7 +228,7 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
                   ? 'w-7 h-7 flex items-center justify-center bg-primary-500 text-white rounded-full mx-auto' 
                   : currentMonth 
                     ? 'text-white' 
-                    : 'text-gray-500'
+                    : 'text-gray-400'
               }`}>
                 {date.getDate()}
               </div>

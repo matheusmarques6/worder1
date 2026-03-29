@@ -147,7 +147,7 @@ export default function HelpPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
           <p className="text-gray-500">Carregando central de ajuda...</p>
         </div>
       </div>

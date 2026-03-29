@@ -259,7 +259,7 @@ export function AutomationRulesTab({
       {/* Rules List */}
       {rules.length === 0 ? (
         <div className="p-8 bg-gray-50 border border-gray-200 rounded-2xl text-center">
-          <Zap className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+          <Zap className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h4 className="text-lg font-medium text-white mb-2">
             Nenhuma regra configurada
           </h4>

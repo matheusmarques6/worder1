@@ -1,60 +1,79 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthClient } from '@/lib/api-utils'
-import { createDomain, getDomain } from '@/lib/email/resend'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+// =============================================
+// WORDER: Email Domains API
+// /src/app/api/email/domains/route.ts
+//
+// GET: list domains, POST: create domain.
+// =============================================
 
-export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthClient, authError } from '@/lib/api-utils';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { createDomain, getDomain } from '@/lib/email/resend';
 
-// GET - List domains for org
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const auth = await getAuthClient()
-    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthClient();
+    if (!auth) return authError();
 
-    const { data: domains } = await supabaseAdmin
+    const { user } = auth;
+
+    const { data: domains, error } = await supabaseAdmin
       .from('email_domains')
       .select('*')
-      .eq('organization_id', auth.user.organization_id)
-      .order('created_at', { ascending: false })
+      .eq('organization_id', user.organization_id)
+      .order('created_at', { ascending: false });
 
-    return NextResponse.json({ success: true, domains: domains || [] })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    if (error) {
+      console.error('[EmailDomains] Error fetching domains:', error);
+      return NextResponse.json({ error: 'Failed to fetch domains' }, { status: 500 });
+    }
+
+    return NextResponse.json({ domains: domains || [] });
+  } catch (error) {
+    console.error('[EmailDomains] Error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// POST - Add a new domain
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthClient()
-    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthClient();
+    if (!auth) return authError();
 
-    const { domain } = await req.json()
-    if (!domain) return NextResponse.json({ error: 'Domain is required' }, { status: 400 })
+    const { user } = auth;
+    const { domain } = await request.json();
 
-    // Create domain in Resend
-    const result = await createDomain(domain)
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 })
+    if (!domain) {
+      return NextResponse.json({ error: 'Domain is required' }, { status: 400 });
     }
 
-    // Store in database
-    const { data, error } = await supabaseAdmin
+    // Create domain in Resend
+    const resendDomain = await createDomain(domain);
+
+    // Store in our database
+    const { data: dbDomain, error } = await supabaseAdmin
       .from('email_domains')
       .insert({
-        organization_id: auth.user.organization_id,
+        organization_id: user.organization_id,
         domain,
-        resend_domain_id: result.domain?.id,
+        resend_domain_id: resendDomain?.id || null,
         status: 'pending',
-        dns_records: result.domain?.records || [],
+        dns_records: resendDomain?.records || [],
       })
       .select()
-      .single()
+      .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      console.error('[EmailDomains] Error creating domain:', error);
+      return NextResponse.json({ error: 'Failed to save domain' }, { status: 500 });
+    }
 
-    return NextResponse.json({ success: true, domain: data })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ domain: dbDomain }, { status: 201 });
+  } catch (error: any) {
+    console.error('[EmailDomains] Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

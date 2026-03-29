@@ -598,7 +598,7 @@ export function CreateAgentWizard({
         <div className="space-y-5">
           {loadingData ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
+              <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
             </div>
           ) : (
             <>
@@ -651,7 +651,7 @@ export function CreateAgentWizard({
                       whatsappAccessAll: e.target.checked,
                       whatsappNumberIds: e.target.checked ? [] : permissions.whatsappNumberIds
                     })}
-                    className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
+                    className="w-4 h-4 rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500/50"
                   />
                   <span className="text-sm text-gray-600">Acesso a todos os números</span>
                 </label>
@@ -682,7 +682,7 @@ export function CreateAgentWizard({
                                 })
                               }
                             }}
-                            className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
+                            className="w-4 h-4 rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500/50"
                           />
                           <div className="flex-1">
                             <div className="text-sm text-white">{number.phone_number}</div>
@@ -715,7 +715,7 @@ export function CreateAgentWizard({
                         type="checkbox"
                         checked={permissions[perm.key as keyof typeof permissions] as boolean}
                         onChange={(e) => setPermissions({ ...permissions, [perm.key]: e.target.checked })}
-                        className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
+                        className="w-4 h-4 rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500/50"
                       />
                       <span className="text-sm text-gray-600">{perm.label}</span>
                     </label>
@@ -912,7 +912,7 @@ export function CreateAgentWizard({
                   type="checkbox"
                   checked={sendWelcomeEmail}
                   onChange={(e) => setSendWelcomeEmail(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-primary-500/50"
+                  className="w-4 h-4 rounded border-gray-300 bg-white text-primary-500 focus:ring-primary-500/50"
                 />
                 <span className="text-sm text-gray-600">Enviar email de boas-vindas com credenciais</span>
               </label>

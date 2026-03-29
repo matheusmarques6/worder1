@@ -256,7 +256,7 @@ export default function NumberSelector({
                       </p>
                       <div className="flex items-center gap-2 text-xs text-gray-500">
                         <span>{number.phone_number}</span>
-                        <span className="text-gray-500">•</span>
+                        <span className="text-gray-400">•</span>
                         <span className={`flex items-center gap-1 ${
                           number.is_connected ? 'text-green-400' : 'text-red-400'
                         }`}>

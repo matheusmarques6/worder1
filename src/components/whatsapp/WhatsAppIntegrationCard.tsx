@@ -62,7 +62,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
       const configData = await configRes.json()
       
       // Buscar instâncias (QR Code)
-      const instancesRes = await fetch(`/api/whatsapp/instances?organization_id=${organizationId}`)
+      const instancesRes = await fetch(`/api/whatsapp/instances?organizationId=${organizationId}`)
       const instancesData = await instancesRes.json()
       
       const hasConfig = configData.connected
@@ -274,7 +274,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
               <MessageSquare className="w-3.5 h-3.5" />
               Inbox
             </a>
-            <span className="text-gray-600">•</span>
+            <span className="text-gray-300">•</span>
             <a 
               href="/whatsapp?tab=campaigns" 
               className="flex items-center gap-1.5 text-gray-500 hover:text-white transition-colors"
@@ -282,7 +282,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
               <MessageSquare className="w-3.5 h-3.5" />
               Campanhas
             </a>
-            <span className="text-gray-600">•</span>
+            <span className="text-gray-300">•</span>
             <a
               href="https://business.facebook.com/settings/whatsapp-business-accounts"
               target="_blank"

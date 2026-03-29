@@ -242,7 +242,7 @@ export function BulkDeleteModal({
                       type="checkbox"
                       checked={deleteDeals}
                       onChange={(e) => setDeleteDeals(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-brand-500 focus:ring-primary-500"
+                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500"
                     />
                     <div className="flex-1">
                       <p className="text-sm text-white">Excluir deals associados</p>
@@ -260,7 +260,7 @@ export function BulkDeleteModal({
                       type="checkbox"
                       checked={deleteConversations}
                       onChange={(e) => setDeleteConversations(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-brand-500 focus:ring-primary-500"
+                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500"
                     />
                     <div className="flex-1">
                       <p className="text-sm text-white">Excluir conversas WhatsApp</p>

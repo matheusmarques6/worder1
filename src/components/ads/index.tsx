@@ -418,7 +418,7 @@ export const TopAdsList = ({ ads, onViewAll }: TopAdsListProps) => {
         
         {ads.length === 0 && (
           <div className="text-center py-8">
-            <BarChart3 className="w-10 h-10 text-gray-500 mx-auto mb-2" />
+            <BarChart3 className="w-10 h-10 text-gray-400 mx-auto mb-2" />
             <p className="text-gray-500 text-sm">Nenhum anúncio encontrado</p>
           </div>
         )}

@@ -1,30 +1,131 @@
+// =============================================
+// WORDER: Email Merge Tags
+// /src/lib/email/merge-tags.ts
+//
+// 15 merge tags in 4 categories with PT-BR labels.
+// =============================================
+
 export interface MergeTag {
-  name: string
-  value: string
-  sample: string
-  category: 'contact' | 'order' | 'store' | 'cart'
+  tag: string;
+  label: string;
+  category: 'contact' | 'order' | 'store' | 'cart';
+  sampleValue: string;
 }
 
-export const mergeTags: Record<string, MergeTag> = {
-  first_name: { name: 'Nome', value: '{{first_name}}', sample: 'João', category: 'contact' },
-  last_name: { name: 'Sobrenome', value: '{{last_name}}', sample: 'Silva', category: 'contact' },
-  email: { name: 'Email', value: '{{email}}', sample: 'joao@email.com', category: 'contact' },
-  phone: { name: 'Telefone', value: '{{phone}}', sample: '(11) 99999-9999', category: 'contact' },
-  company: { name: 'Empresa', value: '{{company}}', sample: 'Empresa LTDA', category: 'contact' },
-  store_name: { name: 'Nome da Loja', value: '{{store_name}}', sample: 'Minha Loja', category: 'store' },
-  store_url: { name: 'URL da Loja', value: '{{store_url}}', sample: 'https://minhaloja.com.br', category: 'store' },
-  order_number: { name: 'Nº Pedido', value: '{{order_number}}', sample: '#1234', category: 'order' },
-  order_total: { name: 'Total Pedido', value: '{{order_total}}', sample: 'R$ 199,90', category: 'order' },
-  order_date: { name: 'Data Pedido', value: '{{order_date}}', sample: '27/03/2026', category: 'order' },
-  cart_total: { name: 'Total Carrinho', value: '{{cart_total}}', sample: 'R$ 299,90', category: 'cart' },
-  cart_url: { name: 'Link Carrinho', value: '{{cart_url}}', sample: 'https://loja.com/cart/recover', category: 'cart' },
-  product_name: { name: 'Produto', value: '{{product_name}}', sample: 'Camiseta Premium', category: 'order' },
-  product_price: { name: 'Preço', value: '{{product_price}}', sample: 'R$ 89,90', category: 'order' },
-  product_url: { name: 'Link Produto', value: '{{product_url}}', sample: 'https://loja.com/produto', category: 'order' },
-}
+export const MERGE_TAGS: MergeTag[] = [
+  // Contact tags
+  {
+    tag: 'contact.first_name',
+    label: 'Primeiro Nome',
+    category: 'contact',
+    sampleValue: 'Maria',
+  },
+  {
+    tag: 'contact.last_name',
+    label: 'Sobrenome',
+    category: 'contact',
+    sampleValue: 'Silva',
+  },
+  {
+    tag: 'contact.email',
+    label: 'E-mail',
+    category: 'contact',
+    sampleValue: 'maria@exemplo.com',
+  },
+  {
+    tag: 'contact.phone',
+    label: 'Telefone',
+    category: 'contact',
+    sampleValue: '(11) 99999-0000',
+  },
 
-export function getMergeTagsByCategory(category: MergeTag['category']) {
-  return Object.entries(mergeTags)
-    .filter(([, tag]) => tag.category === category)
-    .map(([key, tag]) => ({ key, ...tag }))
+  // Order tags
+  {
+    tag: 'order.number',
+    label: 'Número do Pedido',
+    category: 'order',
+    sampleValue: '#1042',
+  },
+  {
+    tag: 'order.total',
+    label: 'Total do Pedido',
+    category: 'order',
+    sampleValue: 'R$ 199,90',
+  },
+  {
+    tag: 'order.status',
+    label: 'Status do Pedido',
+    category: 'order',
+    sampleValue: 'Enviado',
+  },
+  {
+    tag: 'order.tracking_url',
+    label: 'URL de Rastreio',
+    category: 'order',
+    sampleValue: 'https://rastreio.exemplo.com/abc123',
+  },
+
+  // Store tags
+  {
+    tag: 'store.name',
+    label: 'Nome da Loja',
+    category: 'store',
+    sampleValue: 'Minha Loja',
+  },
+  {
+    tag: 'store.url',
+    label: 'URL da Loja',
+    category: 'store',
+    sampleValue: 'https://minhaloja.com.br',
+  },
+  {
+    tag: 'store.email',
+    label: 'E-mail da Loja',
+    category: 'store',
+    sampleValue: 'contato@minhaloja.com.br',
+  },
+  {
+    tag: 'store.phone',
+    label: 'Telefone da Loja',
+    category: 'store',
+    sampleValue: '(11) 3000-0000',
+  },
+
+  // Cart tags
+  {
+    tag: 'cart.url',
+    label: 'URL do Carrinho',
+    category: 'cart',
+    sampleValue: 'https://minhaloja.com.br/cart/recover/abc123',
+  },
+  {
+    tag: 'cart.total',
+    label: 'Total do Carrinho',
+    category: 'cart',
+    sampleValue: 'R$ 349,90',
+  },
+  {
+    tag: 'cart.items_count',
+    label: 'Quantidade de Itens',
+    category: 'cart',
+    sampleValue: '3',
+  },
+];
+
+export const MERGE_TAG_CATEGORIES = [
+  { key: 'contact', label: 'Contato' },
+  { key: 'order', label: 'Pedido' },
+  { key: 'store', label: 'Loja' },
+  { key: 'cart', label: 'Carrinho' },
+] as const;
+
+/**
+ * Returns a map of tag -> sampleValue for test/preview purposes.
+ */
+export function getSampleMergeData(): Record<string, string> {
+  const data: Record<string, string> = {};
+  for (const tag of MERGE_TAGS) {
+    data[tag.tag] = tag.sampleValue;
+  }
+  return data;
 }

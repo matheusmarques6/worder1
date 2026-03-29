@@ -26,6 +26,8 @@ import {
   CheckCheck,
   Plus,
   ShoppingBag,
+  ShoppingCart,
+  Package,
   Trash2,
   AlertCircle,
   AlertTriangle,
@@ -36,10 +38,6 @@ import {
   User,
   Building2,
   Menu,
-  Mail,
-  Target,
-  RefreshCcw,
-  BarChart3,
 } from 'lucide-react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
@@ -82,26 +80,18 @@ interface Notification {
 
 const mainNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: 'Inbox', href: '/inbox', icon: MessageSquare },
-  { title: 'Contatos', href: '/contacts', icon: Users },
-  { title: 'Email', href: '/email/campaigns', icon: Mail },
-  { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare },
-  { title: 'CRM', href: '/crm', icon: ShoppingBag },
+  { title: 'Pedidos', href: '/orders', icon: ShoppingCart },
+  { title: 'Produtos', href: '/products', icon: Package },
+  { title: 'CRM', href: '/crm', icon: Users },
+  { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
 ]
 
-const automationNavItems: NavItem[] = [
-  { title: 'Automações', href: '/automations', icon: Zap },
+const toolsNavItems: NavItem[] = [
   { title: 'Formulários', href: '/forms', icon: FileText },
-  { title: 'Segmentos', href: '/segments', icon: Target },
-  { title: 'Recuperação', href: '/recovery', icon: RefreshCcw },
+  { title: 'Automações', href: '/automations', icon: Zap },
 ]
 
-const analyticsNavItems: NavItem[] = [
-  { title: 'Visão Geral', href: '/analytics/sales', icon: BarChart3 },
-]
-
-const footerNavItems: NavItem[] = [
-  { title: 'Integrações', href: '/integrations', icon: ExternalLink },
+const settingsNavItems: NavItem[] = [
   { title: 'Configurações', href: '/settings', icon: Settings },
   { title: 'Ajuda', href: '/help', icon: HelpCircle },
 ]
@@ -149,8 +139,9 @@ export function Sidebar() {
         href={item.href}
         className={cn(
           'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200',
-          isActive && 'bg-white/10 text-white',
-          !isActive && 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+          'hover:bg-sidebar-hover',
+          isActive && 'bg-sidebar-active text-white border-l-[3px] border-brand-500',
+          !isActive && 'text-gray-400 hover:text-gray-200'
         )}
       >
         <Icon className={cn('w-5 h-5 flex-shrink-0', isActive && 'text-brand-400')} />
@@ -231,7 +222,7 @@ export function Sidebar() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="text-[10px] text-gray-500"
+                  className="text-[10px] text-gray-400"
                 >
                   by Convertfy
                 </motion.span>
@@ -240,7 +231,7 @@ export function Sidebar() {
           </Link>
           <button
             onClick={toggleSidebar}
-            className="w-8 h-8 rounded-lg bg-sidebar-hover hover:bg-sidebar-active flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+            className="w-8 h-8 rounded-lg bg-white hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-200 transition-colors"
           >
             {sidebarCollapsed ? (
               <ChevronRight className="w-4 h-4" />
@@ -255,7 +246,7 @@ export function Sidebar() {
           {/* Main */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
+              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Principal
               </p>
             )}
@@ -266,43 +257,29 @@ export function Sidebar() {
             </div>
           </div>
 
-          {/* Automation */}
+          {/* Tools */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
-                Automação
+              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Ferramentas
               </p>
             )}
             <div className="space-y-1">
-              {automationNavItems.map((item) => (
+              {toolsNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>
           </div>
 
-          {/* Analytics */}
+          {/* Settings */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
-                Analytics
-              </p>
-            )}
-            <div className="space-y-1">
-              {analyticsNavItems.map((item) => (
-                <NavLink key={item.href} item={item} />
-              ))}
-            </div>
-          </div>
-
-          {/* Footer Nav */}
-          <div>
-            {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
+              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Sistema
               </p>
             )}
             <div className="space-y-1">
-              {footerNavItems.map((item) => (
+              {settingsNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>
@@ -323,8 +300,8 @@ export function Sidebar() {
               >
                 {/* Stores List */}
                 {stores.length > 0 && (
-                  <div className="p-2 border-b border-gray-700/50">
-                    <p className="px-2 py-1 text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <div className="p-2 border-b border-gray-700/30">
+                    <p className="px-2 py-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Suas Lojas
                     </p>
                     <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
@@ -338,11 +315,11 @@ export function Sidebar() {
                           className={cn(
                             'w-full flex items-center gap-3 p-2 rounded-lg transition-colors',
                             currentStore?.id === store.id
-                              ? 'bg-brand-500/10 text-brand-400'
+                              ? 'bg-sidebar-active text-white border-l-[3px] border-brand-500'
                               : 'hover:bg-sidebar-hover text-white'
                           )}
                         >
-                          <div className="w-8 h-8 rounded-lg bg-sidebar-hover flex items-center justify-center text-xs font-bold text-gray-300">
+                          <div className="w-8 h-8 rounded-lg bg-sidebar-hover flex items-center justify-center text-xs text-gray-300 font-bold">
                             {getInitials(store.name)}
                           </div>
                           <div className="flex-1 text-left min-w-0">
@@ -350,7 +327,7 @@ export function Sidebar() {
                             <p className="text-xs text-gray-500 truncate">{store.domain}</p>
                           </div>
                           {currentStore?.id === store.id && (
-                            <Check className="w-4 h-4 text-brand-400 flex-shrink-0" />
+                            <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
                           )}
                         </button>
                       ))}
@@ -388,8 +365,8 @@ export function Sidebar() {
             }}
             className={cn(
               'w-full flex items-center gap-3 p-3 rounded-xl transition-all',
-              'bg-sidebar-hover border border-gray-700/50 hover:border-gray-600',
-              storeDropdownOpen && 'border-brand-400 bg-sidebar-active',
+              'bg-gray-50 border border-gray-200 hover:border-gray-300',
+              storeDropdownOpen && 'border-brand-400 bg-white',
               sidebarCollapsed && 'justify-center'
             )}
           >
@@ -406,7 +383,7 @@ export function Sidebar() {
                   exit={{ opacity: 0, width: 0 }}
                   className="flex-1 text-left min-w-0 overflow-hidden"
                 >
-                  <p className="text-sm font-semibold text-white truncate">
+                  <p className="text-sm font-semibold text-gray-900 truncate">
                     {currentStore?.name || 'Selecionar Loja'}
                   </p>
                   <p className="text-xs text-gray-500 truncate">
@@ -672,7 +649,7 @@ export function Header() {
   return (
     <header
       className={cn(
-        'fixed top-0 right-0 h-16 bg-gray-50/80 backdrop-blur-xl border-b border-gray-200 z-30 flex items-center justify-between px-4 lg:px-6 transition-all duration-300',
+        'fixed top-0 right-0 h-16 bg-gray-50/80 backdrop-blur-xl border-b border-gray-700/30 z-30 flex items-center justify-between px-4 lg:px-6 transition-all duration-300',
         // ✅ MODIFICADO: Mobile sempre left-0, desktop depende do sidebar
         'left-0',
         'lg:left-20',
@@ -682,7 +659,7 @@ export function Header() {
       {/* ✅ NOVO: Botão Hamburger (Mobile only) */}
       <button
         onClick={toggleSidebar}
-        className="lg:hidden p-2 rounded-lg hover:bg-white text-gray-500 hover:text-gray-800 transition-colors mr-2"
+        className="lg:hidden p-2 rounded-lg hover:bg-white text-gray-400 hover:text-gray-200 transition-colors mr-2"
       >
         <Menu className="w-5 h-5" />
       </button>
@@ -720,7 +697,7 @@ export function Header() {
         <div className="relative" ref={dropdownRef}>
           <button 
             onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="relative p-2 rounded-xl hover:bg-white text-gray-500 hover:text-gray-800 transition-colors"
+            className="relative p-2 rounded-xl hover:bg-white text-gray-400 hover:text-gray-200 transition-colors"
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
@@ -740,7 +717,7 @@ export function Header() {
                 className="absolute right-0 top-full mt-2 w-96 bg-white border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden"
               >
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/30">
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-white">Notificações</h3>
                     {unreadCount > 0 && (
@@ -781,8 +758,8 @@ export function Header() {
                       <div
                         key={notification.id}
                         className={cn(
-                          'px-4 py-3 border-b border-gray-200 hover:bg-gray-50 transition-colors',
-                          !notification.read && 'bg-brand-50/50'
+                          'px-4 py-3 border-b border-gray-700/30 hover:bg-gray-50 transition-colors',
+                          !notification.read && 'bg-primary-500/5'
                         )}
                       >
                         <div className="flex items-start gap-3">
@@ -863,7 +840,7 @@ export function Header() {
 
                 {/* Footer */}
                 {notifications.length > 0 && (
-                  <div className="px-4 py-3 border-t border-gray-200">
+                  <div className="px-4 py-3 border-t border-gray-700/30">
                     <a 
                       href="/notifications"
                       onClick={() => setNotificationsOpen(false)}
@@ -928,7 +905,7 @@ export function Header() {
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* User Info Header */}
-                <div className="p-4 border-b border-gray-200">
+                <div className="p-4 border-b border-gray-700/30">
                   <div className="flex items-center gap-3">
                     {userAvatar ? (
                       <img 
@@ -953,10 +930,10 @@ export function Header() {
 
                 {/* Agents Section */}
                 {agents.length > 0 && (
-                  <div className="px-3 py-2 border-b border-gray-200">
+                  <div className="px-3 py-2 border-b border-gray-700/30">
                     <div className="flex items-center gap-2 px-1 mb-2">
                       <Users className="w-3.5 h-3.5 text-gray-400" />
-                      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                      <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                         Agentes ({agents.filter(a => a.status === 'online').length} online)
                       </span>
                     </div>
@@ -1041,7 +1018,7 @@ export function Header() {
                 </div>
 
                 {/* Logout */}
-                <div className="px-4 py-2 border-t border-gray-200">
+                <div className="px-4 py-2 border-t border-gray-700/30">
                   <button
                     onClick={handleLogout}
                     disabled={isLoggingOut}
