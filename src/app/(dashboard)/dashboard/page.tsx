@@ -234,7 +234,7 @@ const KPICard = ({
     className={`
       relative rounded-xl p-4 transition-all duration-300 overflow-hidden
       ${highlight
-        ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg shadow-primary-500/20'
+        ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/20'
         : 'bg-white border border-gray-200 hover:border-gray-300'
       }
     `}

@@ -47,7 +47,7 @@ const InfoTooltip = ({ text }: { text: string }) => (
     <Info className="w-4 h-4 text-gray-400 cursor-help" />
     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-100 rounded-lg text-xs text-gray-900 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
       {text}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-dark-700" />
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-100" />
     </div>
   </div>
 )

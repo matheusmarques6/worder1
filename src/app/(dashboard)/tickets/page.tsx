@@ -52,7 +52,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }>
   in_progress: { label: 'Em Andamento', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Clock },
   waiting_customer: { label: 'Aguard. Cliente', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20', icon: User },
   waiting_internal: { label: 'Aguard. Interno', color: 'bg-pink-500/10 text-pink-400 border-pink-500/20', icon: Clock },
-  resolved: { label: 'Resolvido', color: 'bg-green-50 text-green-600 border-success-500/20', icon: CheckCircle },
+  resolved: { label: 'Resolvido', color: 'bg-green-50 text-green-600 border-green-200', icon: CheckCircle },
   closed: { label: 'Fechado', color: 'bg-gray-100 text-gray-500 border-gray-200', icon: XCircle },
 }
 
@@ -384,7 +384,7 @@ export default function TicketsPage() {
 
       {/* Error */}
       {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-50 border border-error-500/20 rounded-xl">
+        <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-xl">
           <AlertCircle className="w-5 h-5 text-red-500" />
           <p className="text-red-500">{error}</p>
         </div>

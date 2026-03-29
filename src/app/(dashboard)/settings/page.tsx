@@ -1007,7 +1007,7 @@ export default function SettingsPage() {
                   <button
                     onClick={() => setShowAddKeyModal(true)}
                     disabled={availableProviders.length === 0}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-accent-500 hover:from-orange-600 hover:to-accent-600 disabled:from-dark-600 disabled:to-dark-600 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-accent-500 hover:from-orange-600 hover:to-accent-600 disabled:from-gray-200 disabled:to-gray-200 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-4 h-4" />
                     Adicionar Key
@@ -1286,7 +1286,7 @@ export default function SettingsPage() {
                       <button
                         onClick={handleSaveApiKey}
                         disabled={!newKeyProvider || !newKeyValue || savingKey}
-                        className="flex-1 py-3 bg-gradient-to-r from-orange-500 to-accent-500 hover:from-orange-600 hover:to-accent-600 disabled:from-dark-600 disabled:to-dark-600 text-white rounded-xl font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                        className="flex-1 py-3 bg-gradient-to-r from-orange-500 to-accent-500 hover:from-orange-600 hover:to-accent-600 disabled:from-gray-200 disabled:to-gray-200 text-white rounded-xl font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                       >
                         {savingKey && <Loader2 className="w-4 h-4 animate-spin" />}
                         {savingKey ? 'Salvando...' : 'Salvar'}

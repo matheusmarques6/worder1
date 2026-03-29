@@ -299,7 +299,7 @@ export default function HelpPage() {
                   </div>
                 </div>
 
-                <div className="divide-y divide-dark-700">
+                <div className="divide-y divide-gray-200">
                   {category.faqs.map((faq) => (
                     <div key={faq.id} className="group">
                       <button
