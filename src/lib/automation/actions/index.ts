@@ -382,63 +382,62 @@ async function executeSendEmail(
     throw new Error('Email do contato não encontrado');
   }
 
-  // Buscar integração de email (Klaviyo ou outro)
-  const { data: integration } = await supabase
-    .from('integrations')
-    .select('*')
-    .eq('organization_id', organizationId)
-    .eq('type', 'klaviyo')
-    .eq('status', 'active')
-    .single();
-
   const subject = resolveVariable(config.subject || 'Mensagem automática', context);
-  const body = resolveVariable(config.body || config.message || '', context);
-  const templateId = config.templateId || config.template;
+  const body = resolveVariable(config.body || config.message || config.html || '', context);
 
-  if (integration) {
-    // Enviar via Klaviyo
-    try {
-      const klaviyoApiKey = integration.credentials?.api_key;
-      
-      if (templateId) {
-        // Usar template do Klaviyo
-        // TODO: Implementar chamada real à API do Klaviyo
-        console.log(`[Action] Would send Klaviyo template ${templateId} to ${contact.email}`);
-      } else {
-        // Enviar email direto
-        console.log(`[Action] Would send Klaviyo email to ${contact.email}`);
-      }
+  // Try real email sending via Resend
+  try {
+    const { sendCampaignEmail } = await import('@/lib/email/send-campaign-email');
+    const result = await sendCampaignEmail({
+      supabaseAdmin: supabase,
+      contact,
+      template: { html: body || `<p>${subject}</p>`, subject },
+      org: { id: organizationId },
+      campaign: config.campaignId ? { id: config.campaignId } : undefined,
+      flowId: context.system?.execution_id,
+    });
 
+    if (result.success) {
       return {
         success: true,
         output: {
           action: 'send_email',
-          provider: 'klaviyo',
+          provider: 'resend',
           to: contact.email,
           subject,
-          template_id: templateId,
-          sent: true
-        }
+          emailSendId: result.emailSendId,
+          sent: true,
+        },
       };
-    } catch (e: any) {
-      throw new Error(`Erro ao enviar email via Klaviyo: ${e.message}`);
+    } else {
+      // Email send failed but don't break the flow
+      console.warn(`[Action] Email send failed for ${contact.email}: ${result.error}`);
+      return {
+        success: true,
+        output: {
+          action: 'send_email',
+          provider: 'resend',
+          to: contact.email,
+          subject,
+          warning: result.error || 'Send failed',
+          sent: false,
+        },
+      };
     }
+  } catch (importErr: any) {
+    // Fallback if email lib not available
+    console.log(`[Action] Email fallback for ${contact.email}: ${importErr.message}`);
+    return {
+      success: true,
+      output: {
+        action: 'send_email',
+        provider: 'none',
+        to: contact.email,
+        subject,
+        warning: 'Email lib not configured',
+      },
+    };
   }
-
-  // Sem integração - logar apenas
-  console.log(`[Action] Email would be sent to ${contact.email} (no integration configured)`);
-  
-  return {
-    success: true,
-    output: {
-      action: 'send_email',
-      provider: 'none',
-      to: contact.email,
-      subject,
-      body_preview: body.substring(0, 100),
-      warning: 'Integração de email não configurada'
-    }
-  };
 }
 
 // =====================================================

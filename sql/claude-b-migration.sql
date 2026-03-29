@@ -416,7 +416,164 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON email_sends
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- =====================================================
--- 12. GRANT PERMISSIONS (Supabase service role)
+-- 12. TABELA: tracking_events (rastreamento server-side)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS tracking_events (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  organization_id UUID NOT NULL,
+  visitor_id VARCHAR(100),
+  session_id VARCHAR(100),
+  contact_id UUID,
+  event_name VARCHAR(100) NOT NULL,
+  page_url TEXT,
+  referrer TEXT,
+  user_agent TEXT,
+  ip_address VARCHAR(50),
+  utm_source VARCHAR(255),
+  utm_medium VARCHAR(255),
+  utm_campaign VARCHAR(255),
+  utm_term VARCHAR(255),
+  utm_content VARCHAR(255),
+  fbclid VARCHAR(255),
+  gclid VARCHAR(255),
+  ttclid VARCHAR(255),
+  custom_data JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE tracking_events ADD COLUMN IF NOT EXISTS visitor_id VARCHAR(100);
+ALTER TABLE tracking_events ADD COLUMN IF NOT EXISTS session_id VARCHAR(100);
+ALTER TABLE tracking_events ADD COLUMN IF NOT EXISTS contact_id UUID;
+ALTER TABLE tracking_events ADD COLUMN IF NOT EXISTS utm_source VARCHAR(255);
+ALTER TABLE tracking_events ADD COLUMN IF NOT EXISTS utm_medium VARCHAR(255);
+ALTER TABLE tracking_events ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(255);
+ALTER TABLE tracking_events ADD COLUMN IF NOT EXISTS fbclid VARCHAR(255);
+ALTER TABLE tracking_events ADD COLUMN IF NOT EXISTS gclid VARCHAR(255);
+ALTER TABLE tracking_events ADD COLUMN IF NOT EXISTS ttclid VARCHAR(255);
+
+CREATE INDEX IF NOT EXISTS idx_tracking_org ON tracking_events(organization_id);
+CREATE INDEX IF NOT EXISTS idx_tracking_visitor ON tracking_events(visitor_id);
+CREATE INDEX IF NOT EXISTS idx_tracking_event ON tracking_events(event_name);
+CREATE INDEX IF NOT EXISTS idx_tracking_created ON tracking_events(created_at DESC);
+
+ALTER TABLE tracking_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "tracking_events_all" ON tracking_events;
+CREATE POLICY "tracking_events_all" ON tracking_events FOR ALL USING (true) WITH CHECK (true);
+
+-- =====================================================
+-- 13. TABELA: product_alerts (alertas de estoque)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS product_alerts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  organization_id UUID NOT NULL,
+  product_id VARCHAR(255) NOT NULL,
+  product_title VARCHAR(500),
+  contact_id UUID,
+  email VARCHAR(255) NOT NULL,
+  alert_type VARCHAR(50) DEFAULT 'back_in_stock',
+  status VARCHAR(50) DEFAULT 'active',
+  triggered_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE product_alerts ADD COLUMN IF NOT EXISTS product_title VARCHAR(500);
+ALTER TABLE product_alerts ADD COLUMN IF NOT EXISTS contact_id UUID;
+ALTER TABLE product_alerts ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';
+ALTER TABLE product_alerts ADD COLUMN IF NOT EXISTS triggered_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_product_alerts_org ON product_alerts(organization_id);
+CREATE INDEX IF NOT EXISTS idx_product_alerts_product ON product_alerts(product_id);
+
+ALTER TABLE product_alerts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "product_alerts_all" ON product_alerts;
+CREATE POLICY "product_alerts_all" ON product_alerts FOR ALL USING (true) WITH CHECK (true);
+
+-- =====================================================
+-- 14. TABELA: segments (segmentos de contatos)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS segments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  organization_id UUID NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  conditions JSONB DEFAULT '{}'::jsonb,
+  contact_count INTEGER DEFAULT 0,
+  is_dynamic BOOLEAN DEFAULT true,
+  created_by UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE segments ADD COLUMN IF NOT EXISTS conditions JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE segments ADD COLUMN IF NOT EXISTS contact_count INTEGER DEFAULT 0;
+ALTER TABLE segments ADD COLUMN IF NOT EXISTS is_dynamic BOOLEAN DEFAULT true;
+
+CREATE INDEX IF NOT EXISTS idx_segments_org ON segments(organization_id);
+
+ALTER TABLE segments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "segments_all" ON segments;
+CREATE POLICY "segments_all" ON segments FOR ALL USING (true) WITH CHECK (true);
+
+-- =====================================================
+-- 15. COLUNAS EXTRAS para email_sends (V4)
+-- =====================================================
+
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS flow_id UUID;
+ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS provider_message_id VARCHAR(255);
+
+-- =====================================================
+-- 16. COLUNA email_consent em contacts
+-- =====================================================
+
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email_consent VARCHAR(50) DEFAULT 'subscribed';
+
+-- =====================================================
+-- 17. TABELA: sending_domains
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS sending_domains (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  organization_id UUID NOT NULL,
+  domain VARCHAR(255) NOT NULL,
+  status VARCHAR(50) DEFAULT 'pending',
+  dns_records JSONB DEFAULT '[]'::jsonb,
+  verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE sending_domains ADD COLUMN IF NOT EXISTS dns_records JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE sending_domains ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+
+ALTER TABLE sending_domains ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "sending_domains_all" ON sending_domains;
+CREATE POLICY "sending_domains_all" ON sending_domains FOR ALL USING (true) WITH CHECK (true);
+
+-- =====================================================
+-- 18. TABELA: sending_servers
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS sending_servers (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  organization_id UUID NOT NULL,
+  name VARCHAR(255),
+  type VARCHAR(50) DEFAULT 'smtp',
+  host VARCHAR(255),
+  port INTEGER DEFAULT 587,
+  username VARCHAR(255),
+  is_default BOOLEAN DEFAULT false,
+  status VARCHAR(50) DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE sending_servers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "sending_servers_all" ON sending_servers;
+CREATE POLICY "sending_servers_all" ON sending_servers FOR ALL USING (true) WITH CHECK (true);
+
+-- =====================================================
+-- 99. GRANT PERMISSIONS
 -- =====================================================
 
 GRANT ALL ON coupons TO authenticated, service_role;
@@ -426,6 +583,11 @@ GRANT ALL ON email_sends TO authenticated, service_role;
 GRANT ALL ON api_keys TO authenticated, service_role;
 GRANT ALL ON audit_logs TO authenticated, service_role;
 GRANT ALL ON form_submissions TO authenticated, service_role;
+GRANT ALL ON tracking_events TO authenticated, service_role;
+GRANT ALL ON product_alerts TO authenticated, service_role;
+GRANT ALL ON segments TO authenticated, service_role;
+GRANT ALL ON sending_domains TO authenticated, service_role;
+GRANT ALL ON sending_servers TO authenticated, service_role;
 
 -- =====================================================
 -- PRONTO! Execute este SQL no Supabase SQL Editor.
