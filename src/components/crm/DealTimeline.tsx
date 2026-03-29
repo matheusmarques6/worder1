@@ -116,7 +116,7 @@ export function DealTimeline({ dealId, className = '' }: DealTimelineProps) {
   
   if (history.length === 0) {
     return (
-      <div className={`text-center py-8 text-dark-400 ${className}`}>
+      <div className={`text-center py-8 text-gray-500 ${className}`}>
         <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
         <p className="text-sm">Nenhuma mudança de estágio registrada</p>
       </div>
@@ -128,25 +128,25 @@ export function DealTimeline({ dealId, className = '' }: DealTimelineProps) {
       {/* Metrics Summary */}
       {metrics && (
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="p-3 bg-dark-800/50 rounded-lg text-center">
-            <p className="text-lg font-semibold text-white">{metrics.totalChanges}</p>
-            <p className="text-xs text-dark-400">Mudanças</p>
+          <div className="p-3 bg-gray-50 rounded-lg text-center">
+            <p className="text-lg font-semibold text-gray-900">{metrics.totalChanges}</p>
+            <p className="text-xs text-gray-500">Mudanças</p>
           </div>
-          <div className="p-3 bg-dark-800/50 rounded-lg text-center">
-            <p className="text-lg font-semibold text-white">
+          <div className="p-3 bg-gray-50 rounded-lg text-center">
+            <p className="text-lg font-semibold text-gray-900">
               {metrics.totalTimeInPipelineHours < 24 
                 ? `${Math.round(metrics.totalTimeInPipelineHours)}h`
                 : `${Math.round(metrics.totalTimeInPipelineHours / 24)}d`}
             </p>
-            <p className="text-xs text-dark-400">Tempo Total</p>
+            <p className="text-xs text-gray-500">Tempo Total</p>
           </div>
-          <div className="p-3 bg-dark-800/50 rounded-lg text-center">
-            <p className="text-lg font-semibold text-white">
+          <div className="p-3 bg-gray-50 rounded-lg text-center">
+            <p className="text-lg font-semibold text-gray-900">
               {metrics.averageTimePerStageHours < 24 
                 ? `${Math.round(metrics.averageTimePerStageHours)}h`
                 : `${Math.round(metrics.averageTimePerStageHours / 24)}d`}
             </p>
-            <p className="text-xs text-dark-400">Média/Estágio</p>
+            <p className="text-xs text-gray-500">Média/Estágio</p>
           </div>
         </div>
       )}
@@ -154,7 +154,7 @@ export function DealTimeline({ dealId, className = '' }: DealTimelineProps) {
       {/* Timeline */}
       <div className="relative">
         {/* Linha vertical */}
-        <div className="absolute left-[7px] top-3 bottom-3 w-0.5 bg-dark-700" />
+        <div className="absolute left-[7px] top-3 bottom-3 w-0.5 bg-gray-100" />
         
         {/* Items */}
         <div className="space-y-4">
@@ -167,35 +167,35 @@ export function DealTimeline({ dealId, className = '' }: DealTimelineProps) {
               className="relative pl-6"
             >
               {/* Dot */}
-              <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full bg-dark-900 border-2 border-primary-500" />
+              <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full bg-white border-2 border-primary-500" />
               
               {/* Content */}
-              <div className="p-3 bg-dark-800/50 rounded-lg">
+              <div className="p-3 bg-gray-50 rounded-lg">
                 {/* Stage Change */}
                 <div className="flex items-center gap-2 mb-2">
                   {item.fromStage ? (
                     <>
-                      <span className="text-sm text-dark-300">{item.fromStage.name}</span>
-                      <ArrowRight className="w-4 h-4 text-dark-500" />
-                      <span className="text-sm font-medium text-primary-400">{item.toStage.name}</span>
+                      <span className="text-sm text-gray-600">{item.fromStage.name}</span>
+                      <ArrowRight className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm font-medium text-brand-600">{item.toStage.name}</span>
                     </>
                   ) : (
                     <>
-                      <span className="text-sm text-dark-400">Criado em</span>
-                      <span className="text-sm font-medium text-primary-400">{item.toStage.name}</span>
+                      <span className="text-sm text-gray-500">Criado em</span>
+                      <span className="text-sm font-medium text-brand-600">{item.toStage.name}</span>
                     </>
                   )}
                 </div>
                 
                 {/* Meta */}
-                <div className="flex items-center gap-4 text-xs text-dark-400">
+                <div className="flex items-center gap-4 text-xs text-gray-500">
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
                     {formatDate(item.changedAt)}
                   </span>
                   
                   {item.timeInPreviousStage && (
-                    <span className="px-2 py-0.5 bg-dark-700 rounded text-dark-300">
+                    <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-600">
                       {formatTimeInterval(item.timeInPreviousStage)} no estágio anterior
                     </span>
                   )}
@@ -210,7 +210,7 @@ export function DealTimeline({ dealId, className = '' }: DealTimelineProps) {
                 
                 {/* Notes */}
                 {item.notes && (
-                  <p className="mt-2 text-sm text-dark-300 italic">
+                  <p className="mt-2 text-sm text-gray-600 italic">
                     "{item.notes}"
                   </p>
                 )}

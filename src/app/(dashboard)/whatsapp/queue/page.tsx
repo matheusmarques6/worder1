@@ -53,7 +53,7 @@ const getStatusColor = (status: string) => {
     online: 'bg-success-500',
     busy: 'bg-amber-500',
     away: 'bg-purple-500',
-    offline: 'bg-dark-500',
+    offline: 'bg-gray-300',
   }
   return colors[status] || colors.offline
 }
@@ -101,23 +101,23 @@ function QueueItemCard({ item, agents, onAssign }: QueueItemCardProps) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4"
+      className="bg-gray-50 border border-gray-200 rounded-xl p-4"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary-500/10 rounded-full flex items-center justify-center">
-            <User className="w-5 h-5 text-primary-400" />
+          <div className="w-10 h-10 bg-brand-50 rounded-full flex items-center justify-center">
+            <User className="w-5 h-5 text-brand-600" />
           </div>
           <div>
             <h4 className="font-medium text-white">
               {item.contact_name || item.contact_phone || 'Contato'}
             </h4>
             {item.last_message_preview && (
-              <p className="text-sm text-dark-400 line-clamp-1">
+              <p className="text-sm text-gray-500 line-clamp-1">
                 {item.last_message_preview}
               </p>
             )}
-            <div className="flex items-center gap-3 mt-1 text-xs text-dark-500">
+            <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3" />
                 Esperando há {formatWaitTime(waitSeconds)}
@@ -134,7 +134,7 @@ function QueueItemCard({ item, agents, onAssign }: QueueItemCardProps) {
           <select
             value={selectedAgent}
             onChange={(e) => setSelectedAgent(e.target.value)}
-            className="px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm text-white"
+            className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm text-white"
           >
             <option value="">Selecionar agente</option>
             {availableAgents.map((agent) => (
@@ -174,11 +174,11 @@ function AgentCard({ agent }: AgentCardProps) {
   const utilizationPercent = Math.round((agent.current_conversations / agent.max_conversations) * 100)
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
+    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
       <div className="flex items-center gap-3">
         {/* Avatar */}
         <div className="relative">
-          <div className="w-10 h-10 bg-dark-700 rounded-full flex items-center justify-center">
+          <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
             {agent.profile?.avatar_url ? (
               <img
                 src={agent.profile.avatar_url}
@@ -186,10 +186,10 @@ function AgentCard({ agent }: AgentCardProps) {
                 className="w-10 h-10 rounded-full object-cover"
               />
             ) : (
-              <User className="w-5 h-5 text-dark-400" />
+              <User className="w-5 h-5 text-gray-500" />
             )}
           </div>
-          <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-dark-800 ${getStatusColor(agent.status)}`} />
+          <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-gray-200 ${getStatusColor(agent.status)}`} />
         </div>
 
         {/* Info */}
@@ -205,7 +205,7 @@ function AgentCard({ agent }: AgentCardProps) {
               </span>
             )}
           </div>
-          <p className="text-xs text-dark-500">{getStatusLabel(agent.status)}</p>
+          <p className="text-xs text-gray-400">{getStatusLabel(agent.status)}</p>
         </div>
 
         {/* Stats */}
@@ -213,13 +213,13 @@ function AgentCard({ agent }: AgentCardProps) {
           <p className="text-lg font-bold text-white">
             {agent.current_conversations}/{agent.max_conversations}
           </p>
-          <p className="text-xs text-dark-500">conversas</p>
+          <p className="text-xs text-gray-400">conversas</p>
         </div>
       </div>
 
       {/* Utilization Bar */}
       <div className="mt-3">
-        <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div
             className={`h-full transition-all ${
               utilizationPercent >= 90 ? 'bg-error-500' :
@@ -232,7 +232,7 @@ function AgentCard({ agent }: AgentCardProps) {
       </div>
 
       {/* Today's Stats */}
-      <div className="flex items-center justify-between mt-3 text-xs text-dark-500">
+      <div className="flex items-center justify-between mt-3 text-xs text-gray-400">
         <span>{agent.assignments_today || 0} atribuídas hoje</span>
         <span>{agent.completed_today || 0} finalizadas</span>
       </div>
@@ -312,8 +312,8 @@ export default function QueuePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Fila de Atendimento</h1>
-          <p className="text-dark-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900">Fila de Atendimento</h1>
+          <p className="text-gray-500 mt-1">
             Gerencie a distribuição de conversas entre atendentes
           </p>
         </div>
@@ -324,11 +324,11 @@ export default function QueuePage() {
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
               myStatus?.status === 'online'
                 ? 'bg-success-500/20 text-success-400 hover:bg-success-500/30'
-                : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
             <div className={`w-2.5 h-2.5 rounded-full ${
-              myStatus?.status === 'online' ? 'bg-success-500' : 'bg-dark-500'
+              myStatus?.status === 'online' ? 'bg-success-500' : 'bg-gray-300'
             }`} />
             {myStatus?.status === 'online' ? 'Online' : 'Offline'}
           </button>
@@ -339,7 +339,7 @@ export default function QueuePage() {
               className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
                 myStatus?.on_break
                   ? 'bg-amber-500/20 text-amber-400'
-                  : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               <Coffee className="w-4 h-4" />
@@ -350,7 +350,7 @@ export default function QueuePage() {
           <button
             onClick={handleRefresh}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-dark-700 text-white rounded-xl hover:bg-dark-600"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-white rounded-xl hover:bg-gray-200"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -359,50 +359,50 @@ export default function QueuePage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-500/10 rounded-lg">
               <Clock className="w-5 h-5 text-amber-400" />
             </div>
             <div>
               <p className="text-2xl font-bold text-amber-400">{stats?.waiting_count || 0}</p>
-              <p className="text-xs text-dark-400">Na fila</p>
+              <p className="text-xs text-gray-500">Na fila</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-success-500/10 rounded-lg">
               <Users className="w-5 h-5 text-success-400" />
             </div>
             <div>
               <p className="text-2xl font-bold text-success-400">{agentMetrics?.online || 0}</p>
-              <p className="text-xs text-dark-400">Agentes online</p>
+              <p className="text-xs text-gray-500">Agentes online</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary-500/10 rounded-lg">
-              <MessageSquare className="w-5 h-5 text-primary-400" />
+            <div className="p-2 bg-brand-50 rounded-lg">
+              <MessageSquare className="w-5 h-5 text-brand-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-white">{agentMetrics?.total_conversations || 0}</p>
-              <p className="text-xs text-dark-400">Conversas ativas</p>
+              <p className="text-2xl font-bold text-gray-900">{agentMetrics?.total_conversations || 0}</p>
+              <p className="text-xs text-gray-500">Conversas ativas</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-500/10 rounded-lg">
               <Zap className="w-5 h-5 text-purple-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-white">{agentMetrics?.available_capacity || 0}</p>
-              <p className="text-xs text-dark-400">Capacidade livre</p>
+              <p className="text-2xl font-bold text-gray-900">{agentMetrics?.available_capacity || 0}</p>
+              <p className="text-xs text-gray-500">Capacidade livre</p>
             </div>
           </div>
         </div>
@@ -412,7 +412,7 @@ export default function QueuePage() {
         {/* Queue Items */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold text-gray-900">
               Aguardando Atendimento ({items.length})
             </h2>
             <button
@@ -432,13 +432,13 @@ export default function QueuePage() {
 
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+              <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
             </div>
           ) : items.length === 0 ? (
-            <div className="text-center py-12 bg-dark-800/30 rounded-xl border border-dark-700/50">
+            <div className="text-center py-12 bg-gray-50 rounded-xl border border-gray-200">
               <CheckCircle className="w-12 h-12 text-success-400 mx-auto mb-3" />
               <h3 className="text-lg font-medium text-white mb-1">Fila vazia!</h3>
-              <p className="text-dark-400">Todas as conversas foram atendidas</p>
+              <p className="text-gray-500">Todas as conversas foram atendidas</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -458,15 +458,15 @@ export default function QueuePage() {
 
         {/* Agents */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-white">
+          <h2 className="text-lg font-semibold text-gray-900">
             Atendentes ({agentMetrics?.total || 0})
           </h2>
 
           <div className="space-y-3">
             {agents.length === 0 ? (
-              <div className="text-center py-8 bg-dark-800/30 rounded-xl border border-dark-700/50">
-                <Users className="w-10 h-10 text-dark-600 mx-auto mb-2" />
-                <p className="text-dark-400 text-sm">Nenhum atendente</p>
+              <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
+                <Users className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                <p className="text-gray-500 text-sm">Nenhum atendente</p>
               </div>
             ) : (
               agents.map((agent) => (

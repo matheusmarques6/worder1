@@ -47,7 +47,7 @@ const RFM_SEGMENTS: Record<string, { label: string; color: string; icon: any }> 
   about_to_sleep: { label: 'Adormecendo', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50', icon: Clock },
   at_risk: { label: 'Em Risco', color: 'bg-red-500/20 text-red-400 border-red-500/50', icon: AlertTriangle },
   hibernating: { label: 'Hibernando', color: 'bg-gray-500/20 text-gray-400 border-gray-500/50', icon: Clock },
-  lost: { label: 'Perdido', color: 'bg-dark-600/50 text-dark-400 border-dark-500/50', icon: X },
+  lost: { label: 'Perdido', color: 'bg-gray-200/50 text-gray-500 border-gray-300/50', icon: X },
 }
 
 // Predefined tag colors
@@ -59,7 +59,7 @@ const TAG_COLORS: Record<string, string> = {
   inativo: 'bg-red-500/20 text-red-400 border-red-500/30',
   novo: 'bg-green-500/20 text-green-400 border-green-500/30',
   recorrente: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
-  default: 'bg-dark-600/50 text-dark-300 border-dark-500/30',
+  default: 'bg-gray-200/50 text-gray-600 border-gray-300/30',
 }
 
 // Suggested tags
@@ -673,15 +673,15 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-          className="relative w-full max-w-md bg-dark-900 border-l border-dark-700/50 shadow-2xl overflow-y-auto"
+          className="relative w-full max-w-md bg-white border-l border-gray-200 shadow-2xl overflow-y-auto"
         >
           {/* Header */}
-          <div className="sticky top-0 z-10 bg-dark-900/95 backdrop-blur-xl border-b border-dark-700/50 p-6">
+          <div className="sticky top-0 z-10 bg-white backdrop-blur-xl border-b border-gray-200 p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-white">Informações do Contato</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Informações do Contato</h2>
               <button
                 onClick={onClose}
-                className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-800 transition-colors"
+                className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -689,12 +689,12 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
 
             {/* Avatar & Name */}
             <div className="flex flex-col items-center text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mb-4 ring-4 ring-dark-800">
-                <span className="text-2xl font-bold text-white">{initials}</span>
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mb-4 ring-4 ring-white">
+                <span className="text-2xl font-bold text-gray-900">{initials}</span>
               </div>
-              <h3 className="text-xl font-bold text-white">{fullName}</h3>
+              <h3 className="text-xl font-bold text-gray-900">{fullName}</h3>
               {contact.phone && (
-                <p className="text-dark-400 mt-1">{contact.phone}</p>
+                <p className="text-gray-500 mt-1">{contact.phone}</p>
               )}
             </div>
           </div>
@@ -704,14 +704,14 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
             {/* Contact Info */}
             <div className="space-y-3">
               {contact.email && (
-                <div className="flex items-center gap-3 text-dark-300">
-                  <Mail className="w-4 h-4 text-dark-500" />
+                <div className="flex items-center gap-3 text-gray-600">
+                  <Mail className="w-4 h-4 text-gray-400" />
                   <span>{contact.email}</span>
                 </div>
               )}
               {contact.company && (
-                <div className="flex items-center gap-3 text-dark-300">
-                  <Building2 className="w-4 h-4 text-dark-500" />
+                <div className="flex items-center gap-3 text-gray-600">
+                  <Building2 className="w-4 h-4 text-gray-400" />
                   <span>{contact.company}</span>
                 </div>
               )}
@@ -720,12 +720,12 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
             {/* Custom Fields */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Campos Personalizados
                 </span>
                 <button
                   onClick={() => setEditingCustomFields(!editingCustomFields)}
-                  className="p-1 rounded text-dark-400 hover:text-primary-400 transition-colors"
+                  className="p-1 rounded text-gray-500 hover:text-brand-600 transition-colors"
                   title={editingCustomFields ? 'Cancelar' : 'Editar campos'}
                 >
                   {editingCustomFields ? <X className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
@@ -747,7 +747,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       setCustomFieldValues(contact.custom_fields || {})
                       setEditingCustomFields(false)
                     }}
-                    className="flex-1 px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-dark-300 text-sm font-medium transition-colors"
+                    className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-600 text-sm font-medium transition-colors"
                   >
                     Cancelar
                   </button>
@@ -772,14 +772,14 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
             {/* Contact Deals/Pipelines - Always show */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2 text-dark-400">
+                <div className="flex items-center gap-2 text-gray-500">
                   <Briefcase className="w-4 h-4" />
                   <span className="text-xs font-semibold uppercase tracking-wider">Pipelines</span>
                 </div>
                 {pipelines.length > 0 && onCreateDeal && (
                   <button
                     onClick={() => setShowPipelineModal(true)}
-                    className="p-1 rounded text-dark-400 hover:text-primary-400 transition-colors"
+                    className="p-1 rounded text-gray-500 hover:text-brand-600 transition-colors"
                     title="Adicionar em Pipeline"
                   >
                     <Plus className="w-4 h-4" />
@@ -796,7 +796,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                   {contactDeals.map((deal) => (
                     <div
                       key={deal.id}
-                      className="flex items-center gap-3 p-3 bg-dark-800/50 border border-dark-700/50 rounded-xl group"
+                      className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl group"
                     >
                       <div
                         className="w-2 h-full min-h-[40px] rounded-full flex-shrink-0"
@@ -805,8 +805,8 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       <div className="flex-1 min-w-0">
                         <p className="text-white text-sm font-medium truncate">{deal.title}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-dark-400">{deal.pipeline?.name || 'Pipeline'}</span>
-                          <span className="text-dark-600">•</span>
+                          <span className="text-xs text-gray-500">{deal.pipeline?.name || 'Pipeline'}</span>
+                          <span className="text-gray-400">•</span>
                           <span 
                             className="text-xs px-1.5 py-0.5 rounded"
                             style={{ 
@@ -825,7 +825,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       </div>
                       <button
                         onClick={() => openDeleteConfirm(deal.id)}
-                        className="p-1.5 rounded-lg text-dark-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
                         title="Remover da pipeline"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -834,13 +834,13 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-4 border border-dashed border-dark-700 rounded-xl">
-                  <Briefcase className="w-6 h-6 mx-auto mb-2 text-dark-600" />
-                  <p className="text-dark-500 text-sm">Nenhuma pipeline vinculada</p>
+                <div className="text-center py-4 border border-dashed border-gray-200 rounded-xl">
+                  <Briefcase className="w-6 h-6 mx-auto mb-2 text-gray-400" />
+                  <p className="text-gray-400 text-sm">Nenhuma pipeline vinculada</p>
                   {pipelines.length > 0 && onCreateDeal && (
                     <button
                       onClick={() => setShowPipelineModal(true)}
-                      className="mt-2 text-primary-400 text-sm hover:text-primary-300"
+                      className="mt-2 text-brand-600 text-sm hover:text-brand-500"
                     >
                       Adicionar em pipeline
                     </button>
@@ -852,10 +852,10 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
             {/* Tags */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">Tags</span>
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tags</span>
                 <button
                   onClick={() => setShowTagInput(!showTagInput)}
-                  className="p-1 rounded text-dark-400 hover:text-primary-400 transition-colors"
+                  className="p-1 rounded text-gray-500 hover:text-brand-600 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -877,7 +877,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                         onChange={(e) => setNewTag(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddTag(newTag)}
                         placeholder="Nova tag..."
-                        className="flex-1 px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                        className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
                         disabled={savingTags}
                       />
                       <button
@@ -896,7 +896,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                             key={tag}
                             onClick={() => handleAddTag(tag)}
                             disabled={savingTags}
-                            className="px-2 py-1 text-xs rounded-md bg-dark-800 text-dark-400 hover:text-white hover:bg-dark-700 transition-colors"
+                            className="px-2 py-1 text-xs rounded-md bg-white text-gray-500 hover:text-white hover:bg-gray-100 transition-colors"
                           >
                             + {tag}
                           </button>
@@ -926,22 +926,22 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                     </span>
                   ))
                 ) : (
-                  <span className="text-dark-500 text-sm">Nenhuma tag</span>
+                  <span className="text-gray-400 text-sm">Nenhuma tag</span>
                 )}
               </div>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
-                <div className="flex items-center gap-2 text-dark-400 mb-1">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                <div className="flex items-center gap-2 text-gray-500 mb-1">
                   <ShoppingCart className="w-4 h-4" />
                   <span className="text-xs">Pedidos</span>
                 </div>
-                <p className="text-2xl font-bold text-white">{contact.total_orders || 0}</p>
+                <p className="text-2xl font-bold text-gray-900">{contact.total_orders || 0}</p>
               </div>
-              <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
-                <div className="flex items-center gap-2 text-dark-400 mb-1">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                <div className="flex items-center gap-2 text-gray-500 mb-1">
                   <DollarSign className="w-4 h-4" />
                   <span className="text-xs">Total Gasto</span>
                 </div>
@@ -953,7 +953,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
 
             {/* RFM Segment Badge */}
             {enrichedData?.rfm_segment && RFM_SEGMENTS[enrichedData.rfm_segment] && (
-              <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {(() => {
@@ -966,7 +966,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                           </div>
                           <div>
                             <p className="text-white font-medium">{segment.label}</p>
-                            <p className="text-dark-400 text-xs">Segmento RFM</p>
+                            <p className="text-gray-500 text-xs">Segmento RFM</p>
                           </div>
                         </>
                       )
@@ -974,21 +974,21 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                   </div>
                   <div className="flex gap-1">
                     <div className="text-center px-2">
-                      <p className="text-xs text-dark-500">R</p>
+                      <p className="text-xs text-gray-400">R</p>
                       <p className="text-white font-bold">{enrichedData.rfm_recency_score || '-'}</p>
                     </div>
                     <div className="text-center px-2">
-                      <p className="text-xs text-dark-500">F</p>
+                      <p className="text-xs text-gray-400">F</p>
                       <p className="text-white font-bold">{enrichedData.rfm_frequency_score || '-'}</p>
                     </div>
                     <div className="text-center px-2">
-                      <p className="text-xs text-dark-500">M</p>
+                      <p className="text-xs text-gray-400">M</p>
                       <p className="text-white font-bold">{enrichedData.rfm_monetary_score || '-'}</p>
                     </div>
                   </div>
                 </div>
                 {enrichedData.days_since_last_order !== undefined && (
-                  <div className="mt-3 pt-3 border-t border-dark-700/50 flex items-center gap-4 text-xs text-dark-400">
+                  <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-4 text-xs text-gray-500">
                     <span>Última compra: <span className="text-white">{enrichedData.days_since_last_order} dias atrás</span></span>
                     {enrichedData.order_frequency_days && (
                       <span>Frequência: <span className="text-white">~{Math.round(enrichedData.order_frequency_days)} dias</span></span>
@@ -1000,14 +1000,14 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
 
             {/* Última Compra */}
             {enrichedData?.last_order_products && enrichedData.last_order_products.length > 0 && (
-              <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
                 <button
                   onClick={() => setShowLastOrder(!showLastOrder)}
-                  className="w-full p-4 bg-dark-800/50 flex items-center justify-between hover:bg-dark-800 transition-colors"
+                  className="w-full p-4 bg-gray-50 flex items-center justify-between hover:bg-white transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <Package className="w-4 h-4 text-cyan-400" />
-                    <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Última Compra {enrichedData.last_order_number && `#${enrichedData.last_order_number}`}
                     </span>
                     {enrichedData.last_order_value && (
@@ -1016,7 +1016,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       </span>
                     )}
                   </div>
-                  <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showLastOrder ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showLastOrder ? 'rotate-180' : ''}`} />
                 </button>
                 <AnimatePresence>
                   {showLastOrder && (
@@ -1026,9 +1026,9 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="p-3 space-y-2 bg-dark-900/30">
+                      <div className="p-3 space-y-2 bg-white/30">
                         {enrichedData.last_order_products.slice(0, 5).map((product, idx) => (
-                          <div key={idx} className="flex items-center gap-3 p-2 rounded-lg bg-dark-800/50">
+                          <div key={idx} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
                             {product.image_url ? (
                               <img
                                 src={product.image_url}
@@ -1036,13 +1036,13 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                                 className="w-10 h-10 rounded-lg object-cover"
                               />
                             ) : (
-                              <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center">
-                                <Package className="w-5 h-5 text-dark-500" />
+                              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                                <Package className="w-5 h-5 text-gray-400" />
                               </div>
                             )}
                             <div className="flex-1 min-w-0">
                               <p className="text-white text-sm truncate">{product.title}</p>
-                              <p className="text-dark-400 text-xs">
+                              <p className="text-gray-500 text-xs">
                                 {product.quantity}x {formatCurrency(product.price)}
                               </p>
                             </div>
@@ -1057,21 +1057,21 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
 
             {/* Produtos Favoritos */}
             {enrichedData?.favorite_products && enrichedData.favorite_products.length > 0 && (
-              <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
                 <button
                   onClick={() => setShowFavorites(!showFavorites)}
-                  className="w-full p-4 bg-dark-800/50 flex items-center justify-between hover:bg-dark-800 transition-colors"
+                  className="w-full p-4 bg-gray-50 flex items-center justify-between hover:bg-white transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <Heart className="w-4 h-4 text-pink-400" />
-                    <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Produtos Favoritos
                     </span>
-                    <span className="text-dark-500 text-xs">
+                    <span className="text-gray-400 text-xs">
                       ({enrichedData.favorite_products.length})
                     </span>
                   </div>
-                  <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showFavorites ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showFavorites ? 'rotate-180' : ''}`} />
                 </button>
                 <AnimatePresence>
                   {showFavorites && (
@@ -1081,14 +1081,14 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="p-3 space-y-2 bg-dark-900/30">
+                      <div className="p-3 space-y-2 bg-white/30">
                         {enrichedData.favorite_products.slice(0, 5).map((product, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-dark-800/50">
+                          <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
                             <div className="flex items-center gap-2">
-                              <span className="text-dark-500 text-xs font-bold w-5">#{idx + 1}</span>
+                              <span className="text-gray-400 text-xs font-bold w-5">#{idx + 1}</span>
                               <span className="text-white text-sm truncate">{product.title}</span>
                             </div>
-                            <span className="text-primary-400 text-xs font-medium">
+                            <span className="text-brand-600 text-xs font-medium">
                               {product.count}x comprado
                             </span>
                           </div>
@@ -1102,21 +1102,21 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
 
             {/* Histórico de Compras */}
             {orderHistory && orderHistory.length > 0 && (
-              <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
                 <button
                   onClick={() => setShowOrderHistory(!showOrderHistory)}
-                  className="w-full p-4 bg-dark-800/50 flex items-center justify-between hover:bg-dark-800 transition-colors"
+                  className="w-full p-4 bg-gray-50 flex items-center justify-between hover:bg-white transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <ShoppingCart className="w-4 h-4 text-cyan-400" />
-                    <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Histórico de Compras
                     </span>
-                    <span className="text-dark-500 text-xs">
+                    <span className="text-gray-400 text-xs">
                       ({orderHistory.length} pedidos)
                     </span>
                   </div>
-                  <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showOrderHistory ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showOrderHistory ? 'rotate-180' : ''}`} />
                 </button>
                 <AnimatePresence>
                   {showOrderHistory && (
@@ -1126,15 +1126,15 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="p-3 space-y-3 bg-dark-900/30 max-h-80 overflow-y-auto">
+                      <div className="p-3 space-y-3 bg-white/30 max-h-80 overflow-y-auto">
                         {orderHistory.map((order, orderIdx) => (
-                          <div key={orderIdx} className="border border-dark-700/30 rounded-lg overflow-hidden">
-                            <div className="p-2 bg-dark-800/50 flex items-center justify-between">
+                          <div key={orderIdx} className="border border-gray-200/30 rounded-lg overflow-hidden">
+                            <div className="p-2 bg-gray-50 flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 <span className="text-white text-sm font-medium">
                                   Pedido #{order.order_number}
                                 </span>
-                                <span className="text-dark-500 text-xs">
+                                <span className="text-gray-400 text-xs">
                                   {new Date(order.order_date).toLocaleDateString('pt-BR')}
                                 </span>
                               </div>
@@ -1144,7 +1144,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                             </div>
                             <div className="p-2 space-y-1">
                               {order.items.slice(0, 5).map((item, itemIdx) => (
-                                <div key={itemIdx} className="flex items-center gap-2 p-1.5 rounded bg-dark-800/30">
+                                <div key={itemIdx} className="flex items-center gap-2 p-1.5 rounded bg-gray-50">
                                   {item.product_image_url ? (
                                     <img
                                       src={item.product_image_url}
@@ -1152,20 +1152,20 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                                       className="w-8 h-8 rounded object-cover"
                                     />
                                   ) : (
-                                    <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center">
-                                      <Package className="w-4 h-4 text-dark-500" />
+                                    <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+                                      <Package className="w-4 h-4 text-gray-400" />
                                     </div>
                                   )}
                                   <div className="flex-1 min-w-0">
                                     <p className="text-white text-xs truncate">{item.product_title}</p>
-                                    <p className="text-dark-500 text-xs">
+                                    <p className="text-gray-400 text-xs">
                                       {item.quantity}x {formatCurrency(item.unit_price)}
                                     </p>
                                   </div>
                                 </div>
                               ))}
                               {order.items.length > 5 && (
-                                <p className="text-dark-500 text-xs text-center py-1">
+                                <p className="text-gray-400 text-xs text-center py-1">
                                   +{order.items.length - 5} outros itens
                                 </p>
                               )}
@@ -1182,23 +1182,23 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
             {/* Histórico de Navegação */}
             {((enrichedData?.last_viewed_products && enrichedData.last_viewed_products.length > 0) || 
               (browsingSessions && browsingSessions.length > 0)) && (
-              <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
                 <button
                   onClick={() => setShowBrowsingHistory(!showBrowsingHistory)}
-                  className="w-full p-4 bg-dark-800/50 flex items-center justify-between hover:bg-dark-800 transition-colors"
+                  className="w-full p-4 bg-gray-50 flex items-center justify-between hover:bg-white transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <Eye className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Navegação no Site
                     </span>
                     {contact.total_page_views && (
-                      <span className="text-dark-500 text-xs">
+                      <span className="text-gray-400 text-xs">
                         ({contact.total_page_views} páginas)
                       </span>
                     )}
                   </div>
-                  <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showBrowsingHistory ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showBrowsingHistory ? 'rotate-180' : ''}`} />
                 </button>
                 <AnimatePresence>
                   {showBrowsingHistory && (
@@ -1208,20 +1208,20 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="p-3 space-y-3 bg-dark-900/30 max-h-80 overflow-y-auto">
+                      <div className="p-3 space-y-3 bg-white/30 max-h-80 overflow-y-auto">
                         {/* Produtos Visualizados Recentemente */}
                         {enrichedData?.last_viewed_products && enrichedData.last_viewed_products.length > 0 && (
                           <div>
-                            <p className="text-dark-400 text-xs font-medium mb-2 flex items-center gap-1">
+                            <p className="text-gray-500 text-xs font-medium mb-2 flex items-center gap-1">
                               <Package className="w-3 h-3" />
                               Produtos Visualizados
                             </p>
                             <div className="space-y-1">
                               {enrichedData.last_viewed_products.slice(0, 5).map((product, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-dark-800/50">
+                                <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
                                   <div className="flex-1 min-w-0">
                                     <p className="text-white text-xs truncate">{product.title}</p>
-                                    <p className="text-dark-500 text-[10px]">
+                                    <p className="text-gray-400 text-[10px]">
                                       {new Date(product.viewed_at).toLocaleString('pt-BR', { 
                                         day: '2-digit', 
                                         month: '2-digit',
@@ -1244,31 +1244,31 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                         {/* Sessões de Navegação */}
                         {browsingSessions && browsingSessions.length > 0 && (
                           <div>
-                            <p className="text-dark-400 text-xs font-medium mb-2 flex items-center gap-1">
+                            <p className="text-gray-500 text-xs font-medium mb-2 flex items-center gap-1">
                               <Clock className="w-3 h-3" />
                               Sessões Recentes
                             </p>
                             <div className="space-y-2">
                               {browsingSessions.slice(0, 3).map((session, idx) => (
-                                <div key={idx} className="p-2 rounded-lg bg-dark-800/50">
+                                <div key={idx} className="p-2 rounded-lg bg-gray-50">
                                   <div className="flex items-center justify-between mb-1">
                                     <span className="text-white text-xs">
                                       {new Date(session.started_at).toLocaleDateString('pt-BR')} às {new Date(session.started_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                     </span>
-                                    <span className="text-dark-400 text-xs">
+                                    <span className="text-gray-500 text-xs">
                                       {session.page_views} páginas
                                     </span>
                                   </div>
                                   {session.utm_source && (
                                     <div className="flex items-center gap-1 mb-1">
-                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-dark-700 text-dark-300">
+                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-gray-600">
                                         {session.utm_source}
                                         {session.utm_medium && ` / ${session.utm_medium}`}
                                       </span>
                                     </div>
                                   )}
                                   {session.products_viewed && session.products_viewed.length > 0 && (
-                                    <div className="text-dark-500 text-[10px]">
+                                    <div className="text-gray-400 text-[10px]">
                                       Viu: {session.products_viewed.slice(0, 2).map(p => p.product_title).join(', ')}
                                       {session.products_viewed.length > 2 && ` +${session.products_viewed.length - 2}`}
                                     </div>
@@ -1288,13 +1288,13 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
             {/* Activity Timeline */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2 text-dark-400">
+                <div className="flex items-center gap-2 text-gray-500">
                   <Clock className="w-4 h-4" />
                   <span className="text-xs font-semibold uppercase tracking-wider">Atividade Recente</span>
                 </div>
                 <button
                   onClick={() => setShowAddActivity(!showAddActivity)}
-                  className="p-1 rounded text-dark-400 hover:text-primary-400 transition-colors"
+                  className="p-1 rounded text-gray-500 hover:text-brand-600 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -1309,7 +1309,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                     exit={{ height: 0, opacity: 0 }}
                     className="mb-4 overflow-hidden"
                   >
-                    <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl space-y-3">
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
                       {/* Activity Type Selector */}
                       <div className="flex flex-wrap gap-2">
                         {ACTIVITY_TYPES.map(actType => {
@@ -1321,7 +1321,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                                 newActivityType === actType.type
                                   ? actType.color + ' ring-1 ring-current'
-                                  : 'bg-dark-700 text-dark-400 hover:text-white'
+                                  : 'bg-gray-100 text-gray-500 hover:text-white'
                               }`}
                             >
                               <Icon className="w-3.5 h-3.5" />
@@ -1338,7 +1338,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                         onChange={(e) => setNewActivityTitle(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddActivity()}
                         placeholder="Descreva a atividade..."
-                        className="w-full px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
                         disabled={savingActivity}
                       />
 
@@ -1346,7 +1346,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => setShowAddActivity(false)}
-                          className="px-3 py-1.5 text-dark-400 hover:text-white text-sm transition-colors"
+                          className="px-3 py-1.5 text-gray-500 hover:text-white text-sm transition-colors"
                         >
                           Cancelar
                         </button>
@@ -1378,7 +1378,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                     return (
                       <div
                         key={activity.id}
-                        className="flex items-start gap-3 p-3 rounded-lg hover:bg-dark-800/50 transition-colors group"
+                        className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors group"
                       >
                         <div className={`p-2 rounded-lg ${actType.color}`}>
                           <Icon className="w-4 h-4" />
@@ -1387,17 +1387,17 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                           <div className="flex items-center gap-2">
                             <p className="text-white text-sm">{activity.title}</p>
                             {isAutomatic && (
-                              <span className="px-1.5 py-0.5 text-[10px] rounded bg-dark-700 text-dark-400">
+                              <span className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-gray-500">
                                 {activity.source === 'shopify' ? 'Shopify' : activity.source}
                               </span>
                             )}
                           </div>
-                          <p className="text-dark-500 text-xs">{formatDate(activityDate)}</p>
+                          <p className="text-gray-400 text-xs">{formatDate(activityDate)}</p>
                         </div>
                         {!isAutomatic && (
                           <button
                             onClick={() => openDeleteActivityConfirm(activity.id)}
-                            className="p-1 rounded text-dark-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                            className="p-1 rounded text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1407,12 +1407,12 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                   })}
                 </div>
               ) : (
-                <div className="text-center py-8 text-dark-500">
+                <div className="text-center py-8 text-gray-400">
                   <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">Nenhuma atividade registrada</p>
                   <button
                     onClick={() => setShowAddActivity(true)}
-                    className="mt-2 text-primary-400 text-sm hover:text-primary-300"
+                    className="mt-2 text-brand-600 text-sm hover:text-brand-500"
                   >
                     Adicionar primeira atividade
                   </button>
@@ -1421,12 +1421,12 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
             </div>
 
             {/* Actions */}
-            <div className="pt-4 border-t border-dark-700/50 space-y-2">
+            <div className="pt-4 border-t border-gray-200 space-y-2">
               <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-500 hover:bg-primary-600 rounded-xl text-white font-medium transition-colors">
                 <MessageSquare className="w-4 h-4" />
                 Enviar Mensagem
               </button>
-              <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-dark-800 hover:bg-dark-700 rounded-xl text-dark-300 font-medium transition-colors">
+              <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white hover:bg-gray-100 rounded-xl text-gray-600 font-medium transition-colors">
                 <Mail className="w-4 h-4" />
                 Enviar E-mail
               </button>
@@ -1452,15 +1452,15 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-sm bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+                className="w-full max-w-sm bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
               >
                 {/* Modal Content */}
                 <div className="p-6 text-center">
                   <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
                     <Trash2 className="w-7 h-7 text-red-400" />
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">Remover Deal?</h3>
-                  <p className="text-dark-400 text-sm mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Remover Deal?</h3>
+                  <p className="text-gray-500 text-sm mb-6">
                     Tem certeza que deseja remover este deal da pipeline? Esta ação não pode ser desfeita.
                   </p>
                   <div className="flex gap-3">
@@ -1470,7 +1470,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                         setDealToDelete(null)
                       }}
                       disabled={deletingDeal}
-                      className="flex-1 px-4 py-3 bg-dark-700 hover:bg-dark-600 rounded-xl text-dark-300 font-medium transition-colors"
+                      className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-600 font-medium transition-colors"
                     >
                       Cancelar
                     </button>
@@ -1516,15 +1516,15 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-sm bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+                className="w-full max-w-sm bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
               >
                 {/* Modal Content */}
                 <div className="p-6 text-center">
                   <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
                     <Trash2 className="w-7 h-7 text-red-400" />
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">Excluir Atividade?</h3>
-                  <p className="text-dark-400 text-sm mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Excluir Atividade?</h3>
+                  <p className="text-gray-500 text-sm mb-6">
                     Tem certeza que deseja excluir esta atividade? Esta ação não pode ser desfeita.
                   </p>
                   <div className="flex gap-3">
@@ -1534,7 +1534,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                         setActivityToDelete(null)
                       }}
                       disabled={deletingActivity}
-                      className="flex-1 px-4 py-3 bg-dark-700 hover:bg-dark-600 rounded-xl text-dark-300 font-medium transition-colors"
+                      className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-600 font-medium transition-colors"
                     >
                       Cancelar
                     </button>
@@ -1577,23 +1577,23 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-md bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+                className="w-full max-w-md bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
               >
                 {/* Modal Header */}
-                <div className="p-5 border-b border-dark-700">
+                <div className="p-5 border-b border-gray-200">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-primary-500/20 flex items-center justify-center">
-                        <Briefcase className="w-5 h-5 text-primary-400" />
+                      <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center">
+                        <Briefcase className="w-5 h-5 text-brand-600" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-white">Adicionar em Pipeline</h3>
-                        <p className="text-sm text-dark-400">Crie um deal para {contact.first_name || 'este contato'}</p>
+                        <h3 className="text-lg font-semibold text-gray-900">Adicionar em Pipeline</h3>
+                        <p className="text-sm text-gray-500">Crie um deal para {contact.first_name || 'este contato'}</p>
                       </div>
                     </div>
                     <button
                       onClick={() => setShowPipelineModal(false)}
-                      className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700 transition-colors"
+                      className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-100 transition-colors"
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -1604,7 +1604,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                 <div className="p-5 space-y-4">
                   {/* Deal Title */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Título do Deal
                     </label>
                     <input
@@ -1612,13 +1612,13 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       value={dealTitle}
                       onChange={(e) => setDealTitle(e.target.value)}
                       placeholder="Ex: Implementação E-commerce"
-                      className="w-full px-4 py-3 bg-dark-900 border border-dark-600 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
                     />
                   </div>
 
                   {/* Deal Value */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Valor (R$)
                     </label>
                     <input
@@ -1626,13 +1626,13 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                       value={dealValue}
                       onChange={(e) => setDealValue(e.target.value)}
                       placeholder="0"
-                      className="w-full px-4 py-3 bg-dark-900 border border-dark-600 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
                     />
                   </div>
 
                   {/* Pipeline Selector */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Pipeline
                     </label>
                     <div className="space-y-2">
@@ -1645,8 +1645,8 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                           }}
                           className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${
                             selectedPipeline?.id === pipeline.id
-                              ? 'bg-primary-500/10 border-primary-500/50 text-white'
-                              : 'bg-dark-900 border-dark-600 text-dark-300 hover:border-dark-500'
+                              ? 'bg-brand-50 border-brand-400 text-white'
+                              : 'bg-white border-gray-300 text-gray-600 hover:border-gray-300'
                           }`}
                         >
                           <div
@@ -1655,7 +1655,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                           />
                           <span className="flex-1 text-left">{pipeline.name}</span>
                           {selectedPipeline?.id === pipeline.id && (
-                            <ChevronDown className="w-4 h-4 text-primary-400" />
+                            <ChevronDown className="w-4 h-4 text-brand-600" />
                           )}
                         </button>
                       ))}
@@ -1665,7 +1665,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                   {/* Stage Selector */}
                   {selectedPipeline && selectedPipeline.stages && (
                     <div>
-                      <label className="block text-sm font-medium text-dark-300 mb-2">
+                      <label className="block text-sm font-medium text-gray-600 mb-2">
                         Estágio
                       </label>
                       <div className="flex flex-wrap gap-2">
@@ -1678,7 +1678,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                                 selectedStage?.id === stage.id
                                   ? 'bg-primary-500 text-white'
-                                  : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                               }`}
                             >
                               <div
@@ -1694,10 +1694,10 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                 </div>
 
                 {/* Modal Footer */}
-                <div className="p-5 border-t border-dark-700 flex gap-3">
+                <div className="p-5 border-t border-gray-200 flex gap-3">
                   <button
                     onClick={() => setShowPipelineModal(false)}
-                    className="flex-1 px-4 py-3 bg-dark-700 hover:bg-dark-600 rounded-xl text-dark-300 font-medium transition-colors"
+                    className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-600 font-medium transition-colors"
                   >
                     Cancelar
                   </button>

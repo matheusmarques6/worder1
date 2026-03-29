@@ -73,25 +73,25 @@ export function BulkActionsToolbar({
       exit={{ opacity: 0, y: -10 }}
       className="sticky top-0 z-20 mb-4"
     >
-      <div className="flex items-center justify-between p-3 bg-primary-500/10 border border-primary-500/20 rounded-xl backdrop-blur-sm">
+      <div className="flex items-center justify-between p-3 bg-brand-50 border border-primary-500/20 rounded-xl backdrop-blur-sm">
         {/* Left - Selection info */}
         <div className="flex items-center gap-3">
           <button
             onClick={onDeselectAll}
-            className="p-1.5 text-primary-400 hover:text-white hover:bg-primary-500/20 rounded-lg transition-colors"
+            className="p-1.5 text-brand-600 hover:text-white hover:bg-brand-100 rounded-lg transition-colors"
             title="Limpar seleção"
           >
             <X className="w-4 h-4" />
           </button>
           
-          <span className="text-sm text-primary-300">
+          <span className="text-sm text-brand-500">
             <strong className="text-white">{selectedCount}</strong> de {totalCount} selecionado(s)
           </span>
 
           {!allSelected && selectedCount < totalCount && (
             <button
               onClick={onSelectAll}
-              className="text-sm text-primary-400 hover:text-primary-300 underline"
+              className="text-sm text-brand-600 hover:text-brand-500 underline"
             >
               Selecionar todos os {totalCount}
             </button>
@@ -112,7 +112,7 @@ export function BulkActionsToolbar({
                 <select
                   value={tagAction}
                   onChange={(e) => setTagAction(e.target.value as 'add' | 'remove')}
-                  className="px-2 py-1.5 bg-dark-800 border border-dark-600 rounded-lg text-sm text-white"
+                  className="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-white"
                 >
                   <option value="add">Adicionar</option>
                   <option value="remove">Remover</option>
@@ -122,7 +122,7 @@ export function BulkActionsToolbar({
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
                   placeholder="tag1, tag2..."
-                  className="w-40 px-3 py-1.5 bg-dark-800 border border-dark-600 rounded-lg text-sm text-white placeholder-dark-500"
+                  className="w-40 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-white placeholder-dark-500"
                   onKeyDown={(e) => e.key === 'Enter' && handleTagSubmit()}
                 />
                 <button
@@ -134,7 +134,7 @@ export function BulkActionsToolbar({
                 </button>
                 <button
                   onClick={() => setShowTagInput(false)}
-                  className="p-1.5 text-dark-400 hover:text-white"
+                  className="p-1.5 text-gray-500 hover:text-white"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -147,7 +147,7 @@ export function BulkActionsToolbar({
               {/* Tags Button */}
               <button
                 onClick={() => setShowTagInput(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-dark-800 hover:bg-dark-700 text-white rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-gray-100 text-white rounded-lg transition-colors"
                 title="Gerenciar tags"
               >
                 <Tag className="w-4 h-4" />
@@ -158,7 +158,7 @@ export function BulkActionsToolbar({
               <button
                 onClick={onExport}
                 disabled={loading}
-                className="flex items-center gap-2 px-3 py-2 bg-dark-800 hover:bg-dark-700 text-white rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-gray-100 text-white rounded-lg transition-colors"
                 title="Exportar selecionados"
               >
                 {loading ? (

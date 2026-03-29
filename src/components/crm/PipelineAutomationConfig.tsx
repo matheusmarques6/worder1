@@ -262,13 +262,13 @@ export function PipelineAutomationConfig({
       {/* Origem e Estágio */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-dark-300 mb-2">
+          <label className="block text-sm font-medium text-gray-600 mb-2">
             Origem
           </label>
           <select
             value={selectedSource}
             onChange={(e) => handleSourceChange(e.target.value as AutomationSourceType)}
-            className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 appearance-none cursor-pointer"
+            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500 appearance-none cursor-pointer"
             style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239CA3AF'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
               backgroundRepeat: 'no-repeat',
@@ -286,17 +286,17 @@ export function PipelineAutomationConfig({
               </option>
             ))}
           </select>
-          <p className="text-xs text-dark-500 mt-1">De onde vem o lead</p>
+          <p className="text-xs text-gray-400 mt-1">De onde vem o lead</p>
         </div>
         
         <div>
-          <label className="block text-sm font-medium text-dark-300 mb-2">
+          <label className="block text-sm font-medium text-gray-600 mb-2">
             Estágio inicial
           </label>
           <select
             value={selectedStage}
             onChange={(e) => setSelectedStage(e.target.value)}
-            className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 appearance-none cursor-pointer"
+            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500 appearance-none cursor-pointer"
             style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239CA3AF'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
               backgroundRepeat: 'no-repeat',
@@ -311,7 +311,7 @@ export function PipelineAutomationConfig({
               </option>
             ))}
           </select>
-          <p className="text-xs text-dark-500 mt-1">Onde o deal será criado</p>
+          <p className="text-xs text-gray-400 mt-1">Onde o deal será criado</p>
         </div>
       </div>
 
@@ -326,7 +326,7 @@ export function PipelineAutomationConfig({
 
       {/* Tipo de Ação */}
       <div>
-        <label className="block text-sm font-medium text-dark-300 mb-2">
+        <label className="block text-sm font-medium text-gray-600 mb-2">
           Ação
         </label>
         <div className="grid grid-cols-3 gap-3">
@@ -341,12 +341,12 @@ export function PipelineAutomationConfig({
               onClick={() => setSelectedAction(action.value as AutomationActionType)}
               className={`p-4 rounded-xl border-2 text-left transition-all ${
                 selectedAction === action.value
-                  ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-dark-700 hover:border-dark-600'
+                  ? 'border-primary-500 bg-brand-50'
+                  : 'border-gray-200 hover:border-gray-300'
               }`}
             >
               <span className="block text-white font-medium">{action.label}</span>
-              <span className="block text-xs text-dark-400 mt-0.5">{action.desc}</span>
+              <span className="block text-xs text-gray-500 mt-0.5">{action.desc}</span>
             </button>
           ))}
         </div>
@@ -354,25 +354,25 @@ export function PipelineAutomationConfig({
 
       {/* Eventos para sincronizar */}
       <div>
-        <label className="block text-sm font-medium text-dark-300 mb-2">
+        <label className="block text-sm font-medium text-gray-600 mb-2">
           Eventos para sincronizar
         </label>
         <div className="space-y-2">
           {availableEvents.map(eventConfig => (
             <label
               key={eventConfig.event}
-              className="flex items-start gap-3 p-4 bg-dark-800/50 rounded-xl cursor-pointer hover:bg-dark-800 transition-colors"
+              className="flex items-start gap-3 p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-white transition-colors"
             >
               <input
                 type="checkbox"
                 checked={selectedEvents.includes(eventConfig.event)}
                 onChange={() => handleEventToggle(eventConfig.event)}
-                className="mt-0.5 w-5 h-5 rounded border-2 border-dark-600 bg-dark-700 text-primary-500 focus:ring-primary-500 focus:ring-offset-0 cursor-pointer"
+                className="mt-0.5 w-5 h-5 rounded border-2 border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500 focus:ring-offset-0 cursor-pointer"
                 style={{ accentColor: '#F97316' }}
               />
               <div>
                 <span className="block text-white font-medium">{eventConfig.label}</span>
-                <span className="block text-xs text-dark-400">{eventConfig.description}</span>
+                <span className="block text-xs text-gray-500">{eventConfig.description}</span>
               </div>
             </label>
           ))}
@@ -381,7 +381,7 @@ export function PipelineAutomationConfig({
 
       {/* Tags automáticas */}
       <div>
-        <label className="block text-sm font-medium text-dark-300 mb-2">
+        <label className="block text-sm font-medium text-gray-600 mb-2">
           Tags automáticas
         </label>
         <div className="flex gap-2 mb-3">
@@ -391,12 +391,12 @@ export function PipelineAutomationConfig({
             onChange={(e) => setNewTag(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
             placeholder="Nova tag..."
-            className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+            className="flex-1 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
           />
           <button
             type="button"
             onClick={handleAddTag}
-            className="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
+            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl transition-colors"
           >
             Adicionar
           </button>
@@ -406,13 +406,13 @@ export function PipelineAutomationConfig({
             {autoTags.map(tag => (
               <span
                 key={tag}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-500/20 text-primary-400 rounded-lg text-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-100 text-brand-600 rounded-lg text-sm"
               >
                 {tag}
                 <button 
                   type="button"
                   onClick={() => handleRemoveTag(tag)} 
-                  className="hover:text-primary-300"
+                  className="hover:text-brand-500"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -420,7 +420,7 @@ export function PipelineAutomationConfig({
             ))}
           </div>
         )}
-        <p className="text-xs text-dark-500 mt-2">
+        <p className="text-xs text-gray-400 mt-2">
           Estas tags serão adicionadas automaticamente aos contatos
         </p>
       </div>
@@ -432,7 +432,7 @@ export function PipelineAutomationConfig({
             <Download className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <h4 className="font-medium text-white">Importar Clientes Existentes</h4>
-              <p className="text-sm text-dark-400 mt-1">
+              <p className="text-sm text-gray-500 mt-1">
                 Importe todos os clientes já cadastrados no Shopify para o CRM
               </p>
               <button
@@ -449,7 +449,7 @@ export function PipelineAutomationConfig({
       )}
 
       {/* Botão Salvar */}
-      <div className="flex justify-end pt-4 border-t border-dark-700">
+      <div className="flex justify-end pt-4 border-t border-gray-200">
         <button
           type="button"
           onClick={handleSave}

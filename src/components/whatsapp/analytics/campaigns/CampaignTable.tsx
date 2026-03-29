@@ -53,16 +53,16 @@ export function CampaignTable({ campaigns, onViewDetails }: CampaignTableProps) 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.4 }}
-      className="bg-dark-800/50 rounded-xl border border-dark-700/50 overflow-hidden"
+      className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden"
     >
-      <div className="px-6 py-4 border-b border-dark-700/50">
-        <h3 className="text-lg font-semibold text-white">Campanhas</h3>
+      <div className="px-6 py-4 border-b border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900">Campanhas</h3>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-dark-900/50">
+            <tr className="bg-gray-50">
               <SortableHeader
                 label="Campanha"
                 field="title"
@@ -70,7 +70,7 @@ export function CampaignTable({ campaigns, onViewDetails }: CampaignTableProps) 
                 currentOrder={sortOrder}
                 onSort={handleSort}
               />
-              <th className="px-4 py-3 text-left text-xs font-medium text-dark-400 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Status
               </th>
               <SortableHeader
@@ -113,7 +113,7 @@ export function CampaignTable({ campaigns, onViewDetails }: CampaignTableProps) 
                 onSort={handleSort}
                 align="right"
               />
-              <th className="px-4 py-3 text-center text-xs font-medium text-dark-400 uppercase">
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                 Ações
               </th>
             </tr>
@@ -121,7 +121,7 @@ export function CampaignTable({ campaigns, onViewDetails }: CampaignTableProps) 
           <tbody className="divide-y divide-dark-700/50">
             {sortedCampaigns.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-12 text-center text-dark-400">
+                <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                   Nenhuma campanha encontrada no período selecionado
                 </td>
               </tr>
@@ -155,7 +155,7 @@ function SortableHeader({ label, field, currentField, currentOrder, onSort, alig
 
   return (
     <th
-      className={`px-4 py-3 text-xs font-medium text-dark-400 uppercase cursor-pointer hover:text-dark-300 transition-colors ${
+      className={`px-4 py-3 text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-600 transition-colors ${
         align === 'right' ? 'text-right' : 'text-left'
       }`}
       onClick={() => onSort(field)}
@@ -165,12 +165,12 @@ function SortableHeader({ label, field, currentField, currentOrder, onSort, alig
         <div className="flex flex-col">
           <ChevronUp
             className={`w-3 h-3 -mb-1 ${
-              isActive && currentOrder === 'asc' ? 'text-primary-400' : 'text-dark-600'
+              isActive && currentOrder === 'asc' ? 'text-brand-600' : 'text-gray-400'
             }`}
           />
           <ChevronDown
             className={`w-3 h-3 ${
-              isActive && currentOrder === 'desc' ? 'text-primary-400' : 'text-dark-600'
+              isActive && currentOrder === 'desc' ? 'text-brand-600' : 'text-gray-400'
             }`}
           />
         </div>
@@ -188,13 +188,13 @@ function CampaignRow({ campaign, onViewDetails }: CampaignRowProps) {
   const statusConfig = STATUS_CONFIG[campaign.status as CampaignStatus] || STATUS_CONFIG.PENDING;
 
   return (
-    <tr className="hover:bg-dark-700/20 transition-colors">
+    <tr className="hover:bg-gray-100/20 transition-colors">
       <td className="px-4 py-4">
         <div>
-          <p className="text-sm font-medium text-white truncate max-w-[200px]">
+          <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">
             {campaign.title}
           </p>
-          <p className="text-xs text-dark-400 mt-0.5">
+          <p className="text-xs text-gray-500 mt-0.5">
             {campaign.template_name}
           </p>
         </div>
@@ -223,7 +223,7 @@ function CampaignRow({ campaign, onViewDetails }: CampaignRowProps) {
         <div className="flex items-center justify-center gap-2">
           <button
             onClick={() => onViewDetails?.(campaign.id)}
-            className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+            className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
             title="Ver detalhes"
           >
             <BarChart3 className="w-4 h-4" />
@@ -240,7 +240,7 @@ interface RateBadgeProps {
 }
 
 function RateBadge({ value, type }: RateBadgeProps) {
-  let colorClass = 'text-dark-400';
+  let colorClass = 'text-gray-500';
   
   if (type === 'delivery') {
     if (value >= 95) colorClass = 'text-emerald-400';

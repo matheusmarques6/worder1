@@ -304,9 +304,9 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
       case 'waiting':
         return <Clock className={cn(sizeClass, 'text-amber-400')} />;
       case 'cancelled':
-        return <Ban className={cn(sizeClass, 'text-slate-400')} />;
+        return <Ban className={cn(sizeClass, 'text-gray-500')} />;
       case 'skipped':
-        return <SkipForward className={cn(sizeClass, 'text-slate-400')} />;
+        return <SkipForward className={cn(sizeClass, 'text-gray-500')} />;
       default:
         return <Clock className={cn(sizeClass, 'text-white/40')} />;
     }
@@ -395,12 +395,12 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
       transition={{ type: 'spring', damping: 25, stiffness: 300 }}
       className={cn(
         'fixed right-0 top-0 bottom-0 z-50',
-        'w-[450px] bg-[#0d0d0d] border-l border-white/10',
+        'w-[450px] bg-[#0d0d0d] border-l border-gray-200',
         'flex flex-col shadow-2xl'
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/10">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center gap-3">
           {selectedRun ? (
             <button
@@ -419,7 +419,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
             </div>
           )}
           <div>
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold text-gray-900">
               {selectedRun ? 'Detalhes da Execução' : 'Histórico'}
             </h2>
             <p className="text-xs text-white/50">
@@ -454,7 +454,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
         // Run Detail View
         <div className="flex-1 overflow-y-auto">
           {/* Run Summary Card */}
-          <div className="p-4 border-b border-white/10">
+          <div className="p-4 border-b border-gray-200">
             <div className={cn(
               'p-4 rounded-xl border',
               getStatusColor(selectedRun.status)
@@ -574,7 +574,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                 onClick={() => handleRerun(selectedRun.id)}
                 className={cn(
                   'px-4 py-2.5 rounded-lg',
-                  'bg-white/5 hover:bg-white/10 text-white/70 hover:text-white',
+                  'bg-gray-50 hover:bg-white/10 text-white/70 hover:text-white',
                   'text-sm font-medium transition-colors'
                 )}
               >
@@ -585,7 +585,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
 
           {/* Steps Timeline */}
           <div className="p-4">
-            <h3 className="text-sm font-semibold text-white/70 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-900/70 mb-3 flex items-center gap-2">
               <Activity className="w-4 h-4" />
               Timeline da Execução
             </h3>
@@ -645,15 +645,15 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                           step.status === 'success' && 'border-green-500/20 bg-green-500/5',
                           step.status === 'error' && 'border-red-500/20 bg-red-500/5',
                           step.status === 'skipped' && 'border-slate-500/20 bg-slate-500/5',
-                          !['success', 'error', 'skipped'].includes(step.status) && 'border-white/10 bg-white/5',
+                          !['success', 'error', 'skipped'].includes(step.status) && 'border-gray-200 bg-gray-50',
                           isReplayingThis && 'ring-2 ring-blue-500/50'
                         )}>
                           <button
                             onClick={() => toggleStepExpand(step.id)}
-                            className="w-full flex items-center gap-3 p-3 hover:bg-white/5 transition-colors text-left"
+                            className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors text-left"
                           >
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-white truncate">
+                              <p className="text-sm font-medium text-gray-900 truncate">
                                 {step.node_label || node?.data?.label || step.node_id}
                               </p>
                               <p className="text-xs text-white/40">
@@ -661,7 +661,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                               </p>
                             </div>
                             {step.duration_ms !== undefined && (
-                              <span className="text-xs text-white/40 bg-white/5 px-2 py-0.5 rounded">
+                              <span className="text-xs text-white/40 bg-gray-50 px-2 py-0.5 rounded">
                                 {step.duration_ms}ms
                               </span>
                             )}
@@ -679,7 +679,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
-                                className="border-t border-white/10"
+                                className="border-t border-gray-200"
                               >
                                 <div className="p-3 bg-[#0a0a0a] space-y-3">
                                   {step.error_message && (
@@ -734,9 +734,9 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
         // Runs List View
         <>
           {/* Stats Cards */}
-          <div className="p-4 border-b border-white/10">
+          <div className="p-4 border-b border-gray-200">
             <div className="grid grid-cols-4 gap-2">
-              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+              <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
                 <div className="flex items-center justify-between mb-1">
                   <Activity className="w-4 h-4 text-white/40" />
                   <span className="text-lg font-bold text-white">{stats.total}</span>
@@ -768,7 +768,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
           </div>
 
           {/* Filters */}
-          <div className="p-4 border-b border-white/10 space-y-3">
+          <div className="p-4 border-b border-gray-200 space-y-3">
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
@@ -779,7 +779,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className={cn(
                   'w-full pl-10 pr-4 py-2 rounded-lg',
-                  'bg-white/5 border border-white/10 text-white text-sm',
+                  'bg-gray-50 border border-gray-200 text-white text-sm',
                   'placeholder-white/30',
                   'focus:outline-none focus:border-blue-500/50'
                 )}
@@ -796,7 +796,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                     'flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors',
                     filter === f
                       ? 'bg-white/10 text-white border border-white/20'
-                      : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/70'
+                      : 'bg-gray-50 text-white/50 hover:bg-white/10 hover:text-white/70'
                   )}
                 >
                   {f === 'all' && 'Todos'}
@@ -849,13 +849,13 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                     onClick={() => fetchRunDetails(run)}
                     className={cn(
                       'p-4 rounded-xl border cursor-pointer',
-                      'hover:border-white/20 hover:bg-white/5',
+                      'hover:border-white/20 hover:bg-gray-50',
                       'transition-all duration-200',
                       run.status === 'completed' || run.status === 'success'
                         ? 'border-green-500/20 bg-green-500/5'
                         : run.status === 'failed' || run.status === 'error'
                         ? 'border-red-500/20 bg-red-500/5'
-                        : 'border-white/10 bg-white/5'
+                        : 'border-gray-200 bg-gray-50'
                     )}
                   >
                     <div className="flex items-start gap-3">
@@ -871,7 +871,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="text-sm font-medium text-white">
+                          <p className="text-sm font-medium text-gray-900">
                             {formatTriggerType(run.trigger_type)}
                           </p>
                           <span className={cn(

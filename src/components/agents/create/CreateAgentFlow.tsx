@@ -642,7 +642,7 @@ ${agentFunction.handoffRules}
             >
               <X className="w-5 h-5" />
             </button>
-            <h1 className="text-lg font-semibold text-white">Criar Agente de IA</h1>
+            <h1 className="text-lg font-semibold text-gray-900">Criar Agente de IA</h1>
           </div>
 
           {/* Steps indicator */}

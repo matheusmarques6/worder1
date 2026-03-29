@@ -217,15 +217,15 @@ export default function SourcesTab({
             <Database className="w-5 h-5 text-blue-400" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white">Fontes de Conhecimento</h3>
-            <p className="text-sm text-dark-400">Treine seu agente com informações do seu negócio</p>
+            <h3 className="text-lg font-semibold text-gray-900">Fontes de Conhecimento</h3>
+            <p className="text-sm text-gray-500">Treine seu agente com informações do seu negócio</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={onRefresh}
-            className="p-2 rounded-xl bg-dark-800/50 border border-dark-700/50 text-dark-400 hover:text-white transition-colors"
+            className="p-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 hover:text-white transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -241,28 +241,28 @@ export default function SourcesTab({
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
-          <p className="text-2xl font-bold text-white">{sources.length}</p>
-          <p className="text-sm text-dark-400">Fontes totais</p>
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+          <p className="text-2xl font-bold text-gray-900">{sources.length}</p>
+          <p className="text-sm text-gray-500">Fontes totais</p>
         </div>
-        <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
           <p className="text-2xl font-bold text-green-400">{readySources}</p>
-          <p className="text-sm text-dark-400">Prontas para uso</p>
+          <p className="text-sm text-gray-500">Prontas para uso</p>
         </div>
-        <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
           <p className="text-2xl font-bold text-blue-400">{totalChunks}</p>
-          <p className="text-sm text-dark-400">Chunks indexados</p>
+          <p className="text-sm text-gray-500">Chunks indexados</p>
         </div>
       </div>
 
       {/* Sources List */}
       {sources.length === 0 ? (
-        <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-8 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-dark-700/50 flex items-center justify-center mx-auto mb-4">
-            <Database className="w-8 h-8 text-dark-500" />
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <Database className="w-8 h-8 text-gray-400" />
           </div>
           <h4 className="text-lg font-medium text-white mb-2">Nenhuma fonte adicionada</h4>
-          <p className="text-sm text-dark-400 mb-4 max-w-md mx-auto">
+          <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
             Adicione URLs, arquivos ou textos para treinar seu agente com informações específicas do seu negócio.
           </p>
           <button
@@ -286,7 +286,7 @@ export default function SourcesTab({
                 key={source.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4 hover:bg-dark-800/70 transition-colors group"
+                className="bg-gray-50 border border-gray-200 rounded-xl p-4 hover:bg-white/70 transition-colors group"
               >
                 <div className="flex items-start gap-4">
                   {/* Icon */}
@@ -305,7 +305,7 @@ export default function SourcesTab({
                     </div>
 
                     <div className="flex items-center gap-4 mt-1">
-                      <span className="text-xs text-dark-500">{typeInfo.label}</span>
+                      <span className="text-xs text-gray-400">{typeInfo.label}</span>
                       
                       {source.source_type === 'url' && source.url && (
                         <a
@@ -320,11 +320,11 @@ export default function SourcesTab({
                       )}
 
                       {source.source_type === 'file' && source.original_filename && (
-                        <span className="text-xs text-dark-400">{source.original_filename}</span>
+                        <span className="text-xs text-gray-500">{source.original_filename}</span>
                       )}
 
                       {source.chunks_count > 0 && (
-                        <span className="text-xs text-dark-400">
+                        <span className="text-xs text-gray-500">
                           {source.chunks_count} chunks
                         </span>
                       )}
@@ -340,7 +340,7 @@ export default function SourcesTab({
                     {source.status === 'error' && (
                       <button
                         onClick={() => handleReprocess(source.id)}
-                        className="p-2 rounded-lg text-dark-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                        className="p-2 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
                         title="Reprocessar"
                       >
                         <RefreshCw className="w-4 h-4" />
@@ -348,7 +348,7 @@ export default function SourcesTab({
                     )}
                     <button
                       onClick={() => handleDelete(source.id)}
-                      className="p-2 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                       title="Excluir"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -363,11 +363,11 @@ export default function SourcesTab({
 
       {/* Info Box */}
       <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-xl p-4">
-        <h4 className="text-sm font-medium text-white mb-2 flex items-center gap-2">
+        <h4 className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-blue-400" />
           Como funciona o RAG?
         </h4>
-        <p className="text-sm text-dark-400">
+        <p className="text-sm text-gray-500">
           Seus documentos são processados, divididos em partes menores (chunks) e indexados.
           Quando o cliente faz uma pergunta, o sistema busca os chunks mais relevantes e os inclui
           no contexto da IA, permitindo respostas precisas baseadas no seu conteúdo.
@@ -388,17 +388,17 @@ export default function SourcesTab({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-dark-800 rounded-2xl w-full max-w-lg border border-dark-700 overflow-hidden"
+              className="bg-white rounded-2xl w-full max-w-lg border border-gray-200 overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-dark-700">
-                <h3 className="text-lg font-semibold text-white">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">
                   {addType ? `Adicionar ${sourceTypeConfig[addType].label}` : 'Adicionar Fonte'}
                 </h3>
                 <button
                   onClick={() => { setShowAddModal(false); setAddType(null); setError(''); }}
-                  className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
+                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -418,53 +418,53 @@ export default function SourcesTab({
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => setAddType('url')}
-                      className="flex flex-col items-center gap-3 p-6 bg-dark-900/50 border border-dark-700/50 rounded-xl hover:bg-dark-900 hover:border-blue-500/30 transition-all group"
+                      className="flex flex-col items-center gap-3 p-6 bg-gray-50 border border-gray-200 rounded-xl hover:bg-white hover:border-blue-500/30 transition-all group"
                     >
                       <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <Globe className="w-6 h-6 text-blue-400" />
                       </div>
                       <div className="text-center">
                         <p className="text-white font-medium">URL</p>
-                        <p className="text-xs text-dark-500">Site ou página web</p>
+                        <p className="text-xs text-gray-400">Site ou página web</p>
                       </div>
                     </button>
 
                     <button
                       onClick={() => setAddType('file')}
-                      className="flex flex-col items-center gap-3 p-6 bg-dark-900/50 border border-dark-700/50 rounded-xl hover:bg-dark-900 hover:border-green-500/30 transition-all group"
+                      className="flex flex-col items-center gap-3 p-6 bg-gray-50 border border-gray-200 rounded-xl hover:bg-white hover:border-green-500/30 transition-all group"
                     >
                       <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <Upload className="w-6 h-6 text-green-400" />
                       </div>
                       <div className="text-center">
                         <p className="text-white font-medium">Arquivo</p>
-                        <p className="text-xs text-dark-500">PDF, DOCX, TXT</p>
+                        <p className="text-xs text-gray-400">PDF, DOCX, TXT</p>
                       </div>
                     </button>
 
                     <button
                       onClick={() => setAddType('text')}
-                      className="flex flex-col items-center gap-3 p-6 bg-dark-900/50 border border-dark-700/50 rounded-xl hover:bg-dark-900 hover:border-purple-500/30 transition-all group"
+                      className="flex flex-col items-center gap-3 p-6 bg-gray-50 border border-gray-200 rounded-xl hover:bg-white hover:border-purple-500/30 transition-all group"
                     >
                       <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <FileText className="w-6 h-6 text-purple-400" />
                       </div>
                       <div className="text-center">
                         <p className="text-white font-medium">Texto</p>
-                        <p className="text-xs text-dark-500">Cole texto diretamente</p>
+                        <p className="text-xs text-gray-400">Cole texto diretamente</p>
                       </div>
                     </button>
 
                     <button
                       onClick={() => setAddType('products')}
-                      className="flex flex-col items-center gap-3 p-6 bg-dark-900/50 border border-dark-700/50 rounded-xl hover:bg-dark-900 hover:border-orange-500/30 transition-all group"
+                      className="flex flex-col items-center gap-3 p-6 bg-gray-50 border border-gray-200 rounded-xl hover:bg-white hover:border-orange-500/30 transition-all group"
                     >
                       <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <ShoppingBag className="w-6 h-6 text-orange-400" />
                       </div>
                       <div className="text-center">
                         <p className="text-white font-medium">Produtos</p>
-                        <p className="text-xs text-dark-500">Via integração</p>
+                        <p className="text-xs text-gray-400">Via integração</p>
                       </div>
                     </button>
                   </div>
@@ -472,18 +472,18 @@ export default function SourcesTab({
                   /* URL Form */
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-dark-300 mb-2">URL do site</label>
+                      <label className="block text-sm font-medium text-gray-600 mb-2">URL do site</label>
                       <input
                         type="url"
                         value={urlInput}
                         onChange={(e) => setUrlInput(e.target.value)}
                         placeholder="https://exemplo.com/pagina"
-                        className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder:text-dark-500 focus:outline-none focus:border-blue-500/50"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-blue-500/50"
                       />
                     </div>
-                    <div className="flex items-start gap-2 p-3 bg-dark-900/50 rounded-lg">
-                      <Info className="w-4 h-4 text-dark-400 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-dark-400">
+                    <div className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
+                      <Info className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-gray-500">
                         O sistema irá crawlear até 100 páginas a partir desta URL.
                         Certifique-se de que o site é público e acessível.
                       </p>
@@ -491,14 +491,14 @@ export default function SourcesTab({
                     <div className="flex gap-3">
                       <button
                         onClick={() => { setAddType(null); setUrlInput(''); }}
-                        className="flex-1 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+                        className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
                       >
                         Voltar
                       </button>
                       <button
                         onClick={handleAddUrl}
                         disabled={loading || !urlInput.trim()}
-                        className="flex-1 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:bg-dark-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                        className="flex-1 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
                       >
                         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                         Adicionar
@@ -510,11 +510,11 @@ export default function SourcesTab({
                   <div className="space-y-4">
                     <div
                       onClick={() => fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-dark-600 rounded-xl p-8 text-center cursor-pointer hover:border-green-500/50 hover:bg-green-500/5 transition-all"
+                      className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-green-500/50 hover:bg-green-500/5 transition-all"
                     >
-                      <Upload className="w-12 h-12 text-dark-500 mx-auto mb-3" />
+                      <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                       <p className="text-white font-medium mb-1">Clique para selecionar</p>
-                      <p className="text-sm text-dark-500">PDF, DOCX, TXT até 25MB</p>
+                      <p className="text-sm text-gray-400">PDF, DOCX, TXT até 25MB</p>
                     </div>
                     <input
                       ref={fileInputRef}
@@ -524,14 +524,14 @@ export default function SourcesTab({
                       className="hidden"
                     />
                     {loading && (
-                      <div className="flex items-center justify-center gap-2 text-dark-400">
+                      <div className="flex items-center justify-center gap-2 text-gray-500">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="text-sm">Enviando arquivo...</span>
                       </div>
                     )}
                     <button
                       onClick={() => setAddType(null)}
-                      className="w-full py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+                      className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
                     >
                       Voltar
                     </button>
@@ -540,36 +540,36 @@ export default function SourcesTab({
                   /* Text Form */
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-dark-300 mb-2">Nome da fonte</label>
+                      <label className="block text-sm font-medium text-gray-600 mb-2">Nome da fonte</label>
                       <input
                         type="text"
                         value={textName}
                         onChange={(e) => setTextName(e.target.value)}
                         placeholder="Ex: FAQ, Políticas, Informações gerais"
-                        className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder:text-dark-500 focus:outline-none focus:border-purple-500/50"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-purple-500/50"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-dark-300 mb-2">Conteúdo</label>
+                      <label className="block text-sm font-medium text-gray-600 mb-2">Conteúdo</label>
                       <textarea
                         value={textContent}
                         onChange={(e) => setTextContent(e.target.value.slice(0, 10000))}
                         placeholder="Cole aqui as informações que o agente deve conhecer..."
-                        className="w-full h-40 px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder:text-dark-500 resize-none focus:outline-none focus:border-purple-500/50"
+                        className="w-full h-40 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 resize-none focus:outline-none focus:border-purple-500/50"
                       />
-                      <p className="text-xs text-dark-500 mt-1 text-right">{textContent.length}/10000</p>
+                      <p className="text-xs text-gray-400 mt-1 text-right">{textContent.length}/10000</p>
                     </div>
                     <div className="flex gap-3">
                       <button
                         onClick={() => { setAddType(null); setTextName(''); setTextContent(''); }}
-                        className="flex-1 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+                        className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
                       >
                         Voltar
                       </button>
                       <button
                         onClick={handleAddText}
                         disabled={loading || !textName.trim() || !textContent.trim()}
-                        className="flex-1 py-2.5 bg-purple-500 hover:bg-purple-600 disabled:bg-dark-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                        className="flex-1 py-2.5 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
                       >
                         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                         Adicionar
@@ -582,14 +582,14 @@ export default function SourcesTab({
                     <div className="text-center py-6">
                       <ShoppingBag className="w-12 h-12 text-orange-400 mx-auto mb-3" />
                       <h4 className="text-white font-medium mb-2">Sincronizar Produtos</h4>
-                      <p className="text-sm text-dark-400 mb-4">
+                      <p className="text-sm text-gray-500 mb-4">
                         Configure uma integração na aba "Integrações" para sincronizar
                         automaticamente os produtos da sua loja.
                       </p>
                     </div>
                     <button
                       onClick={() => setAddType(null)}
-                      className="w-full py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+                      className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
                     >
                       Voltar
                     </button>

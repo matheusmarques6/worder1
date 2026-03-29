@@ -103,9 +103,9 @@ export function ExportButton({
       </Button>
       
       {open && (
-        <div className="absolute right-0 mt-2 w-64 bg-dark-800 border border-dark-600 rounded-xl shadow-xl z-50 overflow-hidden">
-          <div className="px-3 py-2 border-b border-dark-600">
-            <span className="text-xs font-medium text-dark-400">Escolha o relatório</span>
+        <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-300 rounded-xl shadow-xl z-50 overflow-hidden">
+          <div className="px-3 py-2 border-b border-gray-300">
+            <span className="text-xs font-medium text-gray-500">Escolha o relatório</span>
           </div>
           
           <div className="py-1">
@@ -115,7 +115,7 @@ export function ExportButton({
                 onClick={() => handleExport(option.type)}
                 disabled={isExporting || option.disabled}
                 className={cn(
-                  "w-full px-3 py-2 text-left hover:bg-dark-700 transition-colors",
+                  "w-full px-3 py-2 text-left hover:bg-gray-100 transition-colors",
                   "disabled:opacity-50 disabled:cursor-not-allowed"
                 )}
               >
@@ -123,12 +123,12 @@ export function ExportButton({
                   {exportingType === option.type ? (
                     <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
                   ) : (
-                    <FileDown className="w-4 h-4 text-dark-400" />
+                    <FileDown className="w-4 h-4 text-gray-500" />
                   )}
-                  <span className="text-sm font-medium text-dark-100">{option.label}</span>
+                  <span className="text-sm font-medium text-gray-800">{option.label}</span>
                 </div>
                 {option.description && (
-                  <p className="text-xs text-dark-500 mt-0.5 ml-6">
+                  <p className="text-xs text-gray-400 mt-0.5 ml-6">
                     {option.description}
                   </p>
                 )}

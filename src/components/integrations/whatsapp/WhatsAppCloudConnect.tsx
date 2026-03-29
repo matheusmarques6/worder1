@@ -192,14 +192,14 @@ export default function WhatsAppCloudConnect() {
             <MessageSquare className="w-6 h-6 text-green-400" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-white">WhatsApp Business API</h2>
-            <p className="text-sm text-dark-400">API oficial da Meta para WhatsApp</p>
+            <h2 className="text-xl font-semibold text-gray-900">WhatsApp Business API</h2>
+            <p className="text-sm text-gray-500">API oficial da Meta para WhatsApp</p>
           </div>
         </div>
         <div className="flex gap-2">
           <button
             onClick={loadConfig}
-            className="p-2.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-xl transition-colors"
+            className="p-2.5 text-gray-500 hover:text-white hover:bg-gray-100 rounded-xl transition-colors"
             title="Atualizar"
           >
             <RefreshCw className="w-5 h-5" />
@@ -236,7 +236,7 @@ export default function WhatsAppCloudConnect() {
 
       {/* Connected Account */}
       {config && (
-        <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-xl">
+        <div className="p-5 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
@@ -244,7 +244,7 @@ export default function WhatsAppCloudConnect() {
               </div>
               <div>
                 <h4 className="font-semibold text-white">{config.business_name || 'WhatsApp Business'}</h4>
-                <p className="text-sm text-dark-400">{config.phone_number}</p>
+                <p className="text-sm text-gray-500">{config.phone_number}</p>
               </div>
             </div>
 
@@ -263,22 +263,22 @@ export default function WhatsAppCloudConnect() {
           </div>
 
           {/* Webhook Status */}
-          <div className="p-4 bg-dark-900 rounded-xl">
+          <div className="p-4 bg-white rounded-xl">
             <div className="flex items-center gap-2 mb-3">
-              <Info className="w-4 h-4 text-dark-400" />
-              <span className="text-sm text-dark-300">Configuração do Webhook</span>
+              <Info className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-600">Configuração do Webhook</span>
             </div>
             
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-dark-500 mb-1">Callback URL</label>
+                <label className="block text-xs text-gray-400 mb-1">Callback URL</label>
                 <div className="flex gap-2">
-                  <code className="flex-1 px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-xs text-dark-300 font-mono overflow-x-auto">
+                  <code className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-gray-600 font-mono overflow-x-auto">
                     {webhookUrl}
                   </code>
                   <button
                     onClick={() => copyToClipboard(webhookUrl, 'url')}
-                    className="px-3 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white transition-colors"
+                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-white transition-colors"
                   >
                     {copied === 'url' ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   </button>
@@ -303,15 +303,15 @@ export default function WhatsAppCloudConnect() {
 
           {/* Stats */}
           <div className="mt-4 grid grid-cols-2 gap-4">
-            <div className="p-4 bg-dark-900 rounded-xl text-center">
-              <p className="text-sm font-medium text-white">
+            <div className="p-4 bg-white rounded-xl text-center">
+              <p className="text-sm font-medium text-gray-900">
                 {new Date(config.created_at).toLocaleDateString('pt-BR')}
               </p>
-              <p className="text-xs text-dark-400 mt-1">Conectado em</p>
+              <p className="text-xs text-gray-500 mt-1">Conectado em</p>
             </div>
-            <div className="p-4 bg-dark-900 rounded-xl text-center">
-              <p className="text-sm font-medium text-white">{config.phone_number_id}</p>
-              <p className="text-xs text-dark-400 mt-1">Phone Number ID</p>
+            <div className="p-4 bg-white rounded-xl text-center">
+              <p className="text-sm font-medium text-gray-900">{config.phone_number_id}</p>
+              <p className="text-xs text-gray-500 mt-1">Phone Number ID</p>
             </div>
           </div>
         </div>
@@ -319,7 +319,7 @@ export default function WhatsAppCloudConnect() {
 
       {/* Connection Form */}
       {showForm && !config && (
-        <form onSubmit={handleConnect} className="p-6 bg-dark-800 border border-dark-700 rounded-xl space-y-5">
+        <form onSubmit={handleConnect} className="p-6 bg-white border border-gray-200 rounded-xl space-y-5">
           <div className="flex items-center gap-3 mb-2">
             <Shield className="w-5 h-5 text-green-400" />
             <h3 className="font-semibold text-white">Conectar WhatsApp Business API</h3>
@@ -327,7 +327,7 @@ export default function WhatsAppCloudConnect() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Phone Number ID <span className="text-red-400">*</span>
               </label>
               <input
@@ -335,33 +335,33 @@ export default function WhatsAppCloudConnect() {
                 value={phoneNumberId}
                 onChange={(e) => setPhoneNumberId(e.target.value)}
                 placeholder="Ex: 123456789012345"
-                className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
                 required
               />
-              <p className="text-xs text-dark-500 mt-1.5">
+              <p className="text-xs text-gray-400 mt-1.5">
                 ID do número de telefone no Meta
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
-                WABA ID <span className="text-dark-500">(opcional)</span>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
+                WABA ID <span className="text-gray-400">(opcional)</span>
               </label>
               <input
                 type="text"
                 value={wabaId}
                 onChange={(e) => setWabaId(e.target.value)}
                 placeholder="Ex: 123456789012345"
-                className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
               />
-              <p className="text-xs text-dark-500 mt-1.5">
+              <p className="text-xs text-gray-400 mt-1.5">
                 WhatsApp Business Account ID
               </p>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               Access Token <span className="text-red-400">*</span>
             </label>
             <div className="relative">
@@ -369,19 +369,19 @@ export default function WhatsAppCloudConnect() {
                 value={accessToken}
                 onChange={(e) => setAccessToken(e.target.value)}
                 placeholder="Token permanente do sistema (EAAG...)"
-                className="w-full px-4 py-3 pr-12 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors h-24 font-mono text-sm resize-none"
+                className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors h-24 font-mono text-sm resize-none"
                 style={{ fontFamily: showToken ? 'monospace' : 'inherit' }}
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowToken(!showToken)}
-                className="absolute right-3 top-3 p-1.5 text-dark-400 hover:text-white rounded"
+                className="absolute right-3 top-3 p-1.5 text-gray-500 hover:text-white rounded"
               >
                 {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-xs text-dark-500 mt-1.5">
+            <p className="text-xs text-gray-400 mt-1.5">
               Token de acesso permanente (System User Token)
             </p>
           </div>
@@ -390,7 +390,7 @@ export default function WhatsAppCloudConnect() {
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="px-5 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
+              className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl transition-colors"
             >
               Cancelar
             </button>
@@ -423,9 +423,9 @@ export default function WhatsAppCloudConnect() {
 
       {/* Empty State */}
       {!config && !showForm && (
-        <div className="text-center py-16 bg-dark-800/50 border border-dark-700 rounded-xl">
-          <Phone className="w-12 h-12 mx-auto mb-4 text-dark-600" />
-          <p className="text-dark-400 mb-4">Nenhum número conectado</p>
+        <div className="text-center py-16 bg-gray-50 border border-gray-200 rounded-xl">
+          <Phone className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+          <p className="text-gray-500 mb-4">Nenhum número conectado</p>
           <button
             onClick={() => setShowForm(true)}
             className="text-green-400 hover:text-green-300 font-medium"

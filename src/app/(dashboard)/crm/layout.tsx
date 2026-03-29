@@ -28,7 +28,7 @@ export default function CRMLayout({
   return (
     <div className="space-y-6">
       {/* Tabs */}
-      <div className="border-b border-dark-700/50">
+      <div className="border-b border-gray-200">
         <nav className="flex gap-1">
           {tabs.map((tab) => {
             const Icon = tab.icon
@@ -41,8 +41,8 @@ export default function CRMLayout({
                 className={`
                   flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors
                   ${active 
-                    ? 'border-primary-500 text-primary-400' 
-                    : 'border-transparent text-dark-400 hover:text-white hover:border-dark-600'
+                    ? 'border-primary-500 text-brand-600' 
+                    : 'border-transparent text-gray-500 hover:text-white hover:border-gray-300'
                   }
                 `}
               >

@@ -263,7 +263,7 @@ export default function EvolutionConnect() {
     switch (status) {
       case 'connected': return 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30';
       case 'connecting': return 'text-amber-400 bg-amber-500/20 border-amber-500/30';
-      default: return 'text-dark-400 bg-dark-700 border-dark-600';
+      default: return 'text-gray-500 bg-gray-100 border-gray-300';
     }
   };
 
@@ -292,13 +292,13 @@ export default function EvolutionConnect() {
             <QrCode className="w-6 h-6 text-green-400" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-white">Evolution API</h2>
-            <p className="text-sm text-dark-400">Conexão via QR Code (não-oficial)</p>
+            <h2 className="text-xl font-semibold text-gray-900">Evolution API</h2>
+            <p className="text-sm text-gray-500">Conexão via QR Code (não-oficial)</p>
           </div>
         </div>
         <button
           onClick={loadInstances}
-          className="p-2.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-xl transition-colors"
+          className="p-2.5 text-gray-500 hover:text-white hover:bg-gray-100 rounded-xl transition-colors"
           title="Atualizar"
         >
           <RefreshCw className="w-5 h-5" />
@@ -335,9 +335,9 @@ export default function EvolutionConnect() {
       {/* QR Code Modal */}
       {qrCode && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-dark-800 border border-dark-700 rounded-2xl p-8 max-w-md w-full mx-4 text-center">
-            <h3 className="text-xl font-semibold text-white mb-4">Escaneie o QR Code</h3>
-            <p className="text-dark-400 mb-6">
+          <div className="bg-white border border-gray-200 rounded-2xl p-8 max-w-md w-full mx-4 text-center">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">Escaneie o QR Code</h3>
+            <p className="text-gray-500 mb-6">
               Abra o WhatsApp no seu celular, vá em Configurações → Aparelhos Conectados → Conectar
             </p>
             <div className="bg-white p-4 rounded-xl inline-block mb-6">
@@ -347,7 +347,7 @@ export default function EvolutionConnect() {
                 className="w-64 h-64"
               />
             </div>
-            <div className="flex items-center justify-center gap-2 text-sm text-dark-400 mb-6">
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500 mb-6">
               <Loader2 className="w-4 h-4 animate-spin text-green-500" />
               Aguardando conexão...
             </div>
@@ -356,7 +356,7 @@ export default function EvolutionConnect() {
                 setQrCode(null);
                 setPolling(false);
               }}
-              className="px-5 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
+              className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl transition-colors"
             >
               Cancelar
             </button>
@@ -365,14 +365,14 @@ export default function EvolutionConnect() {
       )}
 
       {/* Create Form */}
-      <form onSubmit={handleCreate} className="p-6 bg-dark-800 border border-dark-700 rounded-xl space-y-5">
+      <form onSubmit={handleCreate} className="p-6 bg-white border border-gray-200 rounded-xl space-y-5">
         <div className="flex items-center gap-3">
           <Plus className="w-5 h-5 text-green-400" />
           <h3 className="font-semibold text-white">Nova Instância</h3>
         </div>
         
         <div>
-          <label className="block text-sm font-medium text-dark-300 mb-2">
+          <label className="block text-sm font-medium text-gray-600 mb-2">
             Nome da Instância <span className="text-red-400">*</span>
           </label>
           <input
@@ -380,10 +380,10 @@ export default function EvolutionConnect() {
             value={instanceName}
             onChange={(e) => setInstanceName(e.target.value)}
             placeholder="Ex: Atendimento, Vendas, Suporte..."
-            className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
+            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
             required
           />
-          <p className="text-xs text-dark-500 mt-1.5">
+          <p className="text-xs text-gray-400 mt-1.5">
             Um nome para identificar esta conexão
           </p>
         </div>
@@ -391,7 +391,7 @@ export default function EvolutionConnect() {
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-2 text-sm text-primary-400 hover:text-primary-300"
+          className="flex items-center gap-2 text-sm text-brand-600 hover:text-brand-500"
         >
           <Settings className="w-4 h-4" />
           Configurações avançadas
@@ -399,33 +399,33 @@ export default function EvolutionConnect() {
         </button>
 
         {showAdvanced && (
-          <div className="space-y-4 pt-4 border-t border-dark-700">
-            <p className="text-xs text-dark-500">
+          <div className="space-y-4 pt-4 border-t border-gray-200">
+            <p className="text-xs text-gray-400">
               Deixe em branco para usar o servidor Evolution padrão do sistema.
             </p>
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
-                Server URL <span className="text-dark-500">(opcional)</span>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
+                Server URL <span className="text-gray-400">(opcional)</span>
               </label>
               <input
                 type="text"
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
                 placeholder="https://evolution.seudominio.com"
-                className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
-                API Key <span className="text-dark-500">(opcional)</span>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
+                API Key <span className="text-gray-400">(opcional)</span>
               </label>
               <input
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="Sua API Key"
-                className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-green-500 transition-colors"
               />
             </div>
           </div>
@@ -446,29 +446,29 @@ export default function EvolutionConnect() {
         <h3 className="font-semibold text-white">Instâncias</h3>
         
         {instances.length === 0 ? (
-          <div className="text-center py-16 bg-dark-800/50 border border-dark-700 rounded-xl">
-            <Phone className="w-12 h-12 mx-auto mb-4 text-dark-600" />
-            <p className="text-dark-400">Nenhuma instância criada</p>
+          <div className="text-center py-16 bg-gray-50 border border-gray-200 rounded-xl">
+            <Phone className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+            <p className="text-gray-500">Nenhuma instância criada</p>
           </div>
         ) : (
           <div className="space-y-4">
             {instances.map((instance) => (
               <div
                 key={instance.id}
-                className="p-5 bg-dark-800/50 border border-dark-700 rounded-xl hover:border-dark-600 transition-colors"
+                className="p-5 bg-gray-50 border border-gray-200 rounded-xl hover:border-gray-300 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                      instance.status === 'connected' ? 'bg-green-500/20' : 'bg-dark-700'
+                      instance.status === 'connected' ? 'bg-green-500/20' : 'bg-gray-100'
                     }`}>
                       <Phone className={`w-6 h-6 ${
-                        instance.status === 'connected' ? 'text-green-400' : 'text-dark-500'
+                        instance.status === 'connected' ? 'text-green-400' : 'text-gray-400'
                       }`} />
                     </div>
                     <div>
                       <h4 className="font-semibold text-white">{instance.title || instance.instance_name}</h4>
-                      <p className="text-sm text-dark-400">
+                      <p className="text-sm text-gray-500">
                         {instance.phone_number || 'Não conectado'}
                       </p>
                     </div>
@@ -511,26 +511,26 @@ export default function EvolutionConnect() {
 
                 {instance.status === 'connected' && (
                   <div className="mt-5 grid grid-cols-3 gap-4">
-                    <div className="p-4 bg-dark-900 rounded-xl text-center">
-                      <p className="text-2xl font-bold text-white">
+                    <div className="p-4 bg-white rounded-xl text-center">
+                      <p className="text-2xl font-bold text-gray-900">
                         {instance.messages_sent || 0}
                       </p>
-                      <p className="text-xs text-dark-400 mt-1">Enviadas</p>
+                      <p className="text-xs text-gray-500 mt-1">Enviadas</p>
                     </div>
-                    <div className="p-4 bg-dark-900 rounded-xl text-center">
-                      <p className="text-2xl font-bold text-white">
+                    <div className="p-4 bg-white rounded-xl text-center">
+                      <p className="text-2xl font-bold text-gray-900">
                         {instance.messages_received || 0}
                       </p>
-                      <p className="text-xs text-dark-400 mt-1">Recebidas</p>
+                      <p className="text-xs text-gray-500 mt-1">Recebidas</p>
                     </div>
-                    <div className="p-4 bg-dark-900 rounded-xl text-center">
-                      <p className="text-sm font-medium text-white">
+                    <div className="p-4 bg-white rounded-xl text-center">
+                      <p className="text-sm font-medium text-gray-900">
                         {instance.created_at 
                           ? new Date(instance.created_at).toLocaleDateString('pt-BR')
                           : '-'
                         }
                       </p>
-                      <p className="text-xs text-dark-400 mt-1">Criado em</p>
+                      <p className="text-xs text-gray-500 mt-1">Criado em</p>
                     </div>
                   </div>
                 )}

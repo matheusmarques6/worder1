@@ -313,10 +313,10 @@ export default function ShopifyImportModal({
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+        className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="p-6 border-b border-dark-700">
+        <div className="p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
@@ -326,13 +326,13 @@ export default function ShopifyImportModal({
                 <h2 className="text-lg font-bold text-white">
                   {status === 'completed' ? 'Importação Concluída!' : 'Importar Clientes do Shopify'}
                 </h2>
-                <p className="text-sm text-dark-400">{storeName}</p>
+                <p className="text-sm text-gray-500">{storeName}</p>
               </div>
             </div>
             {status !== 'importing' && (
               <button
                 onClick={onClose}
-                className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+                className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -353,7 +353,7 @@ export default function ShopifyImportModal({
                 className="flex flex-col items-center justify-center py-12"
               >
                 <Loader2 className="w-10 h-10 text-primary-500 animate-spin mb-4" />
-                <p className="text-dark-400">Carregando dados...</p>
+                <p className="text-gray-500">Carregando dados...</p>
               </motion.div>
             )}
 
@@ -371,11 +371,11 @@ export default function ShopifyImportModal({
                   <Users className="w-6 h-6 text-blue-400 mr-3" />
                   <div className="text-center">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-semibold text-white">
+                      <span className="text-lg font-semibold text-gray-900">
                         {(hasTagFilter || hasEmailFilter) ? (
                           <>
                             ~{estimatedCount.toLocaleString('pt-BR')}
-                            <span className="text-sm font-normal text-dark-400 ml-1">
+                            <span className="text-sm font-normal text-gray-500 ml-1">
                               de {customerCount.toLocaleString('pt-BR')}
                             </span>
                           </>
@@ -383,7 +383,7 @@ export default function ShopifyImportModal({
                           customerCount.toLocaleString('pt-BR')
                         )}
                       </span>
-                      <span className="text-dark-400">clientes</span>
+                      <span className="text-gray-500">clientes</span>
                     </div>
                     {(hasTagFilter || hasEmailFilter) && (
                       <p className="text-xs text-amber-400 mt-1">
@@ -396,19 +396,19 @@ export default function ShopifyImportModal({
                 {/* Filtrar por Tags do Shopify */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="flex items-center gap-2 text-sm font-medium text-dark-300">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-600">
                       <Tag className="w-4 h-4" />
                       Filtrar por tags do Shopify (opcional)
                     </label>
                     {loadingTags && (
-                      <Loader2 className="w-4 h-4 text-dark-400 animate-spin" />
+                      <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
                     )}
                   </div>
                   
                   {availableTags.length > 0 ? (
-                    <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl">
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-dark-400">
+                        <span className="text-xs text-gray-500">
                           {selectedShopifyTags.length === 0 
                             ? 'Nenhum filtro (importar todos)' 
                             : `${selectedShopifyTags.length} tag(s) selecionada(s)`}
@@ -416,14 +416,14 @@ export default function ShopifyImportModal({
                         <div className="flex gap-2">
                           <button
                             onClick={selectAllTags}
-                            className="text-xs text-primary-400 hover:text-primary-300"
+                            className="text-xs text-brand-600 hover:text-brand-500"
                           >
                             Selecionar todas
                           </button>
-                          <span className="text-dark-600">|</span>
+                          <span className="text-gray-400">|</span>
                           <button
                             onClick={clearAllTags}
-                            className="text-xs text-dark-400 hover:text-dark-300"
+                            className="text-xs text-gray-500 hover:text-gray-600"
                           >
                             Limpar
                           </button>
@@ -436,8 +436,8 @@ export default function ShopifyImportModal({
                             onClick={() => toggleShopifyTag(tag)}
                             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm transition-all ${
                               selectedShopifyTags.includes(tag)
-                                ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                : 'bg-dark-700 text-dark-300 border border-dark-600 hover:border-dark-500'
+                                ? 'bg-brand-100 text-brand-600 border border-brand-300'
+                                : 'bg-gray-100 text-gray-600 border border-gray-300 hover:border-gray-300'
                             }`}
                           >
                             {selectedShopifyTags.includes(tag) && (
@@ -446,8 +446,8 @@ export default function ShopifyImportModal({
                             <span>{tag}</span>
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
                               selectedShopifyTags.includes(tag)
-                                ? 'bg-primary-500/30 text-primary-300'
-                                : 'bg-dark-600 text-dark-400'
+                                ? 'bg-primary-500/30 text-brand-500'
+                                : 'bg-gray-200 text-gray-500'
                             }`}>
                               {count}
                             </span>
@@ -456,8 +456,8 @@ export default function ShopifyImportModal({
                       </div>
                     </div>
                   ) : !loadingTags ? (
-                    <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
-                      <p className="text-sm text-dark-400">
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
+                      <p className="text-sm text-gray-500">
                         Nenhuma tag encontrada nos clientes do Shopify
                       </p>
                     </div>
@@ -473,7 +473,7 @@ export default function ShopifyImportModal({
                 {/* Filtrar por Status de Email Marketing */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="flex items-center gap-2 text-sm font-medium text-dark-300">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-600">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
                         <polyline points="22,6 12,13 2,6"/>
@@ -483,9 +483,9 @@ export default function ShopifyImportModal({
                   </div>
                   
                   {emailStatusOptions.length > 0 ? (
-                    <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl">
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-dark-400">
+                        <span className="text-xs text-gray-500">
                           {selectedEmailStatus.length === 0 
                             ? 'Nenhum filtro (importar todos)' 
                             : `${selectedEmailStatus.length} status selecionado(s)`}
@@ -493,14 +493,14 @@ export default function ShopifyImportModal({
                         <div className="flex gap-2">
                           <button
                             onClick={selectAllEmailStatus}
-                            className="text-xs text-primary-400 hover:text-primary-300"
+                            className="text-xs text-brand-600 hover:text-brand-500"
                           >
                             Selecionar todos
                           </button>
-                          <span className="text-dark-600">|</span>
+                          <span className="text-gray-400">|</span>
                           <button
                             onClick={clearAllEmailStatus}
-                            className="text-xs text-dark-400 hover:text-dark-300"
+                            className="text-xs text-gray-500 hover:text-gray-600"
                           >
                             Limpar
                           </button>
@@ -517,8 +517,8 @@ export default function ShopifyImportModal({
                                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                   : status === 'unsubscribed'
                                     ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                    : 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                : 'bg-dark-700 text-dark-300 border border-dark-600 hover:border-dark-500'
+                                    : 'bg-brand-100 text-brand-600 border border-brand-300'
+                                : 'bg-gray-100 text-gray-600 border border-gray-300 hover:border-gray-300'
                             }`}
                           >
                             {selectedEmailStatus.includes(status) && (
@@ -531,8 +531,8 @@ export default function ShopifyImportModal({
                                   ? 'bg-emerald-500/30 text-emerald-300'
                                   : status === 'unsubscribed'
                                     ? 'bg-amber-500/30 text-amber-300'
-                                    : 'bg-primary-500/30 text-primary-300'
-                                : 'bg-dark-600 text-dark-400'
+                                    : 'bg-primary-500/30 text-brand-500'
+                                : 'bg-gray-200 text-gray-500'
                             }`}>
                               {count.toLocaleString('pt-BR')}
                             </span>
@@ -541,8 +541,8 @@ export default function ShopifyImportModal({
                       </div>
                     </div>
                   ) : !loadingTags ? (
-                    <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl text-center">
-                      <p className="text-sm text-dark-400">
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
+                      <p className="text-sm text-gray-500">
                         Carregando opções de email...
                       </p>
                     </div>
@@ -558,7 +558,7 @@ export default function ShopifyImportModal({
                 {/* Pipeline Selection */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Pipeline (opcional)
                     </label>
                     <select
@@ -567,7 +567,7 @@ export default function ShopifyImportModal({
                         setSelectedPipeline(e.target.value)
                         setSelectedStage('')
                       }}
-                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
                     >
                       <option value="">Nenhum</option>
                       {pipelines.map((pipeline) => (
@@ -579,14 +579,14 @@ export default function ShopifyImportModal({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Estágio inicial
                     </label>
                     <select
                       value={selectedStage}
                       onChange={(e) => setSelectedStage(e.target.value)}
                       disabled={!selectedPipeline}
-                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500 disabled:opacity-50"
+                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500 disabled:opacity-50"
                     >
                       <option value="">Selecione</option>
                       {selectedPipelineData?.stages
@@ -602,7 +602,7 @@ export default function ShopifyImportModal({
 
                 {/* Contact Type */}
                 <div>
-                  <label className="block text-sm font-medium text-dark-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     Tipo de contato
                   </label>
                   <div className="grid grid-cols-3 gap-2">
@@ -616,16 +616,16 @@ export default function ShopifyImportModal({
                         onClick={() => setContactType(option.value as any)}
                         className={`p-3 rounded-xl border-2 transition-all text-left ${
                           contactType === option.value
-                            ? 'border-primary-500 bg-primary-500/10'
-                            : 'border-dark-700 hover:border-dark-600'
+                            ? 'border-primary-500 bg-brand-50'
+                            : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
                         <span className={`block text-sm font-medium ${
-                          contactType === option.value ? 'text-primary-400' : 'text-white'
+                          contactType === option.value ? 'text-brand-600' : 'text-white'
                         }`}>
                           {option.label}
                         </span>
-                        <span className="block text-[10px] text-dark-400 mt-0.5">
+                        <span className="block text-[10px] text-gray-500 mt-0.5">
                           {option.desc}
                         </span>
                       </button>
@@ -635,16 +635,16 @@ export default function ShopifyImportModal({
 
                 {/* Create Deals Checkbox */}
                 {selectedPipeline && selectedStage && (
-                  <label className="flex items-start gap-3 p-3 bg-dark-800/50 rounded-xl cursor-pointer hover:bg-dark-800 transition-colors">
+                  <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-white transition-colors">
                     <input
                       type="checkbox"
                       checked={createDeals}
                       onChange={(e) => setCreateDeals(e.target.checked)}
-                      className="w-5 h-5 mt-0.5 rounded border-dark-600 bg-dark-700 text-primary-500 focus:ring-primary-500 focus:ring-offset-0"
+                      className="w-5 h-5 mt-0.5 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500 focus:ring-offset-0"
                     />
                     <div>
                       <span className="block text-white font-medium">Criar deal para cada cliente</span>
-                      <span className="block text-xs text-dark-400">
+                      <span className="block text-xs text-gray-500">
                         Um deal será criado no pipeline e estágio selecionados
                       </span>
                     </div>
@@ -672,13 +672,13 @@ export default function ShopifyImportModal({
               >
                 <div className="text-center">
                   <Loader2 className="w-12 h-12 text-primary-500 animate-spin mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-white mb-1">Importando clientes...</h3>
-                  <p className="text-sm text-dark-400">Isso pode levar alguns minutos</p>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Importando clientes...</h3>
+                  <p className="text-sm text-gray-500">Isso pode levar alguns minutos</p>
                 </div>
 
                 {/* Progress Bar */}
                 <div className="space-y-2">
-                  <div className="h-3 bg-dark-700 rounded-full overflow-hidden">
+                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
                     <motion.div
                       className="h-full bg-gradient-to-r from-primary-500 to-accent-500"
                       initial={{ width: 0 }}
@@ -687,12 +687,12 @@ export default function ShopifyImportModal({
                     />
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-dark-400">Processando...</span>
+                    <span className="text-gray-500">Processando...</span>
                     <span className="text-white font-medium">{Math.round(progress)}%</span>
                   </div>
                 </div>
 
-                <p className="text-center text-xs text-dark-500">
+                <p className="text-center text-xs text-gray-400">
                   Não feche esta janela durante a importação
                 </p>
               </motion.div>
@@ -712,10 +712,10 @@ export default function ShopifyImportModal({
                   <div className="w-16 h-16 mx-auto bg-emerald-500/20 rounded-full flex items-center justify-center mb-4">
                     <CheckCircle className="w-8 h-8 text-emerald-400" />
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-1">
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">
                     {stats.total.toLocaleString('pt-BR')} clientes processados
                   </h3>
-                  <p className="text-sm text-dark-400">
+                  <p className="text-sm text-gray-500">
                     em {formatDuration(duration)}
                     {stats.totalInShopify && stats.totalInShopify !== stats.total && (
                       <span className="ml-1">
@@ -729,19 +729,19 @@ export default function ShopifyImportModal({
                 <div className="grid grid-cols-4 gap-3">
                   <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
                     <p className="text-2xl font-bold text-emerald-400">{stats.created}</p>
-                    <p className="text-xs text-dark-400">Criados</p>
+                    <p className="text-xs text-gray-500">Criados</p>
                   </div>
                   <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-center">
                     <p className="text-2xl font-bold text-blue-400">{stats.updated}</p>
-                    <p className="text-xs text-dark-400">Atualizados</p>
+                    <p className="text-xs text-gray-500">Atualizados</p>
                   </div>
                   <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
                     <p className="text-2xl font-bold text-amber-400">{stats.skipped}</p>
-                    <p className="text-xs text-dark-400">Pulados</p>
+                    <p className="text-xs text-gray-500">Pulados</p>
                   </div>
                   <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-center">
                     <p className="text-2xl font-bold text-red-400">{stats.errors}</p>
-                    <p className="text-xs text-dark-400">Erros</p>
+                    <p className="text-xs text-gray-500">Erros</p>
                   </div>
                 </div>
 
@@ -788,11 +788,11 @@ export default function ShopifyImportModal({
                 <div className="w-16 h-16 mx-auto bg-red-500/20 rounded-full flex items-center justify-center mb-4">
                   <AlertCircle className="w-8 h-8 text-red-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-2">Erro na importação</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Erro na importação</h3>
                 <p className="text-sm text-red-400 mb-4">{error}</p>
                 <button
                   onClick={loadInitialData}
-                  className="flex items-center gap-2 mx-auto px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+                  className="flex items-center gap-2 mx-auto px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Tentar novamente
@@ -803,12 +803,12 @@ export default function ShopifyImportModal({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-dark-700 flex items-center justify-end gap-3">
+        <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
           {status === 'idle' && (
             <>
               <button
                 onClick={onClose}
-                className="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
               >
                 Cancelar
               </button>
@@ -830,7 +830,7 @@ export default function ShopifyImportModal({
                   onSuccess()
                   onClose()
                 }}
-                className="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
               >
                 Fechar
               </button>
@@ -847,7 +847,7 @@ export default function ShopifyImportModal({
           {status === 'error' && (
             <button
               onClick={onClose}
-              className="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+              className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
             >
               Fechar
             </button>

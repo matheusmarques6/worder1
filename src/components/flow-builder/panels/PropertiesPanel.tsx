@@ -111,16 +111,16 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 320, opacity: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="fb-properties w-80 bg-[#111111] border-l border-white/10 flex flex-col h-full"
+        className="fb-properties w-80 bg-[#111111] border-l border-gray-200 flex flex-col h-full"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <div className={cn('p-2 rounded-lg', colors.bg)}>
               <Icon className={cn('w-4 h-4', colors.text)} />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white">
+              <h3 className="text-sm font-semibold text-gray-900">
                 {definition?.label || 'Configurar'}
               </h3>
               <p className="text-[11px] text-white/40 capitalize">
@@ -153,7 +153,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 placeholder={definition?.label}
                 className={cn(
                   'w-full px-3 py-2 rounded-lg',
-                  'bg-[#0a0a0a] border border-white/10',
+                  'bg-[#0a0a0a] border border-gray-200',
                   'text-sm text-white placeholder-white/30',
                   'focus:outline-none focus:border-blue-500/50'
                 )}
@@ -169,7 +169,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 rows={2}
                 className={cn(
                   'w-full px-3 py-2 rounded-lg resize-none',
-                  'bg-[#0a0a0a] border border-white/10',
+                  'bg-[#0a0a0a] border border-gray-200',
                   'text-sm text-white placeholder-white/30',
                   'focus:outline-none focus:border-blue-500/50'
                 )}
@@ -220,7 +220,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       placeholder="Ex: data_renovacao"
                       className={cn(
                         'w-full px-3 py-2 rounded-lg',
-                        'bg-[#0a0a0a] border border-white/10',
+                        'bg-[#0a0a0a] border border-gray-200',
                         'text-sm text-white placeholder-white/30',
                         'focus:outline-none focus:border-blue-500/50'
                       )}
@@ -250,7 +250,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     onChange={(e) => handleUpdate('triggerTime', e.target.value)}
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-sm text-white',
                       'focus:outline-none focus:border-blue-500/50',
                       '[color-scheme:dark]'
@@ -293,7 +293,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     placeholder="Ex: comprar, ajuda, suporte..."
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-sm text-white placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -430,7 +430,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   placeholder="Ex: cliente-vip"
                   className={cn(
                     'w-full px-3 py-2 rounded-lg',
-                    'bg-[#0a0a0a] border border-white/10',
+                    'bg-[#0a0a0a] border border-gray-200',
                     'text-sm text-white placeholder-white/30',
                     'focus:outline-none focus:border-blue-500/50'
                   )}
@@ -500,7 +500,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     placeholder="Ex: preço, concorrente..."
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-sm text-white placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -530,7 +530,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     onChange={(e) => handleUpdate('value', parseInt(e.target.value) || 1)}
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-sm text-white',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -575,7 +575,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       onChange={(e) => handleUpdate('time', e.target.value)}
                       className={cn(
                         'w-full px-3 py-2 rounded-lg',
-                        'bg-[#0a0a0a] border border-white/10',
+                        'bg-[#0a0a0a] border border-gray-200',
                         'text-sm text-white',
                         'focus:outline-none focus:border-blue-500/50'
                       )}
@@ -593,7 +593,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       onChange={(e) => handleUpdate('datetime', e.target.value)}
                       className={cn(
                         'w-full px-3 py-2 rounded-lg',
-                        'bg-[#0a0a0a] border border-white/10',
+                        'bg-[#0a0a0a] border border-gray-200',
                         'text-sm text-white',
                         'focus:outline-none focus:border-blue-500/50',
                         '[color-scheme:dark]'
@@ -635,7 +635,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     placeholder="Ex: {{ contact.first_name }}, seu pedido foi confirmado!"
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-sm text-white placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -658,7 +658,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     placeholder="ID do template externo"
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-sm text-white placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -730,7 +730,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                         placeholder="Ex: Venda - {{contact.name}}"
                         className={cn(
                           'w-full px-3 py-2 rounded-lg',
-                          'bg-[#0a0a0a] border border-white/10',
+                          'bg-[#0a0a0a] border border-gray-200',
                           'text-sm text-white placeholder-white/30',
                           'focus:outline-none focus:border-blue-500/50'
                         )}
@@ -745,7 +745,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                         placeholder="0.00"
                         className={cn(
                           'w-full px-3 py-2 rounded-lg',
-                          'bg-[#0a0a0a] border border-white/10',
+                          'bg-[#0a0a0a] border border-gray-200',
                           'text-sm text-white placeholder-white/30',
                           'focus:outline-none focus:border-blue-500/50'
                         )}
@@ -798,7 +798,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     placeholder="Valor para comparar"
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-sm text-white placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -836,7 +836,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     placeholder="Ex: 100.00"
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-sm text-white placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -879,7 +879,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     placeholder="Ex: 5000.00"
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-sm text-white placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -942,7 +942,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     placeholder="https://..."
                     className={cn(
                       'w-full px-3 py-2 rounded-lg',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-sm text-white placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -971,7 +971,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     rows={2}
                     className={cn(
                       'w-full px-3 py-2 rounded-lg resize-none font-mono text-xs',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-white placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -986,7 +986,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     rows={4}
                     className={cn(
                       'w-full px-3 py-2 rounded-lg resize-none font-mono text-xs',
-                      'bg-[#0a0a0a] border border-white/10',
+                      'bg-[#0a0a0a] border border-gray-200',
                       'text-white placeholder-white/30',
                       'focus:outline-none focus:border-blue-500/50'
                     )}
@@ -1040,15 +1040,15 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
           </section>
 
           {/* Variables hint */}
-          <section className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+          <section className="p-3 bg-brand-50 border border-primary-500/20 rounded-lg">
             <div className="flex items-start gap-2">
-              <Sparkles className="w-4 h-4 text-primary-400 mt-0.5 flex-shrink-0" />
+              <Sparkles className="w-4 h-4 text-brand-600 mt-0.5 flex-shrink-0" />
               <div className="space-y-1">
-                <p className="text-[11px] text-primary-300 font-medium">
+                <p className="text-[11px] text-brand-500 font-medium">
                   Personalização com Variáveis
                 </p>
-                <p className="text-[10px] text-primary-300/70">
-                  Clique em <span className="bg-primary-500/20 px-1 rounded">Personalizar</span> para inserir dados dinâmicos como nome do contato, dados do pedido, etc.
+                <p className="text-[10px] text-brand-500/70">
+                  Clique em <span className="bg-brand-100 px-1 rounded">Personalizar</span> para inserir dados dinâmicos como nome do contato, dados do pedido, etc.
                 </p>
               </div>
             </div>
@@ -1056,12 +1056,12 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-white/10 flex items-center gap-2">
+        <div className="p-4 border-t border-gray-200 flex items-center gap-2">
           <button
             onClick={() => navigator.clipboard.writeText(selectedNode.id)}
             className={cn(
               'flex-1 flex items-center justify-center gap-2 py-2 rounded-lg',
-              'bg-white/5 hover:bg-white/10',
+              'bg-gray-50 hover:bg-white/10',
               'text-sm text-white/60 hover:text-white',
               'transition-colors'
             )}
@@ -1107,7 +1107,7 @@ function SelectField({ value, onChange, options, loading }: SelectFieldProps) {
         disabled={loading}
         className={cn(
           'w-full px-3 py-2 rounded-lg appearance-none',
-          'bg-[#0a0a0a] border border-white/10',
+          'bg-[#0a0a0a] border border-gray-200',
           'text-sm text-white',
           'focus:outline-none focus:border-blue-500/50',
           'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -1190,7 +1190,7 @@ function ContactFieldsEditor({ fields, onFieldsChange }: ContactFieldsEditorProp
                 rows={2}
                 className={cn(
                   'w-full px-3 py-2 rounded-lg resize-none',
-                  'bg-[#0a0a0a] border border-white/10',
+                  'bg-[#0a0a0a] border border-gray-200',
                   'text-sm text-white placeholder-white/30',
                   'focus:outline-none focus:border-blue-500/50'
                 )}
@@ -1203,7 +1203,7 @@ function ContactFieldsEditor({ fields, onFieldsChange }: ContactFieldsEditorProp
                 placeholder={`Novo valor para ${field.label}`}
                 className={cn(
                   'w-full px-3 py-2 rounded-lg',
-                  'bg-[#0a0a0a] border border-white/10',
+                  'bg-[#0a0a0a] border border-gray-200',
                   'text-sm text-white placeholder-white/30',
                   'focus:outline-none focus:border-blue-500/50'
                 )}
@@ -1301,7 +1301,7 @@ function FilterConditionsEditor({
               'px-3 py-1 rounded text-xs transition-colors',
               logicOperator === 'and'
                 ? 'bg-blue-500 text-white'
-                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                : 'bg-gray-50 text-white/60 hover:bg-white/10'
             )}
           >
             E (AND)
@@ -1312,7 +1312,7 @@ function FilterConditionsEditor({
               'px-3 py-1 rounded text-xs transition-colors',
               logicOperator === 'or'
                 ? 'bg-blue-500 text-white'
-                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                : 'bg-gray-50 text-white/60 hover:bg-white/10'
             )}
           >
             OU (OR)
@@ -1323,7 +1323,7 @@ function FilterConditionsEditor({
       {/* Conditions List */}
       <div className="space-y-2">
         {conditions.map((condition, index) => (
-          <div key={index} className="p-3 bg-white/5 rounded-lg space-y-2">
+          <div key={index} className="p-3 bg-gray-50 rounded-lg space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-white/40 uppercase">
                 Condição {index + 1}
@@ -1341,7 +1341,7 @@ function FilterConditionsEditor({
               onChange={(e) => updateCondition(index, { field: e.target.value })}
               className={cn(
                 'w-full px-2 py-1.5 rounded text-xs',
-                'bg-[#0a0a0a] border border-white/10 text-white'
+                'bg-[#0a0a0a] border border-gray-200 text-white'
               )}
             >
               <option value="">Selecione o campo...</option>
@@ -1355,7 +1355,7 @@ function FilterConditionsEditor({
               onChange={(e) => updateCondition(index, { operator: e.target.value })}
               className={cn(
                 'w-full px-2 py-1.5 rounded text-xs',
-                'bg-[#0a0a0a] border border-white/10 text-white'
+                'bg-[#0a0a0a] border border-gray-200 text-white'
               )}
             >
               {FILTER_OPERATORS.map(o => (
@@ -1371,7 +1371,7 @@ function FilterConditionsEditor({
                 placeholder="Valor"
                 className={cn(
                   'w-full px-2 py-1.5 rounded text-xs',
-                  'bg-[#0a0a0a] border border-white/10 text-white placeholder-white/30'
+                  'bg-[#0a0a0a] border border-gray-200 text-white placeholder-white/30'
                 )}
               />
             )}
@@ -1452,7 +1452,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
             disabled={loadingStores}
             className={cn(
               'w-full px-3 py-2 rounded-lg appearance-none',
-              'bg-[#0a0a0a] border border-white/10',
+              'bg-[#0a0a0a] border border-gray-200',
               'text-sm text-white',
               'focus:outline-none focus:border-blue-500/50',
               'disabled:opacity-50'
@@ -1486,7 +1486,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
             placeholder="0.00"
             className={cn(
               'flex-1 px-3 py-2 rounded-lg',
-              'bg-[#0a0a0a] border border-white/10',
+              'bg-[#0a0a0a] border border-gray-200',
               'text-sm text-white placeholder-white/30',
               'focus:outline-none focus:border-blue-500/50'
             )}
@@ -1507,7 +1507,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
               onChange={(e) => onUpdate('paymentStatus', e.target.value)}
               className={cn(
                 'w-full px-3 py-2 rounded-lg appearance-none',
-                'bg-[#0a0a0a] border border-white/10',
+                'bg-[#0a0a0a] border border-gray-200',
                 'text-sm text-white',
                 'focus:outline-none focus:border-blue-500/50'
               )}
@@ -1595,7 +1595,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
           placeholder="Ex: Nova ação necessária"
           className={cn(
             'w-full px-3 py-2 rounded-lg',
-            'bg-[#0a0a0a] border border-white/10',
+            'bg-[#0a0a0a] border border-gray-200',
             'text-sm text-white placeholder-white/30',
             'focus:outline-none focus:border-blue-500/50'
           )}
@@ -1612,7 +1612,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
           rows={3}
           className={cn(
             'w-full px-3 py-2 rounded-lg resize-none',
-            'bg-[#0a0a0a] border border-white/10',
+            'bg-[#0a0a0a] border border-gray-200',
             'text-sm text-white placeholder-white/30',
             'focus:outline-none focus:border-blue-500/50'
           )}
@@ -1641,7 +1641,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
           </div>
         </div>
         
-        <div className="max-h-40 overflow-y-auto space-y-1 p-2 bg-[#0a0a0a] rounded-lg border border-white/10">
+        <div className="max-h-40 overflow-y-auto space-y-1 p-2 bg-[#0a0a0a] rounded-lg border border-gray-200">
           {loadingUsers ? (
             <p className="text-xs text-white/40 text-center py-2">Carregando...</p>
           ) : users.length === 0 ? (
@@ -1650,7 +1650,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
             users.map((user) => (
               <label
                 key={user.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer"
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
               >
                 <input
                   type="checkbox"
@@ -1728,7 +1728,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             disabled={loadingStores}
             className={cn(
               'w-full px-3 py-2 rounded-lg appearance-none',
-              'bg-[#0a0a0a] border border-white/10',
+              'bg-[#0a0a0a] border border-gray-200',
               'text-sm text-white',
               'focus:outline-none focus:border-blue-500/50',
               'disabled:opacity-50'
@@ -1756,7 +1756,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             onChange={(e) => onUpdate('abandonTime', parseInt(e.target.value) || 30)}
             className={cn(
               'px-3 py-2 rounded-lg',
-              'bg-[#0a0a0a] border border-white/10',
+              'bg-[#0a0a0a] border border-gray-200',
               'text-sm text-white',
               'focus:outline-none focus:border-blue-500/50'
             )}
@@ -1767,7 +1767,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
               onChange={(e) => onUpdate('abandonUnit', e.target.value)}
               className={cn(
                 'w-full px-3 py-2 rounded-lg appearance-none',
-                'bg-[#0a0a0a] border border-white/10',
+                'bg-[#0a0a0a] border border-gray-200',
                 'text-sm text-white',
                 'focus:outline-none focus:border-blue-500/50'
               )}
@@ -1797,7 +1797,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             placeholder="0.00"
             className={cn(
               'flex-1 px-3 py-2 rounded-lg',
-              'bg-[#0a0a0a] border border-white/10',
+              'bg-[#0a0a0a] border border-gray-200',
               'text-sm text-white placeholder-white/30',
               'focus:outline-none focus:border-blue-500/50'
             )}
@@ -1883,7 +1883,7 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
             onClick={() => setShowEditor(true)}
             className={cn(
               'p-3 rounded-lg cursor-pointer transition-all',
-              'bg-[#0a0a0a] border border-white/10 hover:border-green-500/50',
+              'bg-[#0a0a0a] border border-gray-200 hover:border-green-500/50',
               'group'
             )}
           >

@@ -273,18 +273,18 @@ export function MergeContactsModal({
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-dark-900 rounded-2xl border border-dark-700 w-full max-w-2xl max-h-[90vh] overflow-hidden"
+          className="bg-white rounded-2xl border border-gray-200 w-full max-w-2xl max-h-[90vh] overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-dark-700">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary-500/20">
-                <Merge className="w-5 h-5 text-primary-400" />
+              <div className="p-2 rounded-lg bg-brand-100">
+                <Merge className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-white">Mesclar Contatos</h2>
-                <p className="text-sm text-dark-400">
+                <h2 className="text-xl font-semibold text-gray-900">Mesclar Contatos</h2>
+                <p className="text-sm text-gray-500">
                   {step === 'detect' && 'Contatos duplicados detectados'}
                   {step === 'select' && 'Selecione o contato principal'}
                   {step === 'confirm' && 'Confirme a mesclagem'}
@@ -293,8 +293,8 @@ export function MergeContactsModal({
                 </p>
               </div>
             </div>
-            <button onClick={handleClose} className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-              <X className="w-5 h-5 text-dark-400" />
+            <button onClick={handleClose} className="p-2 hover:bg-white rounded-lg transition-colors">
+              <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
           
@@ -306,17 +306,17 @@ export function MergeContactsModal({
                 {loading ? (
                   <div className="text-center py-8">
                     <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-dark-400">Procurando duplicados...</p>
+                    <p className="text-gray-500">Procurando duplicados...</p>
                   </div>
                 ) : duplicates.length === 0 ? (
                   <div className="text-center py-8">
                     <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-white mb-2">Nenhum duplicado encontrado</h3>
-                    <p className="text-dark-400">Seus contatos estão organizados!</p>
+                    <p className="text-gray-500">Seus contatos estão organizados!</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-sm text-dark-400 mb-4">
+                    <p className="text-sm text-gray-500 mb-4">
                       Encontramos {duplicates.length} grupo(s) de possíveis duplicados:
                     </p>
                     
@@ -324,7 +324,7 @@ export function MergeContactsModal({
                       <button
                         key={idx}
                         onClick={() => handleSelectGroup(group)}
-                        className="w-full p-4 bg-dark-800 hover:bg-dark-750 rounded-xl border border-dark-700 hover:border-dark-600 transition-all group text-left"
+                        className="w-full p-4 bg-white hover:bg-gray-100 rounded-xl border border-gray-200 hover:border-gray-300 transition-all group text-left"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
@@ -339,24 +339,24 @@ export function MergeContactsModal({
                               {group.confidence === 'high' ? 'Alta' :
                                group.confidence === 'medium' ? 'Média' : 'Baixa'} confiança
                             </div>
-                            <span className="text-sm text-dark-400">
+                            <span className="text-sm text-gray-500">
                               {group.matchType === 'email' ? 'Email' :
                                group.matchType === 'phone' ? 'Telefone' : 'Nome'}: {group.matchValue}
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-white">{group.contacts.length} contatos</span>
-                            <ChevronRight className="w-4 h-4 text-dark-400 group-hover:text-primary-400 transition-colors" />
+                            <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-brand-600 transition-colors" />
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {group.contacts.slice(0, 3).map(contact => (
-                            <span key={contact.id} className="text-xs bg-dark-700 px-2 py-1 rounded">
+                            <span key={contact.id} className="text-xs bg-gray-100 px-2 py-1 rounded">
                               {contact.first_name} {contact.last_name}
                             </span>
                           ))}
                           {group.contacts.length > 3 && (
-                            <span className="text-xs text-dark-400">
+                            <span className="text-xs text-gray-500">
                               +{group.contacts.length - 3} mais
                             </span>
                           )}
@@ -372,23 +372,23 @@ export function MergeContactsModal({
             {step === 'merging_all' && (
               <div className="py-8">
                 <div className="flex flex-col items-center">
-                  <Loader2 className="w-12 h-12 text-primary-400 animate-spin mb-4" />
+                  <Loader2 className="w-12 h-12 text-brand-600 animate-spin mb-4" />
                   <h3 className="text-lg font-medium text-white mb-2">
                     Mesclando contatos...
                   </h3>
-                  <p className="text-dark-400 mb-6">
+                  <p className="text-gray-500 mb-6">
                     Processando: {mergeAllProgress.currentGroup}
                   </p>
                   
                   {/* Progress Bar */}
                   <div className="w-full max-w-md">
                     <div className="flex justify-between text-sm mb-2">
-                      <span className="text-dark-400">Progresso</span>
+                      <span className="text-gray-500">Progresso</span>
                       <span className="text-white">
                         {mergeAllProgress.current} / {mergeAllProgress.total}
                       </span>
                     </div>
-                    <div className="h-3 bg-dark-700 rounded-full overflow-hidden">
+                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
                       <div 
                         className="h-full bg-primary-500 rounded-full transition-all duration-300"
                         style={{ width: `${(mergeAllProgress.current / mergeAllProgress.total) * 100}%` }}
@@ -418,7 +418,7 @@ export function MergeContactsModal({
                     <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
                     <div className="text-sm">
                       <p className="text-yellow-400 font-medium">Selecione o contato principal</p>
-                      <p className="text-dark-300">Os outros serão mesclados nele e depois excluídos.</p>
+                      <p className="text-gray-600">Os outros serão mesclados nele e depois excluídos.</p>
                     </div>
                   </div>
                 </div>
@@ -431,8 +431,8 @@ export function MergeContactsModal({
                       className={`
                         w-full p-4 rounded-xl border transition-all text-left
                         ${primaryContactId === contact.id 
-                          ? 'bg-primary-500/10 border-primary-500' 
-                          : 'bg-dark-800 border-dark-700 hover:border-dark-600'}
+                          ? 'bg-brand-50 border-primary-500' 
+                          : 'bg-white border-gray-200 hover:border-gray-300'}
                       `}
                     >
                       <div className="flex items-start justify-between">
@@ -440,7 +440,7 @@ export function MergeContactsModal({
                           <p className="font-medium text-white">
                             {contact.first_name} {contact.last_name}
                           </p>
-                          <div className="flex flex-wrap gap-3 mt-2 text-sm text-dark-400">
+                          <div className="flex flex-wrap gap-3 mt-2 text-sm text-gray-500">
                             {contact.email && (
                               <span className="flex items-center gap-1">
                                 <Mail className="w-3 h-3" />
@@ -465,13 +465,13 @@ export function MergeContactsModal({
                           <p className="text-sm text-success-400 font-medium">
                             {formatCurrency(contact.total_spent || 0)}
                           </p>
-                          <p className="text-xs text-dark-400">
+                          <p className="text-xs text-gray-500">
                             {contact.total_orders || 0} pedidos
                           </p>
                         </div>
                       </div>
                       {primaryContactId === contact.id && (
-                        <div className="mt-3 flex items-center gap-2 text-primary-400">
+                        <div className="mt-3 flex items-center gap-2 text-brand-600">
                           <CheckCircle className="w-4 h-4" />
                           <span className="text-sm font-medium">Contato principal</span>
                         </div>
@@ -485,9 +485,9 @@ export function MergeContactsModal({
             {/* Step: Confirm */}
             {step === 'confirm' && selectedGroup && primaryContactId && (
               <div className="space-y-4">
-                <div className="p-4 bg-dark-800 rounded-xl">
-                  <h3 className="text-sm font-medium text-white mb-3">Resumo da mesclagem:</h3>
-                  <ul className="space-y-2 text-sm text-dark-300">
+                <div className="p-4 bg-white rounded-xl">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3">Resumo da mesclagem:</h3>
+                  <ul className="space-y-2 text-sm text-gray-600">
                     <li className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-green-400" />
                       {selectedGroup.contacts.length - 1} contato(s) serão mesclados
@@ -513,8 +513,8 @@ export function MergeContactsModal({
             {step === 'done' && mergeResult && (
               <div className="text-center py-8">
                 <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-white mb-2">Mesclagem concluída!</h3>
-                <p className="text-dark-400">{mergeResult.message}</p>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">Mesclagem concluída!</h3>
+                <p className="text-gray-500">{mergeResult.message}</p>
                 {mergeResult.failed > 0 && (
                   <p className="text-yellow-400 text-sm mt-2">
                     {mergeResult.failed} grupo(s) não puderam ser mesclados. Verifique manualmente.
@@ -525,17 +525,17 @@ export function MergeContactsModal({
           </div>
           
           {/* Footer */}
-          <div className="flex items-center justify-between p-6 border-t border-dark-700">
+          <div className="flex items-center justify-between p-6 border-t border-gray-200">
             {step === 'detect' && (
               <>
-                <button onClick={handleClose} className="px-4 py-2 text-dark-400 hover:text-white transition-colors">
+                <button onClick={handleClose} className="px-4 py-2 text-gray-500 hover:text-white transition-colors">
                   Fechar
                 </button>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={detectDuplicates}
                     disabled={loading}
-                    className="px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors"
+                    className="px-4 py-2 bg-gray-100 text-white rounded-lg hover:bg-gray-200 transition-colors"
                   >
                     Atualizar
                   </button>
@@ -559,7 +559,7 @@ export function MergeContactsModal({
               <>
                 <button 
                   onClick={() => setStep('detect')}
-                  className="px-4 py-2 text-dark-400 hover:text-white transition-colors"
+                  className="px-4 py-2 text-gray-500 hover:text-white transition-colors"
                 >
                   Voltar
                 </button>
@@ -577,7 +577,7 @@ export function MergeContactsModal({
               <>
                 <button 
                   onClick={() => setStep('select')}
-                  className="px-4 py-2 text-dark-400 hover:text-white transition-colors"
+                  className="px-4 py-2 text-gray-500 hover:text-white transition-colors"
                 >
                   Voltar
                 </button>
@@ -592,7 +592,7 @@ export function MergeContactsModal({
             )}
             
             {step === 'merging_all' && (
-              <p className="text-dark-400 text-sm w-full text-center">
+              <p className="text-gray-500 text-sm w-full text-center">
                 Por favor, aguarde enquanto processamos todos os grupos...
               </p>
             )}

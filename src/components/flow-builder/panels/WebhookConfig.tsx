@@ -166,13 +166,13 @@ export function WebhookConfig({
     return (
       <div className="space-y-4">
         {/* Create webhook section */}
-        <div className="p-4 rounded-xl bg-[#0a0a0a] border border-white/10">
+        <div className="p-4 rounded-xl bg-[#0a0a0a] border border-gray-200">
           <div className="flex items-start gap-3">
             <div className="p-2 rounded-lg bg-blue-500/15">
               <Webhook className="w-5 h-5 text-blue-400" />
             </div>
             <div className="flex-1">
-              <h4 className="text-sm font-medium text-white mb-1">
+              <h4 className="text-sm font-medium text-gray-900 mb-1">
                 Criar Webhook URL
               </h4>
               <p className="text-xs text-white/50 mb-3">
@@ -219,7 +219,7 @@ export function WebhookConfig({
         </div>
 
         {/* Instructions */}
-        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+        <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
           <h5 className="text-xs font-medium text-white/70 mb-2">Como funciona:</h5>
           <ul className="space-y-1 text-xs text-white/50">
             <li>• Receba dados via POST request</li>
@@ -238,7 +238,7 @@ export function WebhookConfig({
       <div className="space-y-2">
         <label className="text-xs text-white/60">Webhook URL</label>
         <div className="flex items-center gap-2">
-          <div className="flex-1 p-3 rounded-lg bg-[#0a0a0a] border border-white/10 font-mono text-xs text-white/80 overflow-x-auto whitespace-nowrap">
+          <div className="flex-1 p-3 rounded-lg bg-[#0a0a0a] border border-gray-200 font-mono text-xs text-white/80 overflow-x-auto whitespace-nowrap">
             {webhook?.url || config.webhookUrl}
           </div>
           <button
@@ -274,7 +274,7 @@ export function WebhookConfig({
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex-1 p-3 rounded-lg bg-[#0a0a0a] border border-white/10 font-mono text-xs text-white/80">
+            <div className="flex-1 p-3 rounded-lg bg-[#0a0a0a] border border-gray-200 font-mono text-xs text-white/80">
               {showSecret ? webhook.secret : '••••••••••••••••••••••••'}
             </div>
             <button
@@ -299,13 +299,13 @@ export function WebhookConfig({
 
       {/* Stats */}
       {webhook && (
-        <div className="flex items-center gap-4 p-3 rounded-lg bg-white/5 border border-white/10">
+        <div className="flex items-center gap-4 p-3 rounded-lg bg-gray-50 border border-gray-200">
           <div className="text-center">
-            <p className="text-lg font-semibold text-white">{webhook.receivedCount || 0}</p>
+            <p className="text-lg font-semibold text-gray-900">{webhook.receivedCount || 0}</p>
             <p className="text-[10px] text-white/40">Recebidos</p>
           </div>
           {webhook.lastReceivedAt && (
-            <div className="text-center border-l border-white/10 pl-4">
+            <div className="text-center border-l border-gray-200 pl-4">
               <p className="text-xs text-white/60">
                 {new Date(webhook.lastReceivedAt).toLocaleDateString('pt-BR', {
                   day: '2-digit',
@@ -321,7 +321,7 @@ export function WebhookConfig({
       )}
 
       {/* Usage Instructions */}
-      <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+      <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
         <h5 className="text-xs font-medium text-white/70 mb-2 flex items-center gap-2">
           <ExternalLink className="w-3 h-3" />
           Exemplo de uso
@@ -334,7 +334,7 @@ export function WebhookConfig({
       </div>
 
       {/* Variables available */}
-      <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+      <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
         <h5 className="text-xs font-medium text-white/70 mb-2">Variáveis disponíveis:</h5>
         <div className="space-y-1 font-mono text-[10px]">
           <p className="text-blue-400">{'{{trigger.webhook.payload}}'}</p>

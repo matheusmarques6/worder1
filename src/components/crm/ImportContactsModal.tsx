@@ -205,18 +205,18 @@ export function ImportContactsModal({
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-dark-900 rounded-2xl border border-dark-700 w-full max-w-3xl max-h-[90vh] overflow-hidden"
+          className="bg-white rounded-2xl border border-gray-200 w-full max-w-3xl max-h-[90vh] overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-dark-700">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary-500/20">
-                <Upload className="w-5 h-5 text-primary-400" />
+              <div className="p-2 rounded-lg bg-brand-100">
+                <Upload className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-white">Importar Contatos</h2>
-                <p className="text-sm text-dark-400">
+                <h2 className="text-xl font-semibold text-gray-900">Importar Contatos</h2>
+                <p className="text-sm text-gray-500">
                   {step === 'upload' && 'Faça upload de um arquivo CSV'}
                   {step === 'mapping' && 'Mapeie as colunas do arquivo'}
                   {step === 'options' && 'Configure as opções de importação'}
@@ -225,8 +225,8 @@ export function ImportContactsModal({
                 </p>
               </div>
             </div>
-            <button onClick={handleClose} className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-              <X className="w-5 h-5 text-dark-400" />
+            <button onClick={handleClose} className="p-2 hover:bg-white rounded-lg transition-colors">
+              <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
           
@@ -236,10 +236,10 @@ export function ImportContactsModal({
             {step === 'upload' && (
               <div className="text-center py-8">
                 <label className="cursor-pointer">
-                  <div className="w-full p-12 border-2 border-dashed border-dark-600 rounded-xl hover:border-primary-500/50 transition-colors">
-                    <FileSpreadsheet className="w-16 h-16 text-dark-400 mx-auto mb-4" />
+                  <div className="w-full p-12 border-2 border-dashed border-gray-300 rounded-xl hover:border-brand-400 transition-colors">
+                    <FileSpreadsheet className="w-16 h-16 text-gray-500 mx-auto mb-4" />
                     <p className="text-white font-medium mb-2">Arraste um arquivo CSV aqui</p>
-                    <p className="text-dark-400 text-sm mb-4">ou clique para selecionar</p>
+                    <p className="text-gray-500 text-sm mb-4">ou clique para selecionar</p>
                     <span className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">
                       Selecionar arquivo
                     </span>
@@ -252,9 +252,9 @@ export function ImportContactsModal({
                   />
                 </label>
                 
-                <div className="mt-6 text-left p-4 bg-dark-800 rounded-xl">
-                  <h3 className="text-sm font-medium text-white mb-2">Formato esperado:</h3>
-                  <ul className="text-sm text-dark-400 space-y-1">
+                <div className="mt-6 text-left p-4 bg-white rounded-xl">
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">Formato esperado:</h3>
+                  <ul className="text-sm text-gray-500 space-y-1">
                     <li>• Arquivo CSV separado por vírgula ou ponto-e-vírgula</li>
                     <li>• Primeira linha deve conter os nomes das colunas</li>
                     <li>• Cada contato deve ter email ou telefone</li>
@@ -266,27 +266,27 @@ export function ImportContactsModal({
             {/* Step: Mapping */}
             {step === 'mapping' && csvData && (
               <div className="space-y-6">
-                <div className="p-4 bg-dark-800 rounded-xl">
-                  <p className="text-sm text-dark-400">
+                <div className="p-4 bg-white rounded-xl">
+                  <p className="text-sm text-gray-500">
                     <strong className="text-white">{csvData.rows.length}</strong> contatos encontrados no arquivo
                   </p>
                 </div>
                 
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-white">Mapeamento de colunas:</h3>
+                  <h3 className="text-sm font-medium text-gray-900">Mapeamento de colunas:</h3>
                   {csvData.headers.map(header => (
-                    <div key={header} className="flex items-center gap-4 p-3 bg-dark-800 rounded-lg">
+                    <div key={header} className="flex items-center gap-4 p-3 bg-white rounded-lg">
                       <div className="flex-1">
                         <span className="text-sm text-white">{header}</span>
-                        <span className="text-xs text-dark-500 ml-2">
+                        <span className="text-xs text-gray-400 ml-2">
                           Ex: {csvData.rows[0]?.[header] || '-'}
                         </span>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-dark-500" />
+                      <ArrowRight className="w-4 h-4 text-gray-400" />
                       <select
                         value={columnMapping[header] || '_skip'}
                         onChange={(e) => handleMappingChange(header, e.target.value)}
-                        className="bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
+                        className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
                       >
                         {DB_COLUMNS.map(col => (
                           <option key={col.key} value={col.key}>{col.label}</option>
@@ -298,15 +298,15 @@ export function ImportContactsModal({
                 
                 {/* Preview */}
                 <div className="mt-6">
-                  <h3 className="text-sm font-medium text-white mb-3">Preview (primeiros 3 contatos):</h3>
-                  <div className="bg-dark-800 rounded-xl overflow-hidden">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3">Preview (primeiros 3 contatos):</h3>
+                  <div className="bg-white rounded-xl overflow-hidden">
                     <table className="w-full text-sm">
-                      <thead className="bg-dark-700">
+                      <thead className="bg-gray-100">
                         <tr>
                           {Object.entries(columnMapping)
                             .filter(([_, v]) => v !== '_skip')
                             .map(([_, dbCol]) => (
-                              <th key={dbCol} className="px-4 py-2 text-left text-dark-400 font-medium">
+                              <th key={dbCol} className="px-4 py-2 text-left text-gray-500 font-medium">
                                 {DB_COLUMNS.find(c => c.key === dbCol)?.label}
                               </th>
                             ))}
@@ -314,7 +314,7 @@ export function ImportContactsModal({
                       </thead>
                       <tbody>
                         {csvData.rows.slice(0, 3).map((row, index) => (
-                          <tr key={index} className="border-t border-dark-700">
+                          <tr key={index} className="border-t border-gray-200">
                             {Object.entries(columnMapping)
                               .filter(([_, v]) => v !== '_skip')
                               .map(([csvCol]) => (
@@ -335,26 +335,26 @@ export function ImportContactsModal({
             {step === 'options' && (
               <div className="space-y-6">
                 {/* Duplicatas */}
-                <div className="p-4 bg-dark-800 rounded-xl space-y-4">
-                  <h3 className="text-sm font-medium text-white">Tratamento de duplicados</h3>
+                <div className="p-4 bg-white rounded-xl space-y-4">
+                  <h3 className="text-sm font-medium text-gray-900">Tratamento de duplicados</h3>
                   
                   <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={options.skipDuplicates}
                       onChange={(e) => setOptions(prev => ({ ...prev, skipDuplicates: e.target.checked }))}
-                      className="w-4 h-4 rounded border-dark-600 bg-dark-700 text-primary-500 focus:ring-primary-500"
+                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500"
                     />
-                    <span className="text-sm text-dark-300">Ignorar contatos que já existem</span>
+                    <span className="text-sm text-gray-600">Ignorar contatos que já existem</span>
                   </label>
                   
                   {options.skipDuplicates && (
                     <div className="ml-7">
-                      <label className="text-xs text-dark-400 mb-2 block">Detectar duplicado por:</label>
+                      <label className="text-xs text-gray-500 mb-2 block">Detectar duplicado por:</label>
                       <select
                         value={options.duplicateField}
                         onChange={(e) => setOptions(prev => ({ ...prev, duplicateField: e.target.value as any }))}
-                        className="bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
+                        className="bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
                       >
                         <option value="email">Email</option>
                         <option value="phone">Telefone</option>
@@ -367,16 +367,16 @@ export function ImportContactsModal({
                       type="checkbox"
                       checked={options.updateExisting}
                       onChange={(e) => setOptions(prev => ({ ...prev, updateExisting: e.target.checked }))}
-                      className="w-4 h-4 rounded border-dark-600 bg-dark-700 text-primary-500 focus:ring-primary-500"
+                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500"
                     />
-                    <span className="text-sm text-dark-300">Atualizar contatos existentes</span>
+                    <span className="text-sm text-gray-600">Atualizar contatos existentes</span>
                   </label>
                 </div>
                 
                 {/* Tags */}
-                <div className="p-4 bg-dark-800 rounded-xl space-y-4">
-                  <h3 className="text-sm font-medium text-white">Tags padrão</h3>
-                  <p className="text-xs text-dark-400">Adicione tags a todos os contatos importados</p>
+                <div className="p-4 bg-white rounded-xl space-y-4">
+                  <h3 className="text-sm font-medium text-gray-900">Tags padrão</h3>
+                  <p className="text-xs text-gray-500">Adicione tags a todos os contatos importados</p>
                   
                   <div className="flex gap-2">
                     <input
@@ -385,7 +385,7 @@ export function ImportContactsModal({
                       onChange={(e) => setNewTag(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
                       placeholder="Digite uma tag..."
-                      className="flex-1 bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
+                      className="flex-1 bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
                     />
                     <button
                       onClick={handleAddTag}
@@ -400,13 +400,13 @@ export function ImportContactsModal({
                       {options.defaultTags.map(tag => (
                         <span
                           key={tag}
-                          className="flex items-center gap-1 px-3 py-1 bg-primary-500/20 text-primary-400 rounded-full text-sm"
+                          className="flex items-center gap-1 px-3 py-1 bg-brand-100 text-brand-600 rounded-full text-sm"
                         >
                           <Tag className="w-3 h-3" />
                           {tag}
                           <button
                             onClick={() => handleRemoveTag(tag)}
-                            className="ml-1 hover:text-primary-300"
+                            className="ml-1 hover:text-brand-500"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -421,9 +421,9 @@ export function ImportContactsModal({
             {/* Step: Importing */}
             {step === 'importing' && (
               <div className="text-center py-12">
-                <RefreshCw className="w-12 h-12 text-primary-400 animate-spin mx-auto mb-4" />
+                <RefreshCw className="w-12 h-12 text-brand-600 animate-spin mx-auto mb-4" />
                 <p className="text-white font-medium">Importando contatos...</p>
-                <p className="text-dark-400 text-sm">Isso pode levar alguns segundos</p>
+                <p className="text-gray-500 text-sm">Isso pode levar alguns segundos</p>
               </div>
             )}
             
@@ -433,29 +433,29 @@ export function ImportContactsModal({
                 {importResult.success ? (
                   <>
                     <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-white mb-2">Importação concluída!</h3>
-                    <p className="text-dark-400 mb-6">{importResult.message}</p>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Importação concluída!</h3>
+                    <p className="text-gray-500 mb-6">{importResult.message}</p>
                     
                     <div className="grid grid-cols-3 gap-4 max-w-md mx-auto">
-                      <div className="p-4 bg-dark-800 rounded-xl">
+                      <div className="p-4 bg-white rounded-xl">
                         <p className="text-2xl font-bold text-green-400">{importResult.summary?.inserted || 0}</p>
-                        <p className="text-xs text-dark-400">Importados</p>
+                        <p className="text-xs text-gray-500">Importados</p>
                       </div>
-                      <div className="p-4 bg-dark-800 rounded-xl">
+                      <div className="p-4 bg-white rounded-xl">
                         <p className="text-2xl font-bold text-yellow-400">{importResult.summary?.duplicates || 0}</p>
-                        <p className="text-xs text-dark-400">Duplicados</p>
+                        <p className="text-xs text-gray-500">Duplicados</p>
                       </div>
-                      <div className="p-4 bg-dark-800 rounded-xl">
+                      <div className="p-4 bg-white rounded-xl">
                         <p className="text-2xl font-bold text-red-400">{importResult.summary?.invalid || 0}</p>
-                        <p className="text-xs text-dark-400">Inválidos</p>
+                        <p className="text-xs text-gray-500">Inválidos</p>
                       </div>
                     </div>
                   </>
                 ) : (
                   <>
                     <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-white mb-2">Erro na importação</h3>
-                    <p className="text-dark-400">{importResult.error}</p>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Erro na importação</h3>
+                    <p className="text-gray-500">{importResult.error}</p>
                   </>
                 )}
               </div>
@@ -463,9 +463,9 @@ export function ImportContactsModal({
           </div>
           
           {/* Footer */}
-          <div className="flex items-center justify-between p-6 border-t border-dark-700">
+          <div className="flex items-center justify-between p-6 border-t border-gray-200">
             {step === 'upload' && (
-              <button onClick={handleClose} className="px-4 py-2 text-dark-400 hover:text-white transition-colors">
+              <button onClick={handleClose} className="px-4 py-2 text-gray-500 hover:text-white transition-colors">
                 Cancelar
               </button>
             )}
@@ -474,7 +474,7 @@ export function ImportContactsModal({
               <>
                 <button 
                   onClick={() => setStep('upload')}
-                  className="px-4 py-2 text-dark-400 hover:text-white transition-colors"
+                  className="px-4 py-2 text-gray-500 hover:text-white transition-colors"
                 >
                   Voltar
                 </button>
@@ -491,7 +491,7 @@ export function ImportContactsModal({
               <>
                 <button 
                   onClick={() => setStep('mapping')}
-                  className="px-4 py-2 text-dark-400 hover:text-white transition-colors"
+                  className="px-4 py-2 text-gray-500 hover:text-white transition-colors"
                 >
                   Voltar
                 </button>

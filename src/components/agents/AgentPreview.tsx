@@ -130,30 +130,30 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-dark-900">
+    <div className="h-full flex flex-col bg-white">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-dark-700">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
-            <Bot className="w-4 h-4 text-primary-400" />
+          <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center">
+            <Bot className="w-4 h-4 text-brand-600" />
           </div>
           <div>
-            <h4 className="text-sm font-medium text-white">Preview</h4>
-            <p className="text-xs text-dark-500">Teste o agente em tempo real</p>
+            <h4 className="text-sm font-medium text-gray-900">Preview</h4>
+            <p className="text-xs text-gray-400">Teste o agente em tempo real</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleClear}
-            className="p-2 rounded-lg bg-dark-800 text-dark-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-white text-gray-500 hover:text-white transition-colors"
             title="Limpar conversa"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg bg-dark-800 text-dark-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-white text-gray-500 hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -165,16 +165,16 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center mb-4">
-              <Sparkles className="w-8 h-8 text-primary-400" />
+              <Sparkles className="w-8 h-8 text-brand-600" />
             </div>
             <h4 className="text-white font-medium mb-1">Teste seu agente</h4>
-            <p className="text-sm text-dark-500 max-w-xs">
+            <p className="text-sm text-gray-400 max-w-xs">
               Envie uma mensagem para ver como o agente responde com as configurações atuais.
             </p>
 
             {/* Quick prompts */}
             <div className="mt-6 space-y-2">
-              <p className="text-xs text-dark-600">Sugestões:</p>
+              <p className="text-xs text-gray-400">Sugestões:</p>
               <div className="flex flex-wrap gap-2 justify-center">
                 {[
                   'Olá, tudo bem?',
@@ -188,7 +188,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
                       setInput(prompt)
                       inputRef.current?.focus()
                     }}
-                    className="px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-dark-400 hover:text-white rounded-full text-xs transition-colors"
+                    className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-500 hover:text-white rounded-full text-xs transition-colors"
                   >
                     {prompt}
                   </button>
@@ -230,7 +230,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
                     className={`inline-block px-4 py-2.5 rounded-2xl ${
                       message.role === 'user'
                         ? 'bg-blue-500 text-white rounded-br-md'
-                        : 'bg-dark-800 text-dark-200 rounded-bl-md'
+                        : 'bg-white text-gray-700 rounded-bl-md'
                     }`}
                   >
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
@@ -238,7 +238,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
 
                   {/* Metadata */}
                   {message.role === 'assistant' && message.metadata && (
-                    <div className="flex items-center gap-3 mt-1.5 text-xs text-dark-600">
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
                       {message.metadata.response_time_ms && (
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
@@ -273,10 +273,10 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
                 <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
                   <Bot className="w-4 h-4 text-purple-400" />
                 </div>
-                <div className="bg-dark-800 px-4 py-3 rounded-2xl rounded-bl-md">
+                <div className="bg-white px-4 py-3 rounded-2xl rounded-bl-md">
                   <div className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
-                    <span className="text-sm text-dark-400">Digitando...</span>
+                    <span className="text-sm text-gray-500">Digitando...</span>
                   </div>
                 </div>
               </motion.div>
@@ -306,7 +306,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
       </AnimatePresence>
 
       {/* Input */}
-      <div className="p-4 border-t border-dark-700">
+      <div className="p-4 border-t border-gray-200">
         <div className="flex gap-2">
           <input
             ref={inputRef}
@@ -316,7 +316,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
             onKeyPress={handleKeyPress}
             placeholder="Digite uma mensagem..."
             disabled={loading}
-            className="flex-1 px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50 disabled:opacity-50"
+            className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-brand-400 disabled:opacity-50"
           />
           <button
             onClick={handleSend}
@@ -332,7 +332,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
         </div>
 
         {/* Agent info */}
-        <div className="flex items-center justify-between mt-3 text-xs text-dark-600">
+        <div className="flex items-center justify-between mt-3 text-xs text-gray-400">
           <span>
             {agent.provider} • {agent.model}
           </span>

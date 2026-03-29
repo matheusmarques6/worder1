@@ -143,17 +143,17 @@ export default function ActiveIntegrationsSection({
     return (
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-4">
-          <Zap className="w-5 h-5 text-primary-400" />
-          <h2 className="text-lg font-semibold text-white">Suas Integrações</h2>
+          <Zap className="w-5 h-5 text-brand-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Suas Integrações</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2].map((i) => (
-            <div key={i} className="p-6 bg-dark-800/50 border border-dark-700 rounded-2xl animate-pulse">
+            <div key={i} className="p-6 bg-gray-50 border border-gray-200 rounded-2xl animate-pulse">
               <div className="flex items-start gap-4">
-                <div className="w-14 h-14 bg-dark-700 rounded-xl" />
+                <div className="w-14 h-14 bg-gray-100 rounded-xl" />
                 <div className="flex-1">
-                  <div className="h-5 bg-dark-700 rounded w-32 mb-2" />
-                  <div className="h-4 bg-dark-700 rounded w-48" />
+                  <div className="h-5 bg-gray-100 rounded w-32 mb-2" />
+                  <div className="h-4 bg-gray-100 rounded w-48" />
                 </div>
               </div>
             </div>
@@ -174,15 +174,15 @@ export default function ActiveIntegrationsSection({
         {/* Header da seção */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-primary-400" />
-            <h2 className="text-lg font-semibold text-white">Suas Integrações</h2>
-            <span className="px-2 py-0.5 bg-primary-500/20 text-primary-400 text-xs font-medium rounded-full">
+            <Zap className="w-5 h-5 text-brand-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Suas Integrações</h2>
+            <span className="px-2 py-0.5 bg-brand-100 text-brand-600 text-xs font-medium rounded-full">
               {activeCount} ativas
             </span>
           </div>
           <button
             onClick={fetchActiveIntegrations}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm text-dark-400 hover:text-white transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-500 hover:text-white transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Atualizar
@@ -278,10 +278,10 @@ function ShopifyActiveCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={`
-        relative bg-dark-800/50 border rounded-2xl p-5 transition-all duration-200
+        relative bg-gray-50 border rounded-2xl p-5 transition-all duration-200
         ${store.is_active 
           ? 'border-emerald-500/30 hover:border-emerald-500/50' 
-          : 'border-dark-700/50 hover:border-dark-600'
+          : 'border-gray-200 hover:border-gray-300'
         }
       `}
     >
@@ -302,19 +302,19 @@ function ShopifyActiveCard({
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-white truncate">Shopify</h3>
+            <h3 className="font-semibold text-gray-900 truncate">Shopify</h3>
           </div>
-          <p className="text-sm text-dark-400 truncate">
+          <p className="text-sm text-gray-500 truncate">
             {store.shop_name || store.shop_domain}
           </p>
           
           {/* Stats */}
           <div className="flex items-center gap-4 mt-3">
-            <div className="flex items-center gap-1 text-xs text-dark-400">
+            <div className="flex items-center gap-1 text-xs text-gray-500">
               <Users className="w-3.5 h-3.5" />
               <span>{store.total_customers_imported || 0} clientes</span>
             </div>
-            <div className="flex items-center gap-1 text-xs text-dark-400">
+            <div className="flex items-center gap-1 text-xs text-gray-500">
               <ShoppingBag className="w-3.5 h-3.5" />
               <span>{store.total_orders_imported || 0} pedidos</span>
             </div>
@@ -326,7 +326,7 @@ function ShopifyActiveCard({
       <div className="mt-4 flex items-center gap-2">
         <button
           onClick={onConfigure}
-          className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-xl text-sm text-white transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-white transition-colors"
         >
           <Settings className="w-4 h-4" />
           Configurar
@@ -353,7 +353,7 @@ function ShopifyActiveCard({
           href={`https://${store.shop_domain}/admin`}
           target="_blank"
           rel="noopener noreferrer"
-          className="p-2.5 rounded-xl bg-dark-700/50 text-dark-400 hover:text-white transition-colors"
+          className="p-2.5 rounded-xl bg-gray-100 text-gray-500 hover:text-white transition-colors"
           title="Abrir Admin do Shopify"
         >
           <ExternalLink className="w-4 h-4" />
@@ -379,10 +379,10 @@ function WhatsAppActiveCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={`
-        relative bg-dark-800/50 border rounded-2xl p-5 transition-all duration-200
+        relative bg-gray-50 border rounded-2xl p-5 transition-all duration-200
         ${config.is_active 
           ? 'border-emerald-500/30 hover:border-emerald-500/50' 
-          : 'border-dark-700/50 hover:border-dark-600'
+          : 'border-gray-200 hover:border-gray-300'
         }
       `}
     >
@@ -404,11 +404,11 @@ function WhatsAppActiveCard({
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-white truncate">WhatsApp Business</h3>
-          <p className="text-sm text-dark-400 truncate">
+          <h3 className="font-semibold text-gray-900 truncate">WhatsApp Business</h3>
+          <p className="text-sm text-gray-500 truncate">
             {config.business_name || config.phone_number}
           </p>
-          <p className="text-xs text-dark-500 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             {config.phone_number}
           </p>
         </div>
@@ -418,7 +418,7 @@ function WhatsAppActiveCard({
       <div className="mt-4">
         <button
           onClick={onConfigure}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-dark-700/50 hover:bg-dark-700 rounded-xl text-sm text-white transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-white transition-colors"
         >
           <Settings className="w-4 h-4" />
           Configurar
@@ -500,17 +500,17 @@ function ShopifyConfigModal({
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+        className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="p-6 border-b border-dark-700">
+        <div className="p-6 border-b border-gray-200">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-[#96bf48]/20 flex items-center justify-center">
               <ShoppingCart className="w-7 h-7 text-[#96bf48]" />
             </div>
             <div className="flex-1">
-              <h2 className="text-xl font-bold text-white">Shopify</h2>
-              <p className="text-sm text-dark-400">{store.shop_name || store.shop_domain}</p>
+              <h2 className="text-xl font-bold text-gray-900">Shopify</h2>
+              <p className="text-sm text-gray-500">{store.shop_name || store.shop_domain}</p>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green-500"></span>
@@ -524,18 +524,18 @@ function ShopifyConfigModal({
           
           {/* Informações da Loja */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-xl">
-              <span className="text-dark-400 text-sm">Domínio</span>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+              <span className="text-gray-500 text-sm">Domínio</span>
               <span className="text-white text-sm font-medium">{store.shop_domain}</span>
             </div>
             {store.shop_email && (
-              <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-xl">
-                <span className="text-dark-400 text-sm">Email</span>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <span className="text-gray-500 text-sm">Email</span>
                 <span className="text-white text-sm font-medium">{store.shop_email}</span>
               </div>
             )}
-            <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-xl">
-              <span className="text-dark-400 text-sm">Conectado em</span>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+              <span className="text-gray-500 text-sm">Conectado em</span>
               <span className="text-white text-sm font-medium">
                 {new Date(store.created_at).toLocaleDateString('pt-BR')}
               </span>
@@ -547,7 +547,7 @@ function ShopifyConfigModal({
             <button
               onClick={checkConnection}
               disabled={checkingConnection}
-              className="flex items-center gap-2 px-4 py-2 bg-dark-800 hover:bg-dark-700 rounded-xl text-white text-sm transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-100 rounded-xl text-white text-sm transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${checkingConnection ? 'animate-spin' : ''}`} />
               Verificar Conexão
@@ -567,12 +567,12 @@ function ShopifyConfigModal({
           </div>
 
           {/* Aviso sobre configurações */}
-          <div className="p-4 bg-primary-500/10 border border-primary-500/20 rounded-xl">
+          <div className="p-4 bg-brand-50 border border-primary-500/20 rounded-xl">
             <div className="flex items-start gap-3">
-              <Settings className="w-5 h-5 text-primary-400 mt-0.5 flex-shrink-0" />
+              <Settings className="w-5 h-5 text-brand-600 mt-0.5 flex-shrink-0" />
               <div>
                 <h4 className="font-medium text-white">Configurar Automações</h4>
-                <p className="text-sm text-dark-400 mt-1">
+                <p className="text-sm text-gray-500 mt-1">
                   As configurações de eventos, estágios e importação de clientes 
                   estão disponíveis na aba <strong>Automações</strong> dentro de cada Pipeline no CRM.
                 </p>
@@ -581,8 +581,8 @@ function ShopifyConfigModal({
           </div>
 
           {/* Webhook URL */}
-          <div className="p-4 bg-dark-800/50 rounded-xl">
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+          <div className="p-4 bg-gray-50 rounded-xl">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               URL do Webhook
             </label>
             <div className="flex gap-2">
@@ -590,22 +590,22 @@ function ShopifyConfigModal({
                 type="text"
                 readOnly
                 value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/integrations/shopify/webhook`}
-                className="flex-1 px-4 py-2 bg-dark-800 border border-dark-700 rounded-xl text-dark-400 text-sm"
+                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-500 text-sm"
               />
               <button
                 onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/integrations/shopify/webhook`)}
-                className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors text-sm"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors text-sm"
               >
                 Copiar
               </button>
             </div>
-            <p className="text-xs text-dark-500 mt-2">
+            <p className="text-xs text-gray-400 mt-2">
               Configure esta URL nas configurações de webhook do Shopify
             </p>
           </div>
 
           {/* Desconectar */}
-          <div className="pt-4 border-t border-dark-700">
+          <div className="pt-4 border-t border-gray-200">
             <button
               onClick={handleDisconnect}
               disabled={loading}
@@ -618,10 +618,10 @@ function ShopifyConfigModal({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-dark-700 flex items-center justify-end">
+        <div className="p-6 border-t border-gray-200 flex items-center justify-end">
           <button
             onClick={onClose}
-            className="px-6 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+            className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
           >
             Fechar
           </button>

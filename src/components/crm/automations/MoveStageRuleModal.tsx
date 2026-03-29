@@ -276,26 +276,26 @@ export function MoveStageRuleModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           onClick={e => e.stopPropagation()}
-          className="w-full max-w-xl bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+          className="w-full max-w-xl bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-5 border-b border-dark-700">
+          <div className="flex items-center justify-between p-5 border-b border-gray-200">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-500/20 rounded-lg">
                 <ArrowRight className="w-5 h-5 text-blue-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className="text-lg font-semibold text-gray-900">
                   {rule ? 'Editar Regra' : 'Nova Regra'} - Mover Estágio
                 </h2>
                 {sourceType && (
-                  <p className="text-sm text-dark-400">{SOURCE_NAMES[sourceType]}</p>
+                  <p className="text-sm text-gray-500">{SOURCE_NAMES[sourceType]}</p>
                 )}
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -312,7 +312,7 @@ export function MoveStageRuleModal({
 
             {/* Name */}
             <div>
-              <label className="block text-sm text-dark-400 mb-2">
+              <label className="block text-sm text-gray-500 mb-2">
                 Nome da Regra <span className="text-red-400">*</span>
               </label>
               <input
@@ -320,14 +320,14 @@ export function MoveStageRuleModal({
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Ex: Pedido pago → Ganho"
-                className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
 
             {/* Source Selection */}
             {!selectedSource && (
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Fonte <span className="text-red-400">*</span>
                 </label>
                 <div className="grid grid-cols-3 gap-3">
@@ -346,12 +346,12 @@ export function MoveStageRuleModal({
                           p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2
                           ${isSelected
                             ? 'border-blue-500 bg-blue-500/10'
-                            : 'border-dark-700 hover:border-dark-600 bg-dark-900'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
                           }
                         `}
                       >
-                        <IntIcon className={`w-6 h-6 ${isSelected ? 'text-blue-400' : 'text-dark-400'}`} />
-                        <span className={`text-sm ${isSelected ? 'text-blue-400' : 'text-dark-300'}`}>
+                        <IntIcon className={`w-6 h-6 ${isSelected ? 'text-blue-400' : 'text-gray-500'}`} />
+                        <span className={`text-sm ${isSelected ? 'text-blue-400' : 'text-gray-600'}`}>
                           {SOURCE_NAMES[integration.type]}
                         </span>
                       </button>
@@ -364,7 +364,7 @@ export function MoveStageRuleModal({
             {/* Event Selection */}
             {sourceType && (
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Evento que Dispara <span className="text-red-400">*</span>
                 </label>
                 <div className="space-y-2">
@@ -377,7 +377,7 @@ export function MoveStageRuleModal({
                         w-full p-4 rounded-xl border-2 transition-all text-left
                         ${triggerEvent === event.id
                           ? 'border-blue-500 bg-blue-500/10'
-                          : 'border-dark-700 hover:border-dark-600 bg-dark-900'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
                         }
                       `}
                     >
@@ -386,7 +386,7 @@ export function MoveStageRuleModal({
                           <p className={`font-medium ${triggerEvent === event.id ? 'text-blue-400' : 'text-white'}`}>
                             {event.label}
                           </p>
-                          <p className="text-sm text-dark-400">{event.description}</p>
+                          <p className="text-sm text-gray-500">{event.description}</p>
                         </div>
                         {triggerEvent === event.id && (
                           <CheckCircle className="w-5 h-5 text-blue-400" />
@@ -400,14 +400,14 @@ export function MoveStageRuleModal({
 
             {/* Pipeline & Stages */}
             <div>
-              <label className="block text-sm text-dark-400 mb-2">
+              <label className="block text-sm text-gray-500 mb-2">
                 Ação <span className="text-red-400">*</span>
               </label>
               
-              <div className="p-4 bg-dark-900 border border-dark-700 rounded-xl space-y-4">
+              <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-4">
                 {/* Pipeline */}
                 <div>
-                  <label className="block text-xs text-dark-500 mb-1">Pipeline</label>
+                  <label className="block text-xs text-gray-400 mb-1">Pipeline</label>
                   <div className="relative">
                     <select
                       value={pipelineId}
@@ -416,25 +416,25 @@ export function MoveStageRuleModal({
                         setFromStageId('')
                         setTargetStageId('')
                       }}
-                      className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500 transition-colors"
                     >
                       <option value="">Selecionar...</option>
                       {pipelines.map(p => (
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400 pointer-events-none" />
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
                   </div>
                 </div>
 
                 {/* From Stage */}
                 <div>
-                  <label className="block text-xs text-dark-500 mb-1">De Estágio (opcional)</label>
+                  <label className="block text-xs text-gray-400 mb-1">De Estágio (opcional)</label>
                   <div className="relative">
                     <select
                       value={fromStageId}
                       onChange={e => setFromStageId(e.target.value)}
-                      className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500 transition-colors"
                       disabled={!pipelineId}
                     >
                       <option value="">Qualquer estágio</option>
@@ -442,19 +442,19 @@ export function MoveStageRuleModal({
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400 pointer-events-none" />
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
                   </div>
-                  <p className="text-xs text-dark-500 mt-1">Deixe vazio para mover de qualquer estágio</p>
+                  <p className="text-xs text-gray-400 mt-1">Deixe vazio para mover de qualquer estágio</p>
                 </div>
 
                 {/* To Stage */}
                 <div>
-                  <label className="block text-xs text-dark-500 mb-1">Para Estágio <span className="text-red-400">*</span></label>
+                  <label className="block text-xs text-gray-400 mb-1">Para Estágio <span className="text-red-400">*</span></label>
                   <div className="relative">
                     <select
                       value={targetStageId}
                       onChange={e => setTargetStageId(e.target.value)}
-                      className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white appearance-none focus:outline-none focus:border-blue-500 transition-colors"
                       disabled={!pipelineId}
                     >
                       <option value="">Selecionar...</option>
@@ -462,7 +462,7 @@ export function MoveStageRuleModal({
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400 pointer-events-none" />
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
                   </div>
                 </div>
               </div>
@@ -470,7 +470,7 @@ export function MoveStageRuleModal({
 
             {/* Deal Status */}
             <div>
-              <label className="block text-sm text-dark-400 mb-2">
+              <label className="block text-sm text-gray-500 mb-2">
                 Status do Deal
               </label>
               <div className="space-y-2">
@@ -480,12 +480,12 @@ export function MoveStageRuleModal({
                   className={`
                     w-full p-3 rounded-xl border-2 transition-all text-left
                     ${dealStatus === 'keep'
-                      ? 'border-dark-500 bg-dark-700/50'
-                      : 'border-dark-700 hover:border-dark-600 bg-dark-900'
+                      ? 'border-gray-300 bg-gray-100'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
                     }
                   `}
                 >
-                  <p className={`font-medium ${dealStatus === 'keep' ? 'text-white' : 'text-dark-300'}`}>
+                  <p className={`font-medium ${dealStatus === 'keep' ? 'text-white' : 'text-gray-600'}`}>
                     Manter status atual
                   </p>
                 </button>
@@ -496,11 +496,11 @@ export function MoveStageRuleModal({
                     w-full p-3 rounded-xl border-2 transition-all text-left
                     ${dealStatus === 'won'
                       ? 'border-green-500 bg-green-500/10'
-                      : 'border-dark-700 hover:border-dark-600 bg-dark-900'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
                     }
                   `}
                 >
-                  <p className={`font-medium ${dealStatus === 'won' ? 'text-green-400' : 'text-dark-300'}`}>
+                  <p className={`font-medium ${dealStatus === 'won' ? 'text-green-400' : 'text-gray-600'}`}>
                     Marcar como Ganho (Won)
                   </p>
                 </button>
@@ -511,11 +511,11 @@ export function MoveStageRuleModal({
                     w-full p-3 rounded-xl border-2 transition-all text-left
                     ${dealStatus === 'lost'
                       ? 'border-red-500 bg-red-500/10'
-                      : 'border-dark-700 hover:border-dark-600 bg-dark-900'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
                     }
                   `}
                 >
-                  <p className={`font-medium ${dealStatus === 'lost' ? 'text-red-400' : 'text-dark-300'}`}>
+                  <p className={`font-medium ${dealStatus === 'lost' ? 'text-red-400' : 'text-gray-600'}`}>
                     Marcar como Perdido (Lost)
                   </p>
                 </button>
@@ -523,16 +523,16 @@ export function MoveStageRuleModal({
             </div>
 
             {/* Active Toggle */}
-            <div className="flex items-center justify-between p-4 bg-dark-900 border border-dark-700 rounded-xl">
+            <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl">
               <div>
                 <p className="text-sm text-white">Regra Ativa</p>
-                <p className="text-xs text-dark-500">Regras inativas não movem deals</p>
+                <p className="text-xs text-gray-400">Regras inativas não movem deals</p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsEnabled(!isEnabled)}
                 className={`relative w-12 h-6 rounded-full transition-colors ${
-                  isEnabled ? 'bg-green-500' : 'bg-dark-700'
+                  isEnabled ? 'bg-green-500' : 'bg-gray-100'
                 }`}
               >
                 <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${
@@ -543,11 +543,11 @@ export function MoveStageRuleModal({
           </form>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-5 border-t border-dark-700">
+          <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2.5 text-dark-300 hover:text-white transition-colors"
+              className="px-6 py-2.5 text-gray-600 hover:text-white transition-colors"
             >
               Cancelar
             </button>

@@ -29,7 +29,7 @@ export default function WhatsAppPage() {
       {/* Tabs - só mostra se tiver mais de uma aba */}
       {tabs.length > 1 && (
         <div className="px-6">
-          <div className="flex items-center gap-1 border-b border-dark-700/50">
+          <div className="flex items-center gap-1 border-b border-gray-200">
             {tabs.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -40,7 +40,7 @@ export default function WhatsAppPage() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`
                     relative flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors
-                    ${isActive ? 'text-primary-400' : 'text-dark-400 hover:text-white'}
+                    ${isActive ? 'text-brand-600' : 'text-gray-500 hover:text-white'}
                   `}
                 >
                   <Icon className="w-4 h-4" />

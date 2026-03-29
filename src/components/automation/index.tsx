@@ -118,7 +118,7 @@ const getNodeColor = (color: string) => {
     orange: { bg: 'bg-orange-500/20', border: 'border-orange-500/50', text: 'text-orange-400', glow: 'shadow-orange-500/30', solid: 'bg-orange-500' },
     violet: { bg: 'bg-violet-500/20', border: 'border-violet-500/50', text: 'text-violet-400', glow: 'shadow-violet-500/30', solid: 'bg-violet-500' },
     green: { bg: 'bg-green-500/20', border: 'border-green-500/50', text: 'text-green-400', glow: 'shadow-green-500/30', solid: 'bg-green-500' },
-    slate: { bg: 'bg-dark-600/20', border: 'border-dark-600/50', text: 'text-dark-500', glow: 'shadow-dark-600/30', solid: 'bg-dark-600' },
+    slate: { bg: 'bg-gray-200/20', border: 'border-gray-300/50', text: 'text-gray-400', glow: 'shadow-dark-600/30', solid: 'bg-gray-200' },
     indigo: { bg: 'bg-indigo-500/20', border: 'border-indigo-500/50', text: 'text-indigo-400', glow: 'shadow-indigo-500/30', solid: 'bg-indigo-500' },
     red: { bg: 'bg-red-500/20', border: 'border-red-500/50', text: 'text-red-400', glow: 'shadow-red-500/30', solid: 'bg-red-500' },
   };
@@ -237,7 +237,7 @@ function CanvasNode({
               isRunning && 'bg-amber-500',
               isSuccess && 'bg-green-500',
               isError && 'bg-red-500',
-              isSkipped && 'bg-dark-600',
+              isSkipped && 'bg-gray-200',
             )}>
               {isRunning && <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />}
               {isSuccess && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
@@ -248,7 +248,7 @@ function CanvasNode({
 
           {/* Duração se disponível */}
           {executionStatus?.duration && (isSuccess || isError) && (
-            <div className="absolute -bottom-2 right-2 z-20 px-1.5 py-0.5 bg-dark-800 border border-dark-700 rounded text-[9px] text-dark-400">
+            <div className="absolute -bottom-2 right-2 z-20 px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px] text-gray-500">
               {executionStatus.duration}ms
             </div>
           )}
@@ -268,8 +268,8 @@ function CanvasNode({
           <div className={cn(
             'p-4',
             isTrigger 
-              ? 'bg-dark-950/95 border-x-2 border-b-2 border-dark-800/50 rounded-b-2xl' 
-              : `bg-dark-900/90 border-2 ${colors.border} rounded-2xl`
+              ? 'bg-gray-50/95 border-x-2 border-b-2 border-gray-200 rounded-b-2xl' 
+              : `bg-white/90 border-2 ${colors.border} rounded-2xl`
           )}>
             <div className="flex items-center gap-3">
               {/* Ícone */}
@@ -286,7 +286,7 @@ function CanvasNode({
                   {node.data.label || nodeType?.label}
                 </p>
                 {node.data.description && (
-                  <p className="text-xs text-dark-500 truncate mt-0.5">
+                  <p className="text-xs text-gray-400 truncate mt-0.5">
                     {node.data.description}
                   </p>
                 )}
@@ -295,7 +295,7 @@ function CanvasNode({
 
             {/* Config Preview */}
             {node.data.config && Object.keys(node.data.config).length > 0 && (
-              <div className="mt-3 pt-3 border-t border-white/10">
+              <div className="mt-3 pt-3 border-t border-gray-200">
                 <div className="flex flex-wrap gap-1.5">
                   {node.data.config.tagName && (
                     <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] rounded-full">
@@ -303,7 +303,7 @@ function CanvasNode({
                     </span>
                   )}
                   {node.data.config.delay && (
-                    <span className="px-2 py-0.5 bg-dark-600/20 text-dark-400 text-[10px] rounded-full">
+                    <span className="px-2 py-0.5 bg-gray-200/20 text-gray-500 text-[10px] rounded-full">
                       ⏱ {node.data.config.delay.value} {node.data.config.delay.unit}
                     </span>
                   )}
@@ -706,7 +706,7 @@ function NodePalette({ onAddNode }: NodePaletteProps) {
             >
               <div className="flex items-center gap-2">
                 <section.icon className="w-4 h-4 text-[#666666]" />
-                <span className="text-sm font-medium text-white">{section.label}</span>
+                <span className="text-sm font-medium text-gray-900">{section.label}</span>
               </div>
               <ChevronRight
                 className={cn(
@@ -897,12 +897,12 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
   // Componente de Select estilizado
   const StyledSelect = ({ label, value, onChange, options, placeholder, disabled = false }: any) => (
     <div>
-      <label className="text-sm font-medium text-white mb-2 block">{label}</label>
+      <label className="text-sm font-medium text-gray-900 mb-2 block">{label}</label>
       <select
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50 disabled:opacity-50"
+        className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-400 disabled:opacity-50"
       >
         <option value="">{placeholder || 'Selecionar...'}</option>
         {options.map((opt: any) => (
@@ -957,7 +957,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
             <Icon className={cn('w-4 h-4', colors.text)} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white">{nodeType?.label}</h3>
+            <h3 className="text-sm font-semibold text-gray-900">{nodeType?.label}</h3>
             <p className="text-xs text-[#555555]">Configurações</p>
           </div>
         </div>
@@ -1019,7 +1019,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
           <div className="space-y-3">
             <CredentialAlert service="Shopify" configPath="/settings?tab=integrations" integrationId="shopify" />
             <div>
-              <label className="text-sm font-medium text-white mb-2 block">Tempo de abandono</label>
+              <label className="text-sm font-medium text-gray-900 mb-2 block">Tempo de abandono</label>
               <div className="flex gap-2">
                 <Input
                   type="number"
@@ -1146,7 +1146,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {node.type === 'trigger_webhook' && (
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium text-white mb-2 block">URL do Webhook</label>
+              <label className="text-sm font-medium text-gray-900 mb-2 block">URL do Webhook</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -1496,7 +1496,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {/* Logic: Aguardar */}
         {node.type === 'logic_delay' && (
           <div className="space-y-3">
-            <label className="text-sm font-medium text-white">Tempo de espera</label>
+            <label className="text-sm font-medium text-gray-900">Tempo de espera</label>
             <div className="flex gap-2">
               <Input
                 type="number"
@@ -1521,7 +1521,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                     },
                   })
                 }
-                className="bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50"
+                className="bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-400"
               >
                 <option value="minutes">Minutos</option>
                 <option value="hours">Horas</option>
@@ -1567,7 +1567,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {node.type === 'logic_split' && (
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium text-white mb-2 block">
+              <label className="text-sm font-medium text-gray-900 mb-2 block">
                 Divisão: {node.data.config?.splitPercentage || 50}% / {100 - (node.data.config?.splitPercentage || 50)}%
               </label>
               <input
@@ -1626,7 +1626,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
       </div>
 
       {/* Botão de excluir */}
-      <div className="p-4 border-t border-white/10">
+      <div className="p-4 border-t border-gray-200">
         <Button variant="ghost" className="w-full text-red-400 hover:bg-red-500/10" onClick={onDelete}>
           <Trash2 className="w-4 h-4 mr-2" />
           Excluir bloco
@@ -2145,7 +2145,7 @@ export function AutomationCanvas({
             type="text"
             value={automationName}
             onChange={(e) => onNameChange(e.target.value)}
-            className="bg-transparent border-none text-lg font-semibold text-white focus:outline-none focus:ring-2 focus:ring-primary/50 rounded px-2 py-1 min-w-[200px]"
+            className="bg-transparent border-none text-lg font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/50 rounded px-2 py-1 min-w-[200px]"
             placeholder="Nome da automação"
           />
           
@@ -2330,7 +2330,7 @@ export function AutomationCanvas({
                 <div className="w-16 h-16 rounded-2xl bg-[#111111] border border-[#222222] flex items-center justify-center mx-auto mb-4">
                   <Zap className="w-8 h-8 text-[#444444]" />
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-2">Canvas vazio</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Canvas vazio</h3>
                 <p className="text-[#555555] text-sm">
                   Arraste um gatilho da sidebar para começar
                 </p>
@@ -2341,7 +2341,7 @@ export function AutomationCanvas({
           {/* Mensagem de ajuda quando conectando */}
           {connectingFrom && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-              <div className="bg-[#111111] border border-primary-500/50 rounded-lg px-4 py-2 shadow-lg">
+              <div className="bg-[#111111] border border-brand-400 rounded-lg px-4 py-2 shadow-lg">
                 <p className="text-sm text-white">
                   🔗 Clique no <span className="text-emerald-400 font-semibold">ponto verde</span> de outro bloco para conectar
                 </p>

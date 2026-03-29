@@ -211,7 +211,7 @@ export function AutomationRulesTab({
   if (loading || loadingPipelines) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+        <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
       </div>
     )
   }
@@ -221,11 +221,11 @@ export function AutomationRulesTab({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Zap className="w-5 h-5 text-primary-400" />
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-brand-600" />
             Regras de Automação
           </h3>
-          <p className="text-sm text-dark-400 mt-1">
+          <p className="text-sm text-gray-500 mt-1">
             Mova deals automaticamente quando eventos acontecem na Shopify
           </p>
         </div>
@@ -258,12 +258,12 @@ export function AutomationRulesTab({
 
       {/* Rules List */}
       {rules.length === 0 ? (
-        <div className="p-8 bg-dark-800/50 border border-dark-700 rounded-2xl text-center">
-          <Zap className="w-12 h-12 text-dark-600 mx-auto mb-4" />
+        <div className="p-8 bg-gray-50 border border-gray-200 rounded-2xl text-center">
+          <Zap className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h4 className="text-lg font-medium text-white mb-2">
             Nenhuma regra configurada
           </h4>
-          <p className="text-sm text-dark-400 mb-4">
+          <p className="text-sm text-gray-500 mb-4">
             Crie regras para mover deals automaticamente quando pedidos forem pagos, enviados, etc.
           </p>
           <button
@@ -286,8 +286,8 @@ export function AutomationRulesTab({
             return (
               <div
                 key={rule.id}
-                className={`p-4 bg-dark-800/50 border rounded-2xl transition-colors ${
-                  rule.is_active ? 'border-dark-700' : 'border-dark-800 opacity-60'
+                className={`p-4 bg-gray-50 border rounded-2xl transition-colors ${
+                  rule.is_active ? 'border-gray-200' : 'border-gray-200 opacity-60'
                 }`}
               >
                 <div className="flex items-start justify-between">
@@ -307,13 +307,13 @@ export function AutomationRulesTab({
                     <div className="flex items-center gap-2 text-sm">
                       {rule.from_pipeline && (
                         <>
-                          <span className="text-dark-400">SE deal em</span>
-                          <span className="px-2 py-0.5 bg-dark-700 rounded text-white">
+                          <span className="text-gray-500">SE deal em</span>
+                          <span className="px-2 py-0.5 bg-gray-100 rounded text-white">
                             {rule.from_pipeline.name}
                           </span>
                           {rule.from_stage && (
                             <>
-                              <span className="text-dark-400">→</span>
+                              <span className="text-gray-500">→</span>
                               <span 
                                 className="px-2 py-0.5 rounded text-white"
                                 style={{ backgroundColor: rule.from_stage.color + '40' }}
@@ -326,20 +326,20 @@ export function AutomationRulesTab({
                       )}
                       
                       {!rule.from_pipeline && (
-                        <span className="text-dark-400">Qualquer deal</span>
+                        <span className="text-gray-500">Qualquer deal</span>
                       )}
                       
-                      <ArrowRight className="w-4 h-4 text-primary-400 mx-2" />
+                      <ArrowRight className="w-4 h-4 text-brand-600 mx-2" />
                       
                       {rule.to_pipeline && (
                         <>
-                          <span className="text-dark-400">mover para</span>
-                          <span className="px-2 py-0.5 bg-dark-700 rounded text-white">
+                          <span className="text-gray-500">mover para</span>
+                          <span className="px-2 py-0.5 bg-gray-100 rounded text-white">
                             {rule.to_pipeline.name}
                           </span>
                           {rule.to_stage && (
                             <>
-                              <span className="text-dark-400">→</span>
+                              <span className="text-gray-500">→</span>
                               <span 
                                 className="px-2 py-0.5 rounded text-white"
                                 style={{ backgroundColor: rule.to_stage.color + '40' }}
@@ -374,17 +374,17 @@ export function AutomationRulesTab({
                         onChange={() => handleToggleRule(rule)}
                         className="sr-only peer"
                       />
-                      <div className="w-9 h-5 bg-dark-600 rounded-full peer peer-checked:bg-green-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
+                      <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:bg-green-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
                     </label>
                     <button
                       onClick={() => handleEditRule(rule)}
-                      className="p-2 hover:bg-dark-700 rounded-lg text-dark-400 hover:text-white transition-colors"
+                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white transition-colors"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteRule(rule.id)}
-                      className="p-2 hover:bg-red-500/20 rounded-lg text-dark-400 hover:text-red-400 transition-colors"
+                      className="p-2 hover:bg-red-500/20 rounded-lg text-gray-500 hover:text-red-400 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -485,16 +485,16 @@ function RuleModal({
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+        className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-dark-700">
-          <h3 className="text-lg font-semibold text-white">
+        <div className="flex items-center justify-between p-5 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">
             {rule ? 'Editar Regra' : 'Nova Regra de Automação'}
           </h3>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-dark-700 rounded-lg text-dark-400 hover:text-white transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -504,7 +504,7 @@ function RuleModal({
         <div className="p-5 space-y-5 max-h-[60vh] overflow-y-auto">
           {/* Rule Name */}
           <div>
-            <label className="block text-sm text-dark-400 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               Nome da Regra *
             </label>
             <input
@@ -512,19 +512,19 @@ function RuleModal({
               value={formData.ruleName}
               onChange={(e) => setFormData(prev => ({ ...prev, ruleName: e.target.value }))}
               placeholder="Ex: Mover para Enviado quando pago"
-              className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
             />
           </div>
 
           {/* Trigger Event */}
           <div>
-            <label className="block text-sm text-dark-400 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               Quando acontecer *
             </label>
             <select
               value={formData.triggerEvent}
               onChange={(e) => setFormData(prev => ({ ...prev, triggerEvent: e.target.value }))}
-              className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
             >
               <option value="customers/create">👤 Cliente Criado</option>
               <option value="orders/create">🛒 Pedido Criado</option>
@@ -535,8 +535,8 @@ function RuleModal({
           </div>
 
           {/* From Condition */}
-          <div className="p-4 bg-dark-800/50 border border-dark-700 rounded-xl">
-            <label className="block text-sm font-medium text-white mb-3">
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+            <label className="block text-sm font-medium text-gray-900 mb-3">
               SE o deal estiver em (opcional)
             </label>
             <div className="grid grid-cols-2 gap-3">
@@ -548,7 +548,7 @@ function RuleModal({
                     fromPipelineId: e.target.value,
                     fromStageId: '',
                   }))}
-                  className="w-full px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
                 >
                   <option value="">Qualquer pipeline</option>
                   {pipelines.map(p => (
@@ -561,7 +561,7 @@ function RuleModal({
                   value={formData.fromStageId}
                   onChange={(e) => setFormData(prev => ({ ...prev, fromStageId: e.target.value }))}
                   disabled={!formData.fromPipelineId}
-                  className="w-full px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50"
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50"
                 >
                   <option value="">Qualquer estágio</option>
                   {getStages(formData.fromPipelineId).map(s => (
@@ -573,8 +573,8 @@ function RuleModal({
           </div>
 
           {/* To Action */}
-          <div className="p-4 bg-primary-500/10 border border-primary-500/20 rounded-xl">
-            <label className="block text-sm font-medium text-white mb-3">
+          <div className="p-4 bg-brand-50 border border-primary-500/20 rounded-xl">
+            <label className="block text-sm font-medium text-gray-900 mb-3">
               ENTÃO mover para *
             </label>
             <div className="grid grid-cols-2 gap-3">
@@ -586,7 +586,7 @@ function RuleModal({
                     toPipelineId: e.target.value,
                     toStageId: '',
                   }))}
-                  className="w-full px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
                 >
                   <option value="">Selecione pipeline</option>
                   {pipelines.map(p => (
@@ -599,7 +599,7 @@ function RuleModal({
                   value={formData.toStageId}
                   onChange={(e) => setFormData(prev => ({ ...prev, toStageId: e.target.value }))}
                   disabled={!formData.toPipelineId}
-                  className="w-full px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50"
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50"
                 >
                   <option value="">Selecione estágio</option>
                   {getStages(formData.toPipelineId).map(s => (
@@ -610,7 +610,7 @@ function RuleModal({
             </div>
 
             {/* Additional Actions */}
-            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-dark-700">
+            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-200">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -620,7 +620,7 @@ function RuleModal({
                     markAsWon: e.target.checked,
                     markAsLost: e.target.checked ? false : prev.markAsLost,
                   }))}
-                  className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-green-500 focus:ring-green-500"
+                  className="w-4 h-4 rounded border-gray-300 bg-white text-green-500 focus:ring-green-500"
                 />
                 <span className="text-sm text-white">Marcar como Ganho</span>
               </label>
@@ -633,7 +633,7 @@ function RuleModal({
                     markAsLost: e.target.checked,
                     markAsWon: e.target.checked ? false : prev.markAsWon,
                   }))}
-                  className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-red-500 focus:ring-red-500"
+                  className="w-4 h-4 rounded border-gray-300 bg-white text-red-500 focus:ring-red-500"
                 />
                 <span className="text-sm text-white">Marcar como Perdido</span>
               </label>
@@ -642,11 +642,11 @@ function RuleModal({
 
           {/* Min Value Filter */}
           <div>
-            <label className="block text-sm text-dark-400 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               Valor mínimo do pedido (opcional)
             </label>
             <div className="flex items-center gap-2">
-              <span className="text-dark-400">R$</span>
+              <span className="text-gray-500">R$</span>
               <input
                 type="number"
                 value={formData.minOrderValue}
@@ -654,7 +654,7 @@ function RuleModal({
                 placeholder="0,00"
                 min="0"
                 step="0.01"
-                className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                className="flex-1 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
               />
             </div>
           </div>
@@ -669,10 +669,10 @@ function RuleModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-5 border-t border-dark-700">
+        <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="px-5 py-2 text-dark-400 hover:text-white transition-colors"
+            className="px-5 py-2 text-gray-500 hover:text-white transition-colors"
           >
             Cancelar
           </button>

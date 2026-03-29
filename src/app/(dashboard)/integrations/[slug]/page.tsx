@@ -131,7 +131,7 @@ export default function IntegrationConfigPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-lg text-dark-300">{error || 'Integração não encontrada'}</p>
+          <p className="text-lg text-gray-600">{error || 'Integração não encontrada'}</p>
           <button
             onClick={() => router.push('/integrations')}
             className="mt-4 px-4 py-2 bg-primary-500 rounded-xl text-white"
@@ -150,13 +150,13 @@ export default function IntegrationConfigPage() {
         return (
           <div className="space-y-6">
             {/* Tabs */}
-            <div className="flex gap-2 p-1 bg-dark-800 rounded-xl w-fit">
+            <div className="flex gap-2 p-1 bg-white rounded-xl w-fit">
               <button
                 onClick={() => setActiveTab('cloud')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === 'cloud'
                     ? 'bg-primary-500 text-white'
-                    : 'text-dark-400 hover:text-white'
+                    : 'text-gray-500 hover:text-white'
                 }`}
               >
                 API Oficial (Cloud)
@@ -166,7 +166,7 @@ export default function IntegrationConfigPage() {
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === 'evolution'
                     ? 'bg-primary-500 text-white'
-                    : 'text-dark-400 hover:text-white'
+                    : 'text-gray-500 hover:text-white'
                 }`}
               >
                 QR Code (Evolution)
@@ -174,7 +174,7 @@ export default function IntegrationConfigPage() {
             </div>
 
             {/* Content */}
-            <div className="bg-dark-800/50 border border-dark-700 rounded-2xl p-6">
+            <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
               {activeTab === 'cloud' ? (
                 <WhatsAppCloudConnect />
               ) : (
@@ -187,7 +187,7 @@ export default function IntegrationConfigPage() {
       // Adicione outros casos conforme necessário
       case 'shopify':
         return (
-          <div className="bg-dark-800/50 border border-dark-700 rounded-2xl p-6">
+          <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
             <ShopifyConnect />
           </div>
         )
@@ -200,7 +200,7 @@ export default function IntegrationConfigPage() {
       default:
         // Renderizar configuração genérica via webhook
         return (
-          <div className="bg-dark-800/50 border border-dark-700 rounded-2xl p-6 space-y-6">
+          <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6 space-y-6">
             <div className="flex items-center gap-4 mb-6">
               <div
                 className="w-16 h-16 rounded-xl flex items-center justify-center"
@@ -215,14 +215,14 @@ export default function IntegrationConfigPage() {
                 )}
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">{integration.name}</h2>
-                <p className="text-dark-400">{integration.short_description}</p>
+                <h2 className="text-xl font-bold text-gray-900">{integration.name}</h2>
+                <p className="text-gray-500">{integration.short_description}</p>
               </div>
             </div>
 
             {!installed ? (
               <div className="text-center py-8">
-                <p className="text-dark-400 mb-4">
+                <p className="text-gray-500 mb-4">
                   Clique em instalar para começar a configurar esta integração.
                 </p>
                 <button
@@ -236,7 +236,7 @@ export default function IntegrationConfigPage() {
               <div className="space-y-6">
                 {/* Status */}
                 <div className="flex items-center gap-3">
-                  <span className="text-dark-400">Status:</span>
+                  <span className="text-gray-500">Status:</span>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                     installed.status === 'active'
                       ? 'bg-emerald-500/20 text-emerald-400'
@@ -251,7 +251,7 @@ export default function IntegrationConfigPage() {
 
                 {/* Webhook URL */}
                 <div>
-                  <label className="block text-sm font-medium text-dark-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     URL do Webhook
                   </label>
                   <div className="flex gap-2">
@@ -259,11 +259,11 @@ export default function IntegrationConfigPage() {
                       type="text"
                       readOnly
                       value={`${window.location.origin}/api/webhooks/${installed.id}`}
-                      className="flex-1 px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-dark-300 text-sm font-mono"
+                      className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-600 text-sm font-mono"
                     />
                     <button
                       onClick={copyWebhookUrl}
-                      className="px-4 py-3 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors flex items-center gap-2"
+                      className="px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors flex items-center gap-2"
                     >
                       {copied ? (
                         <>
@@ -278,15 +278,15 @@ export default function IntegrationConfigPage() {
                       )}
                     </button>
                   </div>
-                  <p className="text-xs text-dark-500 mt-2">
+                  <p className="text-xs text-gray-400 mt-2">
                     Configure esta URL nas configurações de webhook do {integration.name}
                   </p>
                 </div>
 
                 {/* Instructions */}
-                <div className="p-4 bg-dark-900 rounded-xl">
+                <div className="p-4 bg-white rounded-xl">
                   <h3 className="font-semibold text-white mb-3">Como configurar:</h3>
-                  <ol className="space-y-2 text-sm text-dark-400 list-decimal list-inside">
+                  <ol className="space-y-2 text-sm text-gray-500 list-decimal list-inside">
                     <li>Acesse as configurações do {integration.name}</li>
                     <li>Vá para a seção de Webhooks ou Integrações</li>
                     <li>Cole a URL do webhook acima</li>
@@ -298,7 +298,7 @@ export default function IntegrationConfigPage() {
                 {/* Documentation Link */}
                 <a
                   href="#"
-                  className="inline-flex items-center gap-2 text-primary-400 hover:text-primary-300 text-sm"
+                  className="inline-flex items-center gap-2 text-brand-600 hover:text-brand-500 text-sm"
                 >
                   <ExternalLink className="w-4 h-4" />
                   Ver documentação completa
@@ -311,21 +311,21 @@ export default function IntegrationConfigPage() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-900 p-6">
+    <div className="min-h-screen bg-white p-6">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <button
             onClick={() => router.push('/integrations')}
-            className="p-2 hover:bg-dark-800 rounded-xl transition-colors"
+            className="p-2 hover:bg-white rounded-xl transition-colors"
           >
-            <ArrowLeft className="w-5 h-5 text-dark-400" />
+            <ArrowLeft className="w-5 h-5 text-gray-500" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-2xl font-bold text-gray-900">
               Configurar {integration.name}
             </h1>
-            <p className="text-dark-400">{integration.short_description}</p>
+            <p className="text-gray-500">{integration.short_description}</p>
           </div>
         </div>
 

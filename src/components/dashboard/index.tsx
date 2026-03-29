@@ -83,8 +83,8 @@ export function StatCard({
         
         <div className="relative flex items-start justify-between">
           <div>
-            <p className="text-dark-400 text-sm font-medium mb-1">{title}</p>
-            <p className="text-3xl font-bold text-dark-50 tracking-tight">
+            <p className="text-gray-500 text-sm font-medium mb-1">{title}</p>
+            <p className="text-3xl font-bold text-gray-900 tracking-tight">
               {formattedValue}
             </p>
             {change !== undefined && (
@@ -102,7 +102,7 @@ export function StatCard({
                   )}
                   {Math.abs(change).toFixed(1)}%
                 </span>
-                <span className="text-dark-500 text-sm">{changeLabel}</span>
+                <span className="text-gray-400 text-sm">{changeLabel}</span>
               </div>
             )}
           </div>
@@ -138,16 +138,16 @@ export function RevenueChart({ data }: RevenueChartProps) {
     if (!active || !payload) return null
 
     return (
-      <div className="bg-dark-800 border border-dark-600 rounded-xl p-4 shadow-xl">
-        <p className="text-dark-300 text-sm mb-2">{label}</p>
+      <div className="bg-white border border-gray-300 rounded-xl p-4 shadow-xl">
+        <p className="text-gray-600 text-sm mb-2">{label}</p>
         {payload.map((entry: any, index: number) => (
           <div key={index} className="flex items-center gap-2">
             <span
               className="w-3 h-3 rounded-full"
               style={{ backgroundColor: entry.color }}
             />
-            <span className="text-dark-400 text-sm">{entry.name}:</span>
-            <span className="text-dark-100 font-medium">
+            <span className="text-gray-500 text-sm">{entry.name}:</span>
+            <span className="text-gray-800 font-medium">
               {formatCurrency(entry.value)}
             </span>
           </div>
@@ -165,17 +165,17 @@ export function RevenueChart({ data }: RevenueChartProps) {
       <Card variant="glass" className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-lg font-semibold text-dark-100">Receita</h3>
-            <p className="text-dark-400 text-sm">E-mail Marketing vs Total</p>
+            <h3 className="text-lg font-semibold text-gray-800">Receita</h3>
+            <p className="text-gray-500 text-sm">E-mail Marketing vs Total</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-primary-500" />
-              <span className="text-dark-400 text-sm">E-mail</span>
+              <span className="text-gray-500 text-sm">E-mail</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-accent-500" />
-              <span className="text-dark-400 text-sm">Total</span>
+              <span className="text-gray-500 text-sm">Total</span>
             </div>
           </div>
         </div>
@@ -260,10 +260,10 @@ export function TopCampaigns({ campaigns }: TopCampaignsProps) {
       <Card variant="glass">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-lg font-semibold text-dark-100">Top Campanhas</h3>
-            <p className="text-dark-400 text-sm">Últimos 30 dias</p>
+            <h3 className="text-lg font-semibold text-gray-800">Top Campanhas</h3>
+            <p className="text-gray-500 text-sm">Últimos 30 dias</p>
           </div>
-          <button className="text-primary-400 text-sm font-medium hover:text-primary-300 transition-colors">
+          <button className="text-brand-600 text-sm font-medium hover:text-brand-500 transition-colors">
             Ver todas
           </button>
         </div>
@@ -271,17 +271,17 @@ export function TopCampaigns({ campaigns }: TopCampaignsProps) {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-dark-700">
-                <th className="text-left text-dark-400 text-xs font-medium uppercase tracking-wider pb-3">
+              <tr className="border-b border-gray-200">
+                <th className="text-left text-gray-500 text-xs font-medium uppercase tracking-wider pb-3">
                   Campanha
                 </th>
-                <th className="text-right text-dark-400 text-xs font-medium uppercase tracking-wider pb-3">
+                <th className="text-right text-gray-500 text-xs font-medium uppercase tracking-wider pb-3">
                   Receita
                 </th>
-                <th className="text-right text-dark-400 text-xs font-medium uppercase tracking-wider pb-3">
+                <th className="text-right text-gray-500 text-xs font-medium uppercase tracking-wider pb-3">
                   Abertura
                 </th>
-                <th className="text-right text-dark-400 text-xs font-medium uppercase tracking-wider pb-3">
+                <th className="text-right text-gray-500 text-xs font-medium uppercase tracking-wider pb-3">
                   Cliques
                 </th>
               </tr>
@@ -290,25 +290,25 @@ export function TopCampaigns({ campaigns }: TopCampaignsProps) {
               {campaigns.map((campaign) => (
                 <tr
                   key={campaign.id}
-                  className="group hover:bg-dark-800/30 transition-colors"
+                  className="group hover:bg-gray-50 transition-colors"
                 >
                   <td className="py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center">
-                        <Mail className="w-5 h-5 text-primary-400" />
+                        <Mail className="w-5 h-5 text-brand-600" />
                       </div>
                       <div>
-                        <p className="text-dark-100 font-medium group-hover:text-primary-400 transition-colors">
+                        <p className="text-gray-800 font-medium group-hover:text-brand-600 transition-colors">
                           {campaign.name}
                         </p>
-                        <p className="text-dark-500 text-sm">
+                        <p className="text-gray-400 text-sm">
                           {formatNumber(campaign.recipients)} envios
                         </p>
                       </div>
                     </div>
                   </td>
                   <td className="py-4 text-right">
-                    <span className="text-dark-100 font-semibold">
+                    <span className="text-gray-800 font-semibold">
                       {formatCurrency(campaign.revenue)}
                     </span>
                   </td>
@@ -358,10 +358,10 @@ export function FlowPerformance({ flows }: FlowPerformanceProps) {
       <Card variant="glass">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-lg font-semibold text-dark-100">Performance dos Flows</h3>
-            <p className="text-dark-400 text-sm">Klaviyo automations</p>
+            <h3 className="text-lg font-semibold text-gray-800">Performance dos Flows</h3>
+            <p className="text-gray-500 text-sm">Klaviyo automations</p>
           </div>
-          <button className="p-2 rounded-lg hover:bg-dark-800 text-dark-400 transition-colors">
+          <button className="p-2 rounded-lg hover:bg-white text-gray-500 transition-colors">
             <MoreHorizontal className="w-5 h-5" />
           </button>
         </div>
@@ -370,37 +370,37 @@ export function FlowPerformance({ flows }: FlowPerformanceProps) {
           {flows.map((flow) => (
             <div
               key={flow.id}
-              className="p-4 rounded-xl bg-dark-800/30 hover:bg-dark-800/50 transition-colors group cursor-pointer"
+              className="p-4 rounded-xl bg-gray-50 hover:bg-gray-50 transition-colors group cursor-pointer"
             >
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h4 className="text-dark-100 font-medium group-hover:text-primary-400 transition-colors">
+                    <h4 className="text-gray-800 font-medium group-hover:text-brand-600 transition-colors">
                       {flow.name}
                     </h4>
                     <Badge variant={flow.status === 'live' ? 'success' : 'warning'}>
                       {flow.status === 'live' ? 'Ativo' : 'Pausado'}
                     </Badge>
                   </div>
-                  <p className="text-dark-500 text-sm mt-1">
+                  <p className="text-gray-400 text-sm mt-1">
                     {formatNumber(flow.recipients)} contatos alcançados
                   </p>
                 </div>
-                <span className="text-dark-100 font-semibold">
+                <span className="text-gray-800 font-semibold">
                   {formatCurrency(flow.revenue)}
                 </span>
               </div>
 
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full"
                       style={{ width: `${Math.min(flow.conversion_rate * 10, 100)}%` }}
                     />
                   </div>
                 </div>
-                <span className="text-dark-300 text-sm font-medium">
+                <span className="text-gray-600 text-sm font-medium">
                   {formatPercentage(flow.conversion_rate)} conversão
                 </span>
               </div>
@@ -435,8 +435,8 @@ export function AttributionChart({ data }: AttributionChartProps) {
       <Card variant="glass">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-lg font-semibold text-dark-100">Atribuição de Receita</h3>
-            <p className="text-dark-400 text-sm">Por canal</p>
+            <h3 className="text-lg font-semibold text-gray-800">Atribuição de Receita</h3>
+            <p className="text-gray-500 text-sm">Por canal</p>
           </div>
         </div>
 
@@ -469,9 +469,9 @@ export function AttributionChart({ data }: AttributionChartProps) {
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: item.color }}
                   />
-                  <span className="text-dark-300">{item.name}</span>
+                  <span className="text-gray-600">{item.name}</span>
                 </div>
-                <span className="text-dark-100 font-semibold">
+                <span className="text-gray-800 font-semibold">
                   {formatPercentage(item.value)}
                 </span>
               </div>
@@ -506,14 +506,14 @@ export function QuickStats({ stats }: QuickStatsProps) {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.3, delay: index * 0.1 }}
-          className="flex items-center gap-3 p-4 rounded-xl bg-dark-800/30 border border-dark-700/50"
+          className="flex items-center gap-3 p-4 rounded-xl bg-gray-50 border border-gray-200"
         >
-          <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center text-dark-400">
+          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500">
             {stat.icon}
           </div>
           <div>
-            <p className="text-dark-500 text-xs">{stat.label}</p>
-            <p className="text-dark-100 font-semibold">{stat.value}</p>
+            <p className="text-gray-400 text-xs">{stat.label}</p>
+            <p className="text-gray-800 font-semibold">{stat.value}</p>
           </div>
           {stat.trend && (
             <div className={cn('ml-auto', stat.trend === 'up' ? 'text-success-400' : 'text-error-400')}>

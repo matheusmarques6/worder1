@@ -53,13 +53,13 @@ interface Log {
 }
 
 const statusConfig: Record<string, { label: string; color: string; bgColor: string }> = {
-  draft: { label: 'Rascunho', color: 'text-dark-300', bgColor: 'bg-dark-600' },
+  draft: { label: 'Rascunho', color: 'text-gray-600', bgColor: 'bg-gray-200' },
   scheduled: { label: 'Agendada', color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-  running: { label: 'Enviando', color: 'text-primary-400', bgColor: 'bg-primary-500/10' },
+  running: { label: 'Enviando', color: 'text-brand-600', bgColor: 'bg-brand-50' },
   paused: { label: 'Pausada', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' },
   completed: { label: 'Concluída', color: 'text-green-400', bgColor: 'bg-green-500/10' },
   failed: { label: 'Falhou', color: 'text-red-400', bgColor: 'bg-red-500/10' },
-  cancelled: { label: 'Cancelada', color: 'text-dark-400', bgColor: 'bg-dark-600' },
+  cancelled: { label: 'Cancelada', color: 'text-gray-500', bgColor: 'bg-gray-200' },
 }
 
 export default function CampaignDetailsPage() {
@@ -131,17 +131,17 @@ export default function CampaignDetailsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+        <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
       </div>
     )
   }
 
   if (!campaign) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 text-dark-400">
+      <div className="flex flex-col items-center justify-center h-96 text-gray-500">
         <AlertCircle className="w-16 h-16 mb-4 opacity-30" />
         <p className="text-lg">Campanha não encontrada</p>
-        <button onClick={() => router.push('/whatsapp/campaigns')} className="mt-4 text-primary-400 hover:underline">
+        <button onClick={() => router.push('/whatsapp/campaigns')} className="mt-4 text-brand-600 hover:underline">
           Voltar para campanhas
         </button>
       </div>
@@ -155,18 +155,18 @@ export default function CampaignDetailsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-4">
-          <button onClick={() => router.push('/whatsapp/campaigns')} className="p-2 hover:bg-dark-800 rounded-lg mt-1">
-            <ArrowLeft className="w-5 h-5 text-dark-400" />
+          <button onClick={() => router.push('/whatsapp/campaigns')} className="p-2 hover:bg-white rounded-lg mt-1">
+            <ArrowLeft className="w-5 h-5 text-gray-500" />
           </button>
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-white">{campaign.name}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{campaign.name}</h1>
               <span className={`px-3 py-1 text-sm font-medium rounded-lg ${status.bgColor} ${status.color}`}>
                 {status.label}
               </span>
             </div>
-            {campaign.description && <p className="text-dark-400">{campaign.description}</p>}
-            <div className="flex items-center gap-4 mt-2 text-sm text-dark-500">
+            {campaign.description && <p className="text-gray-500">{campaign.description}</p>}
+            <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
               <span>Template: {campaign.template_name || 'N/A'}</span>
               <span>•</span>
               <span>Criada em {formatDate(campaign.created_at)}</span>
@@ -193,7 +193,7 @@ export default function CampaignDetailsPage() {
               {actionLoading === 'resume' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />} Retomar
             </button>
           )}
-          <button onClick={() => handleAction('duplicate')} className="p-2 bg-dark-700 text-dark-300 rounded-xl hover:bg-dark-600 hover:text-white">
+          <button onClick={() => handleAction('duplicate')} className="p-2 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 hover:text-white">
             <Copy className="w-5 h-5" />
           </button>
           {['draft', 'cancelled', 'completed', 'failed'].includes(campaign.status) && (
@@ -201,7 +201,7 @@ export default function CampaignDetailsPage() {
               <Trash2 className="w-5 h-5" />
             </button>
           )}
-          <button onClick={fetchCampaign} className="p-2 bg-dark-700 text-dark-400 rounded-xl hover:text-white">
+          <button onClick={fetchCampaign} className="p-2 bg-gray-100 text-gray-500 rounded-xl hover:text-white">
             <RefreshCw className="w-5 h-5" />
           </button>
         </div>
@@ -209,51 +209,51 @@ export default function CampaignDetailsPage() {
 
       {/* Main Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-        <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center gap-2 mb-2">
-            <Users className="w-4 h-4 text-dark-400" />
-            <span className="text-xs text-dark-400">Audiência</span>
+            <Users className="w-4 h-4 text-gray-500" />
+            <span className="text-xs text-gray-500">Audiência</span>
           </div>
-          <p className="text-2xl font-bold text-white">{formatNumber(campaign.total_recipients)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatNumber(campaign.total_recipients)}</p>
         </div>
-        <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center gap-2 mb-2">
             <Send className="w-4 h-4 text-blue-400" />
-            <span className="text-xs text-dark-400">Enviadas</span>
+            <span className="text-xs text-gray-500">Enviadas</span>
           </div>
-          <p className="text-2xl font-bold text-white">{formatNumber(campaign.total_sent)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatNumber(campaign.total_sent)}</p>
         </div>
-        <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center gap-2 mb-2">
             <CheckCircle className="w-4 h-4 text-green-400" />
-            <span className="text-xs text-dark-400">Entregues</span>
+            <span className="text-xs text-gray-500">Entregues</span>
           </div>
           <p className="text-2xl font-bold text-green-400">{metrics?.deliveryRate || 0}%</p>
-          <p className="text-xs text-dark-500">{formatNumber(campaign.total_delivered)}</p>
+          <p className="text-xs text-gray-400">{formatNumber(campaign.total_delivered)}</p>
         </div>
-        <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center gap-2 mb-2">
             <Eye className="w-4 h-4 text-cyan-400" />
-            <span className="text-xs text-dark-400">Lidas</span>
+            <span className="text-xs text-gray-500">Lidas</span>
           </div>
           <p className="text-2xl font-bold text-cyan-400">{metrics?.readRate || 0}%</p>
-          <p className="text-xs text-dark-500">{formatNumber(campaign.total_read)}</p>
+          <p className="text-xs text-gray-400">{formatNumber(campaign.total_read)}</p>
         </div>
-        <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center gap-2 mb-2">
-            <MessageSquare className="w-4 h-4 text-primary-400" />
-            <span className="text-xs text-dark-400">Respostas</span>
+            <MessageSquare className="w-4 h-4 text-brand-600" />
+            <span className="text-xs text-gray-500">Respostas</span>
           </div>
-          <p className="text-2xl font-bold text-primary-400">{metrics?.replyRate || 0}%</p>
-          <p className="text-xs text-dark-500">{formatNumber(campaign.total_replied)}</p>
+          <p className="text-2xl font-bold text-brand-600">{metrics?.replyRate || 0}%</p>
+          <p className="text-xs text-gray-400">{formatNumber(campaign.total_replied)}</p>
         </div>
-        <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl">
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
           <div className="flex items-center gap-2 mb-2">
             <XCircle className="w-4 h-4 text-red-400" />
-            <span className="text-xs text-dark-400">Falhas</span>
+            <span className="text-xs text-gray-500">Falhas</span>
           </div>
           <p className="text-2xl font-bold text-red-400">{metrics?.failureRate || 0}%</p>
-          <p className="text-xs text-dark-500">{formatNumber(campaign.total_failed)}</p>
+          <p className="text-xs text-gray-400">{formatNumber(campaign.total_failed)}</p>
         </div>
       </div>
 
@@ -262,14 +262,14 @@ export default function CampaignDetailsPage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Template Preview */}
           {campaign.template && (
-            <div className="p-6 bg-dark-800/50 border border-dark-700/50 rounded-2xl">
+            <div className="p-6 bg-gray-50 border border-gray-200 rounded-2xl">
               <h3 className="font-semibold text-white mb-4">Preview da Mensagem</h3>
-              <div className="bg-dark-900 border border-dark-700/50 rounded-xl p-4 max-w-sm">
-                <p className="text-sm text-dark-100 whitespace-pre-wrap">{campaign.template.body_text}</p>
+              <div className="bg-white border border-gray-200 rounded-xl p-4 max-w-sm">
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{campaign.template.body_text}</p>
                 {campaign.template.buttons?.length > 0 && (
                   <div className="mt-3 space-y-2">
                     {campaign.template.buttons.map((btn: any, i: number) => (
-                      <button key={i} className="w-full py-2 bg-dark-700 text-primary-400 text-sm rounded-lg">
+                      <button key={i} className="w-full py-2 bg-gray-100 text-brand-600 text-sm rounded-lg">
                         {btn.text}
                       </button>
                     ))}
@@ -280,7 +280,7 @@ export default function CampaignDetailsPage() {
           )}
 
           {/* Timeline */}
-          <div className="p-6 bg-dark-800/50 border border-dark-700/50 rounded-2xl">
+          <div className="p-6 bg-gray-50 border border-gray-200 rounded-2xl">
             <h3 className="font-semibold text-white mb-4">Histórico</h3>
             <div className="space-y-4">
               {logs.length > 0 ? logs.slice(0, 10).map((log) => (
@@ -292,11 +292,11 @@ export default function CampaignDetailsPage() {
                   }`} />
                   <div className="flex-1">
                     <p className="text-sm text-white">{log.message}</p>
-                    <p className="text-xs text-dark-500">{formatDate(log.created_at)}</p>
+                    <p className="text-xs text-gray-400">{formatDate(log.created_at)}</p>
                   </div>
                 </div>
               )) : (
-                <p className="text-sm text-dark-400">Nenhum log registrado</p>
+                <p className="text-sm text-gray-500">Nenhum log registrado</p>
               )}
             </div>
           </div>
@@ -305,39 +305,39 @@ export default function CampaignDetailsPage() {
         {/* Right Column - Info */}
         <div className="space-y-6">
           {/* Campaign Info */}
-          <div className="p-6 bg-dark-800/50 border border-dark-700/50 rounded-2xl">
+          <div className="p-6 bg-gray-50 border border-gray-200 rounded-2xl">
             <h3 className="font-semibold text-white mb-4">Informações</h3>
             <div className="space-y-4">
               <div>
-                <p className="text-xs text-dark-500 mb-1">Tipo</p>
+                <p className="text-xs text-gray-400 mb-1">Tipo</p>
                 <p className="text-sm text-white capitalize">{campaign.type}</p>
               </div>
               <div>
-                <p className="text-xs text-dark-500 mb-1">Audiência</p>
+                <p className="text-xs text-gray-400 mb-1">Audiência</p>
                 <p className="text-sm text-white capitalize">{campaign.audience_type === 'all' ? 'Todos os contatos' : campaign.audience_type}</p>
                 {campaign.audience_tags && campaign.audience_tags.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
                     {campaign.audience_tags.map((tag, i) => (
-                      <span key={i} className="px-2 py-0.5 bg-dark-700 text-dark-300 text-xs rounded">{tag}</span>
+                      <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">{tag}</span>
                     ))}
                   </div>
                 )}
               </div>
               {campaign.scheduled_at && (
                 <div>
-                  <p className="text-xs text-dark-500 mb-1">Agendada para</p>
+                  <p className="text-xs text-gray-400 mb-1">Agendada para</p>
                   <p className="text-sm text-white">{formatDate(campaign.scheduled_at)}</p>
                 </div>
               )}
               {campaign.started_at && (
                 <div>
-                  <p className="text-xs text-dark-500 mb-1">Iniciada em</p>
+                  <p className="text-xs text-gray-400 mb-1">Iniciada em</p>
                   <p className="text-sm text-white">{formatDate(campaign.started_at)}</p>
                 </div>
               )}
               {campaign.completed_at && (
                 <div>
-                  <p className="text-xs text-dark-500 mb-1">Concluída em</p>
+                  <p className="text-xs text-gray-400 mb-1">Concluída em</p>
                   <p className="text-sm text-white">{formatDate(campaign.completed_at)}</p>
                 </div>
               )}
@@ -354,11 +354,11 @@ export default function CampaignDetailsPage() {
               <div className="space-y-3">
                 <div>
                   <p className="text-3xl font-bold text-green-400">{formatCurrency(campaign.attributed_revenue)}</p>
-                  <p className="text-xs text-dark-400">{campaign.attributed_orders} pedidos</p>
+                  <p className="text-xs text-gray-500">{campaign.attributed_orders} pedidos</p>
                 </div>
                 <div>
-                  <p className="text-xs text-dark-500 mb-1">ROI</p>
-                  <p className="text-lg font-semibold text-white">
+                  <p className="text-xs text-gray-400 mb-1">ROI</p>
+                  <p className="text-lg font-semibold text-gray-900">
                     {campaign.total_cost > 0 ? ((campaign.attributed_revenue / campaign.total_cost - 1) * 100).toFixed(0) : 0}%
                   </p>
                 </div>
@@ -367,13 +367,13 @@ export default function CampaignDetailsPage() {
           )}
 
           {/* Cost */}
-          <div className="p-6 bg-dark-800/50 border border-dark-700/50 rounded-2xl">
+          <div className="p-6 bg-gray-50 border border-gray-200 rounded-2xl">
             <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-dark-400" />
+              <DollarSign className="w-5 h-5 text-gray-500" />
               Custo
             </h3>
-            <p className="text-2xl font-bold text-white">{formatCurrency(campaign.total_cost)}</p>
-            <p className="text-xs text-dark-500 mt-1">R$ 0,05 por mensagem</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(campaign.total_cost)}</p>
+            <p className="text-xs text-gray-400 mt-1">R$ 0,05 por mensagem</p>
           </div>
         </div>
       </div>

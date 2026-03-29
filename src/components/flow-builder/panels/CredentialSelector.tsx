@@ -166,7 +166,7 @@ export function CredentialSelector({
         {label && <label className={cn("block text-xs", lightMode ? "text-gray-600" : "text-white/60")}>{label}</label>}
         <div className={cn(
           "flex items-center gap-2 p-3 rounded-lg border",
-          lightMode ? "bg-gray-50 border-gray-200" : "bg-[#1a1a1a] border-white/10"
+          lightMode ? "bg-gray-50 border-gray-200" : "bg-[#1a1a1a] border-gray-200"
         )}>
           <Loader2 className={cn("w-4 h-4 animate-spin", lightMode ? "text-gray-400" : "text-white/40")} />
           <span className={cn("text-sm", lightMode ? "text-gray-400" : "text-white/40")}>Carregando conexões...</span>
@@ -198,7 +198,7 @@ export function CredentialSelector({
               : 'bg-[#1a1a1a] hover:bg-[#222]',
             isOpen
               ? 'border-blue-500/50'
-              : lightMode ? 'border-gray-200' : 'border-white/10',
+              : lightMode ? 'border-gray-200' : 'border-gray-200',
             error && 'border-red-500/50'
           )}
         >
@@ -252,12 +252,12 @@ export function CredentialSelector({
               'shadow-xl overflow-hidden',
               lightMode
                 ? 'bg-white border border-gray-200 shadow-gray-200/50'
-                : 'bg-[#1a1a1a] border border-white/10 shadow-black/50'
+                : 'bg-[#1a1a1a] border border-gray-200 shadow-black/50'
             )}
             style={{ maxHeight: '300px' }}
           >
             {/* Search */}
-            <div className={cn("p-2 border-b", lightMode ? "border-gray-100" : "border-white/10")}>
+            <div className={cn("p-2 border-b", lightMode ? "border-gray-100" : "border-gray-200")}>
               <div className="relative">
                 <Search className={cn("absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4", lightMode ? "text-gray-400" : "text-white/30")} />
                 <input
@@ -271,7 +271,7 @@ export function CredentialSelector({
                     'focus:outline-none focus:border-blue-500/50',
                     lightMode
                       ? 'bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400'
-                      : 'bg-[#0a0a0a] border border-white/10 text-white placeholder-white/30'
+                      : 'bg-[#0a0a0a] border border-gray-200 text-white placeholder-white/30'
                   )}
                 />
                 {search && (
@@ -303,7 +303,7 @@ export function CredentialSelector({
                     }}
                     className={cn(
                       'w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left',
-                      lightMode ? 'hover:bg-gray-50' : 'hover:bg-white/5',
+                      lightMode ? 'hover:bg-gray-50' : 'hover:bg-gray-50',
                       value === connection.id && 'bg-blue-500/10'
                     )}
                   >
@@ -331,7 +331,7 @@ export function CredentialSelector({
             </div>
 
             {/* Create New */}
-            <div className={cn("border-t", lightMode ? "border-gray-100" : "border-white/10")}>
+            <div className={cn("border-t", lightMode ? "border-gray-100" : "border-gray-200")}>
               <button
                 type="button"
                 onClick={() => {
@@ -339,7 +339,7 @@ export function CredentialSelector({
                 }}
                 className={cn(
                   'w-full flex items-center gap-3 px-3 py-3 transition-colors text-left text-blue-500',
-                  lightMode ? 'hover:bg-gray-50' : 'hover:bg-white/5'
+                  lightMode ? 'hover:bg-gray-50' : 'hover:bg-gray-50'
                 )}
               >
                 <Plus className="w-4 h-4" />

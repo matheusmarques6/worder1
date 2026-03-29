@@ -140,16 +140,16 @@ export function BulkDeleteModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+          className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-5 border-b border-dark-700 bg-red-500/10">
+          <div className="flex items-center justify-between p-5 border-b border-gray-200 bg-red-500/10">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-red-500/20 rounded-lg">
                 <AlertTriangle className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className="text-lg font-semibold text-gray-900">
                   Excluir {selectedCount} Contato{selectedCount > 1 ? 's' : ''}
                 </h2>
                 <p className="text-sm text-red-400">
@@ -160,7 +160,7 @@ export function BulkDeleteModal({
             <button
               onClick={onClose}
               disabled={deleting}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -183,7 +183,7 @@ export function BulkDeleteModal({
             {/* Loading */}
             {loading && !success && (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+                <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
               </div>
             )}
 
@@ -200,53 +200,53 @@ export function BulkDeleteModal({
 
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl">
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
                     <div className="flex items-center gap-2 mb-1">
-                      <Users className="w-4 h-4 text-primary-400" />
-                      <span className="text-sm text-dark-400">Contatos</span>
+                      <Users className="w-4 h-4 text-brand-600" />
+                      <span className="text-sm text-gray-500">Contatos</span>
                     </div>
-                    <p className="text-xl font-bold text-white">{preview.contactsCount}</p>
+                    <p className="text-xl font-bold text-gray-900">{preview.contactsCount}</p>
                   </div>
 
-                  <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl">
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
                     <div className="flex items-center gap-2 mb-1">
                       <Briefcase className="w-4 h-4 text-amber-400" />
-                      <span className="text-sm text-dark-400">Deals</span>
+                      <span className="text-sm text-gray-500">Deals</span>
                     </div>
-                    <p className="text-xl font-bold text-white">{preview.dealsCount}</p>
+                    <p className="text-xl font-bold text-gray-900">{preview.dealsCount}</p>
                   </div>
 
-                  <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl">
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
                     <div className="flex items-center gap-2 mb-1">
                       <MessageCircle className="w-4 h-4 text-green-400" />
-                      <span className="text-sm text-dark-400">Conversas</span>
+                      <span className="text-sm text-gray-500">Conversas</span>
                     </div>
-                    <p className="text-xl font-bold text-white">{preview.conversationsCount}</p>
+                    <p className="text-xl font-bold text-gray-900">{preview.conversationsCount}</p>
                   </div>
 
-                  <div className="p-3 bg-dark-800/50 border border-dark-700 rounded-xl">
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
                     <div className="flex items-center gap-2 mb-1">
                       <Activity className="w-4 h-4 text-blue-400" />
-                      <span className="text-sm text-dark-400">Atividades</span>
+                      <span className="text-sm text-gray-500">Atividades</span>
                     </div>
-                    <p className="text-xl font-bold text-white">{preview.activitiesCount}</p>
+                    <p className="text-xl font-bold text-gray-900">{preview.activitiesCount}</p>
                   </div>
                 </div>
 
                 {/* Options */}
                 <div className="space-y-3">
-                  <p className="text-sm font-medium text-dark-300">Opções de exclusão:</p>
+                  <p className="text-sm font-medium text-gray-600">Opções de exclusão:</p>
                   
-                  <label className="flex items-center gap-3 p-3 bg-dark-800/50 border border-dark-700 rounded-xl cursor-pointer hover:bg-dark-800 transition-colors">
+                  <label className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-white transition-colors">
                     <input
                       type="checkbox"
                       checked={deleteDeals}
                       onChange={(e) => setDeleteDeals(e.target.checked)}
-                      className="w-4 h-4 rounded border-dark-600 bg-dark-700 text-primary-500 focus:ring-primary-500"
+                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500"
                     />
                     <div className="flex-1">
                       <p className="text-sm text-white">Excluir deals associados</p>
-                      <p className="text-xs text-dark-500">
+                      <p className="text-xs text-gray-400">
                         {deleteDeals 
                           ? `${preview.dealsCount} deal(s) serão excluídos`
                           : 'Deals serão mantidos, apenas desvinculados'
@@ -255,16 +255,16 @@ export function BulkDeleteModal({
                     </div>
                   </label>
 
-                  <label className="flex items-center gap-3 p-3 bg-dark-800/50 border border-dark-700 rounded-xl cursor-pointer hover:bg-dark-800 transition-colors">
+                  <label className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-white transition-colors">
                     <input
                       type="checkbox"
                       checked={deleteConversations}
                       onChange={(e) => setDeleteConversations(e.target.checked)}
-                      className="w-4 h-4 rounded border-dark-600 bg-dark-700 text-primary-500 focus:ring-primary-500"
+                      className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500 focus:ring-primary-500"
                     />
                     <div className="flex-1">
                       <p className="text-sm text-white">Excluir conversas WhatsApp</p>
-                      <p className="text-xs text-dark-500">
+                      <p className="text-xs text-gray-400">
                         {deleteConversations 
                           ? `${preview.conversationsCount} conversa(s) e mensagens serão excluídas`
                           : 'Conversas serão mantidas, apenas desvinculadas'
@@ -276,7 +276,7 @@ export function BulkDeleteModal({
 
                 {/* Confirmation Input */}
                 <div>
-                  <label className="block text-sm font-medium text-dark-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
                     Digite <span className="text-red-400 font-bold">EXCLUIR</span> para confirmar:
                   </label>
                   <input
@@ -284,7 +284,7 @@ export function BulkDeleteModal({
                     value={confirmText}
                     onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
                     placeholder="EXCLUIR"
-                    className="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-red-500 transition-colors"
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-red-500 transition-colors"
                   />
                 </div>
 
@@ -300,11 +300,11 @@ export function BulkDeleteModal({
 
           {/* Footer */}
           {!success && (
-            <div className="flex items-center justify-end gap-3 p-5 border-t border-dark-700">
+            <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-200">
               <button
                 onClick={onClose}
                 disabled={deleting}
-                className="px-4 py-2.5 text-dark-300 hover:text-white transition-colors"
+                className="px-4 py-2.5 text-gray-600 hover:text-white transition-colors"
               >
                 Cancelar
               </button>

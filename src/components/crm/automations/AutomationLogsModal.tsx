@@ -191,33 +191,33 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           onClick={e => e.stopPropagation()}
-          className="w-full max-w-4xl h-[80vh] bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+          className="w-full max-w-4xl h-[80vh] bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-5 border-b border-dark-700">
-            <h2 className="text-lg font-semibold text-white">
+          <div className="flex items-center justify-between p-5 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">
               Logs de Automação
             </h2>
             <button
               onClick={onClose}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Filters */}
-          <div className="p-4 border-b border-dark-700 flex flex-wrap items-center gap-3">
+          <div className="p-4 border-b border-gray-200 flex flex-wrap items-center gap-3">
             {/* Search */}
             <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 placeholder="Buscar..."
-                className="w-full pl-10 pr-4 py-2 bg-dark-900 border border-dark-700 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
               />
             </div>
 
@@ -226,14 +226,14 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
-                className="px-4 py-2 pr-10 bg-dark-900 border border-dark-700 rounded-lg text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
+                className="px-4 py-2 pr-10 bg-white border border-gray-200 rounded-lg text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
               >
                 <option value="all">Todos status</option>
                 <option value="success">✓ Sucesso</option>
                 <option value="error">✗ Erro</option>
                 <option value="skipped">⚠ Ignorado</option>
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400 pointer-events-none" />
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
             </div>
 
             {/* Source Filter */}
@@ -241,14 +241,14 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
               <select
                 value={sourceFilter}
                 onChange={e => setSourceFilter(e.target.value)}
-                className="px-4 py-2 pr-10 bg-dark-900 border border-dark-700 rounded-lg text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
+                className="px-4 py-2 pr-10 bg-white border border-gray-200 rounded-lg text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
               >
                 <option value="all">Todas fontes</option>
                 <option value="shopify">🛒 Shopify</option>
                 <option value="whatsapp">💬 WhatsApp</option>
                 <option value="hotmart">🔥 Hotmart</option>
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400 pointer-events-none" />
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
             </div>
 
             {/* Period Filter */}
@@ -256,20 +256,20 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
               <select
                 value={periodFilter}
                 onChange={e => setPeriodFilter(e.target.value)}
-                className="px-4 py-2 pr-10 bg-dark-900 border border-dark-700 rounded-lg text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
+                className="px-4 py-2 pr-10 bg-white border border-gray-200 rounded-lg text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
               >
                 <option value="1">Último dia</option>
                 <option value="7">7 dias</option>
                 <option value="30">30 dias</option>
                 <option value="all">Todo período</option>
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400 pointer-events-none" />
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
             </div>
 
             {/* Refresh */}
             <button
               onClick={() => fetchLogs(true)}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
               title="Atualizar"
             >
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -284,8 +284,8 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
               </div>
             ) : logs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20">
-                <Zap className="w-16 h-16 text-dark-600 mb-4" />
-                <p className="text-dark-400">Nenhum log encontrado</p>
+                <Zap className="w-16 h-16 text-gray-400 mb-4" />
+                <p className="text-gray-500">Nenhum log encontrado</p>
               </div>
             ) : (
               <div className="divide-y divide-dark-700/50">
@@ -301,7 +301,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
                   return (
                     <div
                       key={log.id}
-                      className="hover:bg-dark-800/50 transition-colors"
+                      className="hover:bg-gray-50 transition-colors"
                     >
                       <button
                         onClick={() => setExpandedLog(isExpanded ? null : log.id)}
@@ -315,17 +315,17 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
                         {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs text-dark-500">{dateStr} {timeStr}</span>
-                            <Icon className="w-3.5 h-3.5 text-dark-400" />
-                            <span className="text-xs text-dark-400">{SOURCE_NAMES[log.source_type] || log.source_type}</span>
+                            <span className="text-xs text-gray-400">{dateStr} {timeStr}</span>
+                            <Icon className="w-3.5 h-3.5 text-gray-500" />
+                            <span className="text-xs text-gray-500">{SOURCE_NAMES[log.source_type] || log.source_type}</span>
                             {log.rule_name && (
                               <>
-                                <span className="text-dark-600">•</span>
-                                <span className="text-xs text-dark-400">{log.rule_name}</span>
+                                <span className="text-gray-400">•</span>
+                                <span className="text-xs text-gray-500">{log.rule_name}</span>
                               </>
                             )}
                           </div>
-                          <p className={`text-sm ${log.status === 'error' ? 'text-red-400' : 'text-dark-300'}`}>
+                          <p className={`text-sm ${log.status === 'error' ? 'text-red-400' : 'text-gray-600'}`}>
                             {log.message}
                           </p>
                           {log.error_message && (
@@ -334,7 +334,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
                         </div>
 
                         {/* Expand Icon */}
-                        <ChevronDown className={`w-5 h-5 text-dark-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-5 h-5 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                       </button>
 
                       {/* Expanded Details */}
@@ -347,22 +347,22 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
                             className="overflow-hidden"
                           >
                             <div className="px-4 pb-4 ml-12">
-                              <div className="p-4 bg-dark-900 rounded-lg space-y-3">
+                              <div className="p-4 bg-white rounded-lg space-y-3">
                                 <div className="grid grid-cols-2 gap-4 text-sm">
                                   <div>
-                                    <p className="text-dark-500 text-xs mb-1">Evento</p>
+                                    <p className="text-gray-400 text-xs mb-1">Evento</p>
                                     <p className="text-white">{log.event_type}</p>
                                   </div>
                                   <div>
-                                    <p className="text-dark-500 text-xs mb-1">Status</p>
+                                    <p className="text-gray-400 text-xs mb-1">Status</p>
                                     <p className={statusConfig.color}>{statusConfig.label}</p>
                                   </div>
                                   {log.deal_id && (
                                     <div>
-                                      <p className="text-dark-500 text-xs mb-1">Deal ID</p>
+                                      <p className="text-gray-400 text-xs mb-1">Deal ID</p>
                                       <a
                                         href={`/crm?deal=${log.deal_id}`}
-                                        className="text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                                        className="text-brand-600 hover:text-brand-500 flex items-center gap-1"
                                       >
                                         {log.deal_id.slice(0, 8)}...
                                         <ExternalLink className="w-3 h-3" />
@@ -371,10 +371,10 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
                                   )}
                                   {log.contact_id && (
                                     <div>
-                                      <p className="text-dark-500 text-xs mb-1">Contato ID</p>
+                                      <p className="text-gray-400 text-xs mb-1">Contato ID</p>
                                       <a
                                         href={`/crm/contacts?id=${log.contact_id}`}
-                                        className="text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                                        className="text-brand-600 hover:text-brand-500 flex items-center gap-1"
                                       >
                                         {log.contact_id.slice(0, 8)}...
                                         <ExternalLink className="w-3 h-3" />
@@ -385,8 +385,8 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
 
                                 {log.metadata && Object.keys(log.metadata).length > 0 && (
                                   <div>
-                                    <p className="text-dark-500 text-xs mb-2">Dados</p>
-                                    <pre className="text-xs text-dark-300 bg-dark-800 p-3 rounded overflow-x-auto">
+                                    <p className="text-gray-400 text-xs mb-2">Dados</p>
+                                    <pre className="text-xs text-gray-600 bg-white p-3 rounded overflow-x-auto">
                                       {JSON.stringify(log.metadata, null, 2)}
                                     </pre>
                                   </div>
@@ -408,7 +408,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
                 <button
                   onClick={loadMore}
                   disabled={loading}
-                  className="px-6 py-2 bg-dark-700 hover:bg-dark-600 disabled:opacity-50 text-white rounded-lg transition-colors"
+                  className="px-6 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-white rounded-lg transition-colors"
                 >
                   {loading ? 'Carregando...' : 'Carregar mais'}
                 </button>
