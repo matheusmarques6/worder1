@@ -176,6 +176,133 @@ export default function UnlayerEditor({ templateName, design, onSave, onBack }: 
               timer: { enabled: true },
               video: { enabled: true },
             },
+            customJS: [
+              `
+              unlayer.registerTool({
+                name: 'product_feed',
+                label: 'Produtos',
+                icon: 'fa-shopping-bag',
+                supportedDisplayModes: ['email'],
+                options: {
+                  productFeed: {
+                    title: 'Feed de Produtos',
+                    position: 1,
+                    options: {
+                      feedType: {
+                        label: 'Tipo de Feed',
+                        defaultValue: 'bestsellers',
+                        widget: 'dropdown',
+                        data: {
+                          options: [
+                            { label: 'Mais vendidos', value: 'bestsellers' },
+                            { label: 'Mais novos', value: 'newest' },
+                            { label: 'Aleatórios', value: 'random' },
+                            { label: 'Visualizados recentemente', value: 'recently_viewed' },
+                            { label: 'Carrinho abandonado', value: 'cart_items' },
+                            { label: 'Recomendados', value: 'recommendations' },
+                          ],
+                        },
+                      },
+                      maxProducts: {
+                        label: 'Quantidade',
+                        defaultValue: 4,
+                        widget: 'counter',
+                        data: { min: 1, max: 12 },
+                      },
+                      columns: {
+                        label: 'Colunas',
+                        defaultValue: 2,
+                        widget: 'dropdown',
+                        data: {
+                          options: [
+                            { label: '1 coluna', value: 1 },
+                            { label: '2 colunas', value: 2 },
+                            { label: '3 colunas', value: 3 },
+                            { label: '4 colunas', value: 4 },
+                          ],
+                        },
+                      },
+                    },
+                  },
+                  productDisplay: {
+                    title: 'Exibição',
+                    position: 2,
+                    options: {
+                      showPrice: { label: 'Mostrar preço', defaultValue: true, widget: 'toggle' },
+                      showComparePrice: { label: 'Preço original', defaultValue: true, widget: 'toggle' },
+                      showButton: { label: 'Mostrar botão', defaultValue: true, widget: 'toggle' },
+                      buttonText: { label: 'Texto do botão', defaultValue: 'Comprar', widget: 'text' },
+                    },
+                  },
+                },
+                values: {},
+                renderer: {
+                  Viewer: unlayer.createViewer({
+                    render: function(values) {
+                      var cols = values.columns || 2;
+                      var max = values.maxProducts || 4;
+                      var rows = Math.ceil(max / cols);
+                      var html = '<div style="padding:16px;"><table width="100%" cellpadding="0" cellspacing="0" border="0">';
+                      for (var r = 0; r < rows; r++) {
+                        html += '<tr>';
+                        for (var c = 0; c < cols; c++) {
+                          var idx = r * cols + c + 1;
+                          if (idx > max) { html += '<td></td>'; continue; }
+                          html += '<td width="' + (100/cols) + '%" style="padding:8px;vertical-align:top;text-align:center;">';
+                          html += '<div style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;background:#fff;">';
+                          html += '<div style="background:#F3F4F6;height:180px;display:flex;align-items:center;justify-content:center;">';
+                          html += '<span style="color:#9CA3AF;font-size:12px;">Produto ' + idx + '</span></div>';
+                          html += '<div style="padding:12px;">';
+                          html += '<p style="margin:0;font-size:14px;font-weight:600;color:#111827;">Nome do produto</p>';
+                          if (values.showPrice) {
+                            if (values.showComparePrice) html += '<p style="margin:4px 0 0;font-size:12px;color:#9CA3AF;text-decoration:line-through;">R$ XX,XX</p>';
+                            html += '<p style="margin:2px 0 0;font-size:16px;font-weight:700;color:#F97316;">R$ X,XX</p>';
+                          }
+                          if (values.showButton) {
+                            html += '<a style="display:inline-block;margin-top:8px;padding:8px 20px;background:#F97316;color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">' + (values.buttonText || 'Comprar') + '</a>';
+                          }
+                          html += '</div></div></td>';
+                        }
+                        html += '</tr>';
+                      }
+                      html += '</table>';
+                      html += '<!-- WORDER_PRODUCT_BLOCK:' + (values.feedType || 'bestsellers') + ':' + max + ':' + cols + ':' + values.showPrice + ':' + values.showComparePrice + ':' + values.showButton + ':' + (values.buttonText || 'Comprar') + ' -->';
+                      html += '</div>';
+                      return html;
+                    }
+                  }),
+                  exporters: {
+                    email: function(values) {
+                      var cols = values.columns || 2;
+                      var max = values.maxProducts || 4;
+                      var rows = Math.ceil(max / cols);
+                      var html = '<div style="padding:16px;"><table width="100%" cellpadding="0" cellspacing="0" border="0">';
+                      for (var r = 0; r < rows; r++) {
+                        html += '<tr>';
+                        for (var c = 0; c < cols; c++) {
+                          var idx = r * cols + c + 1;
+                          if (idx > max) { html += '<td></td>'; continue; }
+                          html += '<td width="' + (100/cols) + '%" style="padding:8px;vertical-align:top;text-align:center;">';
+                          html += '<div style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;background:#fff;">';
+                          html += '<div style="background:#F3F4F6;height:180px;"></div>';
+                          html += '<div style="padding:12px;">';
+                          html += '<p style="margin:0;font-size:14px;font-weight:600;color:#111827;">{{product_name}}</p>';
+                          if (values.showPrice) html += '<p style="margin:4px 0 0;font-size:16px;font-weight:700;color:#F97316;">{{product_price}}</p>';
+                          if (values.showButton) html += '<a style="display:inline-block;margin-top:8px;padding:8px 20px;background:#F97316;color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">' + (values.buttonText || 'Comprar') + '</a>';
+                          html += '</div></div></td>';
+                        }
+                        html += '</tr>';
+                      }
+                      html += '</table>';
+                      html += '<!-- WORDER_PRODUCT_BLOCK:' + (values.feedType || 'bestsellers') + ':' + max + ':' + cols + ':' + values.showPrice + ':' + values.showComparePrice + ':' + values.showButton + ':' + (values.buttonText || 'Comprar') + ' -->';
+                      html += '</div>';
+                      return html;
+                    }
+                  }
+                },
+              });
+              `,
+            ],
           }}
         />
       </div>

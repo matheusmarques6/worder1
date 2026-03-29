@@ -106,6 +106,85 @@ export function addUnsubscribeLink(
 }
 
 /**
+ * Resolve dynamic product blocks in email HTML.
+ * Replaces <!-- WORDER_PRODUCT_BLOCK:... --> comments with real product HTML.
+ */
+export async function resolveProductBlocks(
+  html: string,
+  orgId: string,
+  contactId?: string
+): Promise<string> {
+  const regex = /<!-- WORDER_PRODUCT_BLOCK:(\w+):(\d+):(\d+):(true|false):(true|false):(true|false):([^-]*?) -->/g
+  let result = html
+  const matches: RegExpExecArray[] = []
+  let m: RegExpExecArray | null
+
+  while ((m = regex.exec(html)) !== null) {
+    matches.push(m)
+  }
+
+  for (const match of matches) {
+    const [fullMatch, feedType, maxStr, colsStr, showPrice, showComparePrice, showButton, buttonText] = match
+    const maxProducts = parseInt(maxStr) || 4
+    const cols = parseInt(colsStr) || 2
+
+    let products: any[] = []
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      const res = await fetch(`${baseUrl}/api/email/product-feeds/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feed_type: feedType, contact_id: contactId, organization_id: orgId, max_products: maxProducts }),
+      })
+      const data = await res.json()
+      products = data.products || []
+    } catch {
+      // No products available
+    }
+
+    if (products.length === 0) {
+      result = result.replace(fullMatch, '')
+      continue
+    }
+
+    const rows = Math.ceil(products.length / cols)
+    let productHtml = '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="padding:16px;">'
+
+    for (let r = 0; r < rows; r++) {
+      productHtml += '<tr>'
+      for (let c = 0; c < cols; c++) {
+        const p = products[r * cols + c]
+        if (!p) { productHtml += `<td width="${100 / cols}%"></td>`; continue }
+
+        const title = p.title || p.name || 'Produto'
+        const price = p.price || '0'
+        const comparePrice = p.compare_at_price || p.compare_price || ''
+        const imgUrl = p.image_url || p.images?.[0]?.src || ''
+        const url = p.url || (p.handle ? `https://loja.com/products/${p.handle}` : '#')
+
+        productHtml += `<td width="${100 / cols}%" style="padding:8px;vertical-align:top;text-align:center;">
+          <a href="${url}" style="text-decoration:none;color:inherit;display:block;">
+            <div style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;background:#fff;">
+              ${imgUrl ? `<img src="${imgUrl}" alt="${title}" style="width:100%;height:auto;display:block;" />` : '<div style="background:#F3F4F6;height:200px;"></div>'}
+              <div style="padding:12px;">
+                <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">${title}</p>
+                ${showPrice === 'true' ? `${showComparePrice === 'true' && comparePrice ? `<p style="margin:4px 0 0;font-size:12px;color:#9CA3AF;text-decoration:line-through;">R$ ${comparePrice}</p>` : ''}<p style="margin:2px 0 0;font-size:16px;font-weight:700;color:#F97316;">R$ ${price}</p>` : ''}
+                ${showButton === 'true' ? `<a href="${url}" style="display:inline-block;margin-top:10px;padding:10px 24px;background:#F97316;color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">${buttonText.trim() || 'Comprar'}</a>` : ''}
+              </div>
+            </div>
+          </a>
+        </td>`
+      }
+      productHtml += '</tr>'
+    }
+    productHtml += '</table>'
+    result = result.replace(fullMatch, productHtml)
+  }
+
+  return result
+}
+
+/**
  * Full email preparation pipeline.
  */
 export function prepareEmailHtml({

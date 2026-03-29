@@ -8,7 +8,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendEmail } from '@/lib/email/resend';
-import { prepareEmailHtml } from '@/lib/email/render';
+import { prepareEmailHtml, resolveProductBlocks } from '@/lib/email/render';
 
 export interface SendCampaignEmailParams {
   campaignId: string;
@@ -60,19 +60,22 @@ export async function sendCampaignEmail({
 
     emailSendId = emailSend.id;
 
-    // 2. Prepare HTML with merge tags, tracking, unsubscribe
+    // 2. Resolve dynamic product blocks
+    const htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId);
+
+    // 3. Prepare HTML with merge tags, tracking, unsubscribe
     const finalHtml = prepareEmailHtml({
-      html: templateHtml,
+      html: htmlWithProducts,
       mergeData,
       emailSendId,
       baseUrl,
     });
 
-    // 3. Render subject merge tags
+    // 4. Render subject merge tags
     const { renderMergeTags } = await import('@/lib/email/render');
     const finalSubject = renderMergeTags(subject, mergeData);
 
-    // 4. Send via Resend
+    // 5. Send via Resend
     const result = await sendEmail({
       to: contactEmail,
       from: fromEmail,
@@ -86,7 +89,7 @@ export async function sendCampaignEmail({
       ],
     });
 
-    // 5. Update status to 'sent' with resend_id
+    // 6. Update status to 'sent' with resend_id
     await supabaseAdmin
       .from('email_sends')
       .update({
