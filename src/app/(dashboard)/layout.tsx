@@ -509,11 +509,11 @@ export default function DashboardLayout({
           </nav>
         </div>
 
-        {/* Forecast */}
+        {/* Analytics */}
         <div>
           {!collapsed && (
             <p className="px-3 mb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-              Forecast
+              Analytics
             </p>
           )}
           <nav className="space-y-1">
