@@ -33,9 +33,15 @@ import {
   Target,
   RefreshCcw,
   FileText,
-  Inbox,
-  Megaphone,
   Puzzle,
+  Send,
+  BarChart3,
+  Briefcase,
+  Package,
+  Tag,
+  Image as ImageIcon,
+  Palette,
+  MessageCircle,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -68,22 +74,79 @@ interface Notification {
 }
 
 // ============================================
-// Navigation — SINGLE SOURCE OF TRUTH
+// Navigation — SINGLE SOURCE OF TRUTH (with submenus)
 // ============================================
-const sidebarNav = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Inbox', href: '/whatsapp', icon: MessageSquare },
-  { name: 'Contatos', href: '/contacts', icon: Users },
-  { name: 'Campanhas', href: '/campaigns', icon: Megaphone },
-  { name: 'Email', href: '/email/campaigns', icon: Mail },
-  { name: 'Templates', href: '/email/templates', icon: FileText },
-  { name: 'CRM', href: '/crm', icon: ShoppingBag },
-  { name: 'Automações', href: '/automations', icon: Zap },
-  { name: 'Formulários', href: '/forms', icon: FileText },
-  { name: 'Segmentos', href: '/segments', icon: Target },
-  { name: 'Recuperação', href: '/recovery', icon: RefreshCcw },
-  { name: 'Integrações', href: '/integrations', icon: Puzzle },
-  { name: 'Configurações', href: '/settings', icon: Settings },
+interface NavChild { name: string; href: string }
+interface NavItem { name: string; href: string; icon: any; children?: NavChild[] }
+interface NavSection { label?: string; items: NavItem[] }
+
+const navigation: NavSection[] = [
+  {
+    items: [
+      { name: 'Início', href: '/dashboard', icon: LayoutDashboard },
+      { name: 'Campanhas', href: '/campaigns', icon: Send },
+      { name: 'Fluxos', href: '/automations', icon: Zap },
+    ],
+  },
+  {
+    label: 'Canais',
+    items: [
+      {
+        name: 'Email', href: '/email/campaigns', icon: Mail,
+        children: [
+          { name: 'Campanhas', href: '/email/campaigns' },
+          { name: 'Templates', href: '/email/templates' },
+        ],
+      },
+      {
+        name: 'WhatsApp', href: '/whatsapp', icon: MessageCircle,
+        children: [
+          { name: 'Inbox', href: '/whatsapp' },
+          { name: 'Campanhas', href: '/whatsapp/campaigns' },
+          { name: 'Agentes IA', href: '/whatsapp/ai-agents' },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Audiência',
+    items: [
+      { name: 'Contatos', href: '/contacts', icon: Users },
+      { name: 'Segmentos', href: '/segments', icon: Target },
+      { name: 'Formulários', href: '/forms', icon: FileText },
+    ],
+  },
+  {
+    label: 'Conteúdo',
+    items: [
+      { name: 'Templates', href: '/email/templates', icon: Palette },
+      { name: 'Produtos', href: '/content/products', icon: Package },
+      { name: 'Cupons', href: '/content/coupons', icon: Tag },
+      { name: 'Mídia', href: '/content/media', icon: ImageIcon },
+    ],
+  },
+  {
+    label: 'Analytics',
+    items: [
+      {
+        name: 'Relatórios', href: '/analytics', icon: BarChart3,
+        children: [
+          { name: 'Visão Geral', href: '/analytics' },
+          { name: 'Vendas', href: '/analytics/sales' },
+          { name: 'Campanhas', href: '/analytics/email' },
+          { name: 'Entregabilidade', href: '/analytics/deliverability' },
+        ],
+      },
+      { name: 'CRM', href: '/crm', icon: Briefcase },
+    ],
+  },
+  {
+    items: [
+      { name: 'Recuperação', href: '/recovery', icon: RefreshCcw },
+      { name: 'Integrações', href: '/integrations', icon: Puzzle },
+      { name: 'Configurações', href: '/settings', icon: Settings },
+    ],
+  },
 ]
 
 const POLLING_INTERVAL = 30000
@@ -292,19 +355,78 @@ export default function DashboardLayout({
   }, [])
 
   // ============================================
-  // NavLink Component
+  // Expandable submenu state
   // ============================================
-  const NavLink = ({ item }: { item: { name: string; href: string; icon: any } }) => {
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
+
+  const toggleExpand = (name: string) => {
+    setExpandedItems(prev => {
+      const next = new Set(prev)
+      next.has(name) ? next.delete(name) : next.add(name)
+      return next
+    })
+  }
+
+  // Auto-expand active sections
+  useEffect(() => {
+    const newExpanded = new Set<string>()
+    for (const section of navigation) {
+      for (const item of section.items) {
+        if (item.children) {
+          const isChildActive = item.children.some(c => pathname === c.href || pathname.startsWith(c.href + '/'))
+          if (isChildActive) newExpanded.add(item.name)
+        }
+      }
+    }
+    if (newExpanded.size > 0) setExpandedItems(newExpanded)
+  }, [pathname])
+
+  // ============================================
+  // Nav Item Renderer
+  // ============================================
+  const SidebarNavItem = ({ item }: { item: NavItem }) => {
     const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+    const isExpanded = expandedItems.has(item.name)
     const Icon = item.icon
+    const hasChildren = item.children && item.children.length > 0
+
+    const itemClasses = cn(
+      'flex items-center gap-3 mx-2 px-3 py-2 rounded-md text-[13px] font-medium transition-colors w-full',
+      isActive && !hasChildren ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+    )
+
+    if (hasChildren && !collapsed) {
+      return (
+        <div>
+          <button onClick={() => toggleExpand(item.name)} className={cn(itemClasses, 'justify-between', isExpanded && 'text-gray-200')}>
+            <div className="flex items-center gap-3">
+              <Icon className="w-[18px] h-[18px] flex-shrink-0" />
+              <span className="truncate">{item.name}</span>
+            </div>
+            <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isExpanded && 'rotate-180')} />
+          </button>
+          {isExpanded && (
+            <div className="ml-9 mt-0.5 space-y-0.5">
+              {item.children!.map(child => (
+                <Link key={child.href} href={child.href} onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    'block py-1.5 px-3 rounded-md text-[12px] transition-colors',
+                    pathname === child.href || pathname.startsWith(child.href + '/')
+                      ? 'text-white bg-white/10'
+                      : 'text-gray-500 hover:text-gray-300'
+                  )}>
+                  {child.name}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
     return (
       <Link href={item.href} onClick={() => setMobileOpen(false)}>
-        <div className={cn(
-          'flex items-center gap-3 mx-2 px-3 py-2 rounded-md text-[13px] font-medium transition-colors',
-          isActive
-            ? 'bg-white/10 text-white'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-        )}>
+        <div className={itemClasses}>
           <Icon className="w-[18px] h-[18px] flex-shrink-0" />
           {!collapsed && <span className="truncate">{item.name}</span>}
         </div>
@@ -313,7 +435,7 @@ export default function DashboardLayout({
   }
 
   // ============================================
-  // Sidebar Content (Omnisend-style dark sidebar)
+  // Sidebar Content (Omnisend-style dark sidebar with sections)
   // ============================================
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -325,10 +447,21 @@ export default function DashboardLayout({
         </Link>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-3 overflow-y-auto">
-        {sidebarNav.map((item) => (
-          <NavLink key={item.href} item={item} />
+      {/* Navigation with sections */}
+      <nav className="flex-1 py-2 overflow-y-auto">
+        {navigation.map((section, i) => (
+          <div key={i} className={section.label ? 'mt-4' : i > 0 ? 'mt-2 pt-2 border-t border-gray-800/30 mx-3' : ''}>
+            {section.label && !collapsed && (
+              <div className="px-5 pb-1">
+                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-[0.08em]">{section.label}</p>
+              </div>
+            )}
+            <div className="space-y-0.5">
+              {section.items.map(item => (
+                <SidebarNavItem key={item.name + item.href} item={item} />
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
