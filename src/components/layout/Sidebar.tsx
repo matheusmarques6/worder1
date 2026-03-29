@@ -94,7 +94,7 @@ const toolsNavItems: NavItem[] = [
 ]
 
 const contentNavItems: NavItem[] = [
-  { title: 'Mídia', href: '/content/media', icon: ImageIcon },
+  { title: 'Conteúdo', href: '/content', icon: ImageIcon },
   { title: 'Cupons', href: '/content/coupons', icon: Ticket },
 ]
 

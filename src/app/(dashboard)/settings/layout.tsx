@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { User, Users, CreditCard, Activity, Link2, Code, Shield, Settings } from 'lucide-react';
+import { User, Users, CreditCard, Activity, Link2, Code, Shield, Settings, Mail, Plug } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const settingsNav = [
@@ -9,6 +9,8 @@ const settingsNav = [
   { title: 'Conta', href: '/settings/account', icon: User },
   { title: 'Equipe', href: '/settings/users', icon: Users },
   { title: 'Faturamento', href: '/settings/billing', icon: CreditCard },
+  { title: 'Email', href: '/settings/email', icon: Mail },
+  { title: 'Integrações', href: '/settings/integrations', icon: Plug },
   { title: 'Rastreamento', href: '/settings/tracking', icon: Activity },
   { title: 'Atribuição', href: '/settings/attribution', icon: Link2 },
   { title: 'UTM', href: '/settings/utm', icon: Link2 },

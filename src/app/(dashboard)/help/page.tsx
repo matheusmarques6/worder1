@@ -147,8 +147,8 @@ export default function HelpPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
-          <p className="text-dark-400">Carregando central de ajuda...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+          <p className="text-gray-500">Carregando central de ajuda...</p>
         </div>
       </div>
     );
@@ -161,24 +161,24 @@ export default function HelpPage() {
         <div className="absolute inset-0 bg-grid-white/5" />
         <div className="relative">
           <div className="flex items-center gap-4 mb-6">
-            <div className="p-3 rounded-2xl bg-primary-500/20 backdrop-blur-sm">
-              <HelpCircle className="w-8 h-8 text-primary-400" />
+            <div className="p-3 rounded-2xl bg-orange-50 backdrop-blur-sm">
+              <HelpCircle className="w-8 h-8 text-orange-500" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-white">Central de Ajuda</h1>
-              <p className="text-dark-300">Encontre respostas e aprenda a usar a plataforma</p>
+              <h1 className="text-3xl font-bold text-gray-900">Central de Ajuda</h1>
+              <p className="text-gray-600">Encontre respostas e aprenda a usar a plataforma</p>
             </div>
           </div>
 
           {/* Search Bar */}
           <div className="relative max-w-2xl">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
             <input
               type="text"
               placeholder="Pesquise por perguntas, artigos ou tutoriais..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 rounded-xl bg-dark-800/80 backdrop-blur-sm border border-dark-700 text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20"
+              className="w-full pl-12 pr-4 py-4 rounded-xl bg-white backdrop-blur-sm border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-500/20"
             />
           </div>
 
@@ -215,8 +215,8 @@ export default function HelpPage() {
             onClick={() => setActiveCategory(null)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               !activeCategory
-                ? 'bg-primary-500 text-white'
-                : 'bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700'
+                ? 'bg-orange-500 text-white'
+                : 'bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
             Todas
@@ -229,8 +229,8 @@ export default function HelpPage() {
                 onClick={() => setActiveCategory(activeCategory === cat.slug ? null : cat.slug)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   activeCategory === cat.slug
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700'
+                    ? 'bg-orange-500 text-white'
+                    : 'bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -250,18 +250,18 @@ export default function HelpPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.1 }}
-              className="bg-dark-800/50 border border-dark-700 rounded-xl p-5 hover:border-primary-500/50 cursor-pointer transition-all group"
+              className="bg-white border border-gray-200 rounded-xl p-5 hover:border-orange-300 cursor-pointer transition-all group"
               onClick={() => toggleFaq(faq.id)}
             >
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-primary-500/20 flex-shrink-0">
-                  <Zap className="w-4 h-4 text-primary-400" />
+                <div className="p-2 rounded-lg bg-orange-50 flex-shrink-0">
+                  <Zap className="w-4 h-4 text-orange-500" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-white group-hover:text-primary-400 transition-colors">
+                  <h3 className="font-medium text-gray-900 group-hover:text-orange-500 transition-colors">
                     {faq.question}
                   </h3>
-                  <p className="text-sm text-dark-400 mt-1 line-clamp-2">{faq.answer}</p>
+                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">{faq.answer}</p>
                 </div>
               </div>
             </motion.div>
@@ -272,10 +272,10 @@ export default function HelpPage() {
       {/* FAQ Sections */}
       <div className="space-y-6">
         {groupedFaqs.length === 0 ? (
-          <div className="text-center py-12 bg-dark-800/50 border border-dark-700 rounded-xl">
-            <HelpCircle className="w-12 h-12 text-dark-500 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">Nenhum resultado encontrado</h3>
-            <p className="text-dark-400">
+          <div className="text-center py-12 bg-white border border-gray-200 rounded-xl">
+            <HelpCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum resultado encontrado</h3>
+            <p className="text-gray-500">
               Tente buscar por outros termos ou entre em contato com nosso suporte.
             </p>
           </div>
@@ -283,8 +283,8 @@ export default function HelpPage() {
           groupedFaqs.map((category) => {
             const Icon = iconMap[category.icon] || HelpCircle;
             return (
-              <div key={category.slug} className="bg-dark-800/50 border border-dark-700 rounded-xl overflow-hidden">
-                <div className="flex items-center gap-3 p-5 border-b border-dark-700">
+              <div key={category.slug} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-3 p-5 border-b border-gray-200">
                   <div
                     className="p-2 rounded-lg"
                     style={{ backgroundColor: `${category.color}20` }}
@@ -292,9 +292,9 @@ export default function HelpPage() {
                     <Icon className="w-5 h-5" style={{ color: category.color }} />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-white">{category.name}</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">{category.name}</h2>
                     {category.description && (
-                      <p className="text-sm text-dark-400">{category.description}</p>
+                      <p className="text-sm text-gray-500">{category.description}</p>
                     )}
                   </div>
                 </div>
@@ -304,13 +304,13 @@ export default function HelpPage() {
                     <div key={faq.id} className="group">
                       <button
                         onClick={() => toggleFaq(faq.id)}
-                        className="w-full flex items-center justify-between p-5 text-left hover:bg-dark-700/30 transition-all"
+                        className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-100 transition-all"
                       >
-                        <span className="font-medium text-white group-hover:text-primary-400 transition-colors pr-4">
+                        <span className="font-medium text-gray-900 group-hover:text-orange-500 transition-colors pr-4">
                           {faq.question}
                         </span>
                         <ChevronDown
-                          className={`w-5 h-5 text-dark-400 transition-transform flex-shrink-0 ${
+                          className={`w-5 h-5 text-gray-500 transition-transform flex-shrink-0 ${
                             expandedFaq === faq.id ? 'rotate-180' : ''
                           }`}
                         />
@@ -325,19 +325,19 @@ export default function HelpPage() {
                             className="overflow-hidden"
                           >
                             <div className="px-5 pb-5">
-                              <p className="text-dark-300 leading-relaxed whitespace-pre-line">
+                              <p className="text-gray-600 leading-relaxed whitespace-pre-line">
                                 {faq.answer}
                               </p>
 
                               {/* Feedback */}
-                              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-dark-700">
-                                <span className="text-sm text-dark-500">Esta resposta foi útil?</span>
+                              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-200">
+                                <span className="text-sm text-gray-400">Esta resposta foi útil?</span>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleFeedback(faq.id, true);
                                   }}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dark-700 hover:bg-green-500/20 text-dark-400 hover:text-green-400 transition-all"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-green-500/20 text-gray-500 hover:text-green-400 transition-all"
                                 >
                                   <ThumbsUp className="w-4 h-4" />
                                   Sim
@@ -347,7 +347,7 @@ export default function HelpPage() {
                                     e.stopPropagation();
                                     handleFeedback(faq.id, false);
                                   }}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dark-700 hover:bg-red-500/20 text-dark-400 hover:text-red-400 transition-all"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all"
                                 >
                                   <ThumbsDown className="w-4 h-4" />
                                   Não
@@ -368,15 +368,15 @@ export default function HelpPage() {
 
       {/* Contact Support Section */}
       <div className="grid md:grid-cols-3 gap-6">
-        <div className="bg-dark-800/50 border border-dark-700 rounded-xl p-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
           <div className="p-3 rounded-xl bg-green-500/20 w-fit mb-4">
             <MessageCircle className="w-6 h-6 text-green-400" />
           </div>
-          <h3 className="text-lg font-semibold text-white mb-2">Chat ao Vivo</h3>
-          <p className="text-dark-400 text-sm mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Chat ao Vivo</h3>
+          <p className="text-gray-500 text-sm mb-4">
             Fale com nossa equipe em tempo real via WhatsApp.
           </p>
-          <div className="flex items-center gap-2 text-sm text-dark-500 mb-4">
+          <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
             <Clock className="w-4 h-4" />
             <span>Seg-Sex, 9h às 18h</span>
           </div>
@@ -391,15 +391,15 @@ export default function HelpPage() {
           </a>
         </div>
 
-        <div className="bg-dark-800/50 border border-dark-700 rounded-xl p-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
           <div className="p-3 rounded-xl bg-blue-500/20 w-fit mb-4">
             <Mail className="w-6 h-6 text-blue-400" />
           </div>
-          <h3 className="text-lg font-semibold text-white mb-2">Email</h3>
-          <p className="text-dark-400 text-sm mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Email</h3>
+          <p className="text-gray-500 text-sm mb-4">
             Envie sua dúvida detalhada por email.
           </p>
-          <div className="flex items-center gap-2 text-sm text-dark-500 mb-4">
+          <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
             <Clock className="w-4 h-4" />
             <span>Resposta em até 24h</span>
           </div>
@@ -412,15 +412,15 @@ export default function HelpPage() {
           </a>
         </div>
 
-        <div className="bg-dark-800/50 border border-dark-700 rounded-xl p-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
           <div className="p-3 rounded-xl bg-purple-500/20 w-fit mb-4">
             <Video className="w-6 h-6 text-purple-400" />
           </div>
-          <h3 className="text-lg font-semibold text-white mb-2">Tutoriais</h3>
-          <p className="text-dark-400 text-sm mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Tutoriais</h3>
+          <p className="text-gray-500 text-sm mb-4">
             Assista vídeos explicativos sobre todas as funcionalidades.
           </p>
-          <div className="flex items-center gap-2 text-sm text-dark-500 mb-4">
+          <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
             <CheckCircle className="w-4 h-4" />
             <span>+50 vídeos disponíveis</span>
           </div>

@@ -44,8 +44,8 @@ const CURRENCIES = ['BRL', 'USD', 'EUR', 'GBP', 'CNY']
 
 const InfoTooltip = ({ text }: { text: string }) => (
   <div className="group relative inline-block ml-1">
-    <Info className="w-4 h-4 text-dark-500 cursor-help" />
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-dark-700 rounded-lg text-xs text-white w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+    <Info className="w-4 h-4 text-gray-400 cursor-help" />
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-100 rounded-lg text-xs text-gray-900 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
       {text}
       <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-dark-700" />
     </div>
@@ -72,13 +72,13 @@ const InputField = ({
   step?: string
 }) => (
   <div>
-    <label className="flex items-center text-sm text-dark-400 mb-2">
+    <label className="flex items-center text-sm text-gray-500 mb-2">
       {label}
       {tooltip && <InfoTooltip text={tooltip} />}
     </label>
     <div className="relative">
       {prefix && (
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500">{prefix}</span>
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">{prefix}</span>
       )}
       <input
         type={type}
@@ -86,12 +86,12 @@ const InputField = ({
         min="0"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500 ${
+        className={`w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-orange-500 ${
           prefix ? 'pl-10' : ''
         } ${suffix ? 'pr-10' : ''}`}
       />
       {suffix && (
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-500">{suffix}</span>
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{suffix}</span>
       )}
     </div>
   </div>
@@ -129,46 +129,46 @@ const CustomFeeModal = ({
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="relative bg-dark-900 rounded-2xl border border-dark-700 p-6 w-full max-w-md"
+        className="relative bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-md"
       >
-        <button onClick={onClose} className="absolute top-4 right-4 text-dark-400 hover:text-white">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-900">
           <X className="w-5 h-5" />
         </button>
 
-        <h3 className="text-lg font-semibold text-white mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-6">
           {fee?.id ? 'Editar Taxa' : 'Nova Taxa Customizada'}
         </h3>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-dark-400 mb-2">Nome da Taxa</label>
+            <label className="block text-sm text-gray-500 mb-2">Nome da Taxa</label>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="Ex: Taxa Shopify, Embalagem"
-              className="w-full px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-orange-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-dark-400 mb-2">Descrição (opcional)</label>
+            <label className="block text-sm text-gray-500 mb-2">Descrição (opcional)</label>
             <input
               type="text"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Descrição da taxa"
-              className="w-full px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-orange-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-dark-400 mb-2">Tipo</label>
+              <label className="block text-sm text-gray-500 mb-2">Tipo</label>
               <select
                 value={formData.fee_type}
                 onChange={(e) => setFormData({ ...formData, fee_type: e.target.value as 'percentage' | 'fixed' })}
-                className="w-full px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-orange-500"
               >
                 <option value="percentage">Porcentagem (%)</option>
                 <option value="fixed">Valor Fixo (R$)</option>
@@ -176,7 +176,7 @@ const CustomFeeModal = ({
             </div>
 
             <div>
-              <label className="block text-sm text-dark-400 mb-2">Valor</label>
+              <label className="block text-sm text-gray-500 mb-2">Valor</label>
               <div className="relative">
                 <input
                   type="number"
@@ -184,9 +184,9 @@ const CustomFeeModal = ({
                   min="0"
                   value={formData.fee_value}
                   onChange={(e) => setFormData({ ...formData, fee_value: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500 pr-10"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-orange-500 pr-10"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-500">
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                   {formData.fee_type === 'percentage' ? '%' : 'R$'}
                 </span>
               </div>
@@ -195,11 +195,11 @@ const CustomFeeModal = ({
 
           {formData.fee_type === 'percentage' && (
             <div>
-              <label className="block text-sm text-dark-400 mb-2">Aplicar sobre</label>
+              <label className="block text-sm text-gray-500 mb-2">Aplicar sobre</label>
               <select
                 value={formData.applies_to}
                 onChange={(e) => setFormData({ ...formData, applies_to: e.target.value })}
-                className="w-full px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-orange-500"
               >
                 <option value="revenue">Receita Total</option>
                 <option value="subtotal">Subtotal (sem frete)</option>
@@ -209,11 +209,11 @@ const CustomFeeModal = ({
           )}
 
           <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-dark-400">Taxa ativa</span>
+            <span className="text-sm text-gray-500">Taxa ativa</span>
             <button
               onClick={() => setFormData({ ...formData, is_active: !formData.is_active })}
               className={`w-12 h-6 rounded-full transition-colors ${
-                formData.is_active ? 'bg-primary-500' : 'bg-dark-700'
+                formData.is_active ? 'bg-orange-500' : 'bg-gray-100'
               }`}
             >
               <div
@@ -227,7 +227,7 @@ const CustomFeeModal = ({
           <button
             onClick={() => onSave(formData)}
             disabled={!formData.name}
-            className="w-full py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 disabled:text-dark-500 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+            className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-100 disabled:text-gray-400 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
           >
             <Save className="w-4 h-4" />
             Salvar Taxa
@@ -347,7 +347,7 @@ export default function TaxSettingsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
       </div>
     )
   }
@@ -357,14 +357,14 @@ export default function TaxSettingsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Configurações de Taxas</h1>
-          <p className="text-dark-400 mt-1">Configure as taxas para cálculo de lucro real</p>
+          <h1 className="text-2xl font-bold text-gray-900">Configurações de Taxas</h1>
+          <p className="text-gray-500 mt-1">Configure as taxas para cálculo de lucro real</p>
         </div>
 
         <button
           onClick={saveSettings}
           disabled={isSaving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 text-white rounded-xl font-medium transition-colors"
+          className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-100 text-white rounded-xl font-medium transition-colors"
         >
           {isSaving ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -381,15 +381,15 @@ export default function TaxSettingsPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+        className="p-6 bg-white rounded-2xl border border-gray-200"
       >
         <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-lg bg-primary-500/20">
-            <Percent className="w-5 h-5 text-primary-400" />
+          <div className="p-2 rounded-lg bg-orange-50">
+            <Percent className="w-5 h-5 text-orange-500" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Custo Padrão</h2>
-            <p className="text-sm text-dark-400">Para produtos sem custo cadastrado</p>
+            <h2 className="text-lg font-semibold text-gray-900">Custo Padrão</h2>
+            <p className="text-sm text-gray-500">Para produtos sem custo cadastrado</p>
           </div>
         </div>
 
@@ -403,11 +403,11 @@ export default function TaxSettingsPage() {
           />
 
           <div>
-            <label className="block text-sm text-dark-400 mb-2">Moeda Padrão para Custos</label>
+            <label className="block text-sm text-gray-500 mb-2">Moeda Padrão para Custos</label>
             <select
               value={settings.default_cost_currency}
               onChange={(e) => setSettings({ ...settings, default_cost_currency: e.target.value })}
-              className="w-full px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-orange-500"
             >
               {CURRENCIES.map(c => (
                 <option key={c} value={c}>{c}</option>
@@ -422,15 +422,15 @@ export default function TaxSettingsPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+        className="p-6 bg-white rounded-2xl border border-gray-200"
       >
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 rounded-lg bg-green-500/20">
             <CreditCard className="w-5 h-5 text-green-400" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Taxas de Pagamento</h2>
-            <p className="text-sm text-dark-400">Gateway de pagamento e taxas por transação</p>
+            <h2 className="text-lg font-semibold text-gray-900">Taxas de Pagamento</h2>
+            <p className="text-sm text-gray-500">Gateway de pagamento e taxas por transação</p>
           </div>
         </div>
 
@@ -458,15 +458,15 @@ export default function TaxSettingsPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+        className="p-6 bg-white rounded-2xl border border-gray-200"
       >
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 rounded-lg bg-orange-500/20">
             <DollarSign className="w-5 h-5 text-orange-400" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Outras Taxas</h2>
-            <p className="text-sm text-dark-400">Impostos, marketplace e custos fixos</p>
+            <h2 className="text-lg font-semibold text-gray-900">Outras Taxas</h2>
+            <p className="text-sm text-gray-500">Impostos, marketplace e custos fixos</p>
           </div>
         </div>
 
@@ -510,7 +510,7 @@ export default function TaxSettingsPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+        className="p-6 bg-white rounded-2xl border border-gray-200"
       >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -518,14 +518,14 @@ export default function TaxSettingsPage() {
               <Settings className="w-5 h-5 text-purple-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Taxas Customizadas</h2>
-              <p className="text-sm text-dark-400">Adicione taxas específicas do seu negócio</p>
+              <h2 className="text-lg font-semibold text-gray-900">Taxas Customizadas</h2>
+              <p className="text-sm text-gray-500">Adicione taxas específicas do seu negócio</p>
             </div>
           </div>
 
           <button
             onClick={() => { setEditingFee(null); setShowFeeModal(true); }}
-            className="flex items-center gap-2 px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-xl text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-xl text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
             Adicionar Taxa
@@ -533,7 +533,7 @@ export default function TaxSettingsPage() {
         </div>
 
         {customFees.length === 0 ? (
-          <div className="text-center py-8 text-dark-400">
+          <div className="text-center py-8 text-gray-500">
             <p>Nenhuma taxa customizada cadastrada</p>
           </div>
         ) : (
@@ -541,13 +541,13 @@ export default function TaxSettingsPage() {
             {customFees.map((fee) => (
               <div
                 key={fee.id}
-                className="flex items-center justify-between p-4 bg-dark-800/50 rounded-xl"
+                className="flex items-center justify-between p-4 bg-white rounded-xl"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${fee.is_active ? 'bg-green-400' : 'bg-dark-500'}`} />
+                  <div className={`w-2 h-2 rounded-full ${fee.is_active ? 'bg-green-400' : 'bg-gray-400'}`} />
                   <div>
-                    <p className="font-medium text-white">{fee.name}</p>
-                    <p className="text-sm text-dark-400">
+                    <p className="font-medium text-gray-900">{fee.name}</p>
+                    <p className="text-sm text-gray-500">
                       {fee.fee_type === 'percentage'
                         ? `${fee.fee_value}% sobre ${fee.applies_to === 'revenue' ? 'receita' : fee.applies_to === 'subtotal' ? 'subtotal' : 'frete'}`
                         : `R$ ${fee.fee_value.toFixed(2)} por ${fee.per_order ? 'pedido' : 'item'}`
@@ -559,13 +559,13 @@ export default function TaxSettingsPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => { setEditingFee(fee); setShowFeeModal(true); }}
-                    className="p-2 hover:bg-dark-700 rounded-lg text-dark-400 hover:text-white transition-colors"
+                    className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-900 transition-colors"
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => fee.id && deleteCustomFee(fee.id)}
-                    className="p-2 hover:bg-red-500/20 rounded-lg text-dark-400 hover:text-red-400 transition-colors"
+                    className="p-2 hover:bg-red-500/20 rounded-lg text-gray-500 hover:text-red-400 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
