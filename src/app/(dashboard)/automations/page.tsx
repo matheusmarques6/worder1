@@ -708,7 +708,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             <Zap className="w-5 h-5 text-primary-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-white truncate">{automation.name}</h3>
+            <h3 className="font-semibold text-gray-900 truncate">{automation.name}</h3>
             {automation.description && (
               <p className="text-sm text-gray-500 truncate">{automation.description}</p>
             )}

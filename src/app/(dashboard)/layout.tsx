@@ -20,12 +20,8 @@ import {
   Mail,
   ShoppingCart,
   HelpCircle,
-  Moon,
-  Sun,
   Menu,
   X,
-  DollarSign,
-  TrendingUp,
   Store,
   ChevronDown,
   Check,
@@ -42,34 +38,15 @@ import {
   RefreshCcw,
   FileText,
   Package,
-  Ticket,
-  Image as ImageIcon,
+  Send,
+  Plug,
+  Briefcase,
+  MessageCircle,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 // Custom icons for ad platforms
-const FacebookIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-  </svg>
-)
-
-const GoogleIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-  </svg>
-)
-
-const TikTokIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z"/>
-  </svg>
-)
-
 import { useStoreStore, useAuthStore, useUIStore, type ShopifyStore } from '@/stores'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
 import { cn } from '@/lib/utils'
@@ -117,43 +94,28 @@ const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
   );
 };
 
-const navigation = [
+const mainNav = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Inbox', href: '/inbox', icon: MessageSquare },
   { name: 'Contatos', href: '/contacts', icon: Users },
-  { name: 'Campanhas', href: '/campaigns', icon: Mail },
-  { name: 'CRM', href: '/crm', icon: Users },
-  { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare },
   { name: 'Email', href: '/email/campaigns', icon: Mail },
+  { name: 'WhatsApp', href: '/whatsapp', icon: MessageCircle },
+  { name: 'CRM', href: '/crm', icon: Briefcase },
 ]
 
-const toolsNav = [
+const automationNav = [
   { name: 'Automações', href: '/automations', icon: Zap },
-  { name: 'Segmentos', href: '/segments', icon: Target },
   { name: 'Formulários', href: '/forms', icon: FileText },
+  { name: 'Segmentos', href: '/segments', icon: Target },
   { name: 'Recuperação', href: '/recovery', icon: RefreshCcw },
-  { name: 'Integrações', href: '/integrations', icon: ExternalLink },
 ]
 
 const analyticsNav = [
-  { name: 'Vendas/CRM', href: '/analytics/sales', icon: TrendingUp },
-  { name: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
-  { name: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
-  { name: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
-  { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon },
-  { name: 'Google Ads', href: '/analytics/google', icon: GoogleIcon },
-  { name: 'TikTok Ads', href: '/analytics/tiktok', icon: TikTokIcon },
+  { name: 'Visão Geral', href: '/analytics/sales', icon: BarChart3 },
 ]
 
-const contentNav = [
-  { name: 'Templates', href: '/email/templates', icon: FileText },
-  { name: 'Mídia', href: '/content/media', icon: ImageIcon },
-  { name: 'Cupons', href: '/content/coupons', icon: Ticket },
-  { name: 'Produtos', href: '/products', icon: Package },
-  { name: 'Pedidos', href: '/orders', icon: ShoppingCart },
-]
-
-const systemNav = [
+const footerNav = [
+  { name: 'Integrações', href: '/integrations', icon: Plug },
   { name: 'Configurações', href: '/settings', icon: Settings },
   { name: 'Ajuda', href: '/help', icon: HelpCircle },
 ]
@@ -511,72 +473,46 @@ export default function DashboardLayout({
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
+      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-5">
         {/* Main */}
+        <nav className="space-y-0.5">
+          {mainNav.map((item) => (
+            <NavLink key={item.name} item={item} />
+          ))}
+        </nav>
+
+        {/* Automação */}
         <div>
           {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-              Principal
+            <p className="px-3 pt-1 pb-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
+              Automação
             </p>
           )}
-          <nav className="space-y-1">
-            {navigation.map((item) => (
+          <nav className="space-y-0.5">
+            {automationNav.map((item) => (
               <NavLink key={item.name} item={item} />
             ))}
           </nav>
         </div>
 
-        {/* Tools */}
+        {/* Analytics */}
         <div>
           {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-              Ferramentas
+            <p className="px-3 pt-1 pb-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
+              Analytics
             </p>
           )}
-          <nav className="space-y-1">
-            {toolsNav.map((item) => (
-              <NavLink key={item.name} item={item} />
-            ))}
-          </nav>
-        </div>
-
-        {/* Forecast */}
-        <div>
-          {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-              Forecast
-            </p>
-          )}
-          <nav className="space-y-1">
+          <nav className="space-y-0.5">
             {analyticsNav.map((item) => (
               <NavLink key={item.name} item={item} />
             ))}
           </nav>
         </div>
 
-        {/* Content */}
+        {/* Footer nav */}
         <div>
-          {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-              Conteúdo
-            </p>
-          )}
-          <nav className="space-y-1">
-            {contentNav.map((item) => (
-              <NavLink key={item.name} item={item} />
-            ))}
-          </nav>
-        </div>
-
-        {/* System */}
-        <div>
-          {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-              Sistema
-            </p>
-          )}
-          <nav className="space-y-1">
-            {systemNav.map((item) => (
+          <nav className="space-y-0.5">
+            {footerNav.map((item) => (
               <NavLink key={item.name} item={item} />
             ))}
           </nav>

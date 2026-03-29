@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { mergeTags } from '@/lib/email/merge-tags'
 import { ArrowLeft, Send, Save } from 'lucide-react'
@@ -18,27 +18,32 @@ const EmailEditorComponent = dynamic(() => import('react-email-editor'), {
 })
 
 interface EmailEditorProps {
-  designJson?: Record<string, unknown>
-  onSave: (html: string, json: Record<string, unknown>) => void
+  templateName?: string
+  design?: Record<string, unknown>
+  onSave: (design: Record<string, unknown>, html: string) => Promise<boolean>
   onBack?: () => void
   onTest?: () => void
-  title?: string
-  saving?: boolean
 }
 
-export default function UnlayerEditor({ designJson, onSave, onBack, onTest, title, saving }: EmailEditorProps) {
+export default function UnlayerEditor({ templateName, design, onSave, onBack, onTest }: EmailEditorProps) {
   const editorRef = useRef<any>(null)
+  const [saving, setSaving] = useState(false)
 
   const onReady = useCallback(() => {
-    if (designJson && editorRef.current?.editor) {
-      editorRef.current.editor.loadDesign(designJson)
+    if (design && editorRef.current?.editor) {
+      editorRef.current.editor.loadDesign(design)
     }
-  }, [designJson])
+  }, [design])
 
   const handleSave = useCallback(() => {
     if (!editorRef.current?.editor) return
-    editorRef.current.editor.exportHtml((data: any) => {
-      onSave(data.html, data.design)
+    editorRef.current.editor.exportHtml(async (data: any) => {
+      setSaving(true)
+      try {
+        await onSave(data.design, data.html)
+      } finally {
+        setSaving(false)
+      }
     })
   }, [onSave])
 
@@ -63,8 +68,8 @@ export default function UnlayerEditor({ designJson, onSave, onBack, onTest, titl
               Voltar
             </button>
           )}
-          {title && (
-            <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
+          {templateName && (
+            <h1 className="text-lg font-semibold text-gray-900">{templateName}</h1>
           )}
         </div>
         <div className="flex items-center gap-2">

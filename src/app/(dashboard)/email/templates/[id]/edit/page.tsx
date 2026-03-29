@@ -32,7 +32,6 @@ export default function EditTemplatePage() {
 
   const [template, setTemplate] = useState<Template | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -55,22 +54,22 @@ export default function EditTemplatePage() {
     if (templateId) fetchTemplate()
   }, [templateId])
 
-  const handleSave = async (html: string, designJson: Record<string, unknown>) => {
-    setSaving(true)
+  const handleSave = async (design: Record<string, unknown>, html: string): Promise<boolean> => {
     try {
       const res = await fetch(`/api/email/templates/${templateId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html, design_json: designJson }),
+        body: JSON.stringify({ design_json: design, html }),
       })
       const data = await res.json()
       if (!data.success) {
         alert('Erro ao salvar: ' + (data.error || 'Erro desconhecido'))
+        return false
       }
+      return true
     } catch (err) {
       alert('Erro ao salvar template')
-    } finally {
-      setSaving(false)
+      return false
     }
   }
 
@@ -105,11 +104,10 @@ export default function EditTemplatePage() {
   return (
     <div className="h-screen">
       <UnlayerEditor
-        designJson={template.design_json}
+        design={template.design_json}
         onSave={handleSave}
         onBack={handleBack}
-        title={template.name}
-        saving={saving}
+        templateName={template.name}
       />
     </div>
   )

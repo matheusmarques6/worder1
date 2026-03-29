@@ -26,8 +26,6 @@ import {
   CheckCheck,
   Plus,
   ShoppingBag,
-  ShoppingCart,
-  Package,
   Trash2,
   AlertCircle,
   AlertTriangle,
@@ -38,10 +36,7 @@ import {
   User,
   Building2,
   Menu,
-  Image as ImageIcon,
-  Ticket,
   Mail,
-  TrendingUp,
   Target,
   RefreshCcw,
   BarChart3,
@@ -89,39 +84,24 @@ const mainNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Inbox', href: '/inbox', icon: MessageSquare },
   { title: 'Contatos', href: '/contacts', icon: Users },
-  { title: 'Campanhas', href: '/campaigns', icon: Mail },
-  { title: 'CRM', href: '/crm', icon: ShoppingBag },
-  { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
   { title: 'Email', href: '/email/campaigns', icon: Mail },
+  { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare },
+  { title: 'CRM', href: '/crm', icon: ShoppingBag },
 ]
 
-const toolsNavItems: NavItem[] = [
+const automationNavItems: NavItem[] = [
   { title: 'Automações', href: '/automations', icon: Zap },
-  { title: 'Segmentos', href: '/segments', icon: Target },
   { title: 'Formulários', href: '/forms', icon: FileText },
+  { title: 'Segmentos', href: '/segments', icon: Target },
   { title: 'Recuperação', href: '/recovery', icon: RefreshCcw },
-  { title: 'Integrações', href: '/integrations', icon: ExternalLink },
 ]
 
 const analyticsNavItems: NavItem[] = [
-  { title: 'Vendas/CRM', href: '/analytics/sales', icon: TrendingUp },
-  { title: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
-  { title: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
-  { title: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
-  { title: 'Facebook Ads', href: '/analytics/facebook', icon: BarChart3 },
-  { title: 'Google Ads', href: '/analytics/google', icon: BarChart3 },
-  { title: 'TikTok Ads', href: '/analytics/tiktok', icon: BarChart3 },
+  { title: 'Visão Geral', href: '/analytics/sales', icon: BarChart3 },
 ]
 
-const contentNavItems: NavItem[] = [
-  { title: 'Templates', href: '/email/templates', icon: FileText },
-  { title: 'Mídia', href: '/content/media', icon: ImageIcon },
-  { title: 'Cupons', href: '/content/coupons', icon: Ticket },
-  { title: 'Produtos', href: '/products', icon: Package },
-  { title: 'Pedidos', href: '/orders', icon: ShoppingCart },
-]
-
-const settingsNavItems: NavItem[] = [
+const footerNavItems: NavItem[] = [
+  { title: 'Integrações', href: '/integrations', icon: ExternalLink },
   { title: 'Configurações', href: '/settings', icon: Settings },
   { title: 'Ajuda', href: '/help', icon: HelpCircle },
 ]
@@ -169,9 +149,8 @@ export function Sidebar() {
         href={item.href}
         className={cn(
           'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200',
-          'hover:bg-sidebar-hover',
-          isActive && 'bg-sidebar-active text-white border-l-[3px] border-brand-500',
-          !isActive && 'text-gray-400 hover:text-gray-200'
+          isActive && 'bg-white/10 text-white',
+          !isActive && 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
         )}
       >
         <Icon className={cn('w-5 h-5 flex-shrink-0', isActive && 'text-brand-400')} />
@@ -276,7 +255,7 @@ export function Sidebar() {
           {/* Main */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <p className="px-4 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
                 Principal
               </p>
             )}
@@ -287,39 +266,25 @@ export function Sidebar() {
             </div>
           </div>
 
-          {/* Tools */}
+          {/* Automation */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Ferramentas
+              <p className="px-4 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
+                Automação
               </p>
             )}
             <div className="space-y-1">
-              {toolsNavItems.map((item) => (
+              {automationNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>
           </div>
 
-          {/* Content */}
+          {/* Analytics */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Conteúdo
-              </p>
-            )}
-            <div className="space-y-1">
-              {contentNavItems.map((item) => (
-                <NavLink key={item.href} item={item} />
-              ))}
-            </div>
-          </div>
-
-          {/* Analytics / Forecast */}
-          <div>
-            {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Forecast
+              <p className="px-4 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
+                Analytics
               </p>
             )}
             <div className="space-y-1">
@@ -329,15 +294,15 @@ export function Sidebar() {
             </div>
           </div>
 
-          {/* Settings */}
+          {/* Footer Nav */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <p className="px-4 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
                 Sistema
               </p>
             )}
             <div className="space-y-1">
-              {settingsNavItems.map((item) => (
+              {footerNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </div>
