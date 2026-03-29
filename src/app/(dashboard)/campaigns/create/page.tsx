@@ -389,16 +389,65 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
 }) {
   const router = useRouter()
   const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
   const [scheduleMode, setScheduleMode] = useState<'now' | 'scheduled'>('now')
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('')
 
   const channelLabel = channels.find(c => c.id === channel)?.name || channel
   const audienceData = segments.find(s => s.id === audience)
 
-  const handleSend = () => {
+  const handleSend = async () => {
     setSending(true)
-    setTimeout(() => {
+    setError('')
+
+    try {
+      // 1. Create the campaign via API
+      const createRes = await fetch('/api/email/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: campaignName || 'Campanha sem nome',
+          subject: subject || campaignName || 'Sem assunto',
+          from_email: 'noreply@resend.dev',
+          sender_name: 'Worder',
+          segment_id: audience || null,
+          template_id: null,
+        }),
+      })
+
+      if (!createRes.ok) {
+        const err = await createRes.json()
+        throw new Error(err.error || 'Erro ao criar campanha')
+      }
+
+      const { campaign } = await createRes.json()
+
+      if (scheduleMode === 'now') {
+        // 2. Send immediately
+        const sendRes = await fetch('/api/email/campaigns/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ campaign_id: campaign.id }),
+        })
+
+        if (!sendRes.ok) {
+          const err = await sendRes.json()
+          throw new Error(err.error || 'Erro ao enviar campanha')
+        }
+
+        const result = await sendRes.json()
+        alert(`Campanha enviada! ${result.sent || 0} emails enviados.`)
+      } else {
+        // Schedule for later
+        alert('Campanha criada como rascunho. Agendamento será implementado em breve.')
+      }
+
       router.push('/campaigns')
-    }, 2000)
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar/enviar campanha')
+      setSending(false)
+    }
   }
 
   return (
@@ -479,12 +528,22 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
           <div className="flex items-center gap-4 mt-4">
             <input
               type="date"
+              value={scheduleDate}
+              onChange={(e) => setScheduleDate(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
             />
             <input
               type="time"
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
             />
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
       </div>

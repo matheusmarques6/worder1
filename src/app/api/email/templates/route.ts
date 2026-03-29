@@ -50,11 +50,11 @@ export async function POST(request: NextRequest) {
     const { user } = auth;
     const body = await request.json();
 
-    const { name, subject, html, type, thumbnail_url } = body;
+    const { name, subject, html, type, category, thumbnail_url } = body;
 
-    if (!name || !subject || !html) {
+    if (!name) {
       return NextResponse.json(
-        { error: 'name, subject, and html are required' },
+        { error: 'name is required' },
         { status: 400 }
       );
     }
@@ -64,9 +64,9 @@ export async function POST(request: NextRequest) {
       .insert({
         organization_id: user.organization_id,
         name,
-        subject,
-        html,
-        type: type || 'campaign',
+        subject: subject || '',
+        html: html || '',
+        type: type || category || 'campaign',
         thumbnail_url: thumbnail_url || null,
         created_by: user.id,
       })

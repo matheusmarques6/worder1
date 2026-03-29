@@ -94,28 +94,29 @@ export async function POST(request: NextRequest) {
       store_id,
     } = body;
 
-    if (!name || !subject || !template_id || !from_email) {
+    if (!name) {
       return NextResponse.json(
-        { error: 'name, subject, template_id, and from_email are required' },
+        { error: 'name is required' },
         { status: 400 }
       );
     }
 
+    const insertData: Record<string, any> = {
+      organization_id: user.organization_id,
+      name,
+      subject: subject || name,
+      status: 'draft',
+    }
+    if (template_id) insertData.template_id = template_id
+    if (from_email) insertData.from_email = from_email
+    if (sender_name) insertData.sender_name = sender_name
+    if (reply_to) insertData.reply_to = reply_to
+    if (segment_id) insertData.segment_id = segment_id
+    if (store_id) insertData.store_id = store_id
+
     const { data: campaign, error } = await supabaseAdmin
       .from('email_campaigns')
-      .insert({
-        organization_id: user.organization_id,
-        name,
-        subject,
-        template_id,
-        from_email,
-        sender_name: sender_name || null,
-        reply_to: reply_to || null,
-        segment_id: segment_id || null,
-        store_id: store_id || null,
-        status: 'draft',
-        created_by: user.id,
-      })
+      .insert(insertData)
       .select()
       .single();
 

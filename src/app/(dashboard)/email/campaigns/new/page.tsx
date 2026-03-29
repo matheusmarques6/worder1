@@ -163,14 +163,15 @@ export default function NewCampaignPage() {
         throw new Error(data.error || 'Erro ao criar campanha')
       }
 
-      const campaign = await createRes.json()
+      const campaignData = await createRes.json()
+      const campaignId = campaignData.campaign?.id || campaignData.id
 
       // Send or schedule
       if (sendType === 'now') {
         const sendRes = await fetch('/api/email/campaigns/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ campaign_id: campaign.id }),
+          body: JSON.stringify({ campaign_id: campaignId }),
         })
         if (!sendRes.ok) {
           throw new Error('Erro ao enviar campanha')

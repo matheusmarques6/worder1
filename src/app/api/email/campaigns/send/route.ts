@@ -144,10 +144,19 @@ export async function POST(request: NextRequest) {
 
     for (const contact of contacts) {
       const mergeData: Record<string, string> = {
+        // Both formats: {{first_name}} and {{contact.first_name}}
+        first_name: contact.first_name || '',
+        last_name: contact.last_name || '',
+        email: contact.email || '',
+        phone: contact.phone || '',
         'contact.first_name': contact.first_name || '',
         'contact.last_name': contact.last_name || '',
         'contact.email': contact.email || '',
         'contact.phone': contact.phone || '',
+        store_name: storeName,
+        store_url: storeUrl,
+        store_email: storeEmail,
+        store_phone: storePhone,
         'store.name': storeName,
         'store.url': storeUrl,
         'store.email': storeEmail,

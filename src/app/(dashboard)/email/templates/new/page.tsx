@@ -81,7 +81,8 @@ export default function NewTemplatePage() {
       }
 
       const data = await res.json()
-      router.push(`/email/templates/${data.id}/edit`)
+      const templateId = data.template?.id || data.id
+      router.push(`/email/templates/${templateId}/edit`)
     } catch (err: any) {
       setError(err.message || 'Erro ao criar template')
     } finally {

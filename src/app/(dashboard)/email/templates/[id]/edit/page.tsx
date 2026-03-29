@@ -39,7 +39,7 @@ export default function EditTemplatePage() {
       const res = await fetch(`/api/email/templates/${templateId}`)
       if (!res.ok) throw new Error('Template não encontrado')
       const data = await res.json()
-      setTemplate(data)
+      setTemplate(data.template || data)
     } catch (err: any) {
       setError(err.message || 'Erro ao carregar template')
     } finally {
