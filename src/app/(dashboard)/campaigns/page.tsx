@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
@@ -18,21 +18,27 @@ import {
   PaperPlaneTilt,
   FunnelSimple,
   MagnifyingGlass,
+  SpinnerGap,
 } from '@phosphor-icons/react'
+import { createBrowserClient } from '@/lib/supabase'
 
-const kpis = [
-  { title: 'Campanhas Ativas', value: '12', icon: Megaphone, color: '#F26B2A' },
-  { title: 'Envios (30d)', value: '45.2K', icon: PaperPlaneTilt, color: '#3B82F6' },
-  { title: 'Taxa de Abertura', value: '32.4%', change: '+2.1%', positive: true, icon: Eye, color: '#22C55E' },
-  { title: 'Receita Atribuída', value: 'R$ 28.450', change: '+15%', positive: true, icon: CurrencyDollar, color: '#F5A623' },
-]
-
-const mockCampaigns = [
-  { id: '1', name: 'Black Friday - Esquenta', channel: 'email', status: 'Enviada', sent: '12.450', opened: '32.1%', clicked: '8.4%', revenue: 'R$ 8.290', date: '10/03/2026' },
-  { id: '2', name: 'Recuperação PIX Março', channel: 'whatsapp', status: 'Ativa', sent: '3.200', opened: '89.2%', clicked: '24.1%', revenue: 'R$ 12.150', date: '08/03/2026' },
-  { id: '3', name: 'Lançamento Coleção', channel: 'email', status: 'Rascunho', sent: '-', opened: '-', clicked: '-', revenue: '-', date: '12/03/2026' },
-  { id: '4', name: 'Win-back 90 dias', channel: 'sms', status: 'Agendada', sent: '-', opened: '-', clicked: '-', revenue: '-', date: '15/03/2026' },
-]
+interface Campaign {
+  id: string
+  name: string
+  channel?: string
+  status: string
+  subject?: string
+  sender_email?: string
+  reply_to?: string
+  scheduled_at?: string
+  sent_at?: string
+  total_sent?: number
+  total_delivered?: number
+  total_opened?: number
+  total_clicked?: number
+  attributed_revenue?: number
+  created_at: string
+}
 
 const channelIcons: Record<string, React.ReactNode> = {
   email: <EnvelopeSimple className="w-4 h-4 text-blue-400" weight="fill" />,
@@ -42,14 +48,69 @@ const channelIcons: Record<string, React.ReactNode> = {
 }
 
 const statusColors: Record<string, string> = {
-  'Enviada': 'bg-green-500/10 text-green-400',
-  'Ativa': 'bg-blue-500/10 text-blue-400',
-  'Rascunho': 'bg-gray-100 text-gray-500',
-  'Agendada': 'bg-amber-500/10 text-amber-400',
+  'sent': 'bg-green-500/10 text-green-400',
+  'active': 'bg-blue-500/10 text-blue-400',
+  'draft': 'bg-gray-100 text-gray-500',
+  'scheduled': 'bg-amber-500/10 text-amber-400',
+  'sending': 'bg-blue-500/10 text-blue-400',
+}
+
+const statusLabels: Record<string, string> = {
+  'sent': 'Enviada',
+  'active': 'Ativa',
+  'draft': 'Rascunho',
+  'scheduled': 'Agendada',
+  'sending': 'Enviando',
 }
 
 export default function CampaignsPage() {
   const [search, setSearch] = useState('')
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchCampaigns = useCallback(async () => {
+    try {
+      setLoading(true)
+      const supabase = createBrowserClient()
+      const { data, error } = await supabase
+        .from('email_campaigns')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error fetching campaigns:', error.message)
+        setCampaigns([])
+        return
+      }
+      setCampaigns(data || [])
+    } catch (err) {
+      console.error('Failed to fetch campaigns:', err)
+      setCampaigns([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchCampaigns()
+  }, [fetchCampaigns])
+
+  const activeCampaigns = campaigns.filter(c => c.status === 'active' || c.status === 'sending').length
+  const totalSent = campaigns.reduce((sum, c) => sum + (c.total_sent || 0), 0)
+  const totalOpened = campaigns.reduce((sum, c) => sum + (c.total_opened || 0), 0)
+  const totalRevenue = campaigns.reduce((sum, c) => sum + (c.attributed_revenue || 0), 0)
+  const openRate = totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(1) : '0'
+
+  const kpis = [
+    { title: 'Campanhas Ativas', value: String(activeCampaigns), icon: Megaphone, color: '#F26B2A' },
+    { title: 'Envios (total)', value: totalSent >= 1000 ? `${(totalSent / 1000).toFixed(1)}K` : String(totalSent), icon: PaperPlaneTilt, color: '#3B82F6' },
+    { title: 'Taxa de Abertura', value: `${openRate}%`, icon: Eye, color: '#22C55E' },
+    { title: 'Receita Atribuída', value: `R$ ${totalRevenue.toLocaleString('pt-BR')}`, icon: CurrencyDollar, color: '#F5A623' },
+  ]
+
+  const filteredCampaigns = campaigns.filter(c =>
+    !search || c.name?.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <div className="space-y-6">
@@ -80,12 +141,6 @@ export default function CampaignsPage() {
                 <div>
                   <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
                   <p className="text-2xl font-bold text-white mt-1 font-display">{kpi.value}</p>
-                  {kpi.change && (
-                    <div className="flex items-center gap-1 mt-2">
-                      {kpi.positive ? <TrendUp className="w-3.5 h-3.5 text-green-400" weight="bold" /> : <TrendDown className="w-3.5 h-3.5 text-red-400" weight="bold" />}
-                      <span className={`text-xs font-medium ${kpi.positive ? 'text-green-400' : 'text-red-400'}`}>{kpi.change}</span>
-                    </div>
-                  )}
                 </div>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${kpi.color}15` }}>
                   <Icon className="w-5 h-5" style={{ color: kpi.color }} weight="duotone" />
@@ -114,41 +169,73 @@ export default function CampaignsPage() {
         </button>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <SpinnerGap className="w-8 h-8 text-[#F26B2A] animate-spin" />
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && filteredCampaigns.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Megaphone className="w-16 h-16 text-gray-600 mb-4" weight="duotone" />
+          <h3 className="text-lg font-semibold text-white mb-1">Nenhuma campanha encontrada</h3>
+          <p className="text-sm text-gray-500">Crie sua primeira campanha para começar.</p>
+        </div>
+      )}
+
       {/* Table */}
-      <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-[#111111]">
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Campanha</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Canal</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Status</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Envios</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Abertura</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Cliques</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Receita</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Data</th>
-            </tr>
-          </thead>
-          <tbody>
-            {mockCampaigns.map((campaign) => (
-              <tr key={campaign.id} onClick={() => window.location.href = `/campaigns/${campaign.id}`} className="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer">
-                <td className="px-5 py-4 text-sm font-medium text-white">{campaign.name}</td>
-                <td className="px-5 py-4">{channelIcons[campaign.channel]}</td>
-                <td className="px-5 py-4">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusColors[campaign.status]}`}>
-                    {campaign.status}
-                  </span>
-                </td>
-                <td className="px-5 py-4 text-sm text-gray-600">{campaign.sent}</td>
-                <td className="px-5 py-4 text-sm text-gray-600">{campaign.opened}</td>
-                <td className="px-5 py-4 text-sm text-gray-600">{campaign.clicked}</td>
-                <td className="px-5 py-4 text-sm font-medium text-white">{campaign.revenue}</td>
-                <td className="px-5 py-4 text-sm text-gray-500">{campaign.date}</td>
+      {!loading && filteredCampaigns.length > 0 && (
+        <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-[#111111]">
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Campanha</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Canal</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Status</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Envios</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Abertura</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Cliques</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Receita</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Data</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredCampaigns.map((campaign) => {
+                const sent = campaign.total_sent || 0
+                const opened = campaign.total_opened || 0
+                const clicked = campaign.total_clicked || 0
+                const revenue = campaign.attributed_revenue || 0
+                const openRatePct = sent > 0 ? `${((opened / sent) * 100).toFixed(1)}%` : '-'
+                const clickRatePct = sent > 0 ? `${((clicked / sent) * 100).toFixed(1)}%` : '-'
+                const channel = campaign.channel || 'email'
+                const statusLabel = statusLabels[campaign.status] || campaign.status
+                const statusColor = statusColors[campaign.status] || 'bg-gray-100 text-gray-500'
+                const dateStr = campaign.sent_at || campaign.scheduled_at || campaign.created_at
+                const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('pt-BR') : '-'
+
+                return (
+                  <tr key={campaign.id} onClick={() => window.location.href = `/campaigns/${campaign.id}`} className="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer">
+                    <td className="px-5 py-4 text-sm font-medium text-white">{campaign.name}</td>
+                    <td className="px-5 py-4">{channelIcons[channel] || channelIcons.email}</td>
+                    <td className="px-5 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusColor}`}>
+                        {statusLabel}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-sm text-gray-600">{sent > 0 ? sent.toLocaleString('pt-BR') : '-'}</td>
+                    <td className="px-5 py-4 text-sm text-gray-600">{openRatePct}</td>
+                    <td className="px-5 py-4 text-sm text-gray-600">{clickRatePct}</td>
+                    <td className="px-5 py-4 text-sm font-medium text-white">{revenue > 0 ? `R$ ${revenue.toLocaleString('pt-BR')}` : '-'}</td>
+                    <td className="px-5 py-4 text-sm text-gray-500">{formattedDate}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

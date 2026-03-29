@@ -272,7 +272,7 @@ function HealthLogItem({ log }: { log: HealthLog }) {
   const IntIcon = integrationIcons[log.integration_type] || Zap
   
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 transition-colors">
+    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-100 hover:bg-gray-100 transition-colors">
       <div className={`p-1.5 rounded-lg bg-gray-700/50`}>
         <IntIcon className="w-4 h-4 text-gray-400" />
       </div>
@@ -307,7 +307,7 @@ function HealthLogItem({ log }: { log: HealthLog }) {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="p-4 rounded-full bg-gray-800/50 mb-4">
+      <div className="p-4 rounded-full bg-gray-100 mb-4">
         <Zap className="w-8 h-8 text-gray-500" />
       </div>
       <h3 className="text-lg font-medium text-white mb-2">Nenhuma integração conectada</h3>

@@ -87,33 +87,38 @@ interface Notification {
 
 const mainNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: 'Pedidos', href: '/orders', icon: ShoppingCart },
-  { title: 'Produtos', href: '/products', icon: Package },
-  { title: 'CRM', href: '/crm', icon: Users },
+  { title: 'Inbox', href: '/inbox', icon: MessageSquare },
+  { title: 'Contatos', href: '/contacts', icon: Users },
+  { title: 'Campanhas', href: '/campaigns', icon: Mail },
+  { title: 'CRM', href: '/crm', icon: ShoppingBag },
   { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
   { title: 'Email', href: '/email/campaigns', icon: Mail },
 ]
 
 const toolsNavItems: NavItem[] = [
-  { title: 'Formulários', href: '/forms', icon: FileText },
   { title: 'Automações', href: '/automations', icon: Zap },
   { title: 'Segmentos', href: '/segments', icon: Target },
+  { title: 'Formulários', href: '/forms', icon: FileText },
   { title: 'Recuperação', href: '/recovery', icon: RefreshCcw },
+  { title: 'Integrações', href: '/integrations', icon: ExternalLink },
 ]
 
 const analyticsNavItems: NavItem[] = [
   { title: 'Vendas/CRM', href: '/analytics/sales', icon: TrendingUp },
+  { title: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
   { title: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
   { title: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
-  { title: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
   { title: 'Facebook Ads', href: '/analytics/facebook', icon: BarChart3 },
   { title: 'Google Ads', href: '/analytics/google', icon: BarChart3 },
   { title: 'TikTok Ads', href: '/analytics/tiktok', icon: BarChart3 },
 ]
 
 const contentNavItems: NavItem[] = [
+  { title: 'Templates', href: '/email/templates', icon: FileText },
   { title: 'Mídia', href: '/content/media', icon: ImageIcon },
   { title: 'Cupons', href: '/content/coupons', icon: Ticket },
+  { title: 'Produtos', href: '/products', icon: Package },
+  { title: 'Pedidos', href: '/orders', icon: ShoppingCart },
 ]
 
 const settingsNavItems: NavItem[] = [

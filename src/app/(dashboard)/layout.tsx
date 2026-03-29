@@ -40,6 +40,10 @@ import {
   Loader2,
   Target,
   RefreshCcw,
+  FileText,
+  Package,
+  Ticket,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -115,25 +119,41 @@ const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Inbox', href: '/inbox', icon: MessageSquare },
+  { name: 'Contatos', href: '/contacts', icon: Users },
+  { name: 'Campanhas', href: '/campaigns', icon: Mail },
   { name: 'CRM', href: '/crm', icon: Users },
   { name: 'WhatsApp', href: '/whatsapp', icon: MessageSquare },
-  { name: 'Automações', href: '/automations', icon: Zap },
   { name: 'Email', href: '/email/campaigns', icon: Mail },
+]
+
+const toolsNav = [
+  { name: 'Automações', href: '/automations', icon: Zap },
+  { name: 'Segmentos', href: '/segments', icon: Target },
+  { name: 'Formulários', href: '/forms', icon: FileText },
+  { name: 'Recuperação', href: '/recovery', icon: RefreshCcw },
+  { name: 'Integrações', href: '/integrations', icon: ExternalLink },
 ]
 
 const analyticsNav = [
   { name: 'Vendas/CRM', href: '/analytics/sales', icon: TrendingUp },
+  { name: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
   { name: 'WhatsApp', href: '/whatsapp/analytics', icon: MessageSquare },
   { name: 'Shopify', href: '/analytics/shopify', icon: ShoppingCart },
-  { name: 'E-mail Marketing', href: '/analytics/email', icon: Mail },
   { name: 'Facebook Ads', href: '/analytics/facebook', icon: FacebookIcon },
   { name: 'Google Ads', href: '/analytics/google', icon: GoogleIcon },
   { name: 'TikTok Ads', href: '/analytics/tiktok', icon: TikTokIcon },
 ]
 
+const contentNav = [
+  { name: 'Templates', href: '/email/templates', icon: FileText },
+  { name: 'Mídia', href: '/content/media', icon: ImageIcon },
+  { name: 'Cupons', href: '/content/coupons', icon: Ticket },
+  { name: 'Produtos', href: '/products', icon: Package },
+  { name: 'Pedidos', href: '/orders', icon: ShoppingCart },
+]
+
 const systemNav = [
-  { name: 'Segmentos', href: '/segments', icon: Target },
-  { name: 'Recuperação', href: '/recovery', icon: RefreshCcw },
   { name: 'Configurações', href: '/settings', icon: Settings },
   { name: 'Ajuda', href: '/help', icon: HelpCircle },
 ]
@@ -506,6 +526,20 @@ export default function DashboardLayout({
           </nav>
         </div>
 
+        {/* Tools */}
+        <div>
+          {!collapsed && (
+            <p className="px-3 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+              Ferramentas
+            </p>
+          )}
+          <nav className="space-y-1">
+            {toolsNav.map((item) => (
+              <NavLink key={item.name} item={item} />
+            ))}
+          </nav>
+        </div>
+
         {/* Forecast */}
         <div>
           {!collapsed && (
@@ -515,6 +549,20 @@ export default function DashboardLayout({
           )}
           <nav className="space-y-1">
             {analyticsNav.map((item) => (
+              <NavLink key={item.name} item={item} />
+            ))}
+          </nav>
+        </div>
+
+        {/* Content */}
+        <div>
+          {!collapsed && (
+            <p className="px-3 mb-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+              Conteúdo
+            </p>
+          )}
+          <nav className="space-y-1">
+            {contentNav.map((item) => (
               <NavLink key={item.name} item={item} />
             ))}
           </nav>
