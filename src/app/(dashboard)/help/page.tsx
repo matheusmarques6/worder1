@@ -157,7 +157,7 @@ export default function HelpPage() {
   return (
     <div className="space-y-8">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-600/20 via-dark-800 to-accent-600/20 p-8 md:p-12">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-orange-50 via-gray-50 to-orange-50 border border-gray-200 p-8 md:p-12">
         <div className="absolute inset-0 bg-grid-white/5" />
         <div className="relative">
           <div className="flex items-center gap-4 mb-6">

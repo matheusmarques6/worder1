@@ -105,7 +105,7 @@ export default function ProfilePage() {
         {/* Profile Card */}
         <div className="bg-white backdrop-blur-xl border border-gray-200 rounded-2xl overflow-hidden">
           {/* Cover & Avatar */}
-          <div className="h-24 bg-gradient-to-r from-primary-600 to-accent-600" />
+          <div className="h-24 bg-gradient-to-r from-orange-500 to-accent-600" />
           <div className="px-6 pb-6">
             <div className="flex items-end gap-4 -mt-10">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-orange-500 to-accent-500 flex items-center justify-center border-4 border-white shadow-xl">
