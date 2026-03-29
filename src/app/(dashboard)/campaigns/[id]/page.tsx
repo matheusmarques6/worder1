@@ -199,7 +199,7 @@ export default function CampaignDetailPage() {
             <Export size={14} />
             Exportar
           </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white rounded-lg hover:opacity-90 text-xs font-medium">
+          <button className="flex items-center gap-2 px-3 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg hover:opacity-90 text-xs font-medium">
             <Repeat size={14} />
             Reenviar
           </button>

@@ -153,7 +153,7 @@ export default function SegmentsPage() {
         </div>
         <button
           onClick={() => setShowBuilder(!showBuilder)}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium"
         >
           <Plus size={16} />
           Novo Segmento
@@ -212,7 +212,7 @@ export default function SegmentsPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <button className="px-4 py-2 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white rounded-lg hover:opacity-90 text-sm font-medium">
+              <button className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg hover:opacity-90 text-sm font-medium">
                 Criar Segmento
               </button>
               <button
@@ -273,7 +273,7 @@ export default function SegmentsPage() {
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  seg.type === 'dynamic' ? 'bg-[#F26B2A]/10' : 'bg-gray-100'
+                  seg.type === 'dynamic' ? 'bg-brand-500/10' : 'bg-gray-100'
                 }`}>
                   {seg.type === 'dynamic' ? (
                     <Lightning size={16} className="text-[#F26B2A]" />
@@ -284,7 +284,7 @@ export default function SegmentsPage() {
                 <div>
                   <h4 className="text-sm font-medium text-gray-900">{seg.name}</h4>
                   <span className={`text-xs px-1.5 py-0.5 rounded ${
-                    seg.type === 'dynamic' ? 'bg-[#F26B2A]/10 text-[#F5A623]' : 'bg-gray-100 text-gray-500'
+                    seg.type === 'dynamic' ? 'bg-brand-500/10 text-[#F5A623]' : 'bg-gray-100 text-gray-500'
                   }`}>
                     {seg.type === 'dynamic' ? 'Dinâmico' : 'Estático'}
                   </span>

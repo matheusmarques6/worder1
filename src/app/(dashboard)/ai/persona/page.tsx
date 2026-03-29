@@ -66,7 +66,7 @@ export default function PersonaPage() {
           {/* Identity */}
           <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Robot size={16} className="text-[#F26B2A]" />
+              <Robot size={16} className="text-brand-600" />
               Identidade
             </h3>
             <div className="space-y-4">
@@ -85,7 +85,7 @@ export default function PersonaPage() {
           {/* Tone Selection */}
           <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Brain size={16} className="text-[#F26B2A]" />
+              <Brain size={16} className="text-brand-600" />
               Tom de Voz
             </h3>
             <div className="grid grid-cols-2 gap-3">
@@ -97,11 +97,11 @@ export default function PersonaPage() {
                     onClick={() => setSelectedTone(tone.id)}
                     className={`text-left p-3 rounded-lg border transition-all ${
                       selectedTone === tone.id
-                        ? 'border-[#F26B2A] bg-[#F26B2A]/5'
+                        ? 'border-[#F26B2A] bg-brand-500/5'
                         : 'border-gray-200 bg-gray-50/30 hover:border-gray-200'
                     }`}
                   >
-                    <Icon size={20} className={selectedTone === tone.id ? 'text-[#F26B2A]' : 'text-gray-500'} />
+                    <Icon size={20} className={selectedTone === tone.id ? 'text-brand-600' : 'text-gray-500'} />
                     <p className="text-sm font-medium text-gray-900 mt-2">{tone.label}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{tone.description}</p>
                   </button>
@@ -113,7 +113,7 @@ export default function PersonaPage() {
           {/* Behavior */}
           <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <ChatCircleDots size={16} className="text-[#F26B2A]" />
+              <ChatCircleDots size={16} className="text-brand-600" />
               Comportamento
             </h3>
             <div className="space-y-4">
@@ -127,7 +127,7 @@ export default function PersonaPage() {
                   <button
                     onClick={() => toggle.setter(!toggle.value)}
                     className={`w-10 h-5 rounded-full transition-colors relative ${
-                      toggle.value ? 'bg-[#F26B2A]' : 'bg-gray-100'
+                      toggle.value ? 'bg-brand-500' : 'bg-gray-100'
                     }`}
                   >
                     <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${
@@ -161,7 +161,7 @@ export default function PersonaPage() {
           {/* Incentive Limits */}
           <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Tag size={16} className="text-[#F26B2A]" />
+              <Tag size={16} className="text-brand-600" />
               Limites de Incentivo
             </h3>
             <div className="space-y-4">
@@ -210,7 +210,7 @@ export default function PersonaPage() {
             <div className="bg-[#0B141A] rounded-xl p-4 min-h-[300px]">
               {/* WhatsApp Header */}
               <div className="flex items-center gap-3 pb-3 border-b border-gray-200/50 mb-4">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center">
                   <Robot size={16} className="text-brand-500" weight="fill" />
                 </div>
                 <div>
@@ -249,7 +249,7 @@ export default function PersonaPage() {
             </div>
 
             {/* Save Button */}
-            <button className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium">
+            <button className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium">
               <FloppyDisk size={16} />
               Salvar Configurações
             </button>

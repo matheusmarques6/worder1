@@ -157,7 +157,7 @@ export default function AutomationDetailPage() {
               Pausar
             </button>
           ) : (
-            <button className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white rounded-lg hover:opacity-90 text-xs font-medium">
+            <button className="flex items-center gap-2 px-3 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg hover:opacity-90 text-xs font-medium">
               <Play size={14} weight="fill" />
               Ativar
             </button>
@@ -177,7 +177,7 @@ export default function AutomationDetailPage() {
               <p className="text-xs text-gray-500 font-medium">Status</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">{status.label}</p>
             </div>
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#F26B2A]/10">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-brand-500/10">
               <Lightning size={20} className="text-[#F26B2A]" weight="duotone" />
             </div>
           </div>
@@ -264,7 +264,7 @@ export default function AutomationDetailPage() {
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-400 font-mono">#{i + 1}</span>
                         <p className="text-sm text-gray-700 font-medium">{nodeName}</p>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-gray-500 font-medium">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-500 font-medium">
                           {nodeType}
                         </span>
                       </div>

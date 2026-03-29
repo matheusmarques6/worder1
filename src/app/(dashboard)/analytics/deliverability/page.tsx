@@ -73,7 +73,7 @@ export default function DeliverabilityPage() {
               key={p}
               onClick={() => setPeriod(p)}
               className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                period === p ? 'bg-[#F26B2A] text-white' : 'text-gray-500 hover:text-white'
+                period === p ? 'bg-brand-500 text-white' : 'text-gray-500 hover:text-white'
               }`}
             >
               {p}

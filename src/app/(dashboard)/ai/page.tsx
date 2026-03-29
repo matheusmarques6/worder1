@@ -131,7 +131,7 @@ export default function AIPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-brand-500 flex items-center justify-center">
             <Robot size={22} className="text-brand-500" weight="fill" />
           </div>
           <div>
@@ -163,12 +163,12 @@ export default function AIPage() {
               transition={{ delay: i * 0.05 }}
               className={`border rounded-xl p-4 ${
                 kpi.highlight
-                  ? 'bg-gradient-to-br from-[#F26B2A]/10 to-[#F5A623]/5 border-[#F26B2A]/30'
+                  ? 'bg-brand-50 border-brand-200'
                   : 'bg-white/50 border-gray-200'
               }`}
             >
               <div className="flex items-center gap-2 mb-2">
-                <Icon size={16} className={kpi.highlight ? 'text-[#F26B2A]' : 'text-gray-500'} />
+                <Icon size={16} className={kpi.highlight ? 'text-brand-600' : 'text-gray-500'} />
                 <span className={`text-xs ${kpi.highlight ? 'text-[#F5A623]' : 'text-gray-500'}`}>{kpi.title}</span>
               </div>
               <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
@@ -190,7 +190,7 @@ export default function AIPage() {
                 <div key={ch.id} className={`bg-gray-50/30 rounded-lg p-4 border ${isEnabled ? 'border-gray-200' : 'border-gray-200 opacity-60'}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <Icon size={20} className={isEnabled ? 'text-[#F26B2A]' : 'text-gray-400'} />
+                      <Icon size={20} className={isEnabled ? 'text-brand-600' : 'text-gray-400'} />
                       <span className="text-sm text-gray-700 font-medium">{ch.title}</span>
                       <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-500">
                         {ch.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail'}
@@ -259,8 +259,8 @@ export default function AIPage() {
             <div className="space-y-2">
               {incentiveRules.map((rule) => (
                 <div key={rule.step} className="flex items-center gap-3 py-2 border-b border-gray-200/50 last:border-0">
-                  <div className="w-6 h-6 rounded-full bg-[#F26B2A]/10 flex items-center justify-center">
-                    <span className="text-xs font-bold text-[#F26B2A]">{rule.step}</span>
+                  <div className="w-6 h-6 rounded-full bg-brand-500/10 flex items-center justify-center">
+                    <span className="text-xs font-bold text-brand-600">{rule.step}</span>
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">

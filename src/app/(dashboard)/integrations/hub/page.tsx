@@ -453,7 +453,7 @@ export default function IntegrationHubPage() {
   
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <RefreshCw className="w-8 h-8 text-violet-500 animate-spin" />
           <span className="text-gray-400">Carregando...</span>
@@ -463,7 +463,7 @@ export default function IntegrationHubPage() {
   }
   
   return (
-    <div className="min-h-screen bg-[#0f0f1a] p-6">
+    <div className="min-h-screen bg-white p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">

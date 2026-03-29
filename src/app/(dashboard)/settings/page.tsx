@@ -58,7 +58,7 @@ const ShopifyIcon = () => (
 );
 
 const KlaviyoIcon = () => (
-  <div className="w-6 h-6 bg-[#2a2a2a] rounded flex items-center justify-center">
+  <div className="w-6 h-6 bg-gray-50 rounded flex items-center justify-center">
     <span className="text-[#28c76f] font-bold text-xs">K</span>
   </div>
 );

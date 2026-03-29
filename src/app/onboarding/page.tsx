@@ -206,7 +206,7 @@ export default function OnboardingPage() {
                     value={storeName}
                     onChange={(e) => setStoreName(e.target.value)}
                     placeholder="Ex: Minha Loja Principal"
-                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors"
                     autoFocus
                   />
                   <p className="text-xs text-gray-400 mt-2">
@@ -235,7 +235,7 @@ export default function OnboardingPage() {
                       value={storeDomain}
                       onChange={(e) => setStoreDomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                       placeholder="minha-loja"
-                      className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-l-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                      className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-l-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors"
                       autoFocus
                     />
                     <span className="px-4 py-3 bg-gray-100 border border-gray-200 rounded-r-xl text-gray-500 text-sm">
@@ -270,7 +270,7 @@ export default function OnboardingPage() {
                     value={accessToken}
                     onChange={(e) => setAccessToken(e.target.value)}
                     placeholder="shpat_xxxxxxxxxxxx"
-                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors font-mono"
+                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors font-mono"
                     autoFocus
                   />
                   <p className="text-xs text-gray-400 mt-2">
@@ -310,7 +310,7 @@ export default function OnboardingPage() {
                     value={apiSecret}
                     onChange={(e) => setApiSecret(e.target.value)}
                     placeholder="shpss_xxxxxxxxxxxx"
-                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors font-mono"
+                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors font-mono"
                     autoFocus
                   />
                   <p className="text-xs text-gray-400 mt-2">

@@ -116,7 +116,7 @@ function StepChannel({ onNext, selectedChannel, setSelectedChannel }: { onNext: 
         <button
           onClick={onNext}
           disabled={!selectedChannel}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-[#F26B2A]/20"
+          className="flex items-center gap-2 px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
         >
           Próximo
           <ArrowRight className="w-4 h-4" weight="bold" />
@@ -213,7 +213,7 @@ function StepAudience({ onNext, onBack, selectedAudience, setSelectedAudience }:
         <button
           onClick={onNext}
           disabled={!selectedAudience}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-[#F26B2A]/20"
+          className="flex items-center gap-2 px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
         >
           Próximo
           <ArrowRight className="w-4 h-4" weight="bold" />
@@ -370,7 +370,7 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
         <button
           onClick={onNext}
           disabled={!campaignName}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-[#F26B2A]/20"
+          className="flex items-center gap-2 px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
         >
           Próximo
           <ArrowRight className="w-4 h-4" weight="bold" />
@@ -497,7 +497,7 @@ function StepReview({ onBack, channel, audience, campaignName, subject }: {
         <button
           onClick={handleSend}
           disabled={sending}
-          className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-60 shadow-lg shadow-[#F26B2A]/20"
+          className="flex items-center gap-2 px-8 py-3 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-60 shadow-sm"
         >
           {sending ? (
             <>

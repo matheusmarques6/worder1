@@ -68,14 +68,14 @@ export default function ContactsPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/contacts/import"
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-600 hover:text-white hover:border-white/[0.12] transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 hover:text-white hover:border-gray-200 transition-colors"
           >
             <Upload className="w-4 h-4" weight="bold" />
             Importar
           </Link>
           <Link
             href="/crm/contacts"
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20"
+            className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-sm"
           >
             <UserPlus className="w-4 h-4" weight="bold" />
             Novo Contato
@@ -94,7 +94,7 @@ export default function ContactsPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] p-5"
+              className="bg-white rounded-2xl border border-gray-200 p-5"
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -111,11 +111,11 @@ export default function ContactsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-[#1A1A1A] rounded-xl border border-white/[0.06] w-fit">
-        <button className="px-4 py-2 rounded-lg text-sm font-medium bg-white/[0.08] text-white">
+      <div className="flex items-center gap-1 p-1 bg-white rounded-xl border border-gray-200 w-fit">
+        <button className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-50 text-white">
           Todos os Contatos
         </button>
-        <Link href="/contacts/lists" className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-white/[0.04] transition-colors">
+        <Link href="/contacts/lists" className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors">
           Listas & Segmentos
         </Link>
       </div>
@@ -129,28 +129,28 @@ export default function ContactsPage() {
             placeholder="Buscar contatos..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+            className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-brand-500 transition-colors"
           />
         </div>
-        <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
+        <button className="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
           <FunnelSimple className="w-4 h-4" />
           Filtros
         </button>
-        <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
+        <button className="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
           <Download className="w-4 h-4" weight="bold" />
           Exportar
         </button>
       </div>
 
       {/* Table */}
-      <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <ArrowsClockwise className="w-6 h-6 animate-spin text-gray-500" />
           </div>
         ) : filteredContacts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-16 h-16 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-4">
+            <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
               <UsersThree className="w-8 h-8 text-gray-400" weight="duotone" />
             </div>
             <p className="text-gray-500 font-medium">Nenhum contato encontrado</p>
@@ -159,7 +159,7 @@ export default function ContactsPage() {
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="bg-[#111111]">
+              <tr className="bg-gray-50">
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Contato</th>
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">E-mail</th>
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Telefone</th>
@@ -171,14 +171,14 @@ export default function ContactsPage() {
             </thead>
             <tbody>
               {filteredContacts.slice((page - 1) * 25, page * 25).map((contact: any) => (
-                <tr key={contact.id} className="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors group">
+                <tr key={contact.id} className="border-t border-gray-200 hover:bg-gray-50 transition-colors group">
                   <td className="px-5 py-4">
-                    <Link href={`/contacts/${contact.id}`} className="flex items-center gap-3 hover:text-[#F26B2A] transition-colors">
-                      <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#F26B2A]/20 to-[#F5A623]/10 flex items-center justify-center text-xs font-bold text-[#F26B2A]">
+                    <Link href={`/contacts/${contact.id}`} className="flex items-center gap-3 hover:text-brand-600 transition-colors">
+                      <div className="w-9 h-9 rounded-lg bg-brand-100 flex items-center justify-center text-xs font-bold text-brand-600">
                         {(contact.first_name?.[0] || '') + (contact.last_name?.[0] || '')}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900 group-hover:text-[#F26B2A] transition-colors">
+                        <p className="text-sm font-medium text-gray-900 group-hover:text-brand-600 transition-colors">
                           {contact.first_name} {contact.last_name}
                         </p>
                       </div>
@@ -190,7 +190,7 @@ export default function ContactsPage() {
                     {contact.tags?.length > 0 ? (
                       <div className="flex items-center gap-1">
                         {contact.tags.slice(0, 2).map((tag: string) => (
-                          <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-gray-500">
+                          <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-500">
                             {tag}
                           </span>
                         ))}
@@ -216,7 +216,7 @@ export default function ContactsPage() {
                       <button className="p-1.5 rounded-lg hover:bg-[#25D366]/10 text-gray-500 hover:text-[#25D366] transition-colors" title="WhatsApp">
                         <WhatsappLogo className="w-4 h-4" weight="fill" />
                       </button>
-                      <button className="p-1.5 rounded-lg hover:bg-white/[0.06] text-gray-500 hover:text-white transition-colors" title="Mais">
+                      <button className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 hover:text-white transition-colors" title="Mais">
                         <DotsThree className="w-4 h-4" weight="bold" />
                       </button>
                     </div>
@@ -229,7 +229,7 @@ export default function ContactsPage() {
 
         {/* Pagination */}
         {filteredContacts.length > 25 && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.06]">
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200">
             <p className="text-xs text-gray-500">
               {(page - 1) * 25 + 1}–{Math.min(page * 25, filteredContacts.length)} de {filteredContacts.length}
             </p>
@@ -237,14 +237,14 @@ export default function ContactsPage() {
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="p-1.5 rounded-lg hover:bg-white/[0.06] text-gray-500 disabled:opacity-30 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 disabled:opacity-30 transition-colors"
               >
                 <CaretLeft className="w-4 h-4" weight="bold" />
               </button>
               <button
                 onClick={() => setPage(p => p + 1)}
                 disabled={page * 25 >= filteredContacts.length}
-                className="p-1.5 rounded-lg hover:bg-white/[0.06] text-gray-500 disabled:opacity-30 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 disabled:opacity-30 transition-colors"
               >
                 <CaretRight className="w-4 h-4" weight="bold" />
               </button>

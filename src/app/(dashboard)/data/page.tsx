@@ -113,7 +113,7 @@ export default function DataPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center">
+        <div className="w-10 h-10 rounded-xl bg-brand-500 flex items-center justify-center">
           <Database size={22} className="text-brand-500" weight="fill" />
         </div>
         <div>
@@ -149,7 +149,7 @@ export default function DataPage() {
         {/* Tracking Pixel */}
         <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Code size={16} className="text-[#F26B2A]" />
+            <Code size={16} className="text-brand-600" />
             Pixel de Rastreamento
           </h3>
           <div className="relative">
@@ -176,7 +176,7 @@ export default function DataPage() {
         {/* Event Tracking Config */}
         <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Crosshair size={16} className="text-[#F26B2A]" />
+            <Crosshair size={16} className="text-brand-600" />
             Eventos Rastreados
           </h3>
           <div className="space-y-3">
@@ -224,7 +224,7 @@ export default function DataPage() {
         {/* Lead Scoring Rules */}
         <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Star size={16} className="text-[#F26B2A]" />
+            <Star size={16} className="text-brand-600" />
             Regras de Scoring
           </h3>
           <div className="space-y-2">
@@ -248,7 +248,7 @@ export default function DataPage() {
         {/* Scoring Distribution */}
         <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Lightning size={16} className="text-[#F26B2A]" />
+            <Lightning size={16} className="text-brand-600" />
             Distribuição de Scores
           </h3>
           <div className="space-y-3">

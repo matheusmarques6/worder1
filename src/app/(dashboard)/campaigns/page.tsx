@@ -120,7 +120,7 @@ export default function CampaignsPage() {
           <h1 className="text-2xl font-bold font-display text-gray-900">Campanhas</h1>
           <p className="text-sm text-gray-500 mt-1">Crie e gerencie campanhas multicanal</p>
         </div>
-        <Link href="/campaigns/create" className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20">
+        <Link href="/campaigns/create" className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-sm">
           <Plus className="w-4 h-4" weight="bold" />
           Criar Campanha
         </Link>
@@ -135,7 +135,7 @@ export default function CampaignsPage() {
               key={kpi.title}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] p-5"
+              className="bg-white rounded-2xl border border-gray-200 p-5"
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -160,10 +160,10 @@ export default function CampaignsPage() {
             placeholder="Buscar campanhas..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+            className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-brand-500 transition-colors"
           />
         </div>
-        <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-500 hover:text-white hover:border-white/[0.12] transition-colors">
+        <button className="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-500 hover:text-white hover:border-gray-200 transition-colors">
           <FunnelSimple className="w-4 h-4" />
           Filtros
         </button>
@@ -187,10 +187,10 @@ export default function CampaignsPage() {
 
       {/* Table */}
       {!loading && filteredCampaigns.length > 0 && (
-        <div className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="bg-[#111111]">
+              <tr className="bg-gray-50">
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Campanha</th>
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Canal</th>
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Status</th>
@@ -216,7 +216,7 @@ export default function CampaignsPage() {
                 const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('pt-BR') : '-'
 
                 return (
-                  <tr key={campaign.id} onClick={() => window.location.href = `/campaigns/${campaign.id}`} className="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer">
+                  <tr key={campaign.id} onClick={() => window.location.href = `/campaigns/${campaign.id}`} className="border-t border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer">
                     <td className="px-5 py-4 text-sm font-medium text-gray-900">{campaign.name}</td>
                     <td className="px-5 py-4">{channelIcons[channel] || channelIcons.email}</td>
                     <td className="px-5 py-4">

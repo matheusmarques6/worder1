@@ -76,7 +76,7 @@ export default function ContactsImportPage() {
           <div key={step.id} className="flex items-center gap-3 flex-1">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
               currentStep > step.id ? 'bg-emerald-500 text-white' :
-              currentStep === step.id ? 'bg-[#F26B2A] text-white' :
+              currentStep === step.id ? 'bg-brand-500 text-white' :
               'bg-gray-50 text-gray-500'
             }`}>
               {currentStep > step.id ? <CheckCircle size={18} weight="fill" /> : step.id}
@@ -158,7 +158,7 @@ export default function ContactsImportPage() {
                 </div>
                 <ArrowRight size={14} className="text-gray-400" />
                 <select className={`flex-1 bg-gray-50 border rounded-lg px-3 py-1.5 text-sm focus:outline-none ${
-                  field.status === 'mapped' ? 'border-emerald-500/30 text-white' : 'border-yellow-500/30 text-yellow-400'
+                  field.status === 'mapped' ? 'border-emerald-500/30 text-emerald-700' : 'border-yellow-500/30 text-yellow-400'
                 }`}>
                   {worderFields.map((wf) => (
                     <option key={wf} selected={wf === field.mappedTo}>{wf}</option>
@@ -225,7 +225,7 @@ export default function ContactsImportPage() {
           <button
             onClick={() => hasFile && setCurrentStep(currentStep + 1)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              hasFile ? 'bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white hover:opacity-90' : 'bg-gray-50 text-gray-500 cursor-not-allowed'
+              hasFile ? 'bg-brand-500 hover:bg-brand-600 text-white hover:opacity-90' : 'bg-gray-50 text-gray-500 cursor-not-allowed'
             }`}
           >
             Próximo

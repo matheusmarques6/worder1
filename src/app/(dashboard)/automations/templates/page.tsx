@@ -167,7 +167,7 @@ export default function AutomationTemplatesPage() {
       <div className="flex items-center gap-4">
         <button
           onClick={() => router.push('/automations')}
-          className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-gray-500 hover:text-white transition-colors"
+          className="p-2 rounded-xl bg-gray-50 hover:bg-gray-50 text-gray-500 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-5 h-5" weight="bold" />
         </button>
@@ -177,7 +177,7 @@ export default function AutomationTemplatesPage() {
         </div>
         <button
           onClick={() => router.push('/automations')}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white/[0.06] border border-white/[0.06] text-gray-600 text-sm font-medium rounded-xl hover:bg-white/[0.1] transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
         >
           <Plus className="w-4 h-4" weight="bold" />
           Criar do Zero
@@ -185,20 +185,20 @@ export default function AutomationTemplatesPage() {
       </div>
 
       {/* Categories */}
-      <div className="flex items-center gap-1 p-1 bg-[#1A1A1A] rounded-xl border border-white/[0.06] w-fit">
+      <div className="flex items-center gap-1 p-1 bg-white rounded-xl border border-gray-200 w-fit">
         {categories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => setActiveCategory(cat.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
               activeCategory === cat.id
-                ? 'bg-white/[0.08] text-gray-900'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-white/[0.04]'
+                ? 'bg-gray-50 text-gray-900'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >
             {cat.label}
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-              activeCategory === cat.id ? 'bg-[#F26B2A]/15 text-[#F26B2A]' : 'bg-white/[0.06] text-gray-500'
+              activeCategory === cat.id ? 'bg-brand-500/15 text-[#F26B2A]' : 'bg-gray-50 text-gray-500'
             }`}>
               {cat.count}
             </span>
@@ -214,7 +214,7 @@ export default function AutomationTemplatesPage() {
           placeholder="Buscar templates..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+          className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-brand-500 transition-colors"
         />
       </div>
 
@@ -226,10 +226,10 @@ export default function AutomationTemplatesPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.03 }}
-            className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] p-5 hover:border-[#F26B2A]/20 hover:bg-white/[0.01] transition-all duration-200 cursor-pointer group"
+            className="bg-white rounded-2xl border border-gray-200 p-5 hover:border-[#F26B2A]/20 hover:bg-gray-50 transition-all duration-200 cursor-pointer group"
           >
             <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl bg-[#F26B2A]/10 flex items-center justify-center group-hover:bg-[#F26B2A]/15 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center group-hover:bg-brand-500/15 transition-colors">
                 <Lightning className="w-5 h-5 text-[#F26B2A]" weight="fill" />
               </div>
               <div className="flex items-center gap-1">
@@ -249,7 +249,7 @@ export default function AutomationTemplatesPage() {
             <h3 className="text-sm font-semibold text-gray-900 font-display">{template.name}</h3>
             <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description}</p>
 
-            <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.04]">
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
               <span className="text-[10px] text-gray-500">Trigger: {template.trigger}</span>
               <div className="flex items-center gap-1">
                 <Star className="w-3 h-3 text-[#F5A623]" weight="fill" />
@@ -257,7 +257,7 @@ export default function AutomationTemplatesPage() {
               </div>
             </div>
 
-            <button className="w-full mt-3 px-4 py-2 bg-white/[0.04] hover:bg-[#F26B2A]/10 text-sm font-medium text-gray-600 hover:text-[#F26B2A] rounded-xl transition-all">
+            <button className="w-full mt-3 px-4 py-2 bg-gray-50 hover:bg-brand-500/10 text-sm font-medium text-gray-600 hover:text-[#F26B2A] rounded-xl transition-all">
               Usar Template
             </button>
           </motion.div>

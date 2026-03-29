@@ -100,7 +100,7 @@ export default function SMSCreatePage() {
               onClick={() => s.id < step && setStep(s.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full justify-center ${
                 step === s.id
-                  ? 'bg-[#F26B2A] text-white'
+                  ? 'bg-brand-500 text-white'
                   : step > s.id
                   ? 'bg-emerald-500/10 text-emerald-400'
                   : 'bg-gray-50 text-gray-500'
@@ -139,7 +139,7 @@ export default function SMSCreatePage() {
                       onClick={() => setSelectedAudience(aud.id)}
                       className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all ${
                         selectedAudience === aud.id
-                          ? 'border-[#F26B2A] bg-[#F26B2A]/5'
+                          ? 'border-[#F26B2A] bg-brand-500/5'
                           : 'border-gray-200 bg-gray-50/30 hover:border-gray-200'
                       }`}
                     >
@@ -156,7 +156,7 @@ export default function SMSCreatePage() {
                 <button
                   onClick={() => step === 1 && campaignName && selectedAudience && setStep(2)}
                   disabled={!campaignName || !selectedAudience}
-                  className="px-6 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity"
+                  className="px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity"
                 >
                   Próximo
                 </button>
@@ -220,7 +220,7 @@ export default function SMSCreatePage() {
                     <button
                       key={v.key}
                       onClick={() => setMessageText((prev) => prev + v.key)}
-                      className="px-2.5 py-1 bg-gray-50 rounded-lg text-xs text-gray-500 hover:text-[#F26B2A] hover:bg-[#F26B2A]/10 transition-colors font-mono"
+                      className="px-2.5 py-1 bg-gray-50 rounded-lg text-xs text-gray-500 hover:text-[#F26B2A] hover:bg-brand-500/10 transition-colors font-mono"
                     >
                       {v.key}
                     </button>
@@ -235,7 +235,7 @@ export default function SMSCreatePage() {
                 <button
                   onClick={() => messageText.trim() && setStep(3)}
                   disabled={!messageText.trim()}
-                  className="px-6 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity"
+                  className="px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity"
                 >
                   Próximo
                 </button>
@@ -252,7 +252,7 @@ export default function SMSCreatePage() {
                 <button
                   onClick={() => setSendType('now')}
                   className={`p-4 rounded-xl border text-left transition-all ${
-                    sendType === 'now' ? 'border-[#F26B2A] bg-[#F26B2A]/5' : 'border-gray-200 bg-gray-50/30 hover:border-gray-200'
+                    sendType === 'now' ? 'border-[#F26B2A] bg-brand-500/5' : 'border-gray-200 bg-gray-50/30 hover:border-gray-200'
                   }`}
                 >
                   <Lightning size={20} className={sendType === 'now' ? 'text-[#F26B2A]' : 'text-gray-500'} weight="fill" />
@@ -262,7 +262,7 @@ export default function SMSCreatePage() {
                 <button
                   onClick={() => setSendType('scheduled')}
                   className={`p-4 rounded-xl border text-left transition-all ${
-                    sendType === 'scheduled' ? 'border-[#F26B2A] bg-[#F26B2A]/5' : 'border-gray-200 bg-gray-50/30 hover:border-gray-200'
+                    sendType === 'scheduled' ? 'border-[#F26B2A] bg-brand-500/5' : 'border-gray-200 bg-gray-50/30 hover:border-gray-200'
                   }`}
                 >
                   <CalendarBlank size={20} className={sendType === 'scheduled' ? 'text-[#F26B2A]' : 'text-gray-500'} weight="fill" />
@@ -307,7 +307,7 @@ export default function SMSCreatePage() {
                 </button>
                 <button
                   onClick={() => setStep(4)}
-                  className="px-6 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
+                  className="px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
                 >
                   Próximo
                 </button>
@@ -366,7 +366,7 @@ export default function SMSCreatePage() {
                 <button onClick={() => setStep(3)} className="text-sm text-gray-500 hover:text-white transition-colors">
                   Voltar
                 </button>
-                <button className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20">
+                <button className="flex items-center gap-2 px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity shadow-sm">
                   <PaperPlaneTilt size={16} weight="bold" />
                   {sendType === 'now' ? 'Enviar Agora' : 'Agendar Envio'}
                 </button>

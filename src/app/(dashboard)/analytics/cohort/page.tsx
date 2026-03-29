@@ -36,7 +36,7 @@ const channelRetention = [
 function getCellColor(value: number | null): string {
   if (value === null) return 'bg-gray-50/20'
   if (value >= 60) return 'bg-emerald-500/30 text-emerald-300'
-  if (value >= 40) return 'bg-[#F26B2A]/30 text-[#F5A623]'
+  if (value >= 40) return 'bg-brand-500/30 text-[#F5A623]'
   if (value >= 25) return 'bg-yellow-500/20 text-yellow-300'
   return 'bg-red-500/20 text-red-300'
 }
@@ -56,7 +56,7 @@ export default function CohortPage() {
           <button
             onClick={() => setMetric('retention')}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              metric === 'retention' ? 'bg-[#F26B2A] text-white' : 'text-gray-500 hover:text-white'
+              metric === 'retention' ? 'bg-brand-500 text-white' : 'text-gray-500 hover:text-white'
             }`}
           >
             Retenção
@@ -64,7 +64,7 @@ export default function CohortPage() {
           <button
             onClick={() => setMetric('revenue')}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              metric === 'revenue' ? 'bg-[#F26B2A] text-white' : 'text-gray-500 hover:text-white'
+              metric === 'revenue' ? 'bg-brand-500 text-white' : 'text-gray-500 hover:text-white'
             }`}
           >
             Receita

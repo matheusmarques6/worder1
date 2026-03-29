@@ -101,7 +101,7 @@ export default function AdvancedAnalyticsPage() {
         <div className="flex items-center gap-4">
           <Link
             href="/analytics/shopify"
-            className="p-2 rounded-lg bg-white hover:bg-[#252540] transition-colors"
+            className="p-2 rounded-lg bg-white hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-400" />
           </Link>

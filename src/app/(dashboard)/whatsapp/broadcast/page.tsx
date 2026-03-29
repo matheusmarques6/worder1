@@ -229,7 +229,7 @@ export default function WhatsAppBroadcastPage() {
               <label className="block text-xs text-gray-500 mb-1.5">Preview</label>
               <div className="bg-[#0B141A] rounded-xl p-4">
                 <div className="flex items-center gap-3 pb-3 border-b border-gray-200/50 mb-4">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center">
                     <WhatsappLogo size={16} className="text-white" weight="fill" />
                   </div>
                   <div>

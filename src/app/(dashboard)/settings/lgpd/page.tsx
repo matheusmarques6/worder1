@@ -296,7 +296,7 @@ export default function LGPDPage() {
                   Utilizamos cookies para melhorar sua experiência. Ao continuar navegando, você concorda com nossa Política de Privacidade.
                 </p>
                 <div className="flex items-center gap-2">
-                  <button className="px-3 py-1 bg-[#F26B2A] text-white text-xs rounded hover:opacity-90">
+                  <button className="px-3 py-1 bg-brand-500 text-white text-xs rounded hover:opacity-90">
                     Aceitar
                   </button>
                   <button className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-zinc-600">

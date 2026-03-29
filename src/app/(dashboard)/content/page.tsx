@@ -81,14 +81,14 @@ export default function ContentPage() {
           <h1 className="text-2xl font-bold font-display text-gray-900">Conteúdo</h1>
           <p className="text-sm text-gray-500 mt-1">Templates, produtos, mídia e cupons</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20">
+        <button className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-sm">
           <Plus className="w-4 h-4" weight="bold" />
           Novo Template
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-[#1A1A1A] rounded-xl border border-white/[0.06] overflow-x-auto">
+      <div className="flex items-center gap-1 p-1 bg-white rounded-xl border border-gray-200 overflow-x-auto">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -98,14 +98,14 @@ export default function ContentPage() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
                 isActive
-                  ? 'bg-white/[0.08] text-gray-900'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-white/[0.04]'
+                  ? 'bg-gray-50 text-gray-900'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
               <Icon className={`w-4 h-4 ${isActive ? 'text-[#F26B2A]' : ''}`} weight={isActive ? 'fill' : 'regular'} />
               {tab.label}
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                isActive ? 'bg-[#F26B2A]/15 text-[#F26B2A]' : 'bg-white/[0.06] text-gray-500'
+                isActive ? 'bg-brand-500/15 text-[#F26B2A]' : 'bg-gray-50 text-gray-500'
               }`}>
                 {tabCounts[tab.id] ?? 0}
               </span>
@@ -121,10 +121,10 @@ export default function ContentPage() {
           <input
             type="text"
             placeholder="Buscar templates..."
-            className="w-full bg-[#1A1A1A] border border-white/[0.06] rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#F26B2A]/40 transition-colors"
+            className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-brand-500 transition-colors"
           />
         </div>
-        <button className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1A] border border-white/[0.06] rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
+        <button className="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
           <FunnelSimple className="w-4 h-4" />
           Filtros
         </button>
@@ -154,10 +154,10 @@ export default function ContentPage() {
               key={template.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-[#1A1A1A] rounded-2xl border border-white/[0.06] overflow-hidden hover:border-[#F26B2A]/20 transition-all duration-200 cursor-pointer group"
+              className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:border-[#F26B2A]/20 transition-all duration-200 cursor-pointer group"
             >
               {/* Thumbnail placeholder */}
-              <div className="h-40 bg-[#111111] flex items-center justify-center group-hover:bg-[#151515] transition-colors">
+              <div className="h-40 bg-gray-50 flex items-center justify-center group-hover:bg-gray-100 transition-colors">
                 {template.thumbnail_url ? (
                   <img src={template.thumbnail_url} alt={template.name} className="w-full h-full object-cover" />
                 ) : (
@@ -171,7 +171,7 @@ export default function ContentPage() {
                     E-mail
                   </span>
                   {template.category && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-gray-500 font-medium">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-500 font-medium">
                       {template.category}
                     </span>
                   )}

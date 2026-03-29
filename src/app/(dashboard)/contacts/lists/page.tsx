@@ -67,7 +67,7 @@ export default function ContactListsPage() {
             <p className="text-sm text-gray-500 mt-0.5">{lists.length} listas · {totalContacts.toLocaleString('pt-BR')} contatos</p>
           </div>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium">
+        <button className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium">
           <Plus size={16} />
           Nova Lista
         </button>
@@ -113,7 +113,7 @@ export default function ContactListsPage() {
               key={t.id}
               onClick={() => setTypeFilter(t.id)}
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                typeFilter === t.id ? 'bg-[#F26B2A] text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
+                typeFilter === t.id ? 'bg-brand-500 text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
               }`}
             >
               {t.label}
@@ -135,7 +135,7 @@ export default function ContactListsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                  list.type === 'dynamic' ? 'bg-[#F26B2A]/10' : 'bg-gray-50'
+                  list.type === 'dynamic' ? 'bg-brand-500/10' : 'bg-gray-50'
                 }`}>
                   {list.type === 'dynamic' ? (
                     <Lightning size={18} className="text-[#F26B2A]" weight="fill" />
@@ -147,7 +147,7 @@ export default function ContactListsPage() {
                   <div className="flex items-center gap-2">
                     <h4 className="text-sm font-medium text-gray-900">{list.name}</h4>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                      list.type === 'dynamic' ? 'bg-[#F26B2A]/10 text-[#F5A623]' : 'bg-gray-50 text-gray-500'
+                      list.type === 'dynamic' ? 'bg-brand-500/10 text-[#F5A623]' : 'bg-gray-50 text-gray-500'
                     }`}>
                       {list.type === 'dynamic' ? 'Dinâmica' : 'Estática'}
                     </span>

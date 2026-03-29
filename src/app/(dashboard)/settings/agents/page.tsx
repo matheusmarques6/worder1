@@ -146,7 +146,7 @@ export default function SettingsAgentsPage() {
           >
             <ArrowLeft size={18} weight="bold" />
           </button>
-          <div className="w-10 h-10 rounded-xl bg-[#F26B2A]/10 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center">
             <Robot size={22} className="text-[#F26B2A]" weight="fill" />
           </div>
           <div>
@@ -156,7 +156,7 @@ export default function SettingsAgentsPage() {
         </div>
         <Link
           href="/whatsapp/ai-agents"
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20"
+          className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-sm"
         >
           <Plus size={16} weight="bold" />
           Novo Agente
@@ -209,7 +209,7 @@ export default function SettingsAgentsPage() {
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4 flex-1">
-                  <div className="w-12 h-12 rounded-xl bg-[#F26B2A]/10 flex items-center justify-center flex-shrink-0">
+                  <div className="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center flex-shrink-0">
                     <Brain size={24} className="text-[#F26B2A]" weight="duotone" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -315,7 +315,7 @@ export default function SettingsAgentsPage() {
                 <p className="text-sm text-gray-700 font-medium">{item.label}</p>
                 <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
               </div>
-              <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-[#F26B2A]' : 'bg-gray-100'}`}>
+              <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-brand-500' : 'bg-gray-100'}`}>
                 <div className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform ${item.enabled ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
               </button>
             </div>

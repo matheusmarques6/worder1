@@ -45,7 +45,7 @@ const activityIconMap: Record<string, { icon: React.ComponentType<any>; color: s
   message_received: { icon: ChatCircle, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' },
   tag_added: { icon: Tag, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' },
   tag_removed: { icon: Tag, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' },
-  deal_created: { icon: CurrencyDollar, color: 'text-[#F26B2A]', bgColor: 'bg-[#F26B2A]/10' },
+  deal_created: { icon: CurrencyDollar, color: 'text-brand-600', bgColor: 'bg-brand-500/10' },
   deal_won: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
   deal_lost: { icon: Warning, color: 'text-red-400', bgColor: 'bg-red-500/10' },
   deal_stage_changed: { icon: TrendUp, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
@@ -60,7 +60,7 @@ const activityIconMap: Record<string, { icon: React.ComponentType<any>; color: s
   contact_created: { icon: UserCircle, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
   contact_updated: { icon: PencilSimple, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' },
   campaign_sent: { icon: Megaphone, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-  campaign_clicked: { icon: CursorClick, color: 'text-[#F26B2A]', bgColor: 'bg-[#F26B2A]/10' },
+  campaign_clicked: { icon: CursorClick, color: 'text-brand-600', bgColor: 'bg-brand-500/10' },
   bot_interaction: { icon: Lightning, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
   blocked: { icon: Warning, color: 'text-red-400', bgColor: 'bg-red-500/10' },
 }
@@ -223,7 +223,7 @@ export default function ContactDetailPage() {
             <Export size={14} />
             Exportar
           </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white rounded-lg hover:opacity-90 text-xs font-medium">
+          <button className="flex items-center gap-2 px-3 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg hover:opacity-90 text-xs font-medium">
             <PaperPlaneTilt size={14} />
             Enviar E-mail
           </button>
@@ -243,7 +243,7 @@ export default function ContactDetailPage() {
                   className="w-20 h-20 rounded-full object-cover mb-4"
                 />
               ) : (
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#F26B2A] to-[#F5A623] flex items-center justify-center mb-4">
+                <div className="w-20 h-20 rounded-full bg-brand-500 flex items-center justify-center mb-4">
                   <span className="text-2xl font-bold text-gray-900">{initials}</span>
                 </div>
               )}
@@ -298,7 +298,7 @@ export default function ContactDetailPage() {
           <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <Tag size={14} className="text-[#F26B2A]" />
+                <Tag size={14} className="text-brand-600" />
                 Tags
               </h3>
               <button className="p-1 rounded hover:bg-gray-50 transition-colors">
@@ -344,7 +344,7 @@ export default function ContactDetailPage() {
           {/* Subscriptions */}
           <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3">
-              <ListBullets size={14} className="text-[#F26B2A]" />
+              <ListBullets size={14} className="text-brand-600" />
               Canais
             </h3>
             <div className="space-y-2">
@@ -392,7 +392,7 @@ export default function ContactDetailPage() {
                   {activeTab === tab.id && (
                     <motion.div
                       layoutId="contactTab"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F26B2A]"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-500"
                     />
                   )}
                 </button>
@@ -450,7 +450,7 @@ export default function ContactDetailPage() {
                     <button
                       onClick={handleAddNote}
                       disabled={!noteText.trim()}
-                      className="px-4 py-2 bg-[#F26B2A] text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
+                      className="px-4 py-2 bg-brand-500 text-white text-sm rounded-lg hover:opacity-90 disabled:opacity-50"
                     >
                       Salvar
                     </button>
@@ -565,7 +565,7 @@ export default function ContactDetailPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-500">Conversas</span>
-                <span className="text-sm text-[#F26B2A] font-medium">{contact.total_conversations}</span>
+                <span className="text-sm text-brand-600 font-medium">{contact.total_conversations}</span>
               </div>
               {contact.last_message_at && (
                 <>
@@ -600,7 +600,7 @@ export default function ContactDetailPage() {
               </div>
               <div className="bg-gray-50/30 rounded-lg p-3 col-span-2">
                 <p className="text-xs text-gray-500">Ticket Médio</p>
-                <p className="text-lg font-bold text-[#F26B2A] mt-1">
+                <p className="text-lg font-bold text-brand-600 mt-1">
                   R$ {avgOrder.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               </div>
@@ -611,7 +611,7 @@ export default function ContactDetailPage() {
           {deals.length > 0 && (
             <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
               <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-4">
-                <CurrencyDollar size={14} className="text-[#F26B2A]" />
+                <CurrencyDollar size={14} className="text-brand-600" />
                 Negociações
               </h3>
               <div className="space-y-3">
@@ -640,7 +640,7 @@ export default function ContactDetailPage() {
             <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                  <ShoppingCart size={14} className="text-[#F26B2A]" />
+                  <ShoppingCart size={14} className="text-brand-600" />
                   Pedidos Recentes
                 </h3>
               </div>

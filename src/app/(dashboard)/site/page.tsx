@@ -83,7 +83,7 @@ export default function SitePage() {
             <p className="text-sm text-gray-500 mt-0.5">Formulários, chat widget, tracking e otimização</p>
           </div>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity">
+        <button className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity">
           <Plus size={16} weight="bold" />
           Novo Formulário
         </button>
@@ -128,7 +128,7 @@ export default function SitePage() {
                 className="bg-white/50 border border-gray-200 rounded-xl p-6 hover:border-gray-200 transition-all cursor-pointer group h-full"
               >
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-[#F26B2A]/10 flex items-center justify-center flex-shrink-0 group-hover:bg-[#F26B2A]/15 transition-colors">
+                  <div className="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-brand-500/15 transition-colors">
                     <Icon size={24} className="text-[#F26B2A]" weight="duotone" />
                   </div>
                   <div className="flex-1">

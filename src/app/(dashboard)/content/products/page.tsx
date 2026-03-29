@@ -79,7 +79,7 @@ export default function ProductsPage() {
           <Link href="/content" className="p-2 rounded-lg hover:bg-gray-50 transition-colors">
             <ArrowLeft size={18} className="text-gray-500" />
           </Link>
-          <div className="w-10 h-10 rounded-xl bg-[#F26B2A]/10 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center">
             <ShoppingBag size={22} className="text-[#F26B2A]" weight="fill" />
           </div>
           <div>
@@ -139,7 +139,7 @@ export default function ProductsPage() {
               key={cat}
               onClick={() => setCategory(cat)}
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
-                category === cat ? 'bg-[#F26B2A] text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
+                category === cat ? 'bg-brand-500 text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
               }`}
             >
               {cat}

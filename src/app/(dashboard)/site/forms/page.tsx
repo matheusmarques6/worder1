@@ -309,7 +309,7 @@ export default function FormsPage() {
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#F26B2A] to-[#F5A623] text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#F26B2A]/20"
+          className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-sm"
         >
           <Plus size={16} weight="bold" />
           Novo Formulário
@@ -366,7 +366,7 @@ export default function FormsPage() {
           <button
             onClick={() => setTypeFilter('all')}
             className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-              typeFilter === 'all' ? 'bg-[#F26B2A] text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
+              typeFilter === 'all' ? 'bg-brand-500 text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
             }`}
           >
             Todos
@@ -376,7 +376,7 @@ export default function FormsPage() {
               key={type}
               onClick={() => setTypeFilter(type)}
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                typeFilter === type ? 'bg-[#F26B2A] text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
+                typeFilter === type ? 'bg-brand-500 text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
               }`}
             >
               {cfg.label}
@@ -536,7 +536,7 @@ export default function FormsPage() {
           </p>
         </div>
         <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
-          <div className="w-10 h-10 rounded-xl bg-[#F26B2A]/10 flex items-center justify-center mb-3">
+          <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center mb-3">
             <Timer size={20} className="text-[#F26B2A]" weight="duotone" />
           </div>
           <h4 className="text-sm font-semibold text-gray-900 mb-1">Exit Intent</h4>
@@ -570,7 +570,7 @@ export default function FormsPage() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-[#111111] border border-gray-200 rounded-2xl w-full max-w-4xl mx-4 mb-8 overflow-hidden shadow-2xl"
+              className="bg-gray-50 border border-gray-200 rounded-2xl w-full max-w-4xl mx-4 mb-8 overflow-hidden shadow-2xl"
             >
               {/* Modal Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -595,7 +595,7 @@ export default function FormsPage() {
                       onClick={() => setTemplateCategory(cat.id)}
                       className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
                         templateCategory === cat.id
-                          ? 'bg-[#F26B2A] text-white'
+                          ? 'bg-brand-500 text-white'
                           : 'bg-gray-50 text-gray-500 hover:text-white'
                       }`}
                     >
@@ -614,14 +614,14 @@ export default function FormsPage() {
                     return (
                       <button
                         key={template.id}
-                        className="relative bg-white/50 border border-gray-200 rounded-xl p-4 text-left hover:border-[#F26B2A]/40 hover:bg-[#F26B2A]/[0.02] transition-all group"
+                        className="relative bg-white/50 border border-gray-200 rounded-xl p-4 text-left hover:border-[#F26B2A]/40 hover:bg-brand-500/[0.02] transition-all group"
                       >
                         {template.popular && (
-                          <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 bg-[#F26B2A] text-white text-[9px] font-bold rounded-full">
+                          <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 bg-brand-500 text-white text-[9px] font-bold rounded-full">
                             Popular
                           </span>
                         )}
-                        <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center mb-3 group-hover:bg-[#F26B2A]/10 transition-colors">
+                        <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center mb-3 group-hover:bg-brand-500/10 transition-colors">
                           <Icon size={20} className="text-gray-500 group-hover:text-[#F26B2A] transition-colors" weight="duotone" />
                         </div>
                         <p className="text-sm text-gray-700 font-medium">{template.name}</p>

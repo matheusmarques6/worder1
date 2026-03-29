@@ -406,7 +406,7 @@ export default function CredentialsPage() {
         </div>
       ) : credentials.length === 0 ? (
         /* Empty State */
-        <div className="flex flex-col items-center justify-center py-12 border border-dashed border-white/20 rounded-lg">
+        <div className="flex flex-col items-center justify-center py-12 border border-dashed border-gray-300 rounded-lg">
           <Key className="w-12 h-12 text-gray-300 mb-3" />
           <p className="text-gray-500">Nenhuma credencial cadastrada</p>
           <p className="text-gray-400 text-sm mt-1">
@@ -429,7 +429,7 @@ export default function CredentialsPage() {
             return (
               <div
                 key={credential.id}
-                className="p-4 rounded-lg bg-[#0a0a0a] border border-gray-200 hover:border-white/20 transition-colors"
+                className="p-4 rounded-lg bg-white border border-gray-200 hover:border-gray-300 transition-colors"
               >
                 {/* Header */}
                 <div className="flex items-start justify-between mb-3">
@@ -448,7 +448,7 @@ export default function CredentialsPage() {
                     <button className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white">
                       <MoreVertical className="w-4 h-4" />
                     </button>
-                    <div className="absolute right-0 top-full mt-1 py-1 bg-[#1a1a1a] rounded-lg border border-gray-200 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[140px]">
+                    <div className="absolute right-0 top-full mt-1 py-1 bg-white rounded-lg border border-gray-200 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[140px]">
                       <button
                         onClick={() => openEditModal(credential)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700/70 hover:text-white hover:bg-gray-50"
@@ -526,7 +526,7 @@ export default function CredentialsPage() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-lg max-h-[90vh] overflow-hidden rounded-xl bg-[#111111] border border-gray-200 shadow-2xl"
+              className="w-full max-w-lg max-h-[90vh] overflow-hidden rounded-xl bg-gray-50 border border-gray-200 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
@@ -557,7 +557,7 @@ export default function CredentialsPage() {
                           <button
                             key={type.type}
                             onClick={() => setSelectedType(type)}
-                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-white/30 hover:bg-gray-50 transition-colors text-left"
+                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors text-left"
                           >
                             <div className="p-2 rounded-lg bg-gray-50">
                               <IconComponent className="w-5 h-5 text-gray-500" />
@@ -596,7 +596,7 @@ export default function CredentialsPage() {
                         placeholder={`Ex: ${selectedType.name} - Produção`}
                         className={cn(
                           'w-full px-3 py-2 rounded-lg',
-                          'bg-[#0a0a0a] border border-gray-200 text-white',
+                          'bg-white border border-gray-200 text-gray-900',
                           'placeholder-white/30',
                           'focus:outline-none focus:border-blue-500/50'
                         )}
@@ -617,7 +617,7 @@ export default function CredentialsPage() {
                             placeholder={field.placeholder}
                             className={cn(
                               'w-full px-3 py-2 rounded-lg pr-10',
-                              'bg-[#0a0a0a] border border-gray-200 text-white',
+                              'bg-white border border-gray-200 text-gray-900',
                               'placeholder-white/30',
                               'focus:outline-none focus:border-blue-500/50'
                             )}
