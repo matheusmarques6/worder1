@@ -281,7 +281,7 @@ export function ExecutionHistory({
   return (
     <div className="h-full flex flex-col">
       {/* Header com filtros */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#222222] bg-[#111111]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold text-gray-900">Execuções</h2>
           <Badge variant="default">{total}</Badge>
@@ -295,7 +295,7 @@ export function ExecutionHistory({
               setStatusFilter(e.target.value);
               setPage(1);
             }}
-            className="px-3 py-1.5 bg-[#1a1a1a] border border-[#333333] rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
+            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
           >
             <option value="">Todos os status</option>
             <option value="pending">⏳ Pendente</option>
@@ -311,7 +311,7 @@ export function ExecutionHistory({
               setDateFilter(e.target.value);
               setPage(1);
             }}
-            className="px-3 py-1.5 bg-[#1a1a1a] border border-[#333333] rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
+            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:border-primary-500"
           >
             <option value="today">Hoje</option>
             <option value="week">Últimos 7 dias</option>
@@ -374,14 +374,14 @@ export function ExecutionHistory({
             </div>
           </div>
         ) : (
-          <div className="divide-y divide-[#1a1a1a]">
+          <div className="divide-y divide-gray-200">
             {runs.map((run) => (
               <motion.div
                 key={run.id}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className={cn(
-                  'flex items-center gap-4 px-4 py-3 hover:bg-[#0f0f0f] cursor-pointer transition-colors',
+                  'flex items-center gap-4 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors',
                   run.status === 'running' && 'bg-amber-500/5'
                 )}
                 onClick={() => setSelectedRunId(run.id)}
@@ -453,7 +453,7 @@ export function ExecutionHistory({
 
       {/* Paginação */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-[#222222] bg-[#111111]">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
           <span className="text-sm text-gray-500">
             Página {page} de {totalPages}
           </span>

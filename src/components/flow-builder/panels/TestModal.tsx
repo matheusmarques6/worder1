@@ -267,11 +267,11 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
       case 'error':
         return <XCircle className="w-4 h-4 text-red-400" />;
       case 'skipped':
-        return <SkipForward className="w-4 h-4 text-white/30" />;
+        return <SkipForward className="w-4 h-4 text-gray-400" />;
       case 'waiting':
         return <Clock className="w-4 h-4 text-amber-400" />;
       default:
-        return <Clock className="w-4 h-4 text-white/40" />;
+        return <Clock className="w-4 h-4 text-gray-400" />;
     }
   };
 
@@ -292,7 +292,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-xl bg-[#111111] border border-gray-200 shadow-2xl"
+          className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-xl bg-gray-50 border border-gray-200 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -303,7 +303,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
             </div>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -322,7 +322,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                     type="checkbox"
                     checked={useSampleData}
                     onChange={(e) => setUseSampleData(e.target.checked)}
-                    className="rounded border-white/20 bg-gray-50 text-blue-500 focus:ring-blue-500"
+                    className="rounded border-gray-300 bg-gray-50 text-blue-500 focus:ring-blue-500"
                   />
                   <span className="text-sm text-gray-700/70">Usar dados de exemplo</span>
                 </label>
@@ -334,7 +334,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                   onChange={(e) => setSelectedContactId(e.target.value)}
                   className={cn(
                     'w-full mt-2 px-3 py-2 rounded-lg',
-                    'bg-[#0a0a0a] border border-gray-200 text-white',
+                    'bg-white border border-gray-200 text-gray-900',
                     'focus:outline-none focus:border-blue-500/50'
                   )}
                 >
@@ -370,8 +370,8 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                 placeholder='{"key": "value"}'
                 className={cn(
                   'w-full h-40 px-3 py-2 rounded-lg font-mono text-sm',
-                  'bg-[#0a0a0a] border border-gray-200 text-white',
-                  'placeholder-white/30',
+                  'bg-white border border-gray-200 text-gray-900',
+                  'placeholder-gray-400',
                   'focus:outline-none focus:border-blue-500/50',
                   'resize-none'
                 )}
@@ -423,13 +423,13 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                 {result.contact && (
                   <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
                     <div className="flex items-center gap-2 text-sm">
-                      <User className="w-4 h-4 text-white/40" />
-                      <span className="text-white/70">Contato:</span>
-                      <span className="text-white">
+                      <User className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-700">Contato:</span>
+                      <span className="text-gray-900">
                         {result.contact.full_name || result.contact.first_name || result.contact.email}
                       </span>
                       {result.contact.email && (
-                        <span className="text-white/40">({result.contact.email})</span>
+                        <span className="text-gray-400">({result.contact.email})</span>
                       )}
                     </div>
                   </div>
@@ -465,9 +465,9 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                               </span>
                             )}
                             {isExpanded ? (
-                              <ChevronDown className="w-4 h-4 text-white/40" />
+                              <ChevronDown className="w-4 h-4 text-gray-400" />
                             ) : (
-                              <ChevronRight className="w-4 h-4 text-white/40" />
+                              <ChevronRight className="w-4 h-4 text-gray-400" />
                             )}
                           </button>
 
@@ -480,7 +480,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                                 exit={{ height: 0, opacity: 0 }}
                                 className="border-t border-gray-200"
                               >
-                                <div className="p-3 bg-[#0a0a0a]">
+                                <div className="p-3 bg-white">
                                   {step.error && (
                                     <div className="mb-2 p-2 rounded bg-red-500/20 text-red-300 text-xs">
                                       {step.error}
@@ -507,8 +507,8 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
             {isRunning && (
               <div className="flex flex-col items-center justify-center py-8">
                 <Loader2 className="w-8 h-8 text-blue-400 animate-spin mb-3" />
-                <p className="text-white/60">Executando teste...</p>
-                <p className="text-white/40 text-sm mt-1">
+                <p className="text-gray-500">Executando teste...</p>
+                <p className="text-gray-400 text-sm mt-1">
                   Isso pode levar alguns segundos
                 </p>
               </div>
@@ -522,7 +522,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
               className={cn(
                 'px-4 py-2 rounded-lg',
                 'text-sm font-medium text-gray-900/60',
-                'hover:bg-white/10 hover:text-white',
+                'hover:bg-gray-100 hover:text-gray-900',
                 'transition-colors'
               )}
             >

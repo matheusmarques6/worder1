@@ -139,14 +139,14 @@ export function Canvas() {
           animated: true,
         }}
         proOptions={{ hideAttribution: true }}
-        className="bg-white"
+        className="bg-[#FAFBFC]"
       >
         {/* Background */}
         <Background
           variant={BackgroundVariant.Dots}
           gap={20}
           size={1}
-          color="#374151"
+          color="#d1d5db"
         />
 
         {/* Controls */}
@@ -154,7 +154,7 @@ export function Canvas() {
           className={cn(
             '[&>button]:bg-gray-100 [&>button]:border-gray-300',
             '[&>button]:text-gray-600 [&>button:hover]:bg-gray-200',
-            '[&>button:hover]:text-white [&>button]:shadow-sm'
+            '[[&>button:hover]:text-white>button:hover]:text-gray-900 [&>button]:shadow-sm'
           )}
         />
 
@@ -175,7 +175,7 @@ export function Canvas() {
                 return '#9ca3af';
             }
           }}
-          maskColor="rgba(17, 24, 39, 0.8)"
+          maskColor="rgba(249, 250, 251, 0.8)"
           className="!bg-white !border-gray-200 shadow-md"
         />
 

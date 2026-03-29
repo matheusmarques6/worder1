@@ -136,7 +136,7 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -154,7 +154,7 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
               className={cn(
                 'w-full pl-10 pr-4 py-2.5 rounded-lg',
                 'bg-white border border-gray-300',
-                'text-white placeholder-dark-400',
+                'text-gray-900 placeholder-gray-400',
                 'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
                 'transition-all'
               )}
@@ -329,7 +329,7 @@ function VariableItem({
               e.stopPropagation();
               onToggleDefault();
             }}
-            className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-900 transition-colors"
             title="Definir valor padrão"
           >
             <span className="text-xs font-mono">|</span>
@@ -339,7 +339,7 @@ function VariableItem({
               e.stopPropagation();
               onCopy();
             }}
-            className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-900 transition-colors"
             title="Copiar"
           >
             {copied ? <Check className="w-4 h-4 text-success-400" /> : <Copy className="w-4 h-4" />}
@@ -365,7 +365,7 @@ function VariableItem({
                 className={cn(
                   'flex-1 px-3 py-2 rounded-lg',
                   'bg-white border border-gray-300',
-                  'text-sm text-gray-700 placeholder-dark-400',
+                  'text-sm text-gray-700 placeholder-gray-400',
                   'focus:outline-none focus:border-primary-500'
                 )}
                 onClick={(e) => e.stopPropagation()}

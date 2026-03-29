@@ -101,11 +101,11 @@ export function TestModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ type: 'spring', duration: 0.3 }}
-          className="relative w-full max-w-lg bg-[#111111] rounded-2xl border border-[#222222] shadow-2xl overflow-hidden"
+          className="relative w-full max-w-lg bg-gray-50 rounded-2xl border border-gray-200 shadow-2xl overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-[#222222]">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-brand-100 rounded-xl">
                 <Play className="w-5 h-5 text-brand-600" />
@@ -117,7 +117,7 @@ export function TestModal({
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-white rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="w-5 h-5 text-gray-500" />
             </button>
@@ -135,7 +135,7 @@ export function TestModal({
                 'p-4 rounded-xl border-2 cursor-pointer transition-all',
                 useSampleData
                   ? 'border-primary-500 bg-brand-50'
-                  : 'border-[#222222] hover:border-[#333333] bg-[#0a0a0a]'
+                  : 'border-gray-200 hover:border-gray-200 bg-white'
               )}
             >
               <div className="flex items-center gap-3">
@@ -161,9 +161,9 @@ export function TestModal({
             </div>
 
             <div className="relative flex items-center">
-              <div className="flex-1 h-px bg-[#222222]" />
+              <div className="flex-1 h-px bg-gray-200" />
               <span className="px-3 text-xs text-gray-400">ou selecione um contato real</span>
-              <div className="flex-1 h-px bg-[#222222]" />
+              <div className="flex-1 h-px bg-gray-200" />
             </div>
 
             {/* Busca */}
@@ -174,7 +174,7 @@ export function TestModal({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Buscar por email ou nome..."
-                className="w-full pl-10 pr-4 py-2.5 bg-[#0a0a0a] border border-[#222222] rounded-xl text-white text-sm focus:outline-none focus:border-brand-400"
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:border-brand-400"
               />
             </div>
 
@@ -201,7 +201,7 @@ export function TestModal({
                       'p-3 rounded-xl border-2 cursor-pointer transition-all',
                       selectedContact?.id === contact.id && !useSampleData
                         ? 'border-primary-500 bg-brand-50'
-                        : 'border-[#222222] hover:border-[#333333] bg-[#0a0a0a]'
+                        : 'border-gray-200 hover:border-gray-200 bg-white'
                     )}
                   >
                     <div className="flex items-center gap-3">
@@ -236,7 +236,7 @@ export function TestModal({
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-[#222222] flex items-center justify-between">
+          <div className="p-4 border-t border-gray-200 flex items-center justify-between">
             <p className="text-xs text-gray-400">
               {useSampleData 
                 ? '✨ Usando dados de exemplo' 
@@ -317,10 +317,10 @@ export function TestResultPanel({
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed right-0 top-0 bottom-0 w-[400px] bg-[#111111] border-l border-[#222222] z-40 flex flex-col shadow-2xl"
+      className="fixed right-0 top-0 bottom-0 w-[400px] bg-gray-50 border-l border-gray-200 z-40 flex flex-col shadow-2xl"
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-[#222222]">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center gap-3">
           <div className={cn(
             'p-2 rounded-xl',
@@ -343,14 +343,14 @@ export function TestResultPanel({
         </div>
         <button
           onClick={onClose}
-          className="p-2 hover:bg-white rounded-lg transition-colors"
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <X className="w-4 h-4 text-gray-500" />
         </button>
       </div>
 
       {/* Stats */}
-      <div className="flex items-center gap-4 p-4 border-b border-[#222222]">
+      <div className="flex items-center gap-4 p-4 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-500" />
           <span className="text-sm text-gray-700">{successCount} sucesso</span>
@@ -433,7 +433,7 @@ export function TestResultPanel({
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-[#222222]">
+      <div className="p-4 border-t border-gray-200">
         <Button variant="secondary" size="sm" onClick={onClose} className="w-full">
           Fechar
         </Button>

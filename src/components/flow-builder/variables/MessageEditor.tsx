@@ -137,7 +137,7 @@ export function MessageEditor({
           maxLength={maxLength}
           className={cn(
             'w-full px-3 py-2 pr-24 rounded-lg resize-none',
-            'bg-[#0a0a0a] border border-gray-200',
+            'bg-white border border-gray-200',
             'text-sm text-gray-700 placeholder-white/30',
             'focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20',
             'transition-all'
@@ -153,7 +153,7 @@ export function MessageEditor({
                 'p-1.5 rounded-lg transition-colors',
                 showPreviewPanel
                   ? 'bg-brand-100 text-brand-600'
-                  : 'hover:bg-white/10 text-white/40 hover:text-white'
+                  : 'hover:bg-gray-100 text-gray-400 hover:text-gray-900'
               )}
               title={showPreviewPanel ? 'Ocultar preview' : 'Ver preview'}
             >
@@ -176,7 +176,7 @@ export function MessageEditor({
 
         {/* Character count */}
         {maxLength && (
-          <div className="absolute bottom-2 left-3 text-[10px] text-white/40">
+          <div className="absolute bottom-2 left-3 text-[10px] text-gray-400">
             {value.length}/{maxLength}
           </div>
         )}

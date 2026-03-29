@@ -287,7 +287,7 @@ export function WhatsAppTemplateEditor({
             {onClose && (
               <button
                 onClick={onClose}
-                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -305,7 +305,7 @@ export function WhatsAppTemplateEditor({
                 'border-2',
                 currentConfig.messageMode === 'free'
                   ? 'border-green-500 bg-green-500/20 text-green-400'
-                  : 'border-gray-300 hover:border-gray-300 text-gray-600 hover:text-white'
+                  : 'border-gray-300 hover:border-gray-300 text-gray-600 hover:text-gray-900'
               )}
             >
               <MessageSquare className="w-4 h-4" />
@@ -321,7 +321,7 @@ export function WhatsAppTemplateEditor({
                 'border-2',
                 currentConfig.messageMode === 'template'
                   ? 'border-green-500 bg-green-500/20 text-green-400'
-                  : 'border-gray-300 hover:border-gray-300 text-gray-600 hover:text-white'
+                  : 'border-gray-300 hover:border-gray-300 text-gray-600 hover:text-gray-900'
               )}
             >
               <FileText className="w-4 h-4" />
@@ -377,7 +377,7 @@ export function WhatsAppTemplateEditor({
           <div className="p-4 border-t border-gray-200 bg-white flex items-center justify-between">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+              className="px-4 py-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
             >
               Cancelar
             </button>
@@ -488,13 +488,13 @@ function FreeTextEditor({ config, onUpdate, onOpenVariables }: FreeTextEditorPro
           rows={8}
           className={cn(
             'w-full px-3 py-3 rounded-lg resize-none',
-            'bg-[#0a0a0a] border border-gray-200',
-            'text-sm text-gray-700 placeholder-white/30',
+            'bg-white border border-gray-200',
+            'text-sm text-gray-700 placeholder-gray-400',
             'focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20',
             'transition-all'
           )}
         />
-        <p className="text-[10px] text-white/40">
+        <p className="text-[10px] text-gray-400">
           Use variáveis como <code className="bg-gray-100 px-1 rounded">{'{{ contact.first_name }}'}</code> para personalizar
         </p>
       </div>
@@ -516,7 +516,7 @@ function FreeTextEditor({ config, onUpdate, onOpenVariables }: FreeTextEditorPro
                 'flex flex-col items-center gap-1 p-3 rounded-lg border transition-all',
                 config.headerType === item.type
                   ? 'border-green-500 bg-green-500/20 text-green-400'
-                  : 'border-gray-300 hover:border-gray-300 text-gray-500 hover:text-white'
+                  : 'border-gray-300 hover:border-gray-300 text-gray-500 hover:text-gray-900'
               )}
             >
               <item.icon className="w-5 h-5" />
@@ -536,8 +536,8 @@ function FreeTextEditor({ config, onUpdate, onOpenVariables }: FreeTextEditorPro
             placeholder="https://exemplo.com/imagem.jpg"
             className={cn(
               'w-full px-3 py-2 rounded-lg',
-              'bg-[#0a0a0a] border border-gray-200',
-              'text-sm text-gray-700 placeholder-white/30',
+              'bg-white border border-gray-200',
+              'text-sm text-gray-700 placeholder-gray-400',
               'focus:outline-none focus:border-green-500/50'
             )}
           />
@@ -635,12 +635,12 @@ function TemplateEditor({
             placeholder="carrinho_abandonado_v1"
             className={cn(
               'w-full px-3 py-2 rounded-lg',
-              'bg-[#0a0a0a] border border-gray-200',
-              'text-sm text-gray-700 placeholder-white/30',
+              'bg-white border border-gray-200',
+              'text-sm text-gray-700 placeholder-gray-400',
               'focus:outline-none focus:border-green-500/50'
             )}
           />
-          <p className="text-[10px] text-white/40">Apenas letras minúsculas e _</p>
+          <p className="text-[10px] text-gray-400">Apenas letras minúsculas e _</p>
         </div>
         <div className="space-y-2">
           <label className="text-xs text-gray-600/60">Categoria</label>
@@ -683,7 +683,7 @@ function TemplateEditor({
                 'px-3 py-1.5 rounded-lg text-xs transition-all',
                 config.headerType === item.type
                   ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                  : 'bg-gray-100 text-gray-600 border border-transparent hover:text-white'
+                  : 'bg-gray-100 text-gray-600 border border-transparent hover:text-gray-900'
               )}
             >
               {item.label}
@@ -694,7 +694,7 @@ function TemplateEditor({
         {config.headerType === 'text' && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-white/50">Texto do cabeçalho</span>
+              <span className="text-[11px] text-gray-500">Texto do cabeçalho</span>
               <button
                 onClick={() => onOpenVariables('header')}
                 className="text-[10px] text-brand-600 hover:text-brand-500"
@@ -710,8 +710,8 @@ function TemplateEditor({
               maxLength={60}
               className={cn(
                 'w-full px-3 py-2 rounded-lg',
-                'bg-[#0a0a0a] border border-gray-200',
-                'text-sm text-gray-700 placeholder-white/30',
+                'bg-white border border-gray-200',
+                'text-sm text-gray-700 placeholder-gray-400',
                 'focus:outline-none focus:border-green-500/50'
               )}
             />
@@ -723,7 +723,7 @@ function TemplateEditor({
 
         {['image', 'video', 'document'].includes(config.headerType || '') && (
           <div className="space-y-2">
-            <span className="text-[11px] text-white/50">URL da mídia</span>
+            <span className="text-[11px] text-gray-500">URL da mídia</span>
             <input
               type="url"
               value={config.headerMediaUrl || ''}
@@ -731,8 +731,8 @@ function TemplateEditor({
               placeholder="https://exemplo.com/arquivo.jpg"
               className={cn(
                 'w-full px-3 py-2 rounded-lg',
-                'bg-[#0a0a0a] border border-gray-200',
-                'text-sm text-gray-700 placeholder-white/30',
+                'bg-white border border-gray-200',
+                'text-sm text-gray-700 placeholder-gray-400',
                 'focus:outline-none focus:border-green-500/50'
               )}
             />
@@ -760,8 +760,8 @@ function TemplateEditor({
           maxLength={1024}
           className={cn(
             'w-full px-3 py-3 rounded-lg resize-none',
-            'bg-[#0a0a0a] border border-gray-200',
-            'text-sm text-gray-700 placeholder-white/30',
+            'bg-white border border-gray-200',
+            'text-sm text-gray-700 placeholder-gray-400',
             'focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20',
             'transition-all'
           )}
@@ -785,8 +785,8 @@ function TemplateEditor({
           maxLength={60}
           className={cn(
             'w-full px-3 py-2 rounded-lg',
-            'bg-[#0a0a0a] border border-gray-200',
-            'text-sm text-gray-700 placeholder-white/30',
+            'bg-white border border-gray-200',
+            'text-sm text-gray-700 placeholder-gray-400',
             'focus:outline-none focus:border-green-500/50'
           )}
         />
@@ -817,7 +817,7 @@ function TemplateEditor({
                 onChange={(e) => onUpdateButton(index, { text: e.target.value })}
                 placeholder="Texto do botão"
                 maxLength={25}
-                className="flex-1 px-2 py-1.5 rounded bg-gray-100 border border-gray-300 text-xs text-gray-600 placeholder-dark-400"
+                className="flex-1 px-2 py-1.5 rounded bg-gray-100 border border-gray-300 text-xs text-gray-600 placeholder-gray-400"
               />
               {button.type !== 'quick_reply' && (
                 <input
@@ -825,7 +825,7 @@ function TemplateEditor({
                   value={button.value || ''}
                   onChange={(e) => onUpdateButton(index, { value: e.target.value })}
                   placeholder={button.type === 'url' ? 'https://...' : '+5511...'}
-                  className="flex-1 px-2 py-1.5 rounded bg-gray-100 border border-gray-300 text-xs text-gray-600 placeholder-dark-400"
+                  className="flex-1 px-2 py-1.5 rounded bg-gray-100 border border-gray-300 text-xs text-gray-600 placeholder-gray-400"
                 />
               )}
               <button
@@ -844,7 +844,7 @@ function TemplateEditor({
             className={cn(
               'w-full py-2.5 rounded-lg text-xs',
               'border border-dashed border-gray-300 hover:border-gray-300',
-              'text-gray-500 hover:text-white',
+              'text-gray-500 hover:text-gray-900',
               'transition-colors flex items-center justify-center gap-2'
             )}
           >
@@ -893,15 +893,15 @@ function PhonePreview({ config }: PhonePreviewProps) {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-6 bg-gradient-to-b from-dark-800/50 to-dark-900/50">
+      <div className="flex-1 flex items-center justify-center p-6 bg-gradient-to-b from-gray-100 to-gray-200">
         {/* Phone Frame */}
         <div className="w-full max-w-[280px]">
-          <div className="bg-[#0b141a] rounded-[2rem] p-2 shadow-2xl border border-gray-300">
+          <div className="bg-gray-100 rounded-[2rem] p-2 shadow-2xl border border-gray-300">
             {/* Phone Screen */}
-            <div className="bg-[#0b141a] rounded-[1.5rem] overflow-hidden">
+            <div className="bg-gray-100 rounded-[1.5rem] overflow-hidden">
               {/* Status Bar */}
               <div className="bg-[#1f2c33] px-4 py-2 flex items-center justify-between">
-                <span className="text-[10px] text-white/70">9:41</span>
+                <span className="text-[10px] text-gray-700">9:41</span>
                 <div className="flex items-center gap-1">
                   <div className="w-4 h-2.5 rounded-sm bg-white/70" />
                 </div>
@@ -954,7 +954,7 @@ function PhonePreview({ config }: PhonePreviewProps) {
 
                     {/* Footer */}
                     {config.footerText && (
-                      <div className="text-white/50 text-[11px] mt-2 pt-1.5 border-t border-gray-200">
+                      <div className="text-gray-500 text-[11px] mt-2 pt-1.5 border-t border-gray-200">
                         {config.footerText}
                       </div>
                     )}
@@ -977,7 +977,7 @@ function PhonePreview({ config }: PhonePreviewProps) {
 
                     {/* Time */}
                     <div className="flex items-center justify-end gap-1 mt-1">
-                      <span className="text-[10px] text-white/50">
+                      <span className="text-[10px] text-gray-500">
                         {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                       <Check className="w-3 h-3 text-blue-400" />
@@ -1025,7 +1025,7 @@ function SelectField({ value, onChange, options }: SelectFieldProps) {
         onChange={(e) => onChange(e.target.value)}
         className={cn(
           'w-full px-3 py-2 rounded-lg appearance-none',
-          'bg-[#0a0a0a] border border-gray-200',
+          'bg-white border border-gray-200',
           'text-sm text-gray-700',
           'focus:outline-none focus:border-green-500/50'
         )}
@@ -1036,7 +1036,7 @@ function SelectField({ value, onChange, options }: SelectFieldProps) {
           </option>
         ))}
       </select>
-      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
     </div>
   );
 }

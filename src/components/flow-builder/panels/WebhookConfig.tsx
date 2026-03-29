@@ -157,7 +157,7 @@ export function WebhookConfig({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="w-6 h-6 text-white/40 animate-spin" />
+        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
       </div>
     );
   }
@@ -166,7 +166,7 @@ export function WebhookConfig({
     return (
       <div className="space-y-4">
         {/* Create webhook section */}
-        <div className="p-4 rounded-xl bg-[#0a0a0a] border border-gray-200">
+        <div className="p-4 rounded-xl bg-white border border-gray-200">
           <div className="flex items-start gap-3">
             <div className="p-2 rounded-lg bg-blue-500/15">
               <Webhook className="w-5 h-5 text-blue-400" />
@@ -238,14 +238,14 @@ export function WebhookConfig({
       <div className="space-y-2">
         <label className="text-xs text-gray-600/60">Webhook URL</label>
         <div className="flex items-center gap-2">
-          <div className="flex-1 p-3 rounded-lg bg-[#0a0a0a] border border-gray-200 font-mono text-xs text-gray-600/80 overflow-x-auto whitespace-nowrap">
+          <div className="flex-1 p-3 rounded-lg bg-white border border-gray-200 font-mono text-xs text-gray-600/80 overflow-x-auto whitespace-nowrap">
             {webhook?.url || config.webhookUrl}
           </div>
           <button
             onClick={() => copyToClipboard(webhook?.url || config.webhookUrl, 'url')}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-white/10 text-white/50 hover:text-white'
+              'hover:bg-gray-100 text-gray-500 hover:text-gray-900'
             )}
           >
             {copied === 'url' ? (
@@ -267,25 +267,25 @@ export function WebhookConfig({
             </label>
             <button
               onClick={regenerateSecret}
-              className="text-[10px] text-white/40 hover:text-white flex items-center gap-1"
+              className="text-[10px] text-gray-400 hover:text-gray-900 flex items-center gap-1"
             >
               <RefreshCw className="w-3 h-3" />
               Regenerar
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex-1 p-3 rounded-lg bg-[#0a0a0a] border border-gray-200 font-mono text-xs text-gray-600/80">
+            <div className="flex-1 p-3 rounded-lg bg-white border border-gray-200 font-mono text-xs text-gray-600/80">
               {showSecret ? webhook.secret : '••••••••••••••••••••••••'}
             </div>
             <button
               onClick={() => setShowSecret(!showSecret)}
-              className="p-2 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
             >
               {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
             <button
               onClick={() => copyToClipboard(webhook.secret, 'secret')}
-              className="p-2 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
             >
               {copied === 'secret' ? (
                 <Check className="w-4 h-4 text-green-400" />
@@ -302,7 +302,7 @@ export function WebhookConfig({
         <div className="flex items-center gap-4 p-3 rounded-lg bg-gray-50 border border-gray-200">
           <div className="text-center">
             <p className="text-lg font-semibold text-gray-900">{webhook.receivedCount || 0}</p>
-            <p className="text-[10px] text-white/40">Recebidos</p>
+            <p className="text-[10px] text-gray-400">Recebidos</p>
           </div>
           {webhook.lastReceivedAt && (
             <div className="text-center border-l border-gray-200 pl-4">
@@ -314,7 +314,7 @@ export function WebhookConfig({
                   minute: '2-digit',
                 })}
               </p>
-              <p className="text-[10px] text-white/40">Último recebido</p>
+              <p className="text-[10px] text-gray-400">Último recebido</p>
             </div>
           )}
         </div>
@@ -326,7 +326,7 @@ export function WebhookConfig({
           <ExternalLink className="w-3 h-3" />
           Exemplo de uso
         </h5>
-        <pre className="text-[10px] text-white/50 bg-[#0a0a0a] p-2 rounded overflow-x-auto">
+        <pre className="text-[10px] text-gray-500 bg-white p-2 rounded overflow-x-auto">
 {`curl -X POST "${webhook?.url || '[URL]'}" \\
   -H "Content-Type: application/json" \\
   -d '{"event": "test", "data": {...}}'`}

@@ -213,12 +213,12 @@ const ExecutionOverlay = ({ status, executionTime, statusMessage }: {
           <Icon className={cn('w-3.5 h-3.5', cfg.color, cfg.animate && 'animate-spin')} />
         )}
         {executionTime !== undefined && status !== 'running' && (
-          <span className="text-[10px] text-white/70 font-medium">
+          <span className="text-[10px] text-gray-700 font-medium">
             {executionTime}ms
           </span>
         )}
         {status === 'running' && (
-          <span className="text-[10px] text-white/70 font-medium">
+          <span className="text-[10px] text-gray-700 font-medium">
             Executando...
           </span>
         )}
@@ -296,7 +296,7 @@ const WhatsAppPreview = ({ config }: { config: Record<string, any> }) => {
   if (!message && !hasAudio && !hasMedia && !hasAttachment && !templateName) {
     return (
       <div className="mt-2 pt-2 border-t border-gray-200">
-        <div className="text-[10px] text-white/40 italic">
+        <div className="text-[10px] text-gray-400 italic">
           Clique para configurar a mensagem
         </div>
       </div>
@@ -306,7 +306,7 @@ const WhatsAppPreview = ({ config }: { config: Record<string, any> }) => {
   return (
     <div className="mt-2 pt-2 border-t border-gray-200">
       {templateName && (
-        <div className="text-[10px] text-white/50 mb-1 flex items-center gap-1">
+        <div className="text-[10px] text-gray-500 mb-1 flex items-center gap-1">
           <FileText className="w-3 h-3" />
           {templateName}
         </div>
@@ -321,19 +321,19 @@ const WhatsAppPreview = ({ config }: { config: Record<string, any> }) => {
 
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
           {hasAudio && (
-            <div className="flex items-center gap-1 text-[10px] text-white/60">
+            <div className="flex items-center gap-1 text-[10px] text-gray-500">
               <Mic className="w-3 h-3" />
               <span>Áudio</span>
             </div>
           )}
           {hasMedia && (
-            <div className="flex items-center gap-1 text-[10px] text-white/60">
+            <div className="flex items-center gap-1 text-[10px] text-gray-500">
               <Image className="w-3 h-3" />
               <span>Imagem</span>
             </div>
           )}
           {hasAttachment && (
-            <div className="flex items-center gap-1 text-[10px] text-white/60">
+            <div className="flex items-center gap-1 text-[10px] text-gray-500">
               <Paperclip className="w-3 h-3" />
               <span>Anexo</span>
             </div>
@@ -377,7 +377,7 @@ const SMSPreview = ({ config }: { config: Record<string, any> }) => {
   if (!message) {
     return (
       <div className="mt-2 pt-2 border-t border-gray-200">
-        <div className="text-[10px] text-white/40 italic">
+        <div className="text-[10px] text-gray-400 italic">
           Clique para configurar o SMS
         </div>
       </div>
@@ -397,7 +397,7 @@ const SMSPreview = ({ config }: { config: Record<string, any> }) => {
         <div className="text-right mt-1">
           <span className={cn(
             "text-[9px]",
-            message.length > 160 ? "text-amber-400" : "text-white/40"
+            message.length > 160 ? "text-amber-400" : "text-gray-400"
           )}>
             {message.length}/160
           </span>
@@ -418,7 +418,7 @@ const EmailPreview = ({ config }: { config: Record<string, any> }) => {
   if (!subject && !body) {
     return (
       <div className="mt-2 pt-2 border-t border-gray-200">
-        <div className="text-[10px] text-white/40 italic">
+        <div className="text-[10px] text-gray-400 italic">
           Clique para configurar o email
         </div>
       </div>
@@ -431,11 +431,11 @@ const EmailPreview = ({ config }: { config: Record<string, any> }) => {
         {subject && (
           <div className="flex items-center gap-1 mb-1">
             <Mail className="w-3 h-3 text-blue-400" />
-            <span className="text-[10px] text-white/70 font-medium truncate">{subject}</span>
+            <span className="text-[10px] text-gray-700 font-medium truncate">{subject}</span>
           </div>
         )}
         {body && (
-          <p className="text-[10px] text-white/50 line-clamp-2">
+          <p className="text-[10px] text-gray-500 line-clamp-2">
             {body.length > 80 ? body.substring(0, 80) + '...' : body}
           </p>
         )}
@@ -486,7 +486,7 @@ const TagPreview = ({ config, isRemove }: { config: Record<string, any>; isRemov
   if (!tagName) {
     return (
       <div className="mt-2 pt-2 border-t border-gray-200">
-        <div className="text-[10px] text-white/40 italic">
+        <div className="text-[10px] text-gray-400 italic">
           Clique para selecionar tag
         </div>
       </div>
@@ -537,7 +537,7 @@ const ConditionPreview = ({ config, nodeType }: { config: Record<string, any>; n
   if (!field) {
     return (
       <div className="mt-2 pt-2 border-t border-gray-200">
-        <div className="text-[10px] text-white/40 italic">
+        <div className="text-[10px] text-gray-400 italic">
           Clique para configurar condição
         </div>
       </div>
@@ -560,7 +560,7 @@ const ConditionPreview = ({ config, nodeType }: { config: Record<string, any>; n
   return (
     <div className="mt-2 pt-2 border-t border-gray-200">
       <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-2 py-1.5 text-center">
-        <span className="text-[10px] text-white/70">
+        <span className="text-[10px] text-gray-700">
           {field} <span className="text-amber-400 font-medium">{operatorLabels[operator] || operator}</span> {value}
         </span>
       </div>
@@ -627,7 +627,7 @@ function BaseNodeComponent(props: BaseNodeProps) {
         'bg-gradient-to-br',
         catConfig.gradient,
         hasResult ? statusCfg.borderColor : catConfig.border,
-        selected && `ring-2 ring-white/30 ${catConfig.glow} shadow-lg`,
+        selected && `ring-2 ring-gray-400/50 ${catConfig.glow} shadow-lg`,
         isExecuting && 'shadow-xl shadow-blue-500/30',
         hasResult && status === 'success' && 'shadow-lg shadow-green-500/20',
         hasResult && status === 'error' && 'shadow-lg shadow-red-500/20',
@@ -649,9 +649,9 @@ function BaseNodeComponent(props: BaseNodeProps) {
           type="target"
           position={Position.Top}
           className={cn(
-            '!w-3 !h-3 !border-2 !bg-[#1a1a1a] !-top-1.5',
-            hasResult && status === 'success' ? '!border-green-500/50' : '!border-white/20',
-            'hover:!bg-white/20'
+            '!w-3 !h-3 !border-2 !bg-white !-top-1.5',
+            hasResult && status === 'success' ? '!border-green-500/50' : '!border-gray-300',
+            'hover:!bg-gray-100'
           )}
         />
       )}
@@ -678,7 +678,7 @@ function BaseNodeComponent(props: BaseNodeProps) {
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-medium text-gray-900 truncate">{label}</h3>
             {description && (
-              <p className="text-[10px] text-white/50 mt-0.5 line-clamp-1">{description}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5 line-clamp-1">{description}</p>
             )}
           </div>
         </div>
@@ -702,7 +702,7 @@ function BaseNodeComponent(props: BaseNodeProps) {
                 {status === 'error' && '✗ Erro'}
                 {status === 'skipped' && '→ Pulado'}
               </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-50 text-white/40">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-50 text-gray-400">
                 {executionTime}ms
               </span>
             </div>
@@ -732,9 +732,9 @@ function BaseNodeComponent(props: BaseNodeProps) {
           type="source"
           position={Position.Bottom}
           className={cn(
-            '!w-3 !h-3 !border-2 !bg-[#1a1a1a] !-bottom-1.5',
-            hasResult && status === 'success' ? '!border-green-500/50' : '!border-white/20',
-            'hover:!bg-white/20'
+            '!w-3 !h-3 !border-2 !bg-white !-bottom-1.5',
+            hasResult && status === 'success' ? '!border-green-500/50' : '!border-gray-300',
+            'hover:!bg-gray-100'
           )}
         />
       )}

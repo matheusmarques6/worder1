@@ -146,7 +146,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onClick={handleClose}
           className={cn(
             'p-2 rounded-lg flex-shrink-0',
-            'hover:bg-gray-100 text-gray-500 hover:text-white',
+            'hover:bg-gray-100 text-gray-500 hover:text-gray-900',
             'transition-colors'
           )}
           title="Fechar"
@@ -167,7 +167,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
               className={cn(
                 'px-3 py-1.5 rounded-lg',
                 'bg-white border border-gray-300',
-                'text-white text-base sm:text-lg font-semibold',
+                'text-gray-900 text-base sm:text-lg font-semibold',
                 'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
                 'w-[150px] sm:w-[200px]'
               )}
@@ -210,7 +210,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onClick={toggleHistoryPanel}
           className={cn(
             'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'hover:bg-gray-100 text-gray-500 hover:text-white',
+            'hover:bg-gray-100 text-gray-500 hover:text-gray-900',
             'transition-colors text-sm'
           )}
           title="Histórico"
@@ -226,7 +226,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           className={cn(
             'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
             'bg-gray-100 hover:bg-gray-200',
-            'text-white text-sm font-medium',
+            'text-gray-700 text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
@@ -254,7 +254,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           className={cn(
             'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
             'bg-gray-100 hover:bg-gray-200 border border-gray-300',
-            'text-white text-sm font-medium',
+            'text-gray-700 text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
@@ -274,7 +274,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           className={cn(
             'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
             'bg-primary-500 hover:bg-primary-600',
-            'text-white text-sm font-medium',
+            'text-gray-700 text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}

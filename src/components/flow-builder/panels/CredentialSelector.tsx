@@ -163,13 +163,13 @@ export function CredentialSelector({
   if (isLoading) {
     return (
       <div className="space-y-2">
-        {label && <label className={cn("block text-xs", lightMode ? "text-gray-600" : "text-white/60")}>{label}</label>}
+        {label && <label className={cn("block text-xs", lightMode ? "text-gray-600" : "text-gray-500")}>{label}</label>}
         <div className={cn(
           "flex items-center gap-2 p-3 rounded-lg border",
-          lightMode ? "bg-gray-50 border-gray-200" : "bg-[#1a1a1a] border-gray-200"
+          lightMode ? "bg-gray-50 border-gray-200" : "bg-white border-gray-200"
         )}>
-          <Loader2 className={cn("w-4 h-4 animate-spin", lightMode ? "text-gray-400" : "text-white/40")} />
-          <span className={cn("text-sm", lightMode ? "text-gray-400" : "text-white/40")}>Carregando conexões...</span>
+          <Loader2 className={cn("w-4 h-4 animate-spin", lightMode ? "text-gray-400" : "text-gray-400")} />
+          <span className={cn("text-sm", lightMode ? "text-gray-400" : "text-gray-400")}>Carregando conexões...</span>
         </div>
       </div>
     );
@@ -179,7 +179,7 @@ export function CredentialSelector({
     <div className="space-y-2 relative" ref={dropdownRef}>
       {/* Label */}
       {label && (
-        <label className={cn("block text-xs", lightMode ? "text-gray-600" : "text-white/60")}>
+        <label className={cn("block text-xs", lightMode ? "text-gray-600" : "text-gray-500")}>
           {label}
           {required && <span className="text-red-400 ml-1">*</span>}
         </label>
@@ -195,7 +195,7 @@ export function CredentialSelector({
             'border text-left transition-colors',
             lightMode
               ? 'bg-gray-50 hover:bg-gray-100'
-              : 'bg-[#1a1a1a] hover:bg-[#222]',
+              : 'bg-white hover:bg-gray-50',
             isOpen
               ? 'border-blue-500/50'
               : lightMode ? 'border-gray-200' : 'border-gray-200',
@@ -207,20 +207,20 @@ export function CredentialSelector({
               <>
                 {renderIcon(selectedConnection.icon, selectedConnection.color)}
                 <div className="flex-1 min-w-0">
-                  <p className={cn("text-sm truncate", lightMode ? "text-gray-800" : "text-white")}>{selectedConnection.name}</p>
-                  <p className={cn("text-[10px] truncate", lightMode ? "text-gray-400" : "text-white/40")}>{selectedConnection.typeName}</p>
+                  <p className={cn("text-sm truncate", lightMode ? "text-gray-800" : "text-gray-900")}>{selectedConnection.name}</p>
+                  <p className={cn("text-[10px] truncate", lightMode ? "text-gray-400" : "text-gray-400")}>{selectedConnection.typeName}</p>
                 </div>
                 {!selectedConnection.isActive && (
                   <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
                 )}
               </>
             ) : (
-              <span className={cn("text-sm", lightMode ? "text-gray-400" : "text-white/40")}>{placeholder}</span>
+              <span className={cn("text-sm", lightMode ? "text-gray-400" : "text-gray-400")}>{placeholder}</span>
             )}
           </div>
           <ChevronDown className={cn(
             'w-4 h-4 transition-transform flex-shrink-0',
-            lightMode ? 'text-gray-400' : 'text-white/40',
+            lightMode ? 'text-gray-400' : 'text-gray-400',
             isOpen && 'rotate-180'
           )} />
         </button>
@@ -233,9 +233,9 @@ export function CredentialSelector({
               e.stopPropagation();
               window.open('/settings/integrations', '_blank');
             }}
-            className="absolute right-10 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10 transition-colors"
+            className="absolute right-10 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-100 transition-colors"
           >
-            <Settings className="w-3.5 h-3.5 text-white/40 hover:text-white" />
+            <Settings className="w-3.5 h-3.5 text-gray-400 hover:text-gray-900" />
           </button>
         )}
       </div>
@@ -252,14 +252,14 @@ export function CredentialSelector({
               'shadow-xl overflow-hidden',
               lightMode
                 ? 'bg-white border border-gray-200 shadow-gray-200/50'
-                : 'bg-[#1a1a1a] border border-gray-200 shadow-black/50'
+                : 'bg-white border border-gray-200 shadow-gray-200/50'
             )}
             style={{ maxHeight: '300px' }}
           >
             {/* Search */}
             <div className={cn("p-2 border-b", lightMode ? "border-gray-100" : "border-gray-200")}>
               <div className="relative">
-                <Search className={cn("absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4", lightMode ? "text-gray-400" : "text-white/30")} />
+                <Search className={cn("absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4", lightMode ? "text-gray-400" : "text-gray-400")} />
                 <input
                   type="text"
                   value={search}
@@ -271,15 +271,15 @@ export function CredentialSelector({
                     'focus:outline-none focus:border-blue-500/50',
                     lightMode
                       ? 'bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400'
-                      : 'bg-[#0a0a0a] border border-gray-200 text-white placeholder-white/30'
+                      : 'bg-white border border-gray-200 text-gray-900 placeholder-gray-400'
                   )}
                 />
                 {search && (
                   <button
                     onClick={() => setSearch('')}
-                    className={cn("absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded", lightMode ? "hover:bg-gray-100" : "hover:bg-white/10")}
+                    className={cn("absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded", lightMode ? "hover:bg-gray-100" : "hover:bg-gray-100")}
                   >
-                    <X className={cn("w-3 h-3", lightMode ? "text-gray-400" : "text-white/40")} />
+                    <X className={cn("w-3 h-3", lightMode ? "text-gray-400" : "text-gray-400")} />
                   </button>
                 )}
               </div>
@@ -288,7 +288,7 @@ export function CredentialSelector({
             {/* Connection List */}
             <div className="overflow-y-auto" style={{ maxHeight: '200px' }}>
               {filteredConnections.length === 0 ? (
-                <div className={cn("p-4 text-center text-sm", lightMode ? "text-gray-400" : "text-white/40")}>
+                <div className={cn("p-4 text-center text-sm", lightMode ? "text-gray-400" : "text-gray-400")}>
                   {search ? 'Nenhuma conexão encontrada' : 'Nenhuma conexão configurada'}
                 </div>
               ) : (
@@ -310,14 +310,14 @@ export function CredentialSelector({
                     {renderIcon(connection.icon, connection.color, 'w-4 h-4')}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className={cn("text-sm truncate", lightMode ? "text-gray-800" : "text-white")}>{connection.name}</p>
+                        <p className={cn("text-sm truncate", lightMode ? "text-gray-800" : "text-gray-900")}>{connection.name}</p>
                         {!connection.isActive && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
                             inativo
                           </span>
                         )}
                       </div>
-                      <p className={cn("text-[10px] truncate", lightMode ? "text-gray-400" : "text-white/40")}>
+                      <p className={cn("text-[10px] truncate", lightMode ? "text-gray-400" : "text-gray-400")}>
                         {connection.typeName}
                         {connection.identifier && ` • ${connection.identifier}`}
                       </p>
@@ -344,7 +344,7 @@ export function CredentialSelector({
               >
                 <Plus className="w-4 h-4" />
                 <span className="text-sm">Criar nova credencial</span>
-                <ExternalLink className={cn("w-3 h-3 ml-auto", lightMode ? "text-gray-400" : "text-white/30")} />
+                <ExternalLink className={cn("w-3 h-3 ml-auto", lightMode ? "text-gray-400" : "text-gray-400")} />
               </button>
             </div>
           </motion.div>
@@ -361,7 +361,7 @@ export function CredentialSelector({
 
       {/* No connections hint */}
       {!isLoading && connections.length === 0 && !error && (
-        <p className={cn("text-[11px]", lightMode ? "text-gray-400" : "text-white/40")}>
+        <p className={cn("text-[11px]", lightMode ? "text-gray-400" : "text-gray-400")}>
           Nenhuma conexão configurada.
           <a
             href="/settings/integrations"

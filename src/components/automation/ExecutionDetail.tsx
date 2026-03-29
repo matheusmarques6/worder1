@@ -218,11 +218,11 @@ export function ExecutionDetail({
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="w-full max-w-xl bg-[#111111] border-l border-[#222222] flex flex-col shadow-2xl"
+        className="w-full max-w-xl bg-gray-50 border-l border-gray-200 flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#222222]">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
             {run && (
               <div className={cn(
@@ -249,7 +249,7 @@ export function ExecutionDetail({
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-white rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <X className="w-5 h-5 text-gray-500" />
           </button>
@@ -268,7 +268,7 @@ export function ExecutionDetail({
         ) : run ? (
           <div className="flex-1 overflow-y-auto">
             {/* Contexto */}
-            <div className="p-4 border-b border-[#222222]">
+            <div className="p-4 border-b border-gray-200">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                 Contexto
               </h3>
@@ -330,7 +330,7 @@ export function ExecutionDetail({
             </div>
 
             {/* Stats */}
-            <div className="px-4 py-3 border-b border-[#222222] flex items-center gap-4">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-500" />
                 <span className="text-sm text-gray-700">{run.completed_steps} sucesso</span>
@@ -487,7 +487,7 @@ export function ExecutionDetail({
 
             {/* Error Message */}
             {run.error && (
-              <div className="p-4 border-t border-[#222222]">
+              <div className="p-4 border-t border-gray-200">
                 <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
                   <div className="flex items-start gap-2">
                     <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -508,7 +508,7 @@ export function ExecutionDetail({
         ) : null}
 
         {/* Footer */}
-        <div className="p-4 border-t border-[#222222] flex items-center justify-between">
+        <div className="p-4 border-t border-gray-200 flex items-center justify-between">
           <Button
             variant="ghost"
             size="sm"

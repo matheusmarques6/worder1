@@ -201,7 +201,7 @@ export function FlowBuilder({
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={handleCloseTestModal}
-                  className="px-4 py-2 rounded-lg text-gray-600 hover:text-white hover:bg-gray-100 transition-colors"
+                  className="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                 >
                   Fechar
                 </button>
@@ -241,7 +241,7 @@ export function FlowBuilder({
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={handleCloseHistoryPanel}
-                  className="px-4 py-2 rounded-lg text-gray-600 hover:text-white hover:bg-gray-100 transition-colors"
+                  className="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                 >
                   Fechar
                 </button>
