@@ -15,20 +15,12 @@ export async function GET(request: NextRequest) {
     if (!auth) return authError();
 
     const { user } = auth;
-    const { searchParams } = request.nextUrl;
-    const type = searchParams.get('type');
 
-    let query = supabaseAdmin
+    const { data: templates, error } = await supabaseAdmin
       .from('email_templates')
       .select('*')
       .eq('organization_id', user.organization_id)
       .order('created_at', { ascending: false });
-
-    if (type) {
-      query = query.eq('type', type);
-    }
-
-    const { data: templates, error } = await query;
 
     if (error) {
       console.error('[EmailTemplates] Error fetching templates:', error);
@@ -50,7 +42,7 @@ export async function POST(request: NextRequest) {
     const { user } = auth;
     const body = await request.json();
 
-    const { name, subject, html, type, category, thumbnail_url } = body;
+    const { name, subject, html, thumbnail_url } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -59,17 +51,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build insert data — only include fields that have values
+    // Only insert columns that exist in the table:
+    // id, organization_id, name, subject, html, design_json, thumbnail_url, created_at, updated_at
     const insertData: Record<string, any> = {
       organization_id: user.organization_id,
       name,
     }
     if (subject) insertData.subject = subject
     if (html) insertData.html = html
-    if (type || category) insertData.type = type || category
     if (thumbnail_url) insertData.thumbnail_url = thumbnail_url
-
-    console.log('[EmailTemplates] Inserting:', { ...insertData, html: insertData.html ? '(has html)' : undefined })
 
     const { data: template, error } = await supabaseAdmin
       .from('email_templates')
@@ -79,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('[EmailTemplates] Error creating template:', error);
-      return NextResponse.json({ error: error.message || 'Failed to create template', details: error.code }, { status: 500 });
+      return NextResponse.json({ error: error.message || 'Failed to create template' }, { status: 500 });
     }
 
     return NextResponse.json({ template }, { status: 201 });

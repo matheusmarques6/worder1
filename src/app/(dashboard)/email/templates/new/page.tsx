@@ -69,7 +69,6 @@ export default function NewTemplatePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          type: category,
         }),
       })
 

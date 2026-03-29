@@ -20,8 +20,9 @@ const UnlayerEditor = dynamic(() => import('@/components/email/email-editor'), {
 interface TemplateData {
   id: string
   name: string
-  category: string
+  category?: string
   design?: Record<string, any>
+  design_json?: Record<string, any>
   html?: string
 }
 
@@ -103,7 +104,7 @@ export default function EditTemplatePage() {
     <div className="fixed inset-0 z-50 bg-white">
       <UnlayerEditor
         templateName={template.name}
-        design={template.design}
+        design={template.design_json || template.design}
         onSave={handleSave}
         onBack={handleBack}
       />

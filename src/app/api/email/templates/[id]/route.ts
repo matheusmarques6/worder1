@@ -48,15 +48,15 @@ export async function PUT(
     const { user } = auth;
     const body = await request.json();
 
-    const { name, subject, html, design, design_json, type, thumbnail_url } = body;
+    const { name, subject, html, design, design_json, thumbnail_url } = body;
 
+    // Only update columns that exist: name, subject, html, design, design_json, thumbnail_url
     const updateData: Record<string, any> = {};
     if (name !== undefined) updateData.name = name;
     if (subject !== undefined) updateData.subject = subject;
     if (html !== undefined) updateData.html = html;
-    if (design !== undefined) updateData.design = design;
+    if (design !== undefined) updateData.design_json = design; // save design as design_json
     if (design_json !== undefined) updateData.design_json = design_json;
-    if (type !== undefined) updateData.type = type;
     if (thumbnail_url !== undefined) updateData.thumbnail_url = thumbnail_url;
 
     const { data: template, error } = await supabaseAdmin
