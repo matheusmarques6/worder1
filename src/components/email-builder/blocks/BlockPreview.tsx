@@ -424,7 +424,9 @@ export function BlockPreview({
                 gap: p.productPadding ?? 8,
               }}
             >
-              {Array.from({ length: total }).map((_, i) => (
+              {Array.from({ length: total }).map((_, i) => {
+                const staticProd = p.staticProducts?.[i]
+                return (
                 <div
                   key={i}
                   style={{
@@ -444,9 +446,14 @@ export function BlockPreview({
                       justifyContent: 'center',
                       color: '#9CA3AF',
                       fontSize: 12,
+                      overflow: 'hidden',
                     }}
                   >
-                    Produto {i + 1}
+                    {staticProd?.image_url ? (
+                      <img src={staticProd.image_url} alt={staticProd.title || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      `Produto ${i + 1}`
+                    )}
                   </div>
                   <div style={{ padding: p.productPadding ?? 8 }}>
                     {p.showName !== false && (
@@ -458,7 +465,7 @@ export function BlockPreview({
                           color: p.nameColor || '#111827',
                         }}
                       >
-                        Nome do produto
+                        {staticProd?.title || 'Nome do produto'}
                       </p>
                     )}
                     {p.showPrice !== false && (
@@ -472,7 +479,7 @@ export function BlockPreview({
                               marginRight: 6,
                             }}
                           >
-                            R$ XX,XX
+                            {staticProd?.compare_at_price ? `R$ ${staticProd.compare_at_price.toFixed(2)}` : 'R$ XX,XX'}
                           </span>
                         )}
                         <span
@@ -482,7 +489,7 @@ export function BlockPreview({
                             color: p.priceColor || '#F97316',
                           }}
                         >
-                          R$ XX,XX
+                          {staticProd?.price ? `R$ ${staticProd.price.toFixed(2)}` : 'R$ XX,XX'}
                         </span>
                       </div>
                     )}
@@ -507,7 +514,8 @@ export function BlockPreview({
                     )}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )

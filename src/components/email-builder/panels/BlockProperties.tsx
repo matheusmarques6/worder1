@@ -4,6 +4,7 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { EmailBlock } from '../config/types'
 import { ViewFeedsModal, CreateFeedModal } from '../modals/ProductFeedModal'
+import { BrowseProductsModal, StaticProductsEditor } from '../modals/BrowseProductsModal'
 
 const RichTextEditor = dynamic(() => import('../blocks/RichTextEditor').then(m => ({ default: m.RichTextEditor })), { ssr: false, loading: () => <div className="h-20 bg-gray-50 rounded-lg animate-pulse" /> })
 
@@ -546,6 +547,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
 function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange: (k: string, v: any) => void; commonTail: () => JSX.Element }) {
   const [showViewFeeds, setShowViewFeeds] = useState(false)
   const [showCreateFeed, setShowCreateFeed] = useState(false)
+  const [showBrowseProducts, setShowBrowseProducts] = useState(false)
   const [textTab, setTextTab] = useState<'name' | 'price'>('name')
 
   return (
@@ -604,6 +606,24 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
               Criar feed de produtos
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ── Modo Estático: Adicionar produtos do catálogo ── */}
+      {p.mode === 'static' && (
+        <div>
+          <button onClick={() => setShowBrowseProducts(true)}
+            className="w-full py-2.5 text-sm font-semibold text-gray-900 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            Adicionar produtos
+          </button>
+          {p.staticProducts && p.staticProducts.length > 0 && (
+            <div className="mt-3">
+              <StaticProductsEditor
+                products={p.staticProducts}
+                onChange={prods => onChange('staticProducts', prods)}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -785,6 +805,23 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
         isOpen={showCreateFeed}
         onClose={() => setShowCreateFeed(false)}
         onCreate={(feed) => { onChange('feedId', feed.id); onChange('feedName', feed.name); onChange('feedType', feed.feed_type) }}
+      />
+      <BrowseProductsModal
+        isOpen={showBrowseProducts}
+        onClose={() => setShowBrowseProducts(false)}
+        maxProducts={(p.columns || 2) * (p.rows || 2)}
+        onSelect={(products) => {
+          onChange('staticProducts', products.map(prod => ({
+            id: prod.id,
+            title: prod.title,
+            price: prod.price,
+            compare_at_price: prod.compare_at_price,
+            image_url: prod.image_url,
+            url: prod.url || (prod.handle ? `https://loja.com/products/${prod.handle}` : ''),
+            description: prod.description || '',
+            buttonText: p.buttonText || 'Comprar',
+          })))
+        }}
       />
     </div>
   )
