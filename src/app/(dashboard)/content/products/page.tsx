@@ -1,75 +1,136 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import {
   ShoppingBag,
-  Plus,
   MagnifyingGlass,
   PencilSimple,
   Eye,
   ArrowLeft,
-  Tag,
   CurrencyDollar,
   Package,
-  TrendUp,
-  Star,
   ArrowsClockwise,
-  FunnelSimple,
   Export,
   CheckCircle,
   XCircle,
-  Clock,
 } from '@phosphor-icons/react'
 
-const kpis = [
-  { title: 'Total de Produtos', value: '156', icon: ShoppingBag, color: 'text-[#F26B2A]' },
-  { title: 'Ativos', value: '142', icon: CheckCircle, color: 'text-emerald-400' },
-  { title: 'Sem Estoque', value: '8', icon: XCircle, color: 'text-red-400' },
-  { title: 'Receita (30d)', value: 'R$ 84.200', icon: CurrencyDollar, color: 'text-blue-400' },
-]
-
-const categories = ['Todos', 'Camisetas', 'Calças', 'Tênis', 'Acessórios', 'Eletrônicos']
-
-const products = [
-  { id: '1', name: 'Camiseta Premium Algodão', sku: 'CAM-001', price: 89.90, compareAt: 129.90, stock: 245, sold: 1840, category: 'Camisetas', status: 'active', rating: 4.8, image: null },
-  { id: '2', name: 'Calça Jeans Slim Fit', sku: 'CAL-012', price: 199.90, compareAt: null, stock: 128, sold: 920, category: 'Calças', status: 'active', rating: 4.6, image: null },
-  { id: '3', name: 'Tênis Runner Pro', sku: 'TEN-005', price: 349.90, compareAt: 449.90, stock: 56, sold: 560, category: 'Tênis', status: 'active', rating: 4.9, image: null },
-  { id: '4', name: 'Boné Snapback Classic', sku: 'ACE-008', price: 59.90, compareAt: null, stock: 420, sold: 2100, category: 'Acessórios', status: 'active', rating: 4.5, image: null },
-  { id: '5', name: 'Fone Bluetooth TWS', sku: 'ELE-003', price: 149.90, compareAt: 199.90, stock: 0, sold: 340, category: 'Eletrônicos', status: 'out_of_stock', rating: 4.3, image: null },
-  { id: '6', name: 'Camiseta Oversized Street', sku: 'CAM-015', price: 109.90, compareAt: null, stock: 180, sold: 1250, category: 'Camisetas', status: 'active', rating: 4.7, image: null },
-  { id: '7', name: 'Mochila Urban Pack', sku: 'ACE-022', price: 189.90, compareAt: 249.90, stock: 32, sold: 410, category: 'Acessórios', status: 'active', rating: 4.4, image: null },
-  { id: '8', name: 'Calça Cargo Tactical', sku: 'CAL-019', price: 229.90, compareAt: null, stock: 0, sold: 280, category: 'Calças', status: 'out_of_stock', rating: 4.2, image: null },
-  { id: '9', name: 'Smartwatch Fit Band', sku: 'ELE-007', price: 299.90, compareAt: 399.90, stock: 18, sold: 620, category: 'Eletrônicos', status: 'active', rating: 4.6, image: null },
-  { id: '10', name: 'Tênis Casual Day', sku: 'TEN-011', price: 249.90, compareAt: null, stock: 95, sold: 780, category: 'Tênis', status: 'active', rating: 4.5, image: null },
-  { id: '11', name: 'Camiseta Polo Executive', sku: 'CAM-020', price: 139.90, compareAt: null, stock: 64, sold: 890, category: 'Camisetas', status: 'draft', rating: 0, image: null },
-  { id: '12', name: 'Relógio Analógico Classic', sku: 'ACE-030', price: 459.90, compareAt: 599.90, stock: 12, sold: 156, category: 'Acessórios', status: 'active', rating: 4.8, image: null },
-]
+interface Product {
+  id: string
+  shopifyProductId: string
+  title: string
+  handle: string
+  vendor: string | null
+  productType: string | null
+  status: string
+  price: number
+  compareAtPrice: number | null
+  sku: string | null
+  totalInventory: number
+  tags: string
+  variants: any[]
+  images: { url: string; alt: string | null }[]
+  createdAt: string
+  updatedAt: string
+}
 
 const statusConfig: Record<string, { label: string; color: string }> = {
-  active: { label: 'Ativo', color: 'bg-emerald-500/10 text-emerald-400' },
-  out_of_stock: { label: 'Sem Estoque', color: 'bg-red-500/10 text-red-400' },
-  draft: { label: 'Rascunho', color: 'bg-zinc-500/10 text-gray-500' },
+  active: { label: 'Ativo', color: 'bg-emerald-500/10 text-emerald-600' },
+  draft: { label: 'Rascunho', color: 'bg-zinc-500/10 text-gray-600' },
+  archived: { label: 'Arquivado', color: 'bg-red-500/10 text-red-600' },
 }
 
 export default function ProductsPage() {
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('Todos')
-  const [sortBy, setSortBy] = useState<'name' | 'sold' | 'price' | 'stock'>('sold')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [sortBy, setSortBy] = useState<'title' | 'price' | 'totalInventory' | 'updatedAt'>('updatedAt')
+  const [storeId, setStoreId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await fetch('/api/products/shopify')
+      if (!res.ok) throw new Error('Falha ao carregar produtos')
+      const data = await res.json()
+      setProducts(data.products || [])
+      setStoreId(data.storeId || null)
+    } catch (err: any) {
+      console.error('Error fetching products:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchProducts()
+  }, [fetchProducts])
+
+  const handleSync = async () => {
+    if (syncing) return
+    try {
+      setSyncing(true)
+      const res = await fetch('/api/shopify/sync-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId, syncType: 'products' }),
+      })
+      if (!res.ok) throw new Error('Falha no sync')
+      await fetchProducts()
+    } catch (err: any) {
+      console.error('Sync error:', err)
+      setError(err.message)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // Compute KPIs from real data
+  const totalProducts = products.length
+  const activeProducts = products.filter((p) => p.status === 'active').length
+  const outOfStock = products.filter((p) => p.totalInventory === 0).length
+
+  const kpis = [
+    { title: 'Total de Produtos', value: totalProducts.toString(), icon: ShoppingBag, color: 'text-[#F26B2A]' },
+    { title: 'Ativos', value: activeProducts.toString(), icon: CheckCircle, color: 'text-emerald-600' },
+    { title: 'Sem Estoque', value: outOfStock.toString(), icon: XCircle, color: 'text-red-600' },
+    { title: 'Rascunhos', value: products.filter((p) => p.status === 'draft').length.toString(), icon: Package, color: 'text-gray-600' },
+  ]
+
+  // Collect unique product types for filtering
+  const productTypes = ['all', ...new Set(products.map((p) => p.productType).filter(Boolean))] as string[]
 
   const filtered = products
     .filter((p) => {
-      const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase())
-      const matchCategory = category === 'Todos' || p.category === category
-      return matchSearch && matchCategory
+      const matchSearch =
+        !search ||
+        p.title.toLowerCase().includes(search.toLowerCase()) ||
+        (p.sku && p.sku.toLowerCase().includes(search.toLowerCase())) ||
+        (p.vendor && p.vendor.toLowerCase().includes(search.toLowerCase()))
+      const matchStatus = statusFilter === 'all' || p.status === statusFilter
+      return matchSearch && matchStatus
     })
     .sort((a, b) => {
-      if (sortBy === 'sold') return b.sold - a.sold
       if (sortBy === 'price') return b.price - a.price
-      if (sortBy === 'stock') return b.stock - a.stock
-      return a.name.localeCompare(b.name)
+      if (sortBy === 'totalInventory') return b.totalInventory - a.totalInventory
+      if (sortBy === 'updatedAt') return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      return a.title.localeCompare(b.title)
     })
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <ArrowsClockwise size={32} className="animate-spin text-gray-400" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -84,13 +145,17 @@ export default function ProductsPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold font-display text-gray-900">Produtos</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Catálogo sincronizado da sua loja</p>
+            <p className="text-sm text-gray-500 mt-0.5">Catalogo sincronizado da sua loja</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
-            <ArrowsClockwise size={14} />
-            Sincronizar
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs disabled:opacity-50"
+          >
+            <ArrowsClockwise size={14} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Sincronizando...' : 'Sync Produtos'}
           </button>
           <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
             <Export size={14} />
@@ -98,6 +163,12 @@ export default function ProductsPage() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
+          {error}
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -127,22 +198,22 @@ export default function ProductsPage() {
           <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             type="text"
-            placeholder="Buscar por nome ou SKU..."
+            placeholder="Buscar por nome, SKU ou fornecedor..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500"
           />
         </div>
         <div className="flex gap-1 overflow-x-auto">
-          {categories.map((cat) => (
+          {['all', 'active', 'draft', 'archived'].map((s) => (
             <button
-              key={cat}
-              onClick={() => setCategory(cat)}
+              key={s}
+              onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
-                category === cat ? 'bg-brand-500 text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
+                statusFilter === s ? 'bg-brand-500 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
               }`}
             >
-              {cat}
+              {s === 'all' ? 'Todos' : s === 'active' ? 'Ativos' : s === 'draft' ? 'Rascunhos' : 'Arquivados'}
             </button>
           ))}
         </div>
@@ -151,105 +222,126 @@ export default function ProductsPage() {
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-900 focus:outline-none"
         >
-          <option value="sold">Mais vendidos</option>
-          <option value="price">Maior preço</option>
-          <option value="stock">Mais estoque</option>
-          <option value="name">Nome A-Z</option>
+          <option value="updatedAt">Mais recentes</option>
+          <option value="price">Maior preco</option>
+          <option value="totalInventory">Mais estoque</option>
+          <option value="title">Nome A-Z</option>
         </select>
       </div>
 
       {/* Products Table */}
-      <div className="bg-white/50 border border-gray-200 rounded-xl overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Produto</th>
-              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">SKU</th>
-              <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Status</th>
-              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Preço</th>
-              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Estoque</th>
-              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Vendidos</th>
-              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Avaliação</th>
-              <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((product) => {
-              const status = statusConfig[product.status]
-              return (
-                <tr key={product.id} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors">
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
-                        <Package size={18} className="text-gray-400" />
+      {filtered.length === 0 ? (
+        <div className="bg-white/50 border border-gray-200 rounded-xl p-12 text-center">
+          <Package size={32} className="text-gray-400 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">
+            {products.length === 0 ? 'Nenhum produto sincronizado ainda. Clique em "Sync Produtos" para importar.' : 'Nenhum produto encontrado com os filtros atuais.'}
+          </p>
+        </div>
+      ) : (
+        <div className="bg-white/50 border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Produto</th>
+                <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">SKU</th>
+                <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Status</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Preco</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Estoque</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Tipo</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((product) => {
+                const status = statusConfig[product.status] || { label: product.status, color: 'bg-zinc-500/10 text-gray-600' }
+                const imageUrl = product.images?.[0]?.url
+                return (
+                  <tr key={product.id} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors">
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        {imageUrl ? (
+                          <img
+                            src={imageUrl}
+                            alt={product.title}
+                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
+                            <Package size={18} className="text-gray-400" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm text-gray-900 font-medium">{product.title}</p>
+                          {product.vendor && <p className="text-xs text-gray-500">{product.vendor}</p>}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm text-gray-700 font-medium">{product.name}</p>
-                        <p className="text-xs text-gray-400">{product.category}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <code className="text-xs text-gray-500 font-mono">{product.sku}</code>
-                  </td>
-                  <td className="p-4">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${status.color}`}>
-                      {status.label}
-                    </span>
-                  </td>
-                  <td className="p-4 text-right">
-                    <p className="text-sm text-gray-700 font-medium">R$ {product.price.toFixed(2)}</p>
-                    {product.compareAt && (
-                      <p className="text-xs text-gray-400 line-through">R$ {product.compareAt.toFixed(2)}</p>
-                    )}
-                  </td>
-                  <td className="p-4 text-right">
-                    <span className={`text-sm ${product.stock === 0 ? 'text-red-400' : product.stock < 20 ? 'text-yellow-400' : 'text-gray-500'}`}>
-                      {product.stock}
-                    </span>
-                  </td>
-                  <td className="p-4 text-sm text-gray-500 text-right">
-                    {product.sold.toLocaleString('pt-BR')}
-                  </td>
-                  <td className="p-4 text-right">
-                    {product.rating > 0 ? (
+                    </td>
+                    <td className="p-4">
+                      <code className="text-xs text-gray-600 font-mono">{product.sku || '—'}</code>
+                    </td>
+                    <td className="p-4">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${status.color}`}>
+                        {status.label}
+                      </span>
+                    </td>
+                    <td className="p-4 text-right">
+                      <p className="text-sm text-gray-900 font-medium">
+                        R$ {product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                      {product.compareAtPrice && (
+                        <p className="text-xs text-gray-400 line-through">
+                          R$ {product.compareAtPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                      )}
+                    </td>
+                    <td className="p-4 text-right">
+                      <span
+                        className={`text-sm ${
+                          product.totalInventory === 0
+                            ? 'text-red-600'
+                            : product.totalInventory < 20
+                            ? 'text-yellow-600'
+                            : 'text-gray-600'
+                        }`}
+                      >
+                        {product.totalInventory}
+                      </span>
+                    </td>
+                    <td className="p-4 text-sm text-gray-600 text-right">{product.productType || '—'}</td>
+                    <td className="p-4">
                       <div className="flex items-center gap-1 justify-end">
-                        <Star size={12} className="text-yellow-400" weight="fill" />
-                        <span className="text-sm text-gray-500">{product.rating}</span>
+                        <button className="p-1.5 rounded hover:bg-gray-50 transition-colors">
+                          <Eye size={14} className="text-gray-500" />
+                        </button>
+                        <button className="p-1.5 rounded hover:bg-gray-50 transition-colors">
+                          <PencilSimple size={14} className="text-gray-500" />
+                        </button>
                       </div>
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-1 justify-end">
-                      <button className="p-1.5 rounded hover:bg-gray-50 transition-colors">
-                        <Eye size={14} className="text-gray-500" />
-                      </button>
-                      <button className="p-1.5 rounded hover:bg-gray-50 transition-colors">
-                        <PencilSimple size={14} className="text-gray-500" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Sync Info */}
       <div className="bg-white/50 border border-gray-200 rounded-xl p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <ArrowsClockwise size={18} className="text-gray-500" />
           <div>
-            <p className="text-sm text-gray-500">Última sincronização: <span className="text-gray-900">há 2 horas</span></p>
-            <p className="text-xs text-gray-400">Sincronização automática a cada 6 horas via Shopify</p>
+            <p className="text-sm text-gray-600">
+              {totalProducts} produtos sincronizados
+            </p>
+            <p className="text-xs text-gray-400">Clique em "Sync Produtos" para atualizar</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400" />
-          <span className="text-xs text-emerald-400">Conectado</span>
+          <div className={`w-2 h-2 rounded-full ${storeId ? 'bg-emerald-400' : 'bg-gray-400'}`} />
+          <span className={`text-xs ${storeId ? 'text-emerald-600' : 'text-gray-500'}`}>
+            {storeId ? 'Conectado' : 'Desconectado'}
+          </span>
         </div>
       </div>
     </div>
