@@ -13,6 +13,7 @@ import {
   Palette,
 } from 'lucide-react'
 import Link from 'next/link'
+import { DEFAULT_TEMPLATES } from '@/components/email-builder/config/default-templates'
 // Template creation
 
 const categories = [
@@ -52,6 +53,33 @@ export default function NewTemplatePage() {
   const [category, setCategory] = useState('marketing')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  const handleCreateFromPrebuilt = async (template: typeof DEFAULT_TEMPLATES[0]) => {
+    setSaving(true)
+    setError('')
+    try {
+      const res = await fetch('/api/email/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: template.name,
+          category: template.category,
+          html: template.html,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Erro ao criar template')
+      }
+      const data = await res.json()
+      const templateId = data.template?.id || data.id
+      router.push(`/email/templates/${templateId}/edit`)
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar template')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -104,6 +132,33 @@ export default function NewTemplatePage() {
             Defina o nome e a categoria do seu template
           </p>
         </div>
+      </div>
+
+      {/* Prebuilt Templates */}
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+        <h2 className="text-sm font-semibold text-gray-900 mb-1">Começar com Template Pronto</h2>
+        <p className="text-xs text-gray-500 mb-4">Selecione um modelo pronto e personalize no editor</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {DEFAULT_TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => handleCreateFromPrebuilt(t)}
+              disabled={saving}
+              className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:border-brand-500 hover:shadow-md transition-all text-center disabled:opacity-50"
+            >
+              <span className="text-2xl mb-2">{t.icon}</span>
+              <span className="text-sm font-medium text-gray-900">{t.name}</span>
+              <span className="text-[10px] text-gray-400 mt-1">{t.description}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div className="flex-1 h-px bg-gray-200" />
+        <span className="text-xs text-gray-400 font-medium">ou comece do zero</span>
+        <div className="flex-1 h-px bg-gray-200" />
       </div>
 
       {/* Form Card */}
