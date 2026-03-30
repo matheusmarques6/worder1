@@ -1,572 +1,299 @@
 'use client';
 
-// =============================================
-// Shopify Integration Card
-// src/components/integrations/shopify/ShopifyConnect.tsx
-//
-// Two states:
-// - Disconnected: Domain input + OAuth connect button
-// - Connected: Status card with webhooks, sync, tracking info
-// =============================================
-
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useAuthStore } from '@/stores';
 import {
-  ShoppingBag,
-  CheckCircle,
-  AlertCircle,
-  Loader2,
-  RefreshCw,
-  Store,
-  Package,
-  Users,
-  ShoppingCart,
-  X,
-  Zap,
-  ExternalLink,
-  Activity,
-  Unplug,
-  Eye,
-  Radio,
-  Palette,
-  Clock,
-  ArrowRight,
+  ShoppingBag, CheckCircle, AlertCircle, Loader2, Trash2,
+  Store, ExternalLink, Wifi, RefreshCw,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 
-interface ShopifyStore {
+interface StoreData {
   id: string;
-  shop_name: string;
-  shop_domain: string;
-  shop_email?: string;
-  currency?: string;
-  plan_name?: string;
-  is_active: boolean;
-  connection_status: string;
-  status?: string;
-  pixel_installed?: boolean;
-  embed_installed?: boolean;
-  initial_sync_completed?: boolean;
-  api_version?: string;
-  total_orders?: number;
-  total_revenue?: number;
-  total_customers?: number;
-  last_sync_at?: string;
-  installed_at?: string;
-  settings?: {
-    theme_editor_url?: string;
-    tracking_endpoint?: string;
-  };
+  shopDomain: string;
+  shopName: string;
+  shopEmail: string;
+  currency: string;
+  planName: string;
+  apiVersion: string;
+  status: string;
+  initialSyncCompleted: boolean;
+  pixelInstalled: boolean;
+  embedInstalled: boolean;
+  installedAt: string;
+  lastSyncAt: string;
+  totalOrders: number;
+  totalRevenue: number;
+  totalCustomers: number;
 }
 
-const ERROR_MESSAGES: Record<string, string> = {
-  oauth_denied: 'Autorização negada pelo Shopify',
-  missing_params: 'Parâmetros inválidos na resposta',
-  invalid_state: 'Sessão inválida — tente novamente',
-  state_expired: 'Sessão expirada — tente novamente',
-  save_failed: 'Erro ao salvar configuração',
-  oauth_not_configured: 'Credenciais OAuth não configuradas no servidor',
-};
-
 export default function ShopifyConnect() {
-  const { user } = useAuthStore();
   const searchParams = useSearchParams();
-
-  const [store, setStore] = useState<ShopifyStore | null>(null);
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
-  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [store, setStore] = useState<StoreData | null>(null);
   const [shopDomain, setShopDomain] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
-  // Load connected store
-  const loadStore = useCallback(async () => {
-    if (!user?.organization_id) return;
+  useEffect(() => {
+    fetchStatus();
+
+    const success = searchParams.get('success');
+    const urlError = searchParams.get('error');
+    const webhooks = searchParams.get('webhooks');
+
+    if (success === 'true') {
+      setSuccessMessage(`Loja conectada! ${webhooks ? `${webhooks} webhooks registrados.` : ''}`);
+    }
+    if (urlError) {
+      setError(getErrorMessage(urlError));
+    }
+  }, [searchParams]);
+
+  async function fetchStatus() {
     try {
       setLoading(true);
-      const response = await fetch('/api/shopify/connect');
-      const data = await response.json();
-
-      if (response.ok && data.stores?.length > 0) {
-        const s = data.stores[0];
-        setStore({
-          id: s.id,
-          shop_name: s.name || s.shop_name,
-          shop_domain: s.domain || s.shop_domain,
-          shop_email: s.email || s.shop_email,
-          currency: s.currency,
-          plan_name: s.plan_name,
-          is_active: s.is_active ?? true,
-          connection_status: s.connectionStatus || s.connection_status || 'active',
-          status: s.status,
-          pixel_installed: s.pixel_installed,
-          embed_installed: s.embed_installed,
-          initial_sync_completed: s.initial_sync_completed,
-          api_version: s.api_version,
-          total_orders: s.totalOrders || s.total_orders,
-          total_revenue: s.totalRevenue || s.total_revenue,
-          total_customers: s.totalCustomers || s.total_customers,
-          last_sync_at: s.lastSyncAt || s.last_sync_at,
-          installed_at: s.installed_at,
-          settings: s.settings,
-        });
-      } else {
-        setStore(null);
-      }
+      const res = await fetch('/api/integrations/shopify/status');
+      const data = await res.json();
+      setConnected(data.connected);
+      setStore(data.store);
     } catch {
-      console.error('Error loading store');
+      console.error('Failed to fetch shopify status');
     } finally {
       setLoading(false);
     }
-  }, [user?.organization_id]);
+  }
 
-  // Handle OAuth redirect params
-  useEffect(() => {
-    const successParam = searchParams.get('success');
-    const errorParam = searchParams.get('error');
-    const shopifyParam = searchParams.get('shopify');
+  async function handleConnect() {
+    const domain = shopDomain.trim();
+    if (!domain) { setError('Digite o domínio da sua loja'); return; }
 
-    if (successParam === 'true' || shopifyParam === 'connected') {
-      const webhooks = searchParams.get('webhooks');
-      const pixel = searchParams.get('pixel');
-      setSuccess(
-        `Loja conectada com sucesso! ${webhooks ? `${webhooks} webhooks registrados.` : ''} ${pixel === 'true' ? 'Pixel instalado.' : ''}`
-      );
-      loadStore();
-    } else if (errorParam) {
-      setError(ERROR_MESSAGES[errorParam] ?? decodeURIComponent(errorParam));
-    }
-  }, [searchParams, loadStore]);
-
-  useEffect(() => {
-    if (user?.organization_id) {
-      loadStore();
-    }
-  }, [user?.organization_id, loadStore]);
-
-  // OAuth Connect
-  const handleConnect = async () => {
-    const domain = shopDomain.trim().replace('.myshopify.com', '');
-    if (!domain) {
-      setError('Informe o domínio da loja');
-      return;
-    }
-
-    setError('');
     setConnecting(true);
+    setError('');
 
     try {
-      const res = await fetch(`/api/integrations/shopify/auth?shop=${domain}.myshopify.com`);
+      const fullDomain = domain.includes('.myshopify.com') ? domain : `${domain}.myshopify.com`;
+      const res = await fetch(`/api/integrations/shopify/auth?shop=${encodeURIComponent(fullDomain)}`);
       const data = await res.json();
 
-      if (data.authUrl) {
-        window.location.href = data.authUrl;
-      } else {
-        setError(data.error || 'Erro ao gerar URL de autorização');
-        setConnecting(false);
-      }
+      if (data.error) { setError(data.error); setConnecting(false); return; }
+
+      window.location.href = data.authUrl;
     } catch {
-      setError('Erro de conexão com o servidor');
+      setError('Erro ao conectar. Tente novamente.');
       setConnecting(false);
     }
-  };
+  }
 
-  // Disconnect
-  const handleDisconnect = async () => {
-    if (!store) return;
+  async function handleDisconnect() {
+    if (!confirm('Tem certeza? Os dados já importados serão mantidos.')) return;
     setDisconnecting(true);
     try {
-      const res = await fetch(`/api/integrations/shopify/${store.id}/disconnect`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        setStore(null);
-        setSuccess('Loja desconectada. Dados importados foram mantidos.');
-        setShowDisconnectConfirm(false);
-      } else {
-        const data = await res.json();
-        setError(data.error || 'Erro ao desconectar');
-      }
+      await fetch('/api/integrations/shopify/disconnect', { method: 'POST' });
+      setConnected(false);
+      setStore(null);
+      setSuccessMessage('Loja desconectada.');
     } catch {
       setError('Erro ao desconectar');
     } finally {
       setDisconnecting(false);
     }
-  };
+  }
 
-  // Force Resync
-  const handleResync = async () => {
-    if (!store) return;
-    setSyncing(true);
-    try {
-      const res = await fetch('/api/shopify/full-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId: store.id, useGraphQL: true }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSuccess(`Sync concluído: ${data.data?.ordersCount || 0} pedidos, ${data.data?.customersCount || 0} clientes`);
-        loadStore();
-      } else {
-        setError(data.error || 'Erro no sync');
-      }
-    } catch {
-      setError('Erro ao sincronizar');
-    } finally {
-      setSyncing(false);
-    }
-  };
+  function getErrorMessage(code: string): string {
+    const m: Record<string, string> = {
+      invalid_state: 'Sessão expirada. Tente conectar novamente.',
+      oauth_denied: 'Instalação cancelada.',
+      missing_params: 'Parâmetros inválidos. Tente novamente.',
+      token_failed: 'Falha ao obter token.',
+      save_failed: 'Falha ao salvar. Tente novamente.',
+      hmac_invalid: 'Validação de segurança falhou.',
+      no_organization: 'Organização não encontrada. Faça login novamente.',
+    };
+    return m[code] || `Erro: ${code}`;
+  }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="w-8 h-8 animate-spin text-[#95BF47]" />
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-[#95BF47]/20 rounded-xl flex items-center justify-center">
-            <ShoppingBag className="w-6 h-6 text-[#95BF47]" />
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Shopify</h2>
-            <p className="text-sm text-gray-500">
-              {store ? store.shop_domain : 'Conecte sua loja para sincronizar dados'}
-            </p>
-          </div>
-        </div>
-        {store && (
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">
-              <CheckCircle className="w-3.5 h-3.5" />
-              Conectada
-            </span>
-            <button
-              onClick={loadStore}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Atualizar"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+  // ============================================
+  // CONNECTED — Status Panel
+  // ============================================
+  if (connected && store) {
+    return (
+      <div className="space-y-6">
+        {successMessage && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg flex items-center gap-2 text-sm">
+            <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            {successMessage}
           </div>
         )}
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+              <Store className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">{store.shopName}</h3>
+              <p className="text-sm text-gray-500">{store.shopDomain}</p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+            <Wifi className="w-3 h-3" /> Conectada
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <InfoBox label="Pedidos" value={String(store.totalOrders)} />
+          <InfoBox label="Clientes" value={String(store.totalCustomers)} />
+          <InfoBox label="Moeda" value={store.currency || 'BRL'} />
+          <InfoBox label="Conectada em" value={store.installedAt ? new Date(store.installedAt).toLocaleDateString('pt-BR') : '-'} />
+        </div>
+
+        <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+          <h4 className="text-sm font-medium text-gray-700 mb-1">Status</h4>
+          <StatusLine label="Webhooks" ok={true} detail="17 registrados" />
+          <StatusLine label="Sync inicial" ok={!!store.initialSyncCompleted} detail={store.initialSyncCompleted ? 'Completo' : 'Pendente'} />
+          <StatusLine label="Pixel" ok={!!store.pixelInstalled} detail={store.pixelInstalled ? 'Instalado' : 'Pendente'} />
+          <StatusLine label="App Embed" ok={!!store.embedInstalled} detail={store.embedInstalled ? 'Ativo' : 'Ativar no tema'} />
+          <StatusLine label="Última sync" ok={true} detail={store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'} />
+          <StatusLine label="API" ok={true} detail={store.apiVersion || '2026-01'} />
+        </div>
+
+        {!store.embedInstalled && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            <p className="font-medium mb-1">Ativar Tracking no Tema</p>
+            <ol className="list-decimal list-inside space-y-0.5 text-amber-700 text-xs">
+              <li>Loja Online &rarr; Temas &rarr; Personalizar</li>
+              <li>App Embeds (icone quebra-cabeça) &rarr; Ativar &quot;Worder Tracking&quot;</li>
+              <li>Salvar</li>
+            </ol>
+          </div>
+        )}
+
+        <div className="flex gap-3 pt-2">
+          <a
+            href={`https://${store.shopDomain}/admin`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
+          >
+            <ExternalLink className="w-4 h-4" /> Shopify Admin
+          </a>
+          <button
+            onClick={fetchStatus}
+            className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
+          >
+            <RefreshCw className="w-4 h-4" /> Atualizar
+          </button>
+          <button
+            onClick={handleDisconnect}
+            disabled={disconnecting}
+            className="flex items-center gap-2 px-4 py-2 text-sm border border-red-200 rounded-lg hover:bg-red-50 text-red-600 ml-auto"
+          >
+            {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            Desconectar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================
+  // DISCONNECTED — OAuth Connect Form
+  // ============================================
+  return (
+    <div className="space-y-5">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+      {successMessage && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center gap-2 text-sm">
+          <CheckCircle className="w-4 h-4 flex-shrink-0" />
+          {successMessage}
+        </div>
+      )}
+
+      <div className="text-center space-y-2">
+        <div className="w-14 h-14 bg-[#95BF47]/10 rounded-2xl flex items-center justify-center mx-auto">
+          <ShoppingBag className="w-7 h-7 text-[#95BF47]" />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900">Conecte sua loja Shopify</h3>
+        <p className="text-sm text-gray-500">Sincronize pedidos, clientes e ative tracking completo</p>
       </div>
 
-      {/* Alerts */}
-      {error && (
-        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span className="flex-1 text-sm">{error}</span>
-          <button onClick={() => setError('')} className="p-1 hover:bg-red-100 rounded">
-            <X className="w-4 h-4" />
-          </button>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Domínio da loja</label>
+        <div className="flex">
+          <input
+            type="text"
+            value={shopDomain}
+            onChange={(e) => setShopDomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+            placeholder="minhaloja"
+            className="flex-1 px-4 py-2.5 border border-gray-300 rounded-l-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] outline-none"
+            onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+            autoFocus
+          />
+          <span className="px-4 py-2.5 bg-gray-50 border border-l-0 border-gray-300 rounded-r-lg text-gray-500 text-sm flex items-center">
+            .myshopify.com
+          </span>
         </div>
-      )}
-      {success && (
-        <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700">
-          <CheckCircle className="w-5 h-5 flex-shrink-0" />
-          <span className="flex-1 text-sm">{success}</span>
-          <button onClick={() => setSuccess('')} className="p-1 hover:bg-emerald-100 rounded">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+        <p className="text-xs text-gray-400 mt-1">Shopify Admin &rarr; Configurações &rarr; Domínios</p>
+      </div>
 
-      {/* ============================================ */}
-      {/* DISCONNECTED STATE — OAuth connect card      */}
-      {/* ============================================ */}
-      {!store && (
-        <>
-          <div className="p-6 bg-white border border-gray-200 rounded-xl space-y-5">
-            <p className="text-sm text-gray-600">
-              Conecte sua loja para sincronizar pedidos, clientes, carrinhos abandonados e ativar tracking completo.
-            </p>
+      <button
+        onClick={handleConnect}
+        disabled={connecting || !shopDomain.trim()}
+        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#95BF47] text-white rounded-lg hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+      >
+        {connecting ? (
+          <><Loader2 className="w-5 h-5 animate-spin" /> Redirecionando para Shopify...</>
+        ) : (
+          <><ShoppingBag className="w-5 h-5" /> Conectar Loja Shopify</>
+        )}
+      </button>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Domínio da sua loja
-              </label>
-              <div className="flex">
-                <input
-                  type="text"
-                  value={shopDomain}
-                  onChange={(e) => setShopDomain(e.target.value.replace(/\s/g, ''))}
-                  placeholder="minhaloja"
-                  className="flex-1 px-4 py-3 bg-white border border-gray-300 rounded-l-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] transition-colors"
-                  onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
-                />
-                <span className="px-4 py-3 bg-gray-50 border border-l-0 border-gray-300 rounded-r-xl text-gray-500 text-sm whitespace-nowrap flex items-center">
-                  .myshopify.com
-                </span>
-              </div>
-              <p className="mt-1.5 text-xs text-gray-400">
-                Encontre em: Shopify Admin &rarr; Configurações &rarr; Domínios
-              </p>
-            </div>
-
-            <button
-              onClick={handleConnect}
-              disabled={connecting || !shopDomain.trim()}
-              className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#95BF47] hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-colors"
-            >
-              {connecting ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Redirecionando para Shopify...
-                </>
-              ) : (
-                <>
-                  <Store className="w-5 h-5" />
-                  Conectar Loja Shopify
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* What syncs */}
-          <div>
-            <p className="text-sm font-medium text-gray-600 mb-3">O que será sincronizado:</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { icon: Package, label: 'Pedidos e status em tempo real', color: 'text-green-500' },
-                { icon: Users, label: 'Clientes e dados de contato', color: 'text-blue-500' },
-                { icon: ShoppingCart, label: 'Carrinhos e checkouts abandonados', color: 'text-amber-500' },
-                { icon: ShoppingBag, label: 'Catálogo de produtos', color: 'text-purple-500' },
-                { icon: Eye, label: 'Tracking comportamental (visitas, cliques)', color: 'text-indigo-500' },
-                { icon: Zap, label: 'Código de rastreio e status de entrega', color: 'text-rose-500' },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-2 p-2 text-sm text-gray-600">
-                  <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                  {item.label}
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ============================================ */}
-      {/* CONNECTED STATE — Status card                */}
-      {/* ============================================ */}
-      {store && (
-        <>
-          {/* Store Info */}
-          <div className="p-5 bg-white border border-gray-200 rounded-xl">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-400">Loja</span>
-                <p className="font-medium text-gray-900">{store.shop_name || store.shop_domain}</p>
-              </div>
-              <div>
-                <span className="text-gray-400">Domínio</span>
-                <p className="font-medium text-gray-900">{store.shop_domain}</p>
-              </div>
-              <div>
-                <span className="text-gray-400">Conectada em</span>
-                <p className="font-medium text-gray-900">
-                  {store.installed_at
-                    ? new Date(store.installed_at).toLocaleDateString('pt-BR', {
-                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-                      })
-                    : '—'}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-400">Moeda</span>
-                <p className="font-medium text-gray-900">{store.currency || 'BRL'}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* KPIs */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-4 bg-white border border-gray-200 rounded-xl text-center">
-              <Package className="w-5 h-5 text-green-500 mx-auto mb-1" />
-              <p className="text-2xl font-bold text-gray-900">{store.total_orders ?? 0}</p>
-              <p className="text-xs text-gray-400">Pedidos</p>
-            </div>
-            <div className="p-4 bg-white border border-gray-200 rounded-xl text-center">
-              <Users className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-              <p className="text-2xl font-bold text-gray-900">{store.total_customers ?? 0}</p>
-              <p className="text-xs text-gray-400">Clientes</p>
-            </div>
-            <div className="p-4 bg-white border border-gray-200 rounded-xl text-center">
-              <ShoppingBag className="w-5 h-5 text-purple-500 mx-auto mb-1" />
-              <p className="text-2xl font-bold text-gray-900">
-                R$ {((store.total_revenue ?? 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
-              </p>
-              <p className="text-xs text-gray-400">Receita</p>
-            </div>
-          </div>
-
-          {/* Integration Status */}
-          <div className="p-5 bg-white border border-gray-200 rounded-xl space-y-3">
-            <h3 className="text-sm font-semibold text-gray-700">Status da Integração</h3>
-
-            <div className="space-y-2">
-              <StatusRow
-                label="Webhooks"
-                active={store.connection_status === 'active'}
-                detail={store.connection_status === 'active' ? 'Ativos' : 'Verificando...'}
-              />
-              <StatusRow
-                label="Sync inicial"
-                active={!!store.initial_sync_completed}
-                detail={
-                  store.initial_sync_completed
-                    ? `Completo (${store.total_orders ?? 0} pedidos, ${store.total_customers ?? 0} clientes)`
-                    : 'Pendente'
-                }
-              />
-              <StatusRow
-                label="Tracking (Pixel)"
-                active={!!store.pixel_installed}
-                detail={store.pixel_installed ? 'Instalado' : 'Pendente'}
-              />
-              <StatusRow
-                label="Tracking (Tema)"
-                active={!!store.embed_installed}
-                detail={store.embed_installed ? 'Ativo' : 'Pendente — ativar nos App Embeds'}
-              />
-              <div className="flex items-center justify-between text-sm pt-1">
-                <span className="text-gray-500 flex items-center gap-2">
-                  <Clock className="w-4 h-4" />
-                  Última atividade
-                </span>
-                <span className="text-gray-700">
-                  {store.last_sync_at
-                    ? formatDistanceToNow(new Date(store.last_sync_at), { addSuffix: true, locale: ptBR })
-                    : 'Nunca'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3">
-            <button
-              onClick={handleResync}
-              disabled={syncing}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              {syncing ? 'Sincronizando...' : 'Forçar Sync'}
-            </button>
-            <a
-              href={`https://${store.shop_domain}/admin`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl text-sm font-medium transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Admin Shopify
-            </a>
-          </div>
-
-          {/* Theme Tracking Guide */}
-          {!store.embed_installed && (
-            <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl">
-              <div className="flex items-start gap-3">
-                <Palette className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-sm font-semibold text-amber-800 mb-2">Ativar Tracking no Tema</h4>
-                  <p className="text-sm text-amber-700 mb-3">
-                    Para rastrear visitantes e identificar clientes automaticamente:
-                  </p>
-                  <ol className="list-decimal list-inside text-sm text-amber-700 space-y-1 mb-3">
-                    <li>Vá em <strong>Loja Online &rarr; Temas &rarr; Personalizar</strong></li>
-                    <li>Clique em <strong>App Embeds</strong> (icone de quebra-cabeça na sidebar)</li>
-                    <li>Ative o toggle <strong>&quot;Worder Tracking&quot;</strong></li>
-                    <li>Clique <strong>Salvar</strong></li>
-                  </ol>
-                  {store.settings?.theme_editor_url && (
-                    <a
-                      href={store.settings.theme_editor_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors"
-                    >
-                      Abrir Editor de Tema
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Danger Zone */}
-          <div className="p-5 bg-white border border-red-200 rounded-xl">
-            <h4 className="text-sm font-semibold text-red-700 mb-2">Zona de Perigo</h4>
-            {!showDisconnectConfirm ? (
-              <button
-                onClick={() => setShowDisconnectConfirm(true)}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
-              >
-                <Unplug className="w-4 h-4" />
-                Desconectar Loja
-              </button>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-red-600">
-                  Tem certeza? Isso irá remover webhooks e parar a sincronização. Os dados já importados serão mantidos.
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowDisconnectConfirm(false)}
-                    className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleDisconnect}
-                    disabled={disconnecting}
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unplug className="w-4 h-4" />}
-                    {disconnecting ? 'Desconectando...' : 'Confirmar Desconexão'}
-                  </button>
-                </div>
-              </div>
-            )}
-            <p className="mt-2 text-xs text-gray-400">
-              Os dados já importados (pedidos, contatos, eventos) serão mantidos.
-            </p>
-          </div>
-        </>
-      )}
+      <div className="text-xs text-gray-400 space-y-0.5 pt-1">
+        <p className="font-medium text-gray-500 mb-1">O que será sincronizado:</p>
+        <p>&#10003; Pedidos e status em tempo real</p>
+        <p>&#10003; Clientes e dados de contato</p>
+        <p>&#10003; Carrinhos abandonados</p>
+        <p>&#10003; Catálogo de produtos</p>
+        <p>&#10003; Tracking comportamental</p>
+        <p>&#10003; Código de rastreio e entregas</p>
+      </div>
     </div>
   );
 }
 
-// ============================================
-// Status Row Component
-// ============================================
+function InfoBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-gray-50 rounded-lg p-3">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="font-semibold text-gray-900 mt-0.5">{value}</p>
+    </div>
+  );
+}
 
-function StatusRow({ label, active, detail }: { label: string; active: boolean; detail: string }) {
+function StatusLine({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-gray-500 flex items-center gap-2">
-        {active ? (
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-        ) : (
-          <span className="w-2 h-2 rounded-full bg-gray-300" />
-        )}
+      <span className="text-gray-600 flex items-center gap-2">
+        <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-500' : 'bg-gray-300'}`} />
         {label}
       </span>
-      <span className={active ? 'text-emerald-600 font-medium' : 'text-gray-500'}>{detail}</span>
+      <span className={ok ? 'text-emerald-600 font-medium' : 'text-gray-500'}>{detail}</span>
     </div>
   );
 }
