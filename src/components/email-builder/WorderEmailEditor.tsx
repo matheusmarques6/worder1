@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag } from 'lucide-react'
+import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, Star, GripVertical, Palette, X } from 'lucide-react'
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { BlockPalette } from './panels/BlockPalette'
 import { BlockPreview } from './blocks/BlockPreview'
 import { BlockProperties } from './panels/BlockProperties'
@@ -14,6 +17,36 @@ interface WorderEmailEditorProps {
   design?: EmailDocument | Record<string, any>
   onSave: (design: Record<string, any>, html: string) => Promise<boolean>
   onBack: () => void
+}
+
+// ── Sortable Block Wrapper ──
+function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDelete }: {
+  blockId: string; children: React.ReactNode; isSelected: boolean;
+  onSelect: () => void; onClone: () => void; onDelete: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: blockId })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, zIndex: isDragging ? 50 : 'auto' }}
+      onClick={e => { e.stopPropagation(); onSelect() }}
+      className={`relative group ${isSelected ? 'ring-2 ring-brand-500 ring-offset-1' : 'hover:ring-1 hover:ring-brand-300'}`}
+    >
+      {/* Drag handle */}
+      <div {...attributes} {...listeners}
+        className="absolute -left-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing p-0.5 text-gray-300 hover:text-gray-500 transition-opacity z-10">
+        <GripVertical className="w-4 h-4" />
+      </div>
+      {/* Block toolbar */}
+      {isSelected && (
+        <div className="absolute -right-9 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5 z-20">
+          <button onClick={e => { e.stopPropagation(); onClone() }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar"><Copy className="w-3.5 h-3.5" /></button>
+          <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+      {children}
+    </div>
+  )
 }
 
 export default function WorderEmailEditor({ templateName, design, onSave, onBack }: WorderEmailEditorProps) {
@@ -30,6 +63,23 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const [previewHtml, setPreviewHtml] = useState('')
   const [showPreview, setShowPreview] = useState(false)
   const [showMergeTags, setShowMergeTags] = useState(false)
+
+  // DnD sensors
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+
+  const handleSortEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setDoc(prev => {
+      const blocks = [...prev.blocks]
+      const oldIdx = blocks.findIndex(b => b.id === active.id)
+      const newIdx = blocks.findIndex(b => b.id === over.id)
+      if (oldIdx === -1 || newIdx === -1) return prev
+      const [moved] = blocks.splice(oldIdx, 1)
+      blocks.splice(newIdx, 0, moved)
+      return { ...prev, blocks }
+    })
+  }, [])
 
   // Undo/Redo
   const [history, setHistory] = useState<string[]>([])
@@ -138,8 +188,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         body: JSON.stringify({ html, testEmail: email, subject: templateName }),
       })
       const data = await res.json()
-      alert(res.ok ? '✅ Teste enviado para ' + email : '❌ ' + (data.error || 'Erro'))
-    } catch (err: any) { alert('❌ ' + err.message) }
+      alert(res.ok ? 'Teste enviado para ' + email : 'Erro: ' + (data.error || 'Erro'))
+    } catch (err: any) { alert('Erro: ' + err.message) }
   }, [doc, templateName])
 
   // ── Preview ──
@@ -278,21 +328,32 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   <p className="text-xs mt-1 text-gray-400">ou clique em um bloco na barra lateral</p>
                 </div>
               ) : (
-                doc.blocks.map((block, i) => (
-                  <div key={block.id} onClick={e => e.stopPropagation()}>
-                    <BlockPreview
-                      block={block}
-                      selected={selectedId === block.id}
-                      onSelect={() => setSelectedId(block.id)}
-                      onMoveUp={() => moveBlock(block.id, 'up')}
-                      onMoveDown={() => moveBlock(block.id, 'down')}
-                      onClone={() => cloneBlock(block.id)}
-                      onDelete={() => removeBlock(block.id)}
-                      isFirst={i === 0}
-                      isLast={i === doc.blocks.length - 1}
-                    />
-                  </div>
-                ))
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSortEnd}>
+                  <SortableContext items={doc.blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
+                    {doc.blocks.map((block) => (
+                      <SortableBlock
+                        key={block.id}
+                        blockId={block.id}
+                        isSelected={selectedId === block.id}
+                        onSelect={() => setSelectedId(block.id)}
+                        onClone={() => cloneBlock(block.id)}
+                        onDelete={() => removeBlock(block.id)}
+                      >
+                        <BlockPreview
+                          block={block}
+                          selected={selectedId === block.id}
+                          onSelect={() => setSelectedId(block.id)}
+                          onMoveUp={() => moveBlock(block.id, 'up')}
+                          onMoveDown={() => moveBlock(block.id, 'down')}
+                          onClone={() => cloneBlock(block.id)}
+                          onDelete={() => removeBlock(block.id)}
+                          isFirst={false}
+                          isLast={false}
+                        />
+                      </SortableBlock>
+                    ))}
+                  </SortableContext>
+                </DndContext>
               )}
             </div>
           </div>
@@ -317,12 +378,12 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, block_json: selectedBlock }),
-                  }).then(() => alert('✅ Salvo!')).catch(() => alert('Erro'))
+                  }).then(() => alert('Salvo!')).catch(() => alert('Erro'))
                 }}
               />
             ) : (
               <div className="text-center py-16 text-gray-400">
-                <span className="text-3xl block mb-3">🎨</span>
+                <span className="block mb-3"><Palette className="w-8 h-8 text-gray-300 mx-auto" /></span>
                 <p className="text-xs font-medium text-gray-500">Selecione um bloco</p>
                 <p className="text-[10px] text-gray-400 mt-1">para editar suas propriedades</p>
               </div>
@@ -337,7 +398,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           <div className="bg-white rounded-xl shadow-2xl max-w-[680px] w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
               <span className="text-sm font-semibold text-gray-900">Preview do Email</span>
-              <button onClick={() => setShowPreview(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <button onClick={() => setShowPreview(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>
             <div className="flex-1 overflow-auto p-4 bg-gray-100">
               <iframe srcDoc={previewHtml} title="Preview" className="w-full border border-gray-200 rounded bg-white" style={{ height: 600 }} />

@@ -48,7 +48,7 @@ export const DEFAULT_TEMPLATES: PrebuiltTemplate[] = [
     name: 'Carrinho Abandonado',
     category: 'transactional',
     description: 'Recuperação de carrinho com produtos e botão de finalizar',
-    icon: '🛒',
+    icon: 'ShoppingCart',
     html: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
   <tr><td style="padding:30px;text-align:center;">
     <img src="https://placehold.co/180x50/FFFFFF/F97316?text=LOGO" alt="Logo" width="180" style="display:block;margin:0 auto 20px;" />
@@ -234,7 +234,7 @@ export const DEFAULT_TEMPLATES: PrebuiltTemplate[] = [
     name: 'Pedir Avaliação',
     category: 'transactional',
     description: 'Solicitar avaliação após a compra',
-    icon: '⭐',
+    icon: 'Star',
     html: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
   <tr><td style="padding:30px;text-align:center;"><img src="https://placehold.co/180x50/FFFFFF/F97316?text=LOGO" alt="Logo" width="180" style="display:block;margin:0 auto;" /></td></tr>
   <tr><td style="padding:0 30px 10px;text-align:center;"><h1 style="margin:0;font-size:24px;font-weight:bold;color:#111827;">Como foi sua experiência?</h1></td></tr>

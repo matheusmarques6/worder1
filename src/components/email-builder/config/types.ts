@@ -43,7 +43,7 @@ export interface BlockDef {
 export const BLOCK_DEFS: BlockDef[] = [
   // ── Layout ──
   {
-    type: 'columns', label: 'Colunas', icon: '▦', category: 'Layout',
+    type: 'columns', label: 'Colunas', icon: 'Columns', category: 'Layout',
     defaultProps: {
       columns: 2, gap: 16, padding: { top: 8, right: 16, bottom: 8, left: 16 },
       leftContent: '<p style="margin:0;font-size:14px;color:#374151;">Coluna esquerda</p>',
@@ -53,7 +53,7 @@ export const BLOCK_DEFS: BlockDef[] = [
 
   // ── Conteúdo ──
   {
-    type: 'text', label: 'Texto', icon: 'T', category: 'Conteúdo',
+    type: 'text', label: 'Texto', icon: 'Type', category: 'Conteúdo',
     defaultProps: {
       content: '<p style="margin:0;">Escreva seu texto aqui. Use as <strong>merge tags</strong> para personalizar.</p>',
       fontSize: 15, color: '#374151', lineHeight: 1.6, align: 'left',
@@ -62,7 +62,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     },
   },
   {
-    type: 'image', label: 'Imagem', icon: '🖼', category: 'Conteúdo',
+    type: 'image', label: 'Imagem', icon: 'Image', category: 'Conteúdo',
     defaultProps: {
       src: 'https://placehold.co/560x280/F3F4F6/9CA3AF?text=Sua+Imagem+Aqui',
       alt: '', href: '', width: 560,
@@ -73,7 +73,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     },
   },
   {
-    type: 'button', label: 'Botão', icon: '🔘', category: 'Conteúdo',
+    type: 'button', label: 'Botão', icon: 'MousePointerClick', category: 'Conteúdo',
     defaultProps: {
       text: 'Clique Aqui', href: '#',
       bgColor: '#F97316', textColor: '#FFFFFF',
@@ -86,18 +86,18 @@ export const BLOCK_DEFS: BlockDef[] = [
     },
   },
   {
-    type: 'divider', label: 'Divisor', icon: '—', category: 'Conteúdo',
+    type: 'divider', label: 'Divisor', icon: 'Minus', category: 'Conteúdo',
     defaultProps: {
       color: '#E5E7EB', thickness: 1, style: 'solid',
       padding: { top: 12, right: 24, bottom: 12, left: 24 },
     },
   },
   {
-    type: 'spacer', label: 'Espaço', icon: '↕', category: 'Conteúdo',
+    type: 'spacer', label: 'Espaço', icon: 'MoveVertical', category: 'Conteúdo',
     defaultProps: { height: 32 },
   },
   {
-    type: 'social', label: 'Redes Sociais', icon: '📱', category: 'Conteúdo',
+    type: 'social', label: 'Redes Sociais', icon: 'Share2', category: 'Conteúdo',
     defaultProps: {
       networks: [
         { type: 'instagram', url: '#' },
@@ -110,14 +110,14 @@ export const BLOCK_DEFS: BlockDef[] = [
     },
   },
   {
-    type: 'video', label: 'Vídeo', icon: '▶️', category: 'Conteúdo',
+    type: 'video', label: 'Vídeo', icon: 'Play', category: 'Conteúdo',
     defaultProps: {
       videoUrl: '', thumbnailUrl: 'https://placehold.co/560x315/111827/FFFFFF?text=%E2%96%B6+Assistir+V%C3%ADdeo',
       padding: { top: 8, right: 24, bottom: 8, left: 24 },
     },
   },
   {
-    type: 'html', label: 'HTML', icon: '</>', category: 'Conteúdo',
+    type: 'html', label: 'HTML', icon: 'Code', category: 'Conteúdo',
     defaultProps: {
       code: '<div style="padding:16px;background:#f3f4f6;border-radius:8px;text-align:center;"><p style="margin:0;color:#6b7280;">HTML customizado</p></div>',
       padding: { top: 8, right: 24, bottom: 8, left: 24 },
@@ -126,7 +126,7 @@ export const BLOCK_DEFS: BlockDef[] = [
 
   // ── E-commerce ──
   {
-    type: 'product-grid', label: 'Produtos', icon: '🛍️', category: 'E-commerce',
+    type: 'product-grid', label: 'Produtos', icon: 'ShoppingBag', category: 'E-commerce',
     defaultProps: {
       mode: 'dynamic', feedType: 'bestsellers',
       title: 'Recomendados Para Você', columns: 2, rows: 2,
@@ -142,7 +142,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     },
   },
   {
-    type: 'abandoned-cart', label: 'Carrinho', icon: '🛒', category: 'E-commerce',
+    type: 'abandoned-cart', label: 'Carrinho', icon: 'ShoppingCart', category: 'E-commerce',
     defaultProps: {
       title: 'Você esqueceu algo!', subtitle: 'Seus itens estão esperando',
       buttonText: 'Finalizar Compra', buttonColor: '#F97316', buttonTextColor: '#FFFFFF',
@@ -152,7 +152,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     },
   },
   {
-    type: 'coupon', label: 'Cupom', icon: '🏷️', category: 'E-commerce',
+    type: 'coupon', label: 'Cupom', icon: 'Tag', category: 'E-commerce',
     defaultProps: {
       headerText: 'Seu desconto especial:', code: '{{coupon_code}}',
       footerText: 'Válido até {{coupon_expiry}}',
@@ -165,7 +165,7 @@ export const BLOCK_DEFS: BlockDef[] = [
 
   // ── Estrutura ──
   {
-    type: 'header', label: 'Cabeçalho', icon: '🔝', category: 'Estrutura',
+    type: 'header', label: 'Cabeçalho', icon: 'PanelTop', category: 'Estrutura',
     defaultProps: {
       logoSrc: 'https://placehold.co/160x45/FFFFFF/F97316?text=LOGO',
       logoWidth: 160, logoHref: '{{store_url}}',
@@ -175,7 +175,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     },
   },
   {
-    type: 'footer', label: 'Rodapé', icon: '📄', category: 'Estrutura',
+    type: 'footer', label: 'Rodapé', icon: 'PanelBottom', category: 'Estrutura',
     defaultProps: {
       companyName: '{{store_name}}', address: '',
       showUnsubscribe: true, showPreferences: false, showViewInBrowser: true,

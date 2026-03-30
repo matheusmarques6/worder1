@@ -6,7 +6,7 @@ export interface MergeTagGroup {
 
 export const MERGE_TAGS: MergeTagGroup[] = [
   {
-    name: 'Contato', icon: '👤',
+    name: 'Contato', icon: 'User',
     tags: [
       { name: 'Primeiro Nome', value: '{{first_name}}', sample: 'Maria' },
       { name: 'Sobrenome', value: '{{last_name}}', sample: 'Silva' },
@@ -15,14 +15,14 @@ export const MERGE_TAGS: MergeTagGroup[] = [
     ],
   },
   {
-    name: 'Loja', icon: '🏪',
+    name: 'Loja', icon: 'Store',
     tags: [
       { name: 'Nome da Loja', value: '{{store_name}}', sample: 'Minha Loja' },
       { name: 'URL da Loja', value: '{{store_url}}', sample: 'https://minhaloja.com' },
     ],
   },
   {
-    name: 'Pedido', icon: '📦',
+    name: 'Pedido', icon: 'Package',
     tags: [
       { name: 'Nº do Pedido', value: '{{order_number}}', sample: '#1234' },
       { name: 'Total', value: '{{order_total}}', sample: 'R$ 199,90' },
@@ -31,7 +31,7 @@ export const MERGE_TAGS: MergeTagGroup[] = [
     ],
   },
   {
-    name: 'Carrinho', icon: '🛒',
+    name: 'Carrinho', icon: 'ShoppingCart',
     tags: [
       { name: 'Link do Carrinho', value: '{{cart_url}}', sample: 'https://loja.com/cart' },
       { name: 'Total', value: '{{cart_total}}', sample: 'R$ 299,90' },
@@ -40,7 +40,7 @@ export const MERGE_TAGS: MergeTagGroup[] = [
     ],
   },
   {
-    name: 'Cupom', icon: '🏷️',
+    name: 'Cupom', icon: 'Tag',
     tags: [
       { name: 'Código', value: '{{coupon_code}}', sample: 'BEMVINDO10' },
       { name: 'Valor', value: '{{coupon_value}}', sample: '10%' },
@@ -48,7 +48,7 @@ export const MERGE_TAGS: MergeTagGroup[] = [
     ],
   },
   {
-    name: 'Sistema', icon: '🔗',
+    name: 'Sistema', icon: 'Link',
     tags: [
       { name: 'Descadastrar', value: '{{unsubscribe_url}}', sample: '#' },
       { name: 'Ver no Navegador', value: '{{view_in_browser_url}}', sample: '#' },

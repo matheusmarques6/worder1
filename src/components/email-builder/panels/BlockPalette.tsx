@@ -1,8 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon } from 'lucide-react'
 import { BLOCK_DEFS, type BlockDef, type EmailBlock } from '../config/types'
 import { MERGE_TAGS } from '../config/merge-tags'
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  ShoppingBag, Tag, ShoppingCart, Type, Image: ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns,
+}
+
+const MERGE_ICON_MAP: Record<string, LucideIcon> = {
+  User, Store, Package, ShoppingCart, Tag, Link,
+}
 
 interface BlockPaletteProps {
   onAddBlock: (type: string) => void
@@ -63,7 +72,7 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock }: BlockPaletteProps)
                     {blocks.map(def => (
                       <button key={def.type} onClick={() => onAddBlock(def.type)} draggable onDragStart={(e) => handleDragStart(e, def)}
                         className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing active:scale-95">
-                        <span className="text-lg leading-none select-none">{def.icon}</span>
+                        <span className="text-lg leading-none select-none">{(() => { const Icon = ICON_MAP[def.icon]; return Icon ? <Icon className="w-5 h-5 text-gray-500" /> : <span>{def.icon}</span> })()}</span>
                         <span className="text-[10px] font-medium text-gray-600 leading-tight select-none">{def.label}</span>
                       </button>
                     ))}
@@ -79,7 +88,7 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock }: BlockPaletteProps)
           <div>
             {savedBlocks.length === 0 ? (
               <div className="text-center py-10">
-                <span className="text-3xl mb-2 block">📦</span>
+                <span className="mb-2 block"><Package className="w-8 h-8 text-gray-400 mx-auto" /></span>
                 <p className="text-xs text-gray-500 font-medium">Nenhum bloco salvo</p>
                 <p className="text-[10px] text-gray-400 mt-1">Selecione um bloco e salve como reutilizável</p>
               </div>
@@ -88,7 +97,7 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock }: BlockPaletteProps)
                 {savedBlocks.map((sb: any) => (
                   <button key={sb.id} onClick={() => onAddSavedBlock?.(sb.block_json)}
                     className="w-full flex items-center gap-2.5 p-3 bg-white border border-gray-200 rounded-lg hover:border-brand-400 transition-all text-left">
-                    <span className="text-base">📦</span>
+                    <span className="text-base"><Package className="w-4 h-4 text-gray-500" /></span>
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-gray-900 truncate">{sb.name}</p>
                       <p className="text-[10px] text-gray-400">{sb.category}</p>
@@ -107,7 +116,7 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock }: BlockPaletteProps)
             {MERGE_TAGS.map(group => (
               <div key={group.name}>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.06em] mb-1.5">
-                  {group.icon} {group.name}
+                  {(() => { const MIcon = MERGE_ICON_MAP[group.icon]; return MIcon ? <MIcon className="w-3 h-3 text-gray-400 inline-block align-middle" /> : null })()}{' '}{group.name}
                 </p>
                 <div className="space-y-1">
                   {group.tags.map(tag => (

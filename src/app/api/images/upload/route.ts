@@ -1,0 +1,55 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getAuthClient, authError } from '@/lib/api-utils'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+
+export async function POST(req: NextRequest) {
+  try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+
+    const formData = await req.formData()
+    const file = formData.get('file') as File
+    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
+    if (!allowed.includes(file.type)) {
+      return NextResponse.json({ error: 'Tipo não permitido. Use JPG, PNG, GIF, WebP ou SVG.' }, { status: 400 })
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Imagem muito grande. Máximo 5MB.' }, { status: 400 })
+    }
+
+    const ext = file.name.split('.').pop() || 'png'
+    const fileName = `${auth.user.organization_id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const buffer = Buffer.from(await file.arrayBuffer())
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('email-images')
+      .upload(fileName, buffer, { contentType: file.type, upsert: false })
+
+    if (uploadError) {
+      console.error('[ImageUpload] Storage error:', uploadError)
+      return NextResponse.json({ error: uploadError.message }, { status: 500 })
+    }
+
+    const { data: urlData } = supabaseAdmin.storage.from('email-images').getPublicUrl(fileName)
+
+    // Save reference
+    try {
+      await supabaseAdmin.from('uploaded_images').insert({
+        organization_id: auth.user.organization_id,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type,
+        url: urlData.publicUrl,
+        storage_path: fileName,
+      })
+    } catch {} // Table may not exist yet
+
+    return NextResponse.json({ url: urlData.publicUrl, fileName: file.name, size: file.size })
+  } catch (e: any) {
+    console.error('[ImageUpload] Error:', e)
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}

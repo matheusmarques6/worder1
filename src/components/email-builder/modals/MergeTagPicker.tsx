@@ -1,8 +1,12 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { X, Search } from 'lucide-react'
+import { X, Search, User, Store, Package, ShoppingCart, Tag, Link, type LucideIcon } from 'lucide-react'
 import { MERGE_TAGS } from '../config/merge-tags'
+
+const MERGE_ICON_MAP: Record<string, LucideIcon> = {
+  User, Store, Package, ShoppingCart, Tag, Link,
+}
 
 interface MergeTagPickerProps {
   isOpen: boolean
@@ -72,8 +76,8 @@ export function MergeTagPicker({ isOpen, onClose, onSelect }: MergeTagPickerProp
             <div className="space-y-4">
               {filteredGroups.map(group => (
                 <div key={group.name}>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.06em] mb-2">
-                    {group.icon} {group.name}
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.06em] mb-2 flex items-center gap-1">
+                    {(() => { const MIcon = MERGE_ICON_MAP[group.icon]; return MIcon ? <MIcon className="w-3 h-3 text-gray-400" /> : null })()}{group.name}
                   </p>
                   <div className="space-y-1">
                     {group.tags.map(tag => (

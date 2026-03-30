@@ -1,5 +1,6 @@
 'use client'
 
+import { Instagram, Facebook, Music, Youtube, Link2, Zap, ChevronUp, ChevronDown, Copy, X } from 'lucide-react'
 import type { EmailBlock } from '../config/types'
 
 interface BlockPreviewProps {
@@ -16,11 +17,11 @@ interface BlockPreviewProps {
 
 const DYNAMIC_TYPES = new Set(['product-grid', 'abandoned-cart', 'coupon'])
 
-const SOCIAL_ICONS: Record<string, { emoji: string; label: string }> = {
-  instagram: { emoji: '📸', label: 'Instagram' },
-  facebook: { emoji: '📘', label: 'Facebook' },
-  tiktok: { emoji: '🎵', label: 'TikTok' },
-  youtube: { emoji: '▶️', label: 'YouTube' },
+const SOCIAL_ICONS: Record<string, { icon: typeof Instagram; label: string }> = {
+  instagram: { icon: Instagram, label: 'Instagram' },
+  facebook: { icon: Facebook, label: 'Facebook' },
+  tiktok: { icon: Music, label: 'TikTok' },
+  youtube: { icon: Youtube, label: 'YouTube' },
 }
 
 function parsePadding(padding: any): React.CSSProperties {
@@ -115,7 +116,7 @@ export function BlockPreview({
                   }}
                   title={p.href}
                 >
-                  🔗
+                  <Link2 size={12} />
                 </span>
               )}
             </div>
@@ -262,17 +263,20 @@ export function BlockPreview({
               {nets.map((n, i) => {
                 const info = SOCIAL_ICONS[n.type]
                 if (!info) return null
+                const SocialIcon = info.icon
                 return (
                   <span
                     key={`${n.type}-${i}`}
                     style={{
-                      fontSize: p.iconSize || 32,
                       cursor: 'default',
                       lineHeight: 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                     }}
                     title={info.label}
                   >
-                    {info.emoji}
+                    <SocialIcon size={p.iconSize || 32} className="text-gray-600" />
                   </span>
                 )
               })}
@@ -709,7 +713,7 @@ export function BlockPreview({
         <div
           className="absolute top-1 left-1 flex items-center gap-1 bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 text-[10px] font-semibold pointer-events-none"
         >
-          <span>⚡</span>
+          <Zap size={10} />
           <span>Dinâmico</span>
         </div>
       )}
@@ -723,7 +727,7 @@ export function BlockPreview({
             className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs"
             title="Mover para cima"
           >
-            ↑
+            <ChevronUp size={14} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onMoveDown() }}
@@ -731,14 +735,14 @@ export function BlockPreview({
             className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs"
             title="Mover para baixo"
           >
-            ↓
+            <ChevronDown size={14} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onClone() }}
             className="p-1 text-gray-400 hover:text-blue-600 text-xs"
             title="Duplicar"
           >
-            ⎘
+            <Copy size={14} />
           </button>
           <div className="w-px h-4 bg-gray-200" />
           <button
@@ -746,7 +750,7 @@ export function BlockPreview({
             className="p-1 text-gray-400 hover:text-red-600 text-xs"
             title="Excluir"
           >
-            ✕
+            <X size={14} />
           </button>
         </div>
       )}
