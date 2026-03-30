@@ -61,20 +61,36 @@ export default function UnlayerEditor({ templateName, design, onSave, onBack }: 
   }, [onSave])
 
   const handleSendTest = useCallback(() => {
-    if (!editorRef.current?.editor) return
+    if (!editorRef.current?.editor) {
+      alert('Editor não carregou. Recarregue a página.')
+      return
+    }
+
+    const email = prompt('Digite o email para enviar o teste:')
+    if (!email || !email.includes('@')) return
 
     editorRef.current.editor.exportHtml(async (data: { design: any; html: string }) => {
       try {
-        await fetch('/api/email/templates/test', {
+        const res = await fetch('/api/email/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ html: data.html }),
+          body: JSON.stringify({
+            html: data.html,
+            testEmail: email,
+            subject: templateName || 'Template',
+          }),
         })
-      } catch (err) {
-        console.error('Test send failed:', err)
+        if (res.ok) {
+          alert('✅ Email de teste enviado para ' + email)
+        } else {
+          const err = await res.json().catch(() => ({}))
+          alert('❌ Erro: ' + (err.error || 'Falha no envio'))
+        }
+      } catch (err: any) {
+        alert('❌ Erro: ' + err.message)
       }
     })
-  }, [])
+  }, [templateName])
 
   // Keyboard shortcut for save
   useEffect(() => {
