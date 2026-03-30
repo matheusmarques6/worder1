@@ -223,7 +223,7 @@ function CanvasNode({
             isRunning && 'ring-2 ring-amber-500 shadow-2xl shadow-amber-500/20 animate-pulse',
             isSuccess && 'ring-2 ring-green-500 shadow-xl shadow-green-500/20',
             isError && 'ring-2 ring-red-500 shadow-xl shadow-red-500/20',
-            isSkipped && 'ring-1 ring-dark-600 opacity-60',
+            isSkipped && 'ring-1 ring-gray-300 opacity-60',
             // Seleção (só se não tiver status)
             !executionStatus && isSelected 
               ? `ring-2 ring-white/50 shadow-2xl ${colors.glow}` 
@@ -298,7 +298,7 @@ function CanvasNode({
               <div className="mt-3 pt-3 border-t border-gray-200">
                 <div className="flex flex-wrap gap-1.5">
                   {node.data.config.tagName && (
-                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] rounded-full">
+                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-600 text-[10px] rounded-full">
                       #{node.data.config.tagName}
                     </span>
                   )}
@@ -308,7 +308,7 @@ function CanvasNode({
                     </span>
                   )}
                   {node.data.config.subject && (
-                    <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 text-[10px] rounded-full truncate max-w-[150px]">
+                    <span className="px-2 py-0.5 bg-violet-500/20 text-violet-600 text-[10px] rounded-full truncate max-w-[150px]">
                       📧 {node.data.config.subject}
                     </span>
                   )}
