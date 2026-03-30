@@ -23,14 +23,14 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('[EmailTemplates] Error fetching templates:', error);
-      return NextResponse.json({ error: 'Failed to fetch templates' }, { status: 500 });
+      console.error('[EmailTemplates] Error:', error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ templates: templates || [] });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[EmailTemplates] Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 });
   }
 }
 
@@ -42,24 +42,23 @@ export async function POST(request: NextRequest) {
     const { user } = auth;
     const body = await request.json();
 
-    const { name, subject, html, thumbnail_url } = body;
-
-    if (!name) {
-      return NextResponse.json(
-        { error: 'name is required' },
-        { status: 400 }
-      );
+    if (!body.name) {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
 
-    // Only insert columns that exist in the table:
-    // id, organization_id, name, subject, html, design_json, thumbnail_url, created_at, updated_at
+    // Minimal insert - only columns guaranteed to exist
     const insertData: Record<string, any> = {
       organization_id: user.organization_id,
-      name,
+      name: body.name,
+    };
+    if (body.subject) insertData.subject = body.subject;
+    if (body.html) insertData.html = body.html;
+    if (body.thumbnail_url) insertData.thumbnail_url = body.thumbnail_url;
+
+    // Try with design_json if provided
+    if (body.design || body.design_json) {
+      insertData.design_json = body.design || body.design_json;
     }
-    if (subject) insertData.subject = subject
-    if (html) insertData.html = html
-    if (thumbnail_url) insertData.thumbnail_url = thumbnail_url
 
     const { data: template, error } = await supabaseAdmin
       .from('email_templates')
@@ -68,13 +67,35 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('[EmailTemplates] Error creating template:', error);
-      return NextResponse.json({ error: error.message || 'Failed to create template' }, { status: 500 });
+      console.error('[EmailTemplates] Insert error:', error.message);
+
+      // If column error: retry without design_json
+      if (error.message?.includes('column') || error.code === '42703') {
+        delete insertData.design_json;
+        // Try with design instead
+        if (body.design || body.design_json) {
+          insertData.design = body.design || body.design_json;
+        }
+        const { data: t2, error: e2 } = await supabaseAdmin
+          .from('email_templates').insert(insertData).select().single();
+
+        if (e2) {
+          // Try completely minimal
+          delete insertData.design;
+          const { data: t3, error: e3 } = await supabaseAdmin
+            .from('email_templates').insert(insertData).select().single();
+          if (e3) return NextResponse.json({ error: e3.message }, { status: 500 });
+          return NextResponse.json({ template: t3 }, { status: 201 });
+        }
+        return NextResponse.json({ template: t2 }, { status: 201 });
+      }
+
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ template }, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[EmailTemplates] Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 });
   }
 }

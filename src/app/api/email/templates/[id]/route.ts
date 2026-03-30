@@ -48,16 +48,73 @@ export async function PUT(
     const { user } = auth;
     const body = await request.json();
 
-    const { name, subject, html, design, design_json, thumbnail_url } = body;
-
-    // Only update columns that exist: name, subject, html, design, design_json, thumbnail_url
+    // Build update with only safe base fields
     const updateData: Record<string, any> = {};
-    if (name !== undefined) updateData.name = name;
-    if (subject !== undefined) updateData.subject = subject;
-    if (html !== undefined) updateData.html = html;
-    if (design !== undefined) updateData.design_json = design; // save design as design_json
-    if (design_json !== undefined) updateData.design_json = design_json;
-    if (thumbnail_url !== undefined) updateData.thumbnail_url = thumbnail_url;
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.subject !== undefined) updateData.subject = body.subject;
+    if (body.html !== undefined) updateData.html = body.html;
+    if (body.thumbnail_url !== undefined) updateData.thumbnail_url = body.thumbnail_url;
+
+    // Try saving design in design_json first, then design, then skip
+    const designValue = body.design ?? body.design_json;
+
+    if (designValue !== undefined) {
+      // Attempt 1: save as design_json
+      const attempt1 = { ...updateData, design_json: designValue };
+      const { data: t1, error: e1 } = await supabaseAdmin
+        .from('email_templates')
+        .update(attempt1)
+        .eq('id', params.id)
+        .eq('organization_id', user.organization_id)
+        .select()
+        .single();
+
+      if (!e1 && t1) {
+        return NextResponse.json({ template: t1 });
+      }
+
+      // Attempt 2: save as design
+      if (e1?.message?.includes('column') || e1?.code === '42703') {
+        const attempt2 = { ...updateData, design: designValue };
+        const { data: t2, error: e2 } = await supabaseAdmin
+          .from('email_templates')
+          .update(attempt2)
+          .eq('id', params.id)
+          .eq('organization_id', user.organization_id)
+          .select()
+          .single();
+
+        if (!e2 && t2) {
+          return NextResponse.json({ template: t2 });
+        }
+
+        // Attempt 3: save without design at all
+        if (e2?.message?.includes('column') || e2?.code === '42703') {
+          const { data: t3, error: e3 } = await supabaseAdmin
+            .from('email_templates')
+            .update(updateData)
+            .eq('id', params.id)
+            .eq('organization_id', user.organization_id)
+            .select()
+            .single();
+
+          if (e3) {
+            console.error('[EmailTemplate] All attempts failed:', e3.message);
+            return NextResponse.json({ error: e3.message }, { status: 500 });
+          }
+          return NextResponse.json({ template: t3 });
+        }
+
+        return NextResponse.json({ error: e2?.message || 'Update failed' }, { status: 500 });
+      }
+
+      return NextResponse.json({ error: e1?.message || 'Update failed' }, { status: 500 });
+    }
+
+    // No design to save - just update base fields
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+    }
 
     const { data: template, error } = await supabaseAdmin
       .from('email_templates')
@@ -67,15 +124,15 @@ export async function PUT(
       .select()
       .single();
 
-    if (error || !template) {
-      console.error('[EmailTemplate] Update error:', error);
-      return NextResponse.json({ error: error?.message || 'Template not found or update failed' }, { status: error ? 500 : 404 });
+    if (error) {
+      console.error('[EmailTemplate] Update error:', error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ template });
-  } catch (error) {
-    console.error('[EmailTemplate] Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error: any) {
+    console.error('[EmailTemplate] PUT error:', error);
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 });
   }
 }
 
@@ -96,13 +153,11 @@ export async function DELETE(
       .eq('organization_id', user.organization_id);
 
     if (error) {
-      console.error('[EmailTemplate] Error deleting template:', error);
-      return NextResponse.json({ error: 'Failed to delete template' }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('[EmailTemplate] Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -232,6 +232,16 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
   campaignName: string; setCampaignName: (v: string) => void;
   subject: string; setSubject: (v: string) => void;
 }) {
+  const [savedTemplates, setSavedTemplates] = useState<any[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+
+  useEffect(() => {
+    fetch('/api/email/templates')
+      .then(r => r.json())
+      .then(data => setSavedTemplates(data.templates || data || []))
+      .catch(() => {})
+  }, [])
+
   return (
     <div className="space-y-6">
       <div>
@@ -317,6 +327,29 @@ function StepContent({ onNext, onBack, channel, campaignName, setCampaignName, s
                       }
                     </div>
                     <p className="text-xs font-medium text-gray-900">{tpl}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Saved Templates */}
+          {channel === 'email' && savedTemplates.length > 0 && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1.5 font-medium">Seus Templates Salvos</label>
+              <div className="grid grid-cols-2 gap-3">
+                {savedTemplates.map((t: any) => (
+                  <button key={t.id} onClick={() => setSelectedTemplateId(t.id)}
+                    className={`bg-white border rounded-lg p-4 text-left transition-all hover:shadow-md ${
+                      selectedTemplateId === t.id ? 'border-brand-500 ring-1 ring-brand-500' : 'border-gray-200'
+                    }`}>
+                    <div className="h-16 bg-gray-50 rounded mb-2 flex items-center justify-center">
+                      <span className="text-xl">✉️</span>
+                    </div>
+                    <p className="text-xs font-medium text-gray-900 truncate">{t.name}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      {t.updated_at ? new Date(t.updated_at).toLocaleDateString('pt-BR') : ''}
+                    </p>
                   </button>
                 ))}
               </div>

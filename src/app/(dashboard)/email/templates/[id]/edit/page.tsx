@@ -59,10 +59,16 @@ export default function EditTemplatePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ design, html }),
       })
-      if (!res.ok) throw new Error('Erro ao salvar')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        console.error('Save failed:', err)
+        alert('Erro ao salvar: ' + (err.error || 'Tente novamente'))
+        return false
+      }
       return true
-    } catch (err) {
+    } catch (err: any) {
       console.error('Save failed:', err)
+      alert('Erro ao salvar: ' + err.message)
       return false
     }
   }
