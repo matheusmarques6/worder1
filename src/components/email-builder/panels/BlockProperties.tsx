@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { EmailBlock } from '../config/types'
+import { ViewFeedsModal, CreateFeedModal } from '../modals/ProductFeedModal'
 
 const RichTextEditor = dynamic(() => import('../blocks/RichTextEditor').then(m => ({ default: m.RichTextEditor })), { ssr: false, loading: () => <div className="h-20 bg-gray-50 rounded-lg animate-pulse" /> })
 
@@ -494,93 +495,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
       )
 
     case 'product-grid':
-      return (
-        <div className="space-y-3">
-          <Field label="Modo">
-            <SelectInput value={p.mode} onChange={v => onChange('mode', v)} options={[
-              { value: 'dynamic', label: 'Dinâmico' }, { value: 'static', label: 'Estático' },
-            ]} />
-          </Field>
-          {p.mode === 'dynamic' && (
-            <Field label="Tipo de Feed">
-              <SelectInput value={p.feedType} onChange={v => onChange('feedType', v)} options={[
-                { value: 'bestsellers', label: 'Mais vendidos' }, { value: 'newest', label: 'Mais recentes' },
-                { value: 'recently_viewed', label: 'Vistos recentemente' }, { value: 'cart_items', label: 'Itens do carrinho' },
-                { value: 'recommendations', label: 'Recomendações' },
-              ]} />
-            </Field>
-          )}
-          <Field label="Título"><TextInput value={p.title} onChange={v => onChange('title', v)} /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Colunas">
-              <SelectInput value={String(p.columns)} onChange={v => onChange('columns', Number(v))} options={[
-                { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
-              ]} />
-            </Field>
-            <Field label="Linhas">
-              <SelectInput value={String(p.rows)} onChange={v => onChange('rows', Number(v))} options={[
-                { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
-              ]} />
-            </Field>
-          </div>
-          <Field label="Altura Máx. Imagem (px)"><NumberInput value={p.maxImageHeight} onChange={v => onChange('maxImageHeight', v)} min={50} max={500} /></Field>
-
-          <div className="space-y-1">
-            <span className="text-[10px] font-semibold text-gray-400 uppercase">Visibilidade</span>
-            <Toggle value={p.showName} onChange={v => onChange('showName', v)} label="Nome do produto" />
-            <Toggle value={p.showPrice} onChange={v => onChange('showPrice', v)} label="Preço" />
-            <Toggle value={p.showComparePrice} onChange={v => onChange('showComparePrice', v)} label="Preço comparativo" />
-            <Toggle value={p.showButton} onChange={v => onChange('showButton', v)} label="Botão" />
-            <Toggle value={p.stackOnMobile} onChange={v => onChange('stackOnMobile', v)} label="Empilhar no mobile" />
-          </div>
-
-          {p.showButton && (
-            <div className="space-y-2 p-2 bg-gray-50 rounded-md">
-              <span className="text-[10px] font-semibold text-gray-400 uppercase">Botão</span>
-              <Field label="Texto do Botão"><TextInput value={p.buttonText} onChange={v => onChange('buttonText', v)} /></Field>
-              <Field label="Cor do Botão"><ColorInput value={p.buttonColor} onChange={v => onChange('buttonColor', v)} /></Field>
-              <Field label="Cor do Texto do Botão"><ColorInput value={p.buttonTextColor} onChange={v => onChange('buttonTextColor', v)} /></Field>
-              <Field label="Border Radius do Botão"><NumberInput value={p.buttonRadius} onChange={v => onChange('buttonRadius', v)} min={0} max={50} /></Field>
-            </div>
-          )}
-
-          <div className="space-y-2 p-2 bg-gray-50 rounded-md">
-            <span className="text-[10px] font-semibold text-gray-400 uppercase">Estilo do Nome</span>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Tamanho"><NumberInput value={p.nameFontSize} onChange={v => onChange('nameFontSize', v)} min={8} max={32} /></Field>
-              <Field label="Peso">
-                <SelectInput value={p.nameWeight} onChange={v => onChange('nameWeight', v)} options={[
-                  { value: 'normal', label: 'Normal' }, { value: '500', label: 'Médio' }, { value: '600', label: 'Semibold' }, { value: '700', label: 'Bold' },
-                ]} />
-              </Field>
-            </div>
-            <Field label="Cor do Nome"><ColorInput value={p.nameColor} onChange={v => onChange('nameColor', v)} /></Field>
-          </div>
-
-          <div className="space-y-2 p-2 bg-gray-50 rounded-md">
-            <span className="text-[10px] font-semibold text-gray-400 uppercase">Estilo do Preço</span>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Tamanho"><NumberInput value={p.priceFontSize} onChange={v => onChange('priceFontSize', v)} min={8} max={48} /></Field>
-              <Field label="Peso">
-                <SelectInput value={p.priceWeight} onChange={v => onChange('priceWeight', v)} options={[
-                  { value: 'normal', label: 'Normal' }, { value: '500', label: 'Médio' }, { value: '600', label: 'Semibold' }, { value: '700', label: 'Bold' },
-                ]} />
-              </Field>
-            </div>
-            <Field label="Cor do Preço"><ColorInput value={p.priceColor} onChange={v => onChange('priceColor', v)} /></Field>
-            <Field label="Cor do Preço Comparativo"><ColorInput value={p.comparePriceColor} onChange={v => onChange('comparePriceColor', v)} /></Field>
-          </div>
-
-          <div className="space-y-2 p-2 bg-gray-50 rounded-md">
-            <span className="text-[10px] font-semibold text-gray-400 uppercase">Card do Produto</span>
-            <Field label="Padding Interno"><NumberInput value={p.productPadding} onChange={v => onChange('productPadding', v)} min={0} max={32} /></Field>
-            <Field label="Cor da Borda"><ColorInput value={p.productBorderColor} onChange={v => onChange('productBorderColor', v)} /></Field>
-            <Field label="Border Radius"><NumberInput value={p.productBorderRadius} onChange={v => onChange('productBorderRadius', v)} min={0} max={32} /></Field>
-          </div>
-
-          {commonTail()}
-        </div>
-      )
+      return <ProductBlockProperties p={p} onChange={onChange} commonTail={commonTail} />
 
     case 'abandoned-cart':
       return (
@@ -622,4 +537,255 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     default:
       return <p className="text-xs text-gray-400 p-3">Selecione um bloco para editar</p>
   }
+}
+
+// ══════════════════════════════════════════
+// Product Block Properties (Klaviyo-style)
+// ══════════════════════════════════════════
+
+function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange: (k: string, v: any) => void; commonTail: () => JSX.Element }) {
+  const [showViewFeeds, setShowViewFeeds] = useState(false)
+  const [showCreateFeed, setShowCreateFeed] = useState(false)
+  const [textTab, setTextTab] = useState<'name' | 'price'>('name')
+
+  return (
+    <div className="space-y-4">
+      {/* ── Dynamic / Static radio cards ── */}
+      <div className="space-y-2">
+        {[
+          { value: 'dynamic', label: 'Dynamic', desc: 'Showcase products using a product feed.' },
+          { value: 'static', label: 'Static', desc: 'Choose products to show for all recipients.' },
+        ].map(opt => (
+          <label key={opt.value}
+            className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${p.mode === opt.value ? 'border-brand-500 bg-brand-50/30' : 'border-gray-200 hover:border-gray-300'}`}>
+            <input type="radio" checked={p.mode === opt.value} onChange={() => onChange('mode', opt.value)}
+              className="mt-0.5 w-4 h-4 text-brand-500 border-gray-300" />
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+              <p className="text-xs text-gray-500">{opt.desc}</p>
+            </div>
+          </label>
+        ))}
+      </div>
+
+      {/* ── Product selection ── */}
+      {p.mode === 'dynamic' && (
+        <div>
+          <p className="text-[12px] font-medium text-gray-700 mb-1">Product selection</p>
+          <p className="text-[12px] font-medium text-gray-700 mb-2">Product feed</p>
+
+          {/* Selected feed card */}
+          <div className="border border-brand-500 rounded-lg p-3 mb-2 bg-brand-50/20">
+            <div className="flex items-start gap-2">
+              <div className="w-4 h-4 rounded-full bg-brand-500 flex items-center justify-center mt-0.5 flex-shrink-0">
+                <div className="w-1.5 h-1.5 rounded-full bg-white" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">{p.feedName || p.feedType || 'bestsellers'}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {p.feedType === 'recently_viewed' && 'Show products a customer has recently viewed. If we run out, show best-selling products.'}
+                  {p.feedType === 'bestsellers' && 'Show best-selling products from All categories.'}
+                  {p.feedType === 'newest' && 'Show newest products from All categories.'}
+                  {p.feedType === 'cart_items' && 'Show products from the customer\'s cart.'}
+                  {p.feedType === 'recommendations' && 'Show recommended products based on purchase history.'}
+                  {!['recently_viewed', 'bestsellers', 'newest', 'cart_items', 'recommendations'].includes(p.feedType) && 'Show products using this feed.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={() => setShowViewFeeds(true)}
+              className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
+              Change selection
+            </button>
+            <button onClick={() => setShowCreateFeed(true)}
+              className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
+              Create product feed
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Product details (checkboxes) ── */}
+      <div>
+        <p className="text-[12px] font-medium text-gray-700 mb-2">Product details</p>
+
+        <div className="space-y-1">
+          <Field label="Start with item number">
+            <SelectInput value={String(p.startItem || 1)} onChange={v => onChange('startItem', Number(v))} options={[
+              { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' },
+            ]} />
+          </Field>
+        </div>
+
+        <div className="space-y-2 mt-3">
+          {/* Product name */}
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={p.showName !== false} onChange={e => onChange('showName', e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
+              <span className="text-xs font-medium text-gray-700">Product name</span>
+            </label>
+            {p.showName !== false && (
+              <div className="ml-6 mt-1 space-y-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" checked={!p.nameLinkEnabled} onChange={() => onChange('nameLinkEnabled', false)}
+                    className="w-3.5 h-3.5 text-brand-500 border-gray-300" />
+                  <span className="text-xs text-gray-600">Unlinked</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" checked={p.nameLinkEnabled === true} onChange={() => onChange('nameLinkEnabled', true)}
+                    className="w-3.5 h-3.5 text-brand-500 border-gray-300" />
+                  <span className="text-xs text-gray-600">Link to product</span>
+                </label>
+              </div>
+            )}
+          </div>
+
+          {/* Price */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={p.showPrice !== false} onChange={e => onChange('showPrice', e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
+            <span className="text-xs font-medium text-gray-700">Price</span>
+          </label>
+
+          {/* Original price */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={p.showComparePrice === true} onChange={e => onChange('showComparePrice', e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
+            <span className="text-xs font-medium text-gray-700">Original price for sale products</span>
+          </label>
+
+          {/* Rating */}
+          <label className="flex items-center gap-2 cursor-pointer opacity-50">
+            <input type="checkbox" checked={false} disabled className="w-4 h-4 rounded border-gray-300" />
+            <span className="text-xs text-gray-500">Rating</span>
+          </label>
+
+          {/* Button */}
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={p.showButton !== false} onChange={e => onChange('showButton', e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
+              <span className="text-xs font-medium text-gray-700">Button</span>
+            </label>
+            {p.showButton !== false && (
+              <div className="ml-6 mt-1">
+                <label className="text-[11px] text-gray-500">Button text</label>
+                <input type="text" value={p.buttonText || 'COMPRAR AGORA'} onChange={e => onChange('buttonText', e.target.value)}
+                  className="w-full mt-0.5 border border-gray-200 rounded-md px-2.5 py-1.5 text-sm text-gray-900 focus:border-brand-500 focus:outline-none" />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Layout ── */}
+      <div>
+        <p className="text-[12px] font-medium text-gray-700 mb-2">Layout</p>
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <Field label="Products per row">
+            <SelectInput value={String(p.columns || 2)} onChange={v => onChange('columns', Number(v))} options={[
+              { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
+            ]} />
+          </Field>
+          <Field label="Number of rows">
+            <SelectInput value={String(p.rows || 2)} onChange={v => onChange('rows', Number(v))} options={[
+              { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
+            ]} />
+          </Field>
+        </div>
+        <Field label="Max image height">
+          <div className="flex items-center gap-1.5">
+            <NumberInput value={p.maxImageHeight || 300} onChange={v => onChange('maxImageHeight', v)} min={50} max={600} />
+            <span className="text-xs text-gray-400">px</span>
+          </div>
+        </Field>
+        <div className="mt-2">
+          <Toggle value={p.stackOnMobile !== false} onChange={v => onChange('stackOnMobile', v)} label="Stack on mobile" />
+        </div>
+      </div>
+
+      {/* ── Product border (+) ── */}
+      <details className="group border border-gray-100 rounded-lg">
+        <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-gray-700 hover:bg-gray-50 rounded-lg">
+          Product border <span className="text-gray-300 group-open:hidden">+</span>
+        </summary>
+        <div className="px-3 pb-3 space-y-2">
+          <ColorInput value={p.productBorderColor || '#E5E7EB'} onChange={v => onChange('productBorderColor', v)} />
+          <NumberInput value={p.productBorderRadius || 8} onChange={v => onChange('productBorderRadius', v)} min={0} max={32} />
+        </div>
+      </details>
+
+      {/* ── Text tabs [Name] [Price] ── */}
+      <div>
+        <p className="text-[12px] font-medium text-gray-700 mb-2">Text</p>
+        <div className="flex border border-gray-200 rounded-lg overflow-hidden mb-3">
+          <button onClick={() => setTextTab('name')}
+            className={`flex-1 py-2 text-xs font-medium transition-colors ${textTab === 'name' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'}`}>
+            Name
+          </button>
+          <button onClick={() => setTextTab('price')}
+            className={`flex-1 py-2 text-xs font-medium transition-colors ${textTab === 'price' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'}`}>
+            Price
+          </button>
+        </div>
+        {textTab === 'name' && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Size"><NumberInput value={p.nameFontSize || 14} onChange={v => onChange('nameFontSize', v)} min={8} max={32} /></Field>
+              <Field label="Weight">
+                <SelectInput value={p.nameWeight || '400'} onChange={v => onChange('nameWeight', v)} options={[
+                  { value: '400', label: 'Normal 400' }, { value: '500', label: 'Medium 500' }, { value: '600', label: 'Semibold 600' }, { value: '700', label: 'Bold 700' },
+                ]} />
+              </Field>
+            </div>
+            <Field label="Color"><ColorInput value={p.nameColor || '#111827'} onChange={v => onChange('nameColor', v)} /></Field>
+          </div>
+        )}
+        {textTab === 'price' && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Size"><NumberInput value={p.priceFontSize || 16} onChange={v => onChange('priceFontSize', v)} min={8} max={48} /></Field>
+              <Field label="Weight">
+                <SelectInput value={p.priceWeight || '700'} onChange={v => onChange('priceWeight', v)} options={[
+                  { value: '400', label: 'Normal 400' }, { value: '500', label: 'Medium 500' }, { value: '600', label: 'Semibold 600' }, { value: '700', label: 'Bold 700' },
+                ]} />
+              </Field>
+            </div>
+            <Field label="Color"><ColorInput value={p.priceColor || '#F97316'} onChange={v => onChange('priceColor', v)} /></Field>
+            <Field label="Compare price color"><ColorInput value={p.comparePriceColor || '#9CA3AF'} onChange={v => onChange('comparePriceColor', v)} /></Field>
+          </div>
+        )}
+      </div>
+
+      {/* ── Button styles ── */}
+      {p.showButton !== false && (
+        <div>
+          <p className="text-[12px] font-medium text-gray-700 mb-2">Button styles</p>
+          <div className="space-y-2">
+            <Field label="Background"><ColorInput value={p.buttonColor || '#F97316'} onChange={v => onChange('buttonColor', v)} /></Field>
+            <Field label="Text color"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>
+            <Field label="Border radius"><NumberInput value={p.buttonRadius || 6} onChange={v => onChange('buttonRadius', v)} min={0} max={50} /></Field>
+          </div>
+        </div>
+      )}
+
+      {commonTail()}
+
+      {/* ── Modals ── */}
+      <ViewFeedsModal
+        isOpen={showViewFeeds}
+        onClose={() => setShowViewFeeds(false)}
+        currentFeedId={p.feedId}
+        onSelect={(feed) => { onChange('feedId', feed.id); onChange('feedName', feed.name); onChange('feedType', feed.feed_type) }}
+      />
+      <CreateFeedModal
+        isOpen={showCreateFeed}
+        onClose={() => setShowCreateFeed(false)}
+        onCreate={(feed) => { onChange('feedId', feed.id); onChange('feedName', feed.name); onChange('feedType', feed.feed_type) }}
+      />
+    </div>
+  )
 }
