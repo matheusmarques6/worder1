@@ -1,113 +1,226 @@
 'use client'
 
-import { useState } from 'react'
+// =============================================
+// Shopify Integration Detail Page
+// /integrations/shopify
+//
+// Fetches REAL data from the API — no mocks.
+// Shows: store info, KPIs, webhooks, sync history,
+// tracking status, disconnect.
+// =============================================
+
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { useAuthStore } from '@/stores'
 import {
   ArrowLeft,
   ShoppingBag,
   CheckCircle,
-  XCircle,
-  ArrowsClockwise,
+  AlertCircle,
+  RefreshCw,
   Package,
-  UsersThree,
+  Users,
   ShoppingCart,
-  CurrencyDollar,
-  TrendUp,
   Clock,
-  Lightning,
-  Warning,
-  Plugs,
-  Globe,
-  ChartLineUp,
-  CaretRight,
-  GearSix,
-  Export,
+  Zap,
+  ExternalLink,
+  Loader2,
+  Unplug,
   Eye,
-  Tag,
-  ArrowSquareOut,
-} from '@phosphor-icons/react'
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
-import Link from 'next/link'
+  Palette,
+  Radio,
+  X,
+  ArrowRight,
+  Store,
+} from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
-const connectionStatus = {
-  connected: true,
-  store: 'minhaloja.myshopify.com',
-  plan: 'Shopify Plus',
-  connectedAt: '2025-06-15T10:00:00Z',
-  lastSync: '2026-03-12T08:30:00Z',
-  syncInterval: '6 horas',
-  apiVersion: '2024-10',
+interface ShopifyStoreData {
+  id: string
+  shop_name: string
+  shop_domain: string
+  shop_email?: string
+  currency?: string
+  plan_name?: string
+  is_active: boolean
+  connection_status: string
+  status?: string
+  pixel_installed?: boolean
+  embed_installed?: boolean
+  initial_sync_completed?: boolean
+  api_version?: string
+  total_orders?: number
+  total_revenue?: number
+  total_customers?: number
+  last_sync_at?: string
+  installed_at?: string
+  settings?: {
+    theme_editor_url?: string
+    tracking_endpoint?: string
+  }
 }
 
-const syncKpis = [
-  { title: 'Produtos Sincronizados', value: '156', icon: Package, color: '#F26B2A', status: 'ok' },
-  { title: 'Clientes Importados', value: '12.450', icon: UsersThree, color: '#3B82F6', status: 'ok' },
-  { title: 'Pedidos Rastreados', value: '8.920', icon: ShoppingCart, color: '#22C55E', status: 'ok' },
-  { title: 'Receita Rastreada (30d)', value: 'R$ 284K', icon: CurrencyDollar, color: '#F5A623', change: '+18%' },
-]
+interface WebhookLogEntry {
+  id: string
+  topic: string
+  status: string
+  received_at: string
+  processed_at?: string
+  processing_time_ms?: number
+}
 
-const syncHistory = [
-  { date: '12/03/2026 08:30', type: 'Automática', items: 'Pedidos, Clientes', status: 'success', duration: '12s', records: 45 },
-  { date: '12/03/2026 02:30', type: 'Automática', items: 'Produtos, Pedidos, Clientes', status: 'success', duration: '28s', records: 128 },
-  { date: '11/03/2026 20:30', type: 'Automática', items: 'Pedidos, Clientes', status: 'success', duration: '9s', records: 32 },
-  { date: '11/03/2026 14:30', type: 'Automática', items: 'Pedidos', status: 'success', duration: '5s', records: 18 },
-  { date: '11/03/2026 08:30', type: 'Automática', items: 'Produtos, Pedidos, Clientes', status: 'success', duration: '31s', records: 142 },
-  { date: '10/03/2026 20:30', type: 'Manual', items: 'Todos', status: 'warning', duration: '45s', records: 210 },
-  { date: '10/03/2026 14:30', type: 'Automática', items: 'Pedidos', status: 'success', duration: '6s', records: 22 },
-]
-
-const revenueData = [
-  { date: '01 Mar', revenue: 18400, orders: 62 },
-  { date: '03 Mar', revenue: 22100, orders: 74 },
-  { date: '05 Mar', revenue: 16800, orders: 56 },
-  { date: '07 Mar', revenue: 28400, orders: 95 },
-  { date: '09 Mar', revenue: 21200, orders: 71 },
-  { date: '11 Mar', revenue: 25600, orders: 86 },
-  { date: '13 Mar', revenue: 29800, orders: 100 },
-]
-
-const automations = [
-  { name: 'Carrinho Abandonado', status: 'active', recoveries: 342, revenue: 48200 },
-  { name: 'Pós-Compra - Obrigado', status: 'active', sent: 1840, openRate: 68 },
-  { name: 'PIX Pendente', status: 'active', recoveries: 128, revenue: 22400 },
-  { name: 'Boleto não pago', status: 'active', recoveries: 86, revenue: 14800 },
-  { name: 'Review de Produto', status: 'paused', sent: 0, openRate: 0 },
-]
-
-const webhookEvents = [
-  { event: 'orders/create', status: 'active', lastReceived: '12 min atrás' },
-  { event: 'orders/updated', status: 'active', lastReceived: '28 min atrás' },
-  { event: 'orders/cancelled', status: 'active', lastReceived: '2 dias atrás' },
-  { event: 'checkouts/create', status: 'active', lastReceived: '5 min atrás' },
-  { event: 'customers/create', status: 'active', lastReceived: '1h atrás' },
-  { event: 'customers/update', status: 'active', lastReceived: '45 min atrás' },
-  { event: 'products/update', status: 'active', lastReceived: '6h atrás' },
-  { event: 'refunds/create', status: 'active', lastReceived: '3 dias atrás' },
-]
-
-const statusSyncConfig: Record<string, { label: string; color: string }> = {
-  success: { label: 'Sucesso', color: 'text-emerald-400' },
-  warning: { label: 'Parcial', color: 'text-yellow-400' },
-  error: { label: 'Erro', color: 'text-red-400' },
+interface SyncLogEntry {
+  id: string
+  sync_type: string
+  entity_type: string
+  status: string
+  started_at: string
+  completed_at?: string
+  items_processed?: number
+  error_message?: string
 }
 
 export default function ShopifyIntegrationPage() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<'overview' | 'sync' | 'webhooks' | 'settings'>('overview')
+  const { user } = useAuthStore()
+
+  const [store, setStore] = useState<ShopifyStoreData | null>(null)
+  const [webhookLogs, setWebhookLogs] = useState<WebhookLogEntry[]>([])
+  const [syncLogs, setSyncLogs] = useState<SyncLogEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [activeTab, setActiveTab] = useState<'overview' | 'webhooks' | 'sync' | 'settings'>('overview')
+
+  const loadData = useCallback(async () => {
+    if (!user?.organization_id) return
+    setLoading(true)
+    try {
+      // Load store
+      const storeRes = await fetch('/api/shopify/connect')
+      const storeData = await storeRes.json()
+      if (storeData.stores?.length > 0) {
+        const s = storeData.stores[0]
+        setStore({
+          id: s.id,
+          shop_name: s.name || s.shop_name,
+          shop_domain: s.domain || s.shop_domain,
+          shop_email: s.email || s.shop_email,
+          currency: s.currency,
+          plan_name: s.plan_name,
+          is_active: s.is_active ?? true,
+          connection_status: s.connectionStatus || s.connection_status || 'active',
+          status: s.status,
+          pixel_installed: s.pixel_installed,
+          embed_installed: s.embed_installed,
+          initial_sync_completed: s.initial_sync_completed,
+          api_version: s.api_version,
+          total_orders: s.totalOrders || s.total_orders || 0,
+          total_revenue: s.totalRevenue || s.total_revenue || 0,
+          total_customers: s.totalCustomers || s.total_customers || 0,
+          last_sync_at: s.lastSyncAt || s.last_sync_at,
+          installed_at: s.installed_at,
+          settings: s.settings,
+        })
+      } else {
+        setStore(null)
+      }
+    } catch (err) {
+      console.error('Failed to load store data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [user?.organization_id])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const handleResync = async () => {
+    if (!store) return
+    setSyncing(true)
+    setError('')
+    try {
+      const res = await fetch('/api/shopify/full-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: store.id, useGraphQL: true }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSuccess(`Sync concluído: ${data.data?.ordersCount || 0} pedidos, ${data.data?.customersCount || 0} clientes`)
+        loadData()
+      } else {
+        setError(data.error || 'Erro no sync')
+      }
+    } catch {
+      setError('Erro ao sincronizar')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const handleDisconnect = async () => {
+    if (!store) return
+    setDisconnecting(true)
+    try {
+      const res = await fetch(`/api/integrations/shopify/${store.id}/disconnect`, { method: 'POST' })
+      if (res.ok) {
+        setSuccess('Loja desconectada.')
+        setStore(null)
+        setShowDisconnectConfirm(false)
+        setTimeout(() => router.push('/integrations'), 1500)
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Erro ao desconectar')
+      }
+    } catch {
+      setError('Erro ao desconectar')
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-20">
+        <Loader2 className="w-8 h-8 animate-spin text-[#95BF47]" />
+      </div>
+    )
+  }
+
+  // Not connected — redirect to integrations
+  if (!store) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <button onClick={() => router.push('/integrations')} className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900">Shopify</h1>
+        </div>
+        <div className="text-center py-16">
+          <ShoppingBag className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 mb-4">Nenhuma loja Shopify conectada.</p>
+          <button
+            onClick={() => router.push('/settings')}
+            className="px-4 py-2 bg-[#95BF47] text-white rounded-xl text-sm font-medium hover:bg-[#7da03a] transition-colors"
+          >
+            Conectar Loja
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const tabs = [
     { id: 'overview' as const, label: 'Visão Geral' },
-    { id: 'sync' as const, label: 'Sincronização' },
     { id: 'webhooks' as const, label: 'Webhooks' },
+    { id: 'sync' as const, label: 'Sincronização' },
     { id: 'settings' as const, label: 'Configurações' },
   ]
 
@@ -116,51 +229,68 @@ export default function ShopifyIntegrationPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push('/integrations')}
-            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
-          >
-            <ArrowLeft size={18} weight="bold" />
+          <button onClick={() => router.push('/integrations')} className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors">
+            <ArrowLeft className="w-4 h-4" />
           </button>
           <div className="w-12 h-12 rounded-xl bg-[#95BF47]/10 flex items-center justify-center">
-            <ShoppingBag size={24} className="text-[#95BF47]" weight="fill" />
+            <ShoppingBag className="w-6 h-6 text-[#95BF47]" />
           </div>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold font-display text-gray-900">Shopify</h1>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs text-emerald-400 font-medium">Conectado</span>
-              </div>
+              <h1 className="text-2xl font-bold text-gray-900">Shopify</h1>
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Conectada
+              </span>
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">{connectionStatus.store}</p>
+            <p className="text-sm text-gray-500 mt-0.5">{store.shop_domain}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
-            <ArrowsClockwise size={14} />
-            Sincronizar Agora
+          <button
+            onClick={handleResync}
+            disabled={syncing}
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-xs font-medium disabled:opacity-50"
+          >
+            {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            {syncing ? 'Sincronizando...' : 'Sincronizar Agora'}
           </button>
           <a
-            href={`https://${connectionStatus.store}/admin`}
+            href={`https://${store.shop_domain}/admin`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs"
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-xs font-medium"
           >
-            <ArrowSquareOut size={14} />
+            <ExternalLink className="w-3.5 h-3.5" />
             Abrir Shopify
           </a>
         </div>
       </div>
 
+      {/* Alerts */}
+      {error && (
+        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError('')}><X className="w-4 h-4" /></button>
+        </div>
+      )}
+      {success && (
+        <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm">
+          <CheckCircle className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1">{success}</span>
+          <button onClick={() => setSuccess('')}><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-white/50 border border-gray-200 rounded-xl w-fit">
+      <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl w-fit">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === tab.id ? 'bg-gray-50 text-white' : 'text-gray-500 hover:text-gray-700'
+              activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             {tab.label}
@@ -173,252 +303,262 @@ export default function ShopifyIntegrationPage() {
         <>
           {/* KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {syncKpis.map((kpi, i) => {
+            {[
+              { title: 'Pedidos', value: store.total_orders || 0, icon: Package, color: '#22C55E' },
+              { title: 'Clientes', value: store.total_customers || 0, icon: Users, color: '#3B82F6' },
+              { title: 'Receita Total', value: `R$ ${((store.total_revenue || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: ShoppingBag, color: '#F5A623' },
+              { title: 'Última Sync', value: store.last_sync_at ? formatDistanceToNow(new Date(store.last_sync_at), { addSuffix: true, locale: ptBR }) : 'Nunca', icon: Clock, color: '#8B5CF6' },
+            ].map((kpi) => {
               const Icon = kpi.icon
               return (
-                <motion.div
-                  key={kpi.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="bg-white/50 border border-gray-200 rounded-xl p-5"
-                >
+                <div key={kpi.title} className="bg-white border border-gray-200 rounded-xl p-5">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
                       <p className="text-2xl font-bold text-gray-900 mt-1">{kpi.value}</p>
-                      {kpi.change && (
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <TrendUp size={12} className="text-emerald-400" weight="bold" />
-                          <span className="text-xs text-emerald-400">{kpi.change}</span>
-                        </div>
-                      )}
                     </div>
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${kpi.color}15` }}>
-                      <Icon size={20} style={{ color: kpi.color }} weight="duotone" />
+                      <Icon className="w-5 h-5" style={{ color: kpi.color }} />
                     </div>
                   </div>
-                </motion.div>
+                </div>
               )
             })}
           </div>
 
-          {/* Revenue Chart */}
-          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-1">Receita Shopify (últimos 14 dias)</h3>
-            <p className="text-xs text-gray-500 mb-4">Receita e pedidos rastreados via integração</p>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={revenueData}>
-                <defs>
-                  <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#95BF47" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#95BF47" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                <XAxis dataKey="date" stroke="#71717a" fontSize={12} />
-                <YAxis stroke="#71717a" fontSize={12} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}K`} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46', borderRadius: '8px' }}
-                  labelStyle={{ color: '#fff' }}
-                  formatter={(value: number, name: string) => [
-                    name === 'revenue' ? `R$ ${value.toLocaleString('pt-BR')}` : value,
-                    name === 'revenue' ? 'Receita' : 'Pedidos',
-                  ]}
-                />
-                <Area type="monotone" dataKey="revenue" stroke="#95BF47" fill="url(#gradRevenue)" strokeWidth={2} name="revenue" />
-              </AreaChart>
-            </ResponsiveContainer>
+          {/* Integration Status */}
+          <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">Status da Integração</h3>
+            <StatusRow label="Conexão" active={store.is_active && store.connection_status === 'active'} detail={store.connection_status === 'active' ? 'Ativa' : store.connection_status} />
+            <StatusRow label="Sync Inicial" active={!!store.initial_sync_completed} detail={store.initial_sync_completed ? 'Completo' : 'Pendente'} />
+            <StatusRow label="Tracking (Pixel)" active={!!store.pixel_installed} detail={store.pixel_installed ? 'Instalado' : 'Pendente'} />
+            <StatusRow label="Tracking (Tema)" active={!!store.embed_installed} detail={store.embed_installed ? 'Ativo' : 'Pendente'} />
+            <StatusRow label="API Version" active={true} detail={store.api_version || '2026-01'} />
           </div>
 
-          {/* Automations using Shopify */}
-          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-900">Automações Conectadas</h3>
-              <Link href="/automations" className="text-xs text-[#F26B2A] hover:text-[#F5A623]">Ver todas</Link>
-            </div>
-            <div className="space-y-3">
-              {automations.map((auto) => (
-                <div key={auto.name} className="flex items-center justify-between py-3 border-b border-gray-200/50 last:border-0">
-                  <div className="flex items-center gap-3">
-                    <Lightning size={16} className={auto.status === 'active' ? 'text-[#F26B2A]' : 'text-gray-400'} weight="fill" />
-                    <div>
-                      <p className="text-sm text-gray-700 font-medium">{auto.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {auto.status === 'active' ? 'Ativo' : 'Pausado'}
-                        {auto.recoveries !== undefined && ` · ${auto.recoveries} recuperações`}
-                        {auto.sent !== undefined && auto.sent > 0 && ` · ${auto.sent} enviados`}
-                      </p>
-                    </div>
-                  </div>
-                  {auto.revenue !== undefined && auto.revenue > 0 && (
-                    <span className="text-sm text-emerald-400 font-medium">R$ {(auto.revenue / 1000).toFixed(1)}K</span>
-                  )}
-                  {auto.openRate !== undefined && auto.openRate > 0 && (
-                    <span className="text-sm text-blue-400 font-medium">{auto.openRate}% abertura</span>
+          {/* Theme Tracking Guide */}
+          {!store.embed_installed && (
+            <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl">
+              <div className="flex items-start gap-3">
+                <Palette className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-semibold text-amber-800 mb-2">Ativar Tracking no Tema</h4>
+                  <ol className="list-decimal list-inside text-sm text-amber-700 space-y-1 mb-3">
+                    <li>Vá em <strong>Loja Online &rarr; Temas &rarr; Personalizar</strong></li>
+                    <li>Clique em <strong>App Embeds</strong> (icone de quebra-cabeça)</li>
+                    <li>Ative <strong>&quot;Worder Tracking&quot;</strong></li>
+                    <li>Clique <strong>Salvar</strong></li>
+                  </ol>
+                  {store.settings?.theme_editor_url && (
+                    <a href={store.settings.theme_editor_url} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors">
+                      Abrir Editor de Tema <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
                   )}
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          )}
 
-      {/* Sync Tab */}
-      {activeTab === 'sync' && (
-        <>
-          {/* Sync Status */}
-          <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-900">Status da Sincronização</h3>
-              <button className="flex items-center gap-2 px-3 py-1.5 bg-[#95BF47]/10 text-[#95BF47] rounded-lg hover:bg-[#95BF47]/20 text-xs font-medium">
-                <ArrowsClockwise size={14} />
-                Sincronizar Tudo
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              {['Produtos', 'Clientes', 'Pedidos'].map((item) => (
-                <div key={item} className="bg-gray-50/30 rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-700 font-medium">{item}</span>
-                    <CheckCircle size={16} className="text-emerald-400" weight="fill" />
-                  </div>
-                  <p className="text-xs text-gray-500">Última sync: {new Date(connectionStatus.lastSync).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Intervalo: {connectionStatus.syncInterval}</p>
+          {/* Store Info */}
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Detalhes da Loja</h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-400">Loja</span>
+                <p className="font-medium text-gray-900">{store.shop_name}</p>
+              </div>
+              <div>
+                <span className="text-gray-400">Domínio</span>
+                <p className="font-medium text-gray-900 font-mono text-xs">{store.shop_domain}</p>
+              </div>
+              <div>
+                <span className="text-gray-400">Conectada em</span>
+                <p className="font-medium text-gray-900">
+                  {store.installed_at ? new Date(store.installed_at).toLocaleDateString('pt-BR') : '—'}
+                </p>
+              </div>
+              <div>
+                <span className="text-gray-400">Moeda</span>
+                <p className="font-medium text-gray-900">{store.currency || 'BRL'}</p>
+              </div>
+              {store.plan_name && (
+                <div>
+                  <span className="text-gray-400">Plano Shopify</span>
+                  <p className="font-medium text-gray-900">{store.plan_name}</p>
                 </div>
-              ))}
+              )}
+              {store.shop_email && (
+                <div>
+                  <span className="text-gray-400">Email</span>
+                  <p className="font-medium text-gray-900">{store.shop_email}</p>
+                </div>
+              )}
             </div>
-          </div>
-
-          {/* Sync History */}
-          <div className="bg-white/50 border border-gray-200 rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900">Histórico de Sincronização</h3>
-            </div>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left text-xs text-gray-500 font-medium px-6 py-3">Data/Hora</th>
-                  <th className="text-left text-xs text-gray-500 font-medium px-6 py-3">Tipo</th>
-                  <th className="text-left text-xs text-gray-500 font-medium px-6 py-3">Itens</th>
-                  <th className="text-right text-xs text-gray-500 font-medium px-6 py-3">Registros</th>
-                  <th className="text-right text-xs text-gray-500 font-medium px-6 py-3">Duração</th>
-                  <th className="text-right text-xs text-gray-500 font-medium px-6 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {syncHistory.map((sync, i) => {
-                  const st = statusSyncConfig[sync.status]
-                  return (
-                    <tr key={i} className="border-b border-gray-200/50 hover:bg-gray-50/20">
-                      <td className="px-6 py-3 text-sm text-gray-700">{sync.date}</td>
-                      <td className="px-6 py-3 text-xs text-gray-500">{sync.type}</td>
-                      <td className="px-6 py-3 text-xs text-gray-500">{sync.items}</td>
-                      <td className="px-6 py-3 text-sm text-gray-700 text-right">{sync.records}</td>
-                      <td className="px-6 py-3 text-xs text-gray-500 text-right">{sync.duration}</td>
-                      <td className="px-6 py-3 text-right">
-                        <span className={`text-xs font-medium ${st.color}`}>{st.label}</span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
           </div>
         </>
       )}
 
       {/* Webhooks Tab */}
       {activeTab === 'webhooks' && (
-        <div className="bg-white/50 border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-900">Webhooks Ativos</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Eventos do Shopify recebidos em tempo real</p>
+            <h3 className="text-sm font-semibold text-gray-900">Webhooks Registrados</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Eventos do Shopify recebidos em tempo real via GraphQL</p>
           </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left text-xs text-gray-500 font-medium px-6 py-3">Evento</th>
-                <th className="text-left text-xs text-gray-500 font-medium px-6 py-3">Status</th>
-                <th className="text-right text-xs text-gray-500 font-medium px-6 py-3">Último Recebido</th>
-              </tr>
-            </thead>
-            <tbody>
-              {webhookEvents.map((wh) => (
-                <tr key={wh.event} className="border-b border-gray-200/50 hover:bg-gray-50/20">
-                  <td className="px-6 py-3">
-                    <code className="text-sm text-gray-700 font-mono">{wh.event}</code>
-                  </td>
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-xs text-emerald-400">Ativo</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-3 text-xs text-gray-500 text-right">{wh.lastReceived}</td>
-                </tr>
+          <div className="divide-y divide-gray-100">
+            {[
+              'ORDERS_CREATE', 'ORDERS_UPDATED', 'ORDERS_FULFILLED', 'ORDERS_CANCELLED', 'ORDERS_PAID',
+              'CHECKOUTS_CREATE', 'CHECKOUTS_UPDATE',
+              'CUSTOMERS_CREATE', 'CUSTOMERS_UPDATE', 'CUSTOMERS_DELETE',
+              'CUSTOMERS_EMAIL_MARKETING_CONSENT_UPDATE',
+              'PRODUCTS_CREATE', 'PRODUCTS_UPDATE', 'PRODUCTS_DELETE',
+              'REFUNDS_CREATE', 'FULFILLMENTS_CREATE', 'FULFILLMENTS_UPDATE',
+              'APP_UNINSTALLED',
+            ].map((topic) => (
+              <div key={topic} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50">
+                <code className="text-sm text-gray-700 font-mono">{topic.toLowerCase().replace('_', '/')}</code>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span className="text-xs text-emerald-600">Registrado</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sync Tab */}
+      {activeTab === 'sync' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Sincronização</h3>
+              <button
+                onClick={handleResync}
+                disabled={syncing}
+                className="flex items-center gap-2 px-3 py-1.5 bg-[#95BF47]/10 text-[#95BF47] rounded-lg hover:bg-[#95BF47]/20 text-xs font-medium disabled:opacity-50"
+              >
+                {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                {syncing ? 'Sincronizando...' : 'Sincronizar Tudo'}
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                { label: 'Clientes', count: store.total_customers || 0 },
+                { label: 'Pedidos', count: store.total_orders || 0 },
+                { label: 'Produtos', count: '—' },
+              ].map((item) => (
+                <div key={item.label} className="bg-gray-50 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-700 font-medium">{item.label}</span>
+                    {store.initial_sync_completed ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    ) : (
+                      <Clock className="w-4 h-4 text-gray-400" />
+                    )}
+                  </div>
+                  <p className="text-xl font-bold text-gray-900">{item.count}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Última sync: {store.last_sync_at ? formatDistanceToNow(new Date(store.last_sync_at), { addSuffix: true, locale: ptBR }) : 'Nunca'}
+                  </p>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">O que é sincronizado</h3>
+            <div className="space-y-2">
+              {[
+                { label: 'Clientes', desc: 'Nome, email, telefone, endereço, tags, marketing consent', active: true },
+                { label: 'Pedidos (90 dias)', desc: 'Pedidos, itens, status financeiro, fulfillment, reembolsos', active: true },
+                { label: 'Produtos', desc: 'Título, variantes, preço, estoque, imagens', active: true },
+                { label: 'Checkouts Abandonados', desc: 'Detecção automática a cada 10 min via GraphQL', active: true },
+                { label: 'Eventos CDP', desc: 'Timeline completa de ações por contato', active: true },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between py-2 text-sm">
+                  <div>
+                    <p className="text-gray-700 font-medium">{item.label}</p>
+                    <p className="text-xs text-gray-400">{item.desc}</p>
+                  </div>
+                  <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
       {/* Settings Tab */}
       {activeTab === 'settings' && (
         <div className="space-y-4">
-          <div className="bg-white/50 border border-gray-200 rounded-xl p-6 space-y-5">
-            <h3 className="text-sm font-semibold text-gray-900">Detalhes da Conexão</h3>
-            <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Detalhes da Conexão</h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-xs text-gray-500">Loja</p>
-                <p className="text-sm text-gray-700 mt-0.5 font-mono">{connectionStatus.store}</p>
+                <p className="text-gray-400">Loja</p>
+                <p className="text-gray-900 font-mono mt-0.5">{store.shop_domain}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">Plano</p>
-                <p className="text-sm text-gray-700 mt-0.5">{connectionStatus.plan}</p>
+                <p className="text-gray-400">Plano</p>
+                <p className="text-gray-900 mt-0.5">{store.plan_name || '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">Conectado desde</p>
-                <p className="text-sm text-gray-700 mt-0.5">{new Date(connectionStatus.connectedAt).toLocaleDateString('pt-BR')}</p>
+                <p className="text-gray-400">Conectado desde</p>
+                <p className="text-gray-900 mt-0.5">{store.installed_at ? new Date(store.installed_at).toLocaleDateString('pt-BR') : '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">API Version</p>
-                <p className="text-sm text-gray-700 mt-0.5 font-mono">{connectionStatus.apiVersion}</p>
+                <p className="text-gray-400">API Version</p>
+                <p className="text-gray-900 font-mono mt-0.5">{store.api_version || '2026-01'}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white/50 border border-gray-200 rounded-xl p-6 space-y-5">
-            <h3 className="text-sm font-semibold text-gray-900">Sincronização</h3>
-            {[
-              { label: 'Sincronizar Produtos', desc: 'Importar catálogo automaticamente', enabled: true },
-              { label: 'Sincronizar Clientes', desc: 'Manter contatos atualizados', enabled: true },
-              { label: 'Sincronizar Pedidos', desc: 'Rastrear pedidos e receita', enabled: true },
-              { label: 'Sincronizar Carrinhos', desc: 'Detectar carrinhos abandonados', enabled: true },
-              { label: 'Sincronizar Estoque', desc: 'Alertas de estoque baixo', enabled: false },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between py-2">
-                <div>
-                  <p className="text-sm text-gray-700 font-medium">{item.label}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
-                </div>
-                <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-[#95BF47]' : 'bg-gray-100'}`}>
-                  <div className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform ${item.enabled ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
-                </button>
-              </div>
-            ))}
-          </div>
-
           {/* Danger Zone */}
-          <div className="bg-white/50 border border-red-500/20 rounded-xl p-6">
-            <h3 className="text-sm font-semibold text-red-400 mb-2">Zona de Perigo</h3>
-            <p className="text-xs text-gray-500 mb-4">Desconectar a integração irá parar todas as sincronizações e automações que dependem do Shopify.</p>
-            <button className="px-4 py-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 text-xs font-medium border border-red-500/20">
-              Desconectar Shopify
-            </button>
+          <div className="bg-white border border-red-200 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-red-700 mb-2">Zona de Perigo</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Desconectar a integração irá parar todas as sincronizações e webhooks. Os dados já importados serão mantidos.
+            </p>
+            {!showDisconnectConfirm ? (
+              <button
+                onClick={() => setShowDisconnectConfirm(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+              >
+                <Unplug className="w-4 h-4" />
+                Desconectar Shopify
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-red-600">Tem certeza? Dados importados serão mantidos.</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setShowDisconnectConfirm(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Cancelar
+                  </button>
+                  <button onClick={handleDisconnect} disabled={disconnecting}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                    {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unplug className="w-4 h-4" />}
+                    {disconnecting ? 'Desconectando...' : 'Confirmar'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function StatusRow({ label, active, detail }: { label: string; active: boolean; detail: string }) {
+  return (
+    <div className="flex items-center justify-between text-sm py-1">
+      <span className="text-gray-500 flex items-center gap-2">
+        {active ? <span className="w-2 h-2 rounded-full bg-emerald-500" /> : <span className="w-2 h-2 rounded-full bg-gray-300" />}
+        {label}
+      </span>
+      <span className={active ? 'text-emerald-600 font-medium' : 'text-gray-500'}>{detail}</span>
     </div>
   )
 }
