@@ -176,20 +176,6 @@ export function BlockPreview({
         return <div style={{ height: p.height || 32 }} />
 
       // ── Columns ──
-      case 'columns':
-        return (
-          <div style={{ ...pad, display: 'flex', gap: p.gap || 16 }}>
-            <div
-              style={{ flex: 1, minWidth: 0 }}
-              dangerouslySetInnerHTML={{ __html: p.leftContent || '' }}
-            />
-            <div
-              style={{ flex: 1, minWidth: 0 }}
-              dangerouslySetInnerHTML={{ __html: p.rightContent || '' }}
-            />
-          </div>
-        )
-
       // ── HTML ──
       case 'html':
         return (
