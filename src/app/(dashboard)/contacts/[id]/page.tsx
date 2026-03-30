@@ -38,6 +38,32 @@ import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { InboxContact, InboxActivity, InboxNote, InboxTask, InboxOrder, InboxDeal } from '@/types/inbox'
 
+interface ShopifyEvent {
+  id: string
+  eventType: string
+  eventSource: string
+  properties: Record<string, any>
+  monetaryValue: number | null
+  currency: string | null
+  occurredAt: string
+  shopifyResourceId: string | null
+  shopifyResourceType: string | null
+}
+
+const shopifyEventLabels: Record<string, string> = {
+  placed_order: 'Pedido Realizado',
+  ordered_product: 'Produto Comprado',
+  fulfilled_order: 'Pedido Entregue',
+  cancelled_order: 'Pedido Cancelado',
+  refunded_order: 'Pedido Reembolsado',
+  checkout_started: 'Checkout Iniciado',
+  checkout_abandoned: 'Carrinho Abandonado',
+  viewed_product: 'Produto Visualizado',
+  added_to_cart: 'Adicionou ao Carrinho',
+  subscribed_email: 'Inscreveu-se por E-mail',
+  profile_created: 'Perfil Criado',
+}
+
 const activityIconMap: Record<string, { icon: React.ComponentType<any>; color: string; bgColor: string }> = {
   conversation_started: { icon: ChatCircle, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
   conversation_closed: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
@@ -63,6 +89,18 @@ const activityIconMap: Record<string, { icon: React.ComponentType<any>; color: s
   campaign_clicked: { icon: CursorClick, color: 'text-brand-600', bgColor: 'bg-brand-500/10' },
   bot_interaction: { icon: Lightning, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
   blocked: { icon: Warning, color: 'text-red-400', bgColor: 'bg-red-500/10' },
+  // Shopify CDP events
+  placed_order: { icon: ShoppingCart, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  ordered_product: { icon: ShoppingCart, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  fulfilled_order: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  cancelled_order: { icon: Warning, color: 'text-red-400', bgColor: 'bg-red-500/10' },
+  refunded_order: { icon: CurrencyDollar, color: 'text-red-400', bgColor: 'bg-red-500/10' },
+  checkout_started: { icon: ShoppingCart, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  checkout_abandoned: { icon: ShoppingCart, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' },
+  viewed_product: { icon: Eye, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' },
+  added_to_cart: { icon: ShoppingCart, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  subscribed_email: { icon: EnvelopeSimple, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  profile_created: { icon: UserCircle, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
 }
 
 const defaultActivityIcon = { icon: Eye, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' }
@@ -114,6 +152,7 @@ export default function ContactDetailPage() {
   const contactId = params.id as string
   const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'tasks'>('timeline')
   const [noteText, setNoteText] = useState('')
+  const [shopifyEvents, setShopifyEvents] = useState<ShopifyEvent[]>([])
 
   const {
     contact,
@@ -137,8 +176,30 @@ export default function ContactDetailPage() {
   useEffect(() => {
     if (contactId) {
       fetchContact(contactId)
+      // Fetch Shopify CDP events
+      fetch(`/api/contacts/${contactId}/shopify-events`)
+        .then((res) => res.json())
+        .then((data) => setShopifyEvents(data.events || []))
+        .catch((err) => console.error('Error fetching shopify events:', err))
     }
   }, [contactId, fetchContact])
+
+  // Merge shopify events into timeline activities
+  const mergedActivities = [...activities]
+  shopifyEvents.forEach((evt) => {
+    mergedActivities.push({
+      id: evt.id,
+      activity_type: evt.eventType,
+      title: shopifyEventLabels[evt.eventType] || evt.eventType,
+      description: evt.monetaryValue
+        ? `${evt.currency === 'BRL' ? 'R$ ' : (evt.currency || '') + ' '}${evt.monetaryValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${evt.properties?.order_number ? ` - Pedido #${evt.properties.order_number}` : ''}${evt.properties?.items ? ` - ${evt.properties.items.length} item(ns)` : ''}`
+        : evt.properties?.order_number
+        ? `Pedido #${evt.properties.order_number}`
+        : evt.properties?.product_title || null,
+      created_at: evt.occurredAt,
+    } as InboxActivity)
+  })
+  mergedActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
   const handleAddNote = async () => {
     if (!noteText.trim() || !contactId) return
@@ -170,7 +231,7 @@ export default function ContactDetailPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/contacts')} className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors">
+          <button onClick={() => router.push('/contacts')} className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors">
             <ArrowLeft size={18} weight="bold" />
           </button>
           <h1 className="text-2xl font-bold font-display text-gray-900">Contato</h1>
@@ -203,7 +264,7 @@ export default function ContactDetailPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push('/contacts')}
-            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
           >
             <ArrowLeft size={18} weight="bold" />
           </button>
@@ -385,7 +446,7 @@ export default function ContactDetailPage() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex-1 px-4 py-3 text-sm font-medium transition-colors relative ${
-                    activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-gray-700'
+                    activeTab === tab.id ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   {tab.label}
@@ -403,13 +464,13 @@ export default function ContactDetailPage() {
               {/* Timeline Tab */}
               {activeTab === 'timeline' && (
                 <div className="space-y-1">
-                  {activities.length === 0 ? (
+                  {mergedActivities.length === 0 ? (
                     <div className="text-center py-8">
                       <Clock size={24} className="text-zinc-700 mx-auto mb-2" weight="duotone" />
                       <p className="text-sm text-gray-500">Nenhuma atividade registrada</p>
                     </div>
                   ) : (
-                    activities.map((activity, i) => {
+                    mergedActivities.map((activity, i) => {
                       const iconCfg = activityIconMap[activity.activity_type] || defaultActivityIcon
                       const Icon = iconCfg.icon
                       return (
@@ -418,7 +479,7 @@ export default function ContactDetailPage() {
                             <div className={`w-8 h-8 rounded-full ${iconCfg.bgColor} flex items-center justify-center flex-shrink-0`}>
                               <Icon size={16} className={iconCfg.color} weight="fill" />
                             </div>
-                            {i < activities.length - 1 && <div className="w-px h-full bg-gray-50 min-h-[24px]" />}
+                            {i < mergedActivities.length - 1 && <div className="w-px h-full bg-gray-50 min-h-[24px]" />}
                           </div>
                           <div className="pb-5">
                             <p className="text-sm text-gray-700">{activity.title}</p>

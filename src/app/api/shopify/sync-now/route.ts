@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { data: store } = await storeQuery
-    .order('installed_at', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
