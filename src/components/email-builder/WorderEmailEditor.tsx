@@ -159,9 +159,24 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   }, [])
 
   // ── Block Operations ──
-  const addBlock = useCallback((type: string) => {
+  const addBlock = useCallback((type: string, targetSectionId?: string, targetColumnId?: string) => {
     const block = createBlock(type as any)
     const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
+
+    if (targetSectionId && targetColumnId) {
+      // Add to specific column
+      const section = sections.find(s => s.id === targetSectionId)
+      if (section) {
+        const column = section.columns.find(c => c.id === targetColumnId)
+        if (column) {
+          column.blocks.push(block)
+          updateDoc({ ...doc, sections })
+          selectBlock(block.id)
+          return
+        }
+      }
+    }
+
     if (sections.length === 0) {
       const section = createSection([100])
       section.columns[0].blocks.push(block)
@@ -457,10 +472,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                         {section.columns.map((column) => {
                           const colBlocks = column.blocks
                           return (
-                            <div key={column.id} style={{ width: `${column.width}%`, minHeight: 40 }} className="relative">
+                            <div key={column.id} style={{ width: `${column.width}%`, minHeight: 40 }} className="relative"
+                              onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30') }}
+                              onDragLeave={e => { e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30') }}
+                              onDrop={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30'); const type = e.dataTransfer.getData('blockType'); if (type) addBlock(type, section.id, column.id) }}
+                            >
                               {colBlocks.length === 0 ? (
-                                <div className="flex items-center justify-center h-full min-h-[60px] border border-dashed border-gray-200 rounded text-gray-300 text-xs">
-                                  <Plus className="w-3.5 h-3.5" />
+                                <div
+                                  onClick={() => addBlock('text', section.id, column.id)}
+                                  className="flex flex-col items-center justify-center h-full min-h-[80px] border-2 border-dashed border-gray-200 rounded-lg text-gray-300 text-xs cursor-pointer hover:border-brand-400 hover:text-brand-400 hover:bg-brand-50/30 transition-all"
+                                >
+                                  <Plus className="w-4 h-4 mb-1" />
+                                  <span className="text-[10px]">Arraste ou clique</span>
                                 </div>
                               ) : (
                                 <SortableContext items={colBlocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
