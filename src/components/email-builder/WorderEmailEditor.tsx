@@ -10,6 +10,7 @@ import { BlockPreview } from './blocks/BlockPreview'
 import { BlockProperties } from './panels/BlockProperties'
 import { MergeTagPicker } from './modals/MergeTagPicker'
 import { SendTestModal } from './modals/SendTestModal'
+import { SectionProperties } from './panels/SectionProperties'
 import {
   BLOCK_DEFS, SECTION_LAYOUTS, createBlock, createSection, migrateV1toV2, DEFAULT_DOCUMENT,
   type EmailBlock, type EmailDocument, type EmailSection,
@@ -51,43 +52,7 @@ function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDel
   )
 }
 
-// ── Section Properties Panel ──
-function SectionProperties({ section, onChange }: { section: EmailSection; onChange: (patch: Partial<EmailSection['styles']>) => void }) {
-  const s = section.styles
-  return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-[11px] font-medium text-gray-500 mb-1">Cor de Fundo</label>
-        <div className="flex items-center gap-2">
-          <input type="color" value={s.backgroundColor || '#ffffff'} onChange={e => onChange({ backgroundColor: e.target.value })}
-            className="w-8 h-8 rounded border border-gray-200 cursor-pointer p-0.5" />
-          <input type="text" value={s.backgroundColor || ''} onChange={e => onChange({ backgroundColor: e.target.value })}
-            placeholder="Transparente" className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-900" />
-        </div>
-      </div>
-      <div>
-        <label className="block text-[11px] font-medium text-gray-500 mb-1.5">Padding</label>
-        <div className="grid grid-cols-2 gap-2">
-          {(['top', 'right', 'bottom', 'left'] as const).map(side => (
-            <div key={side} className="flex items-center gap-1.5">
-              <span className="text-[10px] text-gray-400 w-3 capitalize">{side[0].toUpperCase()}</span>
-              <input type="number" min={0} max={100} value={s.padding[side]}
-                onChange={e => onChange({ padding: { ...s.padding, [side]: Number(e.target.value) } })}
-                className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-gray-900" />
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="flex items-center justify-between">
-        <label className="text-[11px] font-medium text-gray-500">Empilhar no Mobile</label>
-        <button onClick={() => onChange({ stackOnMobile: !s.stackOnMobile })}
-          className={`relative w-9 h-5 rounded-full transition-colors ${s.stackOnMobile ? 'bg-brand-500' : 'bg-gray-300'}`}>
-          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${s.stackOnMobile ? 'left-[18px]' : 'left-0.5'}`} />
-        </button>
-      </div>
-    </div>
-  )
-}
+// SectionProperties imported from './panels/SectionProperties'
 
 // ── Helpers ──
 function findBlockLocation(doc: EmailDocument, blockId: string): { sectionIdx: number; columnIdx: number; blockIdx: number } | null {
@@ -122,6 +87,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const [showPreview, setShowPreview] = useState(false)
   const [showMergeTags, setShowMergeTags] = useState(false)
   const [showSendTest, setShowSendTest] = useState(false)
+  const [showSaveBlockModal, setShowSaveBlockModal] = useState(false)
+  const [saveBlockName, setSaveBlockName] = useState('')
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -547,19 +514,33 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                 block={selectedBlock}
                 onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
                 onSaveAsReusable={() => {
-                  const name = prompt('Nome do bloco reutilizavel:')
-                  if (!name) return
-                  fetch('/api/email/saved-blocks', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, block_json: selectedBlock }),
-                  }).then(() => showToast('Bloco salvo!')).catch(() => showToast('Erro ao salvar bloco', 'error'))
+                  setSaveBlockName('')
+                  setShowSaveBlockModal(true)
                 }}
               />
             ) : selectedSection ? (
               <SectionProperties
                 section={selectedSection}
-                onChange={(patch) => updateSectionStyles(selectedSection.id, patch)}
+                onStyleChange={(key, value) => updateSectionStyles(selectedSection.id, { [key]: value })}
+                onColumnLayoutChange={(cols) => {
+                  setDoc(prev => ({
+                    ...prev,
+                    sections: prev.sections.map(s => {
+                      if (s.id !== selectedSection.id) return s
+                      const newCols = cols.map((w, i) => ({
+                        id: s.columns[i]?.id || ('c_' + Date.now().toString(36) + '_' + i),
+                        width: w,
+                        blocks: s.columns[i]?.blocks || [],
+                      }))
+                      // Move overflow blocks to last column
+                      if (s.columns.length > cols.length) {
+                        const overflow = s.columns.slice(cols.length).flatMap(c => c.blocks)
+                        newCols[newCols.length - 1].blocks.push(...overflow)
+                      }
+                      return { ...s, columns: newCols }
+                    })
+                  }))
+                }}
               />
             ) : (
               <div className="text-center py-16 text-gray-400">
@@ -604,6 +585,30 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           setShowMergeTags(false)
         }}
       />
+
+      {/* ── Save Block Modal ── */}
+      {showSaveBlockModal && selectedBlock && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowSaveBlockModal(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-[380px] p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Salvar Bloco Reutilizável</h3>
+            <input type="text" value={saveBlockName} onChange={e => setSaveBlockName(e.target.value)}
+              placeholder="Nome do bloco..." autoFocus
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none mb-3" />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowSaveBlockModal(false)}
+                className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+              <button disabled={!saveBlockName.trim()} onClick={() => {
+                fetch('/api/email/saved-blocks', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: saveBlockName.trim(), block_json: selectedBlock }),
+                }).then(() => { showToast('Bloco salvo!'); setShowSaveBlockModal(false) }).catch(() => showToast('Erro', 'error'))
+              }} className="px-4 py-2 bg-brand-500 text-white text-sm font-semibold rounded-lg hover:bg-brand-600 disabled:opacity-50">
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

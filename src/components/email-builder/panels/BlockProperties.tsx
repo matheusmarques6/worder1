@@ -1,7 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import type { EmailBlock } from '../config/types'
+
+const RichTextEditor = dynamic(() => import('../blocks/RichTextEditor').then(m => ({ default: m.RichTextEditor })), { ssr: false, loading: () => <div className="h-20 bg-gray-50 rounded-lg animate-pulse" /> })
 
 interface BlockPropertiesProps {
   block: EmailBlock
@@ -213,8 +216,10 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
       return (
         <div className="space-y-3">
           <Field label="Conteúdo">
-            <textarea value={p.content || ''} onChange={e => onChange('content', e.target.value)} rows={5}
-              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-md text-sm text-gray-900 focus:border-brand-500 focus:outline-none resize-y font-mono" />
+            <RichTextEditor
+              content={p.contentHtml || p.content || '<p>Escreva seu texto aqui.</p>'}
+              onChange={(html) => { onChange('contentHtml', html); onChange('content', html) }}
+            />
           </Field>
           <TextStyleSection fontSize={p.fontSize} color={p.color} fontWeight={undefined} align={p.align} onChange={onChange} />
           <Field label="Altura da Linha">
@@ -291,14 +296,10 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     case 'columns':
       return (
         <div className="space-y-3">
-          <Field label="Conteúdo Esquerda">
-            <textarea value={p.leftContent || ''} onChange={e => onChange('leftContent', e.target.value)} rows={3}
-              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-md text-sm font-mono text-gray-900 focus:border-brand-500 focus:outline-none resize-y" />
-          </Field>
-          <Field label="Conteúdo Direita">
-            <textarea value={p.rightContent || ''} onChange={e => onChange('rightContent', e.target.value)} rows={3}
-              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-md text-sm font-mono text-gray-900 focus:border-brand-500 focus:outline-none resize-y" />
-          </Field>
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-500 mb-1">As colunas são containers. Arraste blocos da paleta para dentro de cada coluna no canvas.</p>
+            <p className="text-[10px] text-gray-400">Dica: Use layouts de seção para criar estruturas multi-coluna.</p>
+          </div>
           <Field label="Colunas">
             <SelectInput value={String(p.columns)} onChange={v => onChange('columns', Number(v))} options={[
               { value: '2', label: '2 Colunas' }, { value: '3', label: '3 Colunas' },
