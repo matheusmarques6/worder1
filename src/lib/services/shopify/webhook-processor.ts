@@ -7,28 +7,30 @@
 // =============================================
 
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
-import type { 
-  ShopifyStoreConfig, 
+import type {
+  ShopifyStoreConfig,
   ShopifyCustomer,
   ShopifyOrder,
   ShopifyCheckout,
   WebhookProcessResult,
   ShopifyWebhookJob
 } from './types';
-import { 
-  syncContactFromShopify, 
+import {
+  syncContactFromShopify,
   updateContactOrderStats,
-  addAbandonedCartTag 
+  addAbandonedCartTag
 } from './contact-sync';
-import { 
-  createOrUpdateDealForContact, 
+import {
+  createOrUpdateDealForContact,
   moveDealToStage,
-  markDealAsWon 
+  markDealAsWon
 } from './deal-sync';
-import { 
-  RuleEngine, 
-  type EventData 
+import {
+  RuleEngine,
+  type EventData
 } from '../automation/rule-engine';
+import { createEvent } from '@/lib/shopify/event-service';
+import { WORDER_SHOPIFY_EVENTS, EVENT_SOURCES } from '@/lib/shopify/event-types';
 
 // Supabase client com service role
 
@@ -275,7 +277,43 @@ async function handleOrderCreate(
     contact_id: contact.id,
     value: orderValue,
   });
-  
+
+  // CDP: placed_order event
+  try {
+    await createEvent({
+      organization_id: store.organization_id,
+      contact_id: contact.id,
+      store_id: store.id,
+      event_type: WORDER_SHOPIFY_EVENTS.PLACED_ORDER,
+      event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+      properties: {
+        order_id: String(order.id),
+        order_number: String(order.order_number),
+        total_price: orderValue,
+        currency: order.currency,
+        financial_status: order.financial_status,
+        fulfillment_status: order.fulfillment_status,
+        item_count: order.line_items?.length || 0,
+        items: (order.line_items || []).map((li: any) => ({
+          product_id: li.product_id ? String(li.product_id) : undefined,
+          title: li.title,
+          quantity: li.quantity || 1,
+          price: parseFloat(li.price || '0'),
+          sku: li.sku,
+          variant_title: li.variant_title,
+        })),
+      },
+      monetary_value: orderValue,
+      currency: order.currency || 'BRL',
+      shopify_resource_id: String(order.id),
+      shopify_resource_type: 'order',
+      occurred_at: order.created_at || new Date().toISOString(),
+      idempotency_key: `placed_order:${order.id}`,
+    });
+  } catch (cdpError) {
+    console.error('[WebhookProcessor] CDP event creation failed:', cdpError);
+  }
+
   return {
     success: true,
     action: 'order_created',
@@ -561,13 +599,44 @@ export async function handleAbandonedCheckout(
   
   if (!createdDeal) {
     const hasRules = await hasAutomationRules(store.organization_id, 'shopify', 'checkout_abandoned');
-    
+
     if (!hasRules) {
-      // Função aceita apenas 1 argumento
       await addAbandonedCartTag(checkout.contact_id);
     }
   }
-  
+
+  // CDP: checkout_abandoned event
+  try {
+    await createEvent({
+      organization_id: store.organization_id,
+      contact_id: checkout.contact_id,
+      store_id: store.id,
+      event_type: WORDER_SHOPIFY_EVENTS.CHECKOUT_ABANDONED,
+      event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+      properties: {
+        checkout_id: String(checkout.id),
+        checkout_url: checkout.abandoned_checkout_url || null,
+        total_price: checkoutValue,
+        currency: checkout.currency || 'BRL',
+        item_count: checkout.line_items?.length || 0,
+        items: (checkout.line_items || []).map((li: any) => ({
+          product_id: li.product_id ? String(li.product_id) : undefined,
+          title: li.title,
+          quantity: li.quantity || 1,
+          price: parseFloat(li.price || '0'),
+        })),
+      },
+      monetary_value: checkoutValue,
+      currency: checkout.currency || 'BRL',
+      shopify_resource_id: String(checkout.id),
+      shopify_resource_type: 'checkout',
+      occurred_at: new Date().toISOString(),
+      idempotency_key: `checkout_abandoned:${checkout.id}`,
+    });
+  } catch (cdpError) {
+    console.error('[WebhookProcessor] CDP event creation failed (abandoned):', cdpError);
+  }
+
   return {
     success: true,
     action: 'checkout_abandoned',

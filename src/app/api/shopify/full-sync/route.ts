@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
 import { runFullSync, runIncrementalSync } from '@/lib/services/shopify/full-sync';
+import { runFullSyncGraphQL } from '@/lib/services/shopify/full-sync-graphql';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -103,7 +104,17 @@ export async function POST(request: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let result: any;
-    if (options.incremental) {
+    const useGraphQL = (options as any).useGraphQL === true;
+
+    if (useGraphQL) {
+      // New GraphQL-based sync
+      result = await runFullSyncGraphQL(store, {
+        syncCustomers: options.syncCustomers,
+        syncOrders: options.syncOrders,
+        syncProducts: options.syncProducts,
+        ordersDaysBack: (options as any).ordersDaysBack || 90,
+      });
+    } else if (options.incremental) {
       const since = new Date();
       since.setDate(since.getDate() - 1); // Last 24 hours
       result = await runIncrementalSync(store, since, syncOptions);

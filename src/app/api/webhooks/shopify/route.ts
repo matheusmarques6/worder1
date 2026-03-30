@@ -18,6 +18,10 @@ import { trackActivity, trackPurchase, enrichContactFromOrder } from '@/lib/serv
 import { executeAutomationRules, mapShopifyEventToTrigger } from '@/lib/services/automation/automation-executor';
 import type { ShopifyStoreConfig, ShopifyCustomer } from '@/lib/services/shopify/types';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { createEvent } from '@/lib/shopify/event-service';
+import { WORDER_SHOPIFY_EVENTS, EVENT_SOURCES } from '@/lib/shopify/event-types';
+import { markCheckoutRecovered } from '@/lib/services/shopify/jobs/abandoned-cart';
+import { enrichContactAfterOrder } from '@/lib/shopify/profile-enricher';
 export const dynamic = 'force-dynamic';
 
 // ============================================
@@ -152,6 +156,32 @@ async function processCustomerCreated(store: ShopifyStoreConfig, customer: any) 
   // NOTA: Removido createOrUpdateDealForContact automático para novos clientes
   // Deals são criados apenas via regras de automação ou quando há pedido
 
+  // CDP: profile_created event
+  try {
+    await createEvent({
+      organization_id: store.organization_id,
+      contact_id: contact?.id,
+      store_id: store.id,
+      event_type: WORDER_SHOPIFY_EVENTS.PROFILE_CREATED,
+      event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+      properties: {
+        customer_id: String(customer.id),
+        email: customer.email,
+        first_name: customer.first_name,
+        last_name: customer.last_name,
+        phone: customer.phone,
+        accepts_marketing: customer.accepts_marketing,
+        tags: customer.tags,
+      },
+      shopify_resource_id: String(customer.id),
+      shopify_resource_type: 'customer',
+      occurred_at: customer.created_at || new Date().toISOString(),
+      idempotency_key: `profile_created:${customer.id}`,
+    });
+  } catch (cdpError) {
+    console.error('[Shopify Webhook] CDP event creation failed (customer):', cdpError);
+  }
+
   // Emitir evento para automações
   await EventBus.emit(EventType.CONTACT_CREATED, {
     organization_id: store.organization_id,
@@ -247,13 +277,18 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   if (order.checkout_id) {
     await supabase
       .from('shopify_checkouts')
-      .update({ 
+      .update({
         status: 'converted',
         converted_order_id: String(order.id),
         updated_at: new Date().toISOString(),
       })
       .eq('store_id', store.id)
       .eq('shopify_checkout_id', String(order.checkout_id));
+  }
+
+  // Mark any abandoned checkout as recovered
+  if (order.email) {
+    await markCheckoutRecovered(store.id, order.email, String(order.id));
   }
   
   // ======================================
@@ -359,6 +394,93 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     // Não falhar o webhook por causa do tracking
   }
 
+  // ======================================
+  // CDP: Criar eventos na contact_events
+  // ======================================
+  try {
+    // Evento placed_order
+    await createEvent({
+      organization_id: store.organization_id,
+      contact_id: contact.id,
+      store_id: store.id,
+      event_type: WORDER_SHOPIFY_EVENTS.PLACED_ORDER,
+      event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+      properties: {
+        order_id: String(order.id),
+        order_number: String(order.order_number),
+        total_price: orderValue,
+        subtotal_price: parseFloat(order.subtotal_price || '0'),
+        total_tax: parseFloat(order.total_tax || '0'),
+        total_discounts: parseFloat(order.total_discounts || '0'),
+        currency: order.currency,
+        financial_status: order.financial_status,
+        fulfillment_status: order.fulfillment_status,
+        discount_codes: order.discount_codes || [],
+        item_count: order.line_items?.length || 0,
+        items: (order.line_items || []).map((item: any) => ({
+          product_id: item.product_id ? String(item.product_id) : undefined,
+          title: item.title || item.name,
+          quantity: item.quantity || 1,
+          price: parseFloat(item.price || '0'),
+          sku: item.sku,
+          variant_title: item.variant_title,
+        })),
+        shipping_address: order.shipping_address ? {
+          city: order.shipping_address.city,
+          province: order.shipping_address.province,
+          country: order.shipping_address.country,
+          zip: order.shipping_address.zip,
+        } : undefined,
+        tags: order.tags ? (typeof order.tags === 'string' ? order.tags.split(',').map((t: string) => t.trim()) : order.tags) : [],
+        note: order.note,
+      },
+      monetary_value: orderValue,
+      currency: order.currency || 'BRL',
+      shopify_resource_id: String(order.id),
+      shopify_resource_type: 'order',
+      occurred_at: order.created_at || new Date().toISOString(),
+      idempotency_key: `placed_order:${order.id}`,
+    });
+
+    // Evento ordered_product per line item
+    for (const item of (order.line_items || [])) {
+      await createEvent({
+        organization_id: store.organization_id,
+        contact_id: contact.id,
+        store_id: store.id,
+        event_type: WORDER_SHOPIFY_EVENTS.ORDERED_PRODUCT,
+        event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+        properties: {
+          order_id: String(order.id),
+          order_number: String(order.order_number),
+          product_id: item.product_id ? String(item.product_id) : undefined,
+          variant_id: item.variant_id ? String(item.variant_id) : undefined,
+          title: item.title || item.name,
+          quantity: item.quantity || 1,
+          price: parseFloat(item.price || '0'),
+          sku: item.sku,
+          variant_title: item.variant_title,
+          currency: order.currency,
+        },
+        monetary_value: parseFloat(item.price || '0') * (item.quantity || 1),
+        currency: order.currency || 'BRL',
+        shopify_resource_id: String(order.id),
+        shopify_resource_type: 'order',
+        occurred_at: order.created_at || new Date().toISOString(),
+        idempotency_key: `ordered_product:${order.id}:${item.id || item.product_id}`,
+      });
+    }
+  } catch (cdpError) {
+    console.error('[Shopify Webhook] CDP event creation failed:', cdpError);
+  }
+
+  // CDP: Enrich contact profile after order
+  try {
+    await enrichContactAfterOrder(contact.id, store.id);
+  } catch (enrichError) {
+    console.error('[Shopify Webhook] Profile enrichment failed:', enrichError);
+  }
+
   // Emitir evento para automações
   await EventBus.emit(EventType.ORDER_CREATED, {
     organization_id: store.organization_id,
@@ -375,15 +497,15 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     },
     source: 'shopify',
   });
-  
+
   // Criar notificação
   await supabase.from('notifications').insert({
     organization_id: store.organization_id,
     type: 'order',
     title: 'Novo pedido do Shopify',
     message: `Pedido #${order.order_number} de ${order.email} - R$ ${orderValue.toFixed(2)}`,
-    data: { 
-      order_id: order.id, 
+    data: {
+      order_id: order.id,
       order_number: order.order_number,
       contact_id: contact.id,
       value: orderValue,
@@ -459,6 +581,32 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
       // Mover deal para estágio "pago" ou marcar como ganho
       await moveDealToStage(contact.id, store, 'paid');
     }
+  }
+
+  // CDP: Evento checkout_completed (order paid = checkout completed)
+  try {
+    await createEvent({
+      organization_id: store.organization_id,
+      contact_id: contact?.id,
+      store_id: store.id,
+      event_type: WORDER_SHOPIFY_EVENTS.CHECKOUT_COMPLETED,
+      event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+      properties: {
+        order_id: String(order.id),
+        order_number: String(order.order_number),
+        total_price: parseFloat(order.total_price || '0'),
+        currency: order.currency,
+        financial_status: 'paid',
+      },
+      monetary_value: parseFloat(order.total_price || '0'),
+      currency: order.currency || 'BRL',
+      shopify_resource_id: String(order.id),
+      shopify_resource_type: 'order',
+      occurred_at: new Date().toISOString(),
+      idempotency_key: `checkout_completed:${order.id}`,
+    });
+  } catch (cdpError) {
+    console.error('[Shopify Webhook] CDP event creation failed (order_paid):', cdpError);
   }
 
   // Emitir evento
@@ -547,6 +695,34 @@ async function processOrderFulfilled(store: ShopifyStoreConfig, order: any) {
     }
   }
 
+  // CDP: fulfilled_order event
+  try {
+    await createEvent({
+      organization_id: store.organization_id,
+      contact_id: contact?.id,
+      store_id: store.id,
+      event_type: WORDER_SHOPIFY_EVENTS.FULFILLED_ORDER,
+      event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+      properties: {
+        order_id: String(order.id),
+        order_number: String(order.order_number),
+        total_price: parseFloat(order.total_price || '0'),
+        currency: order.currency,
+        tracking_number: order.fulfillments?.[0]?.tracking_number || null,
+        tracking_url: order.fulfillments?.[0]?.tracking_url || null,
+        tracking_company: order.fulfillments?.[0]?.tracking_company || null,
+      },
+      monetary_value: parseFloat(order.total_price || '0'),
+      currency: order.currency || 'BRL',
+      shopify_resource_id: String(order.id),
+      shopify_resource_type: 'order',
+      occurred_at: new Date().toISOString(),
+      idempotency_key: `fulfilled_order:${order.id}`,
+    });
+  } catch (cdpError) {
+    console.error('[Shopify Webhook] CDP event creation failed (fulfilled):', cdpError);
+  }
+
   // Emitir evento
   await EventBus.emit(EventType.ORDER_FULFILLED, {
     organization_id: store.organization_id,
@@ -610,14 +786,40 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
     }
   }
 
+  // CDP: cancelled_order event
+  try {
+    await createEvent({
+      organization_id: store.organization_id,
+      contact_id: contact?.id,
+      store_id: store.id,
+      event_type: WORDER_SHOPIFY_EVENTS.CANCELLED_ORDER,
+      event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+      properties: {
+        order_id: String(order.id),
+        order_number: String(order.order_number),
+        total_price: parseFloat(order.total_price || '0'),
+        currency: order.currency,
+        cancel_reason: order.cancel_reason || null,
+      },
+      monetary_value: parseFloat(order.total_price || '0'),
+      currency: order.currency || 'BRL',
+      shopify_resource_id: String(order.id),
+      shopify_resource_type: 'order',
+      occurred_at: new Date().toISOString(),
+      idempotency_key: `cancelled_order:${order.id}`,
+    });
+  } catch (cdpError) {
+    console.error('[Shopify Webhook] CDP event creation failed (cancelled):', cdpError);
+  }
+
   // Emitir evento
   await EventBus.emit(EventType.ORDER_CANCELLED, {
     organization_id: store.organization_id,
     contact_id: contact?.id,
     order_id: order.id?.toString(),
     email: order.email,
-    data: { 
-      order_number: order.order_number, 
+    data: {
+      order_number: order.order_number,
       cancel_reason: order.cancel_reason,
     },
     source: 'shopify',
@@ -655,6 +857,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
   });
 
   // Se tem email, criar/atualizar contato
+  let contactId: string | null = null;
   if (checkout.email) {
     const customerData: ShopifyCustomer = {
       id: 0,
@@ -669,9 +872,234 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       created_at: checkout.created_at,
       updated_at: checkout.created_at,
     };
-    
-    await syncContactFromShopify(customerData, store, 'checkout');
+
+    const contact = await syncContactFromShopify(customerData, store, 'checkout');
+    contactId = contact?.id || null;
   }
+
+  // CDP: checkout_started event
+  try {
+    const checkoutValue = parseFloat(checkout.total_price || '0');
+    await createEvent({
+      organization_id: store.organization_id,
+      contact_id: contactId,
+      store_id: store.id,
+      event_type: WORDER_SHOPIFY_EVENTS.CHECKOUT_STARTED,
+      event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+      properties: {
+        checkout_id: String(checkout.id || checkout.token),
+        checkout_url: checkout.abandoned_checkout_url || null,
+        total_price: checkoutValue,
+        subtotal_price: parseFloat(checkout.subtotal_price || '0'),
+        currency: checkout.currency,
+        item_count: checkout.line_items?.length || 0,
+        items: (checkout.line_items || []).map((item: any) => ({
+          product_id: item.product_id ? String(item.product_id) : undefined,
+          title: item.title || item.name,
+          quantity: item.quantity || 1,
+          price: parseFloat(item.price || '0'),
+          sku: item.sku,
+          variant_title: item.variant_title,
+        })),
+      },
+      monetary_value: checkoutValue,
+      currency: checkout.currency || 'BRL',
+      shopify_resource_id: String(checkout.id || checkout.token),
+      shopify_resource_type: 'checkout',
+      occurred_at: checkout.created_at || new Date().toISOString(),
+      idempotency_key: `checkout_started:${checkout.id || checkout.token}`,
+    });
+  } catch (cdpError) {
+    console.error('[Shopify Webhook] CDP event creation failed (checkout):', cdpError);
+  }
+}
+
+// ============================================
+// NOVOS HANDLERS (Phase 2)
+// ============================================
+
+async function processRefundCreated(store: ShopifyStoreConfig, refund: any) {
+  console.log(`[Shopify] Processing refund created for order: ${refund.order_id}`);
+
+  const supabase = getSupabase();
+
+  // Find contact by order
+  const { data: orderRecord } = await supabase
+    .from('shopify_orders')
+    .select('contact_id')
+    .eq('store_id', store.id)
+    .eq('shopify_order_id', String(refund.order_id))
+    .maybeSingle();
+
+  const contactId = orderRecord?.contact_id || null;
+
+  // Calculate refund total
+  const refundAmount = refund.transactions?.reduce(
+    (sum: number, t: any) => sum + parseFloat(t.amount || '0'),
+    0
+  ) || 0;
+
+  // CDP event
+  try {
+    await createEvent({
+      organization_id: store.organization_id,
+      contact_id: contactId,
+      store_id: store.id,
+      event_type: WORDER_SHOPIFY_EVENTS.REFUNDED_ORDER,
+      event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+      properties: {
+        order_id: String(refund.order_id),
+        refund_id: String(refund.id),
+        refund_amount: refundAmount,
+        currency: refund.currency || 'BRL',
+        refunded_items: (refund.refund_line_items || []).map((rli: any) => ({
+          title: rli.line_item?.title || rli.line_item?.name,
+          quantity: rli.quantity,
+        })),
+      },
+      monetary_value: refundAmount,
+      currency: refund.currency || 'BRL',
+      shopify_resource_id: String(refund.id),
+      shopify_resource_type: 'refund',
+      occurred_at: refund.created_at || new Date().toISOString(),
+      idempotency_key: `refunded_order:${refund.id}`,
+    });
+  } catch (cdpError) {
+    console.error('[Shopify Webhook] CDP event creation failed (refund):', cdpError);
+  }
+}
+
+async function processFulfillmentEvent(store: ShopifyStoreConfig, fulfillment: any) {
+  console.log(`[Shopify] Processing fulfillment: ${fulfillment.id} (status: ${fulfillment.status})`);
+
+  const supabase = getSupabase();
+
+  const { data: orderRecord } = await supabase
+    .from('shopify_orders')
+    .select('contact_id')
+    .eq('store_id', store.id)
+    .eq('shopify_order_id', String(fulfillment.order_id))
+    .maybeSingle();
+
+  const contactId = orderRecord?.contact_id || null;
+
+  const eventType = fulfillment.status === 'delivered'
+    ? WORDER_SHOPIFY_EVENTS.SHIPMENT_DELIVERED
+    : WORDER_SHOPIFY_EVENTS.SHIPMENT_CONFIRMED;
+
+  try {
+    await createEvent({
+      organization_id: store.organization_id,
+      contact_id: contactId,
+      store_id: store.id,
+      event_type: eventType,
+      event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+      properties: {
+        order_id: String(fulfillment.order_id),
+        fulfillment_id: String(fulfillment.id),
+        status: fulfillment.status,
+        tracking_number: fulfillment.tracking_number || null,
+        tracking_url: fulfillment.tracking_url || null,
+        tracking_company: fulfillment.tracking_company || null,
+      },
+      shopify_resource_id: String(fulfillment.id),
+      shopify_resource_type: 'fulfillment',
+      occurred_at: fulfillment.created_at || new Date().toISOString(),
+      idempotency_key: `${eventType}:${fulfillment.id}:${fulfillment.status}`,
+    });
+  } catch (cdpError) {
+    console.error('[Shopify Webhook] CDP event creation failed (fulfillment):', cdpError);
+  }
+}
+
+async function processMarketingConsentUpdate(store: ShopifyStoreConfig, customer: any) {
+  console.log(`[Shopify] Processing marketing consent update: ${customer.email}`);
+
+  const supabase = getSupabase();
+
+  const emailConsent = customer.email_marketing_consent;
+  if (!emailConsent) return;
+
+  const isSubscribed = emailConsent.state === 'subscribed';
+
+  // Update contact consent fields
+  if (customer.email) {
+    await supabase
+      .from('contacts')
+      .update({
+        email_consent: isSubscribed,
+        email_consent_at: emailConsent.consent_updated_at || new Date().toISOString(),
+        email_consent_source: emailConsent.opt_in_level || 'shopify',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('organization_id', store.organization_id)
+      .ilike('email', customer.email);
+  }
+
+  // CDP event
+  if (isSubscribed) {
+    const { data: contact } = await supabase
+      .from('contacts')
+      .select('id')
+      .eq('organization_id', store.organization_id)
+      .ilike('email', customer.email || '')
+      .maybeSingle();
+
+    try {
+      await createEvent({
+        organization_id: store.organization_id,
+        contact_id: contact?.id || null,
+        store_id: store.id,
+        event_type: WORDER_SHOPIFY_EVENTS.SUBSCRIBED_EMAIL,
+        event_source: EVENT_SOURCES.SHOPIFY_WEBHOOK,
+        properties: {
+          email: customer.email,
+          consent_state: emailConsent.state,
+          opt_in_level: emailConsent.opt_in_level,
+        },
+        shopify_resource_id: String(customer.id),
+        shopify_resource_type: 'customer',
+        occurred_at: emailConsent.consent_updated_at || new Date().toISOString(),
+        idempotency_key: `subscribed_email:${customer.id}:${emailConsent.consent_updated_at}`,
+      });
+    } catch (cdpError) {
+      console.error('[Shopify Webhook] CDP event creation failed (consent):', cdpError);
+    }
+  }
+}
+
+async function processProductEvent(store: ShopifyStoreConfig, product: any, topic: string) {
+  console.log(`[Shopify] Processing product event: ${topic} - ${product.title}`);
+
+  const supabase = getSupabase();
+
+  if (topic === 'products/delete') {
+    await supabase
+      .from('shopify_products')
+      .update({ status: 'archived', updated_at: new Date().toISOString() })
+      .eq('store_id', store.id)
+      .eq('shopify_product_id', String(product.id));
+    return;
+  }
+
+  // Upsert product
+  await supabase.from('shopify_products').upsert({
+    store_id: store.id,
+    organization_id: store.organization_id,
+    shopify_product_id: String(product.id),
+    title: product.title,
+    handle: product.handle,
+    vendor: product.vendor,
+    product_type: product.product_type,
+    tags: product.tags,
+    status: product.status || 'active',
+    variants: product.variants,
+    images: product.images,
+    price: product.variants?.[0]?.price ? parseFloat(product.variants[0].price) : null,
+    updated_at: new Date().toISOString(),
+  }, {
+    onConflict: 'store_id,shopify_product_id',
+  });
 }
 
 // ============================================
@@ -724,22 +1152,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 5. Verificar idempotência (evitar processar duplicado)
+    // 5. Verificar idempotência via shopify_webhook_log
     if (webhookId) {
       const supabase = getSupabase();
+
+      // Check new webhook_log table first
+      const { data: logEntry } = await supabase
+        .from('shopify_webhook_log')
+        .select('id, status')
+        .eq('webhook_id', webhookId)
+        .maybeSingle();
+
+      if (logEntry) {
+        console.log(`[Shopify Webhook] Duplicate webhook ignored: ${webhookId} (status: ${logEntry.status})`);
+        return NextResponse.json({ success: true, message: 'Duplicate webhook' });
+      }
+
+      // Register in webhook_log (ignore unique constraint errors from race conditions)
+      const { error: logInsertError } = await supabase.from('shopify_webhook_log').insert({
+        store_id: store.id,
+        organization_id: store.organization_id,
+        webhook_id: webhookId,
+        topic,
+        shop_domain: shopDomain,
+        shopify_resource_id: body.id ? String(body.id) : null,
+        status: 'processing',
+        attempts: 1,
+        received_at: new Date().toISOString(),
+      });
+      if (logInsertError && logInsertError.code === '23505') {
+        // Unique constraint violation — duplicate webhook, already handled above
+        console.log(`[Shopify Webhook] Duplicate webhook_log insert ignored: ${webhookId}`);
+        return NextResponse.json({ success: true, message: 'Duplicate webhook' });
+      }
+
+      // Also keep legacy shopify_webhook_events for backwards compat
       const { data: existing } = await supabase
         .from('shopify_webhook_events')
         .select('id')
         .eq('store_id', store.id)
         .eq('shopify_event_id', webhookId)
         .maybeSingle();
-      
+
       if (existing) {
-        console.log(`[Shopify Webhook] Duplicate event ignored: ${webhookId}`);
+        console.log(`[Shopify Webhook] Duplicate event ignored (legacy): ${webhookId}`);
         return NextResponse.json({ success: true, message: 'Duplicate event' });
       }
-      
-      // Registrar evento
+
       await supabase.from('shopify_webhook_events').insert({
         store_id: store.id,
         organization_id: store.organization_id,
@@ -780,19 +1239,44 @@ export async function POST(request: NextRequest) {
           await processCheckout(store, body);
           break;
           
-        case 'app/uninstalled':
-          // Marcar loja como desconectada
+        case 'refunds/create':
+          await processRefundCreated(store, body);
+          break;
+
+        case 'fulfillments/create':
+        case 'fulfillments/update':
+          await processFulfillmentEvent(store, body);
+          break;
+
+        case 'customers/delete':
+          console.log(`[Shopify Webhook] Customer deleted: ${body.id}`);
+          break;
+
+        case 'customers/email_marketing_consent/update':
+          await processMarketingConsentUpdate(store, body);
+          break;
+
+        case 'products/create':
+        case 'products/update':
+        case 'products/delete':
+          await processProductEvent(store, body, topic);
+          break;
+
+        case 'app/uninstalled': {
           const supabase = getSupabase();
           await supabase
             .from('shopify_stores')
             .update({
               is_active: false,
               connection_status: 'disconnected',
+              uninstalled_at: new Date().toISOString(),
+              status: 'uninstalled',
               updated_at: new Date().toISOString(),
             })
             .eq('id', store.id);
           break;
-          
+        }
+
         default:
           console.log(`[Shopify Webhook] Unhandled topic: ${topic}`);
       }
@@ -800,9 +1284,22 @@ export async function POST(request: NextRequest) {
       // Marcar evento como processado
       if (webhookId) {
         const supabase = getSupabase();
+        const processingTime = Date.now() - startTime;
+
+        // Update webhook_log
+        await supabase
+          .from('shopify_webhook_log')
+          .update({
+            status: 'processed',
+            processing_time_ms: processingTime,
+            processed_at: new Date().toISOString(),
+          })
+          .eq('webhook_id', webhookId);
+
+        // Update legacy table
         await supabase
           .from('shopify_webhook_events')
-          .update({ 
+          .update({
             status: 'processed',
             processed_at: new Date().toISOString(),
           })
@@ -816,9 +1313,23 @@ export async function POST(request: NextRequest) {
       // Marcar evento como falho
       if (webhookId) {
         const supabase = getSupabase();
+        const processingTime = Date.now() - startTime;
+
+        // Update webhook_log
+        await supabase
+          .from('shopify_webhook_log')
+          .update({
+            status: 'failed',
+            error_message: processingError.message,
+            processing_time_ms: processingTime,
+            processed_at: new Date().toISOString(),
+          })
+          .eq('webhook_id', webhookId);
+
+        // Update legacy table
         await supabase
           .from('shopify_webhook_events')
-          .update({ 
+          .update({
             status: 'failed',
             error_message: processingError.message,
             processed_at: new Date().toISOString(),
