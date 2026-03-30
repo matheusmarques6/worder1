@@ -90,33 +90,151 @@ export interface BlockDef {
   defaultProps: Record<string, any>
 }
 
+// ═══════════════════════════════════════════
+// Best practices email design spacing:
+// - Content width: 600px
+// - Text: 24-32px lateral padding for readability (max 65-75 chars/line)
+// - Images: 600px full width, 0 padding for hero, 24px lateral for inline
+// - Buttons: min 44px height (touch target), 16-20px vertical breathing room
+// - Divider: 20-24px vertical for visual separation
+// - Spacer: 24-40px default (breathing room between sections)
+// - Social: 24px vertical for footer-like spacing
+// - Products: 20px padding, 12px gap between cards
+// - Header: 16-20px vertical, centered
+// - Footer: 24-32px padding, smaller text (11-12px)
+// ═══════════════════════════════════════════
+
 export const BLOCK_DEFS: BlockDef[] = [
+  // ── Texto: 24px lateral para legibilidade, 10px vertical ──
   { type: 'text', label: 'Texto', icon: 'Type', category: 'Conteúdo',
-    defaultProps: { contentHtml: '<p>Escreva seu texto aqui.</p>', fontSize: 15, color: '#374151', lineHeight: 1.6, align: 'left', padding: { top: 12, right: 0, bottom: 12, left: 0 }, backgroundColor: '' } },
+    defaultProps: {
+      contentHtml: '<p>Escreva seu texto aqui.</p>',
+      fontSize: 16, color: '#374151', lineHeight: 1.6, align: 'left',
+      padding: { top: 10, right: 24, bottom: 10, left: 24 },
+      backgroundColor: '',
+    } },
+
+  // ── Imagem: 600px full width, 0 padding (hero style) ──
   { type: 'image', label: 'Imagem', icon: 'Image', category: 'Conteúdo',
-    defaultProps: { src: 'https://placehold.co/560x280/F3F4F6/9CA3AF?text=Sua+Imagem', alt: '', href: '', width: 560, align: 'center', borderRadius: 0, padding: { top: 0, right: 0, bottom: 0, left: 0 }, backgroundColor: '' } },
+    defaultProps: {
+      src: 'https://placehold.co/600x300/F3F4F6/9CA3AF?text=Sua+Imagem+Aqui',
+      alt: '', href: '', width: 600, align: 'center', borderRadius: 0,
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      backgroundColor: '',
+    } },
+
+  // ── Botão: 44px+ touch target, 16px vertical, 24px lateral, 48px interno ──
   { type: 'button', label: 'Botão', icon: 'MousePointerClick', category: 'Conteúdo',
-    defaultProps: { text: 'Clique Aqui', href: '#', bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 28, paddingV: 13, align: 'center', fullWidth: false, padding: { top: 12, right: 0, bottom: 12, left: 0 }, backgroundColor: '' } },
+    defaultProps: {
+      text: 'Clique Aqui', href: '#',
+      bgColor: '#F97316', textColor: '#FFFFFF',
+      fontSize: 16, fontWeight: 'bold', borderRadius: 8,
+      paddingH: 32, paddingV: 14,
+      align: 'center', fullWidth: false,
+      padding: { top: 16, right: 24, bottom: 16, left: 24 },
+      backgroundColor: '',
+    } },
+
+  // ── Divisor: 20px vertical para separação visual clara ──
   { type: 'divider', label: 'Divisor', icon: 'Minus', category: 'Conteúdo',
-    defaultProps: { color: '#E5E7EB', thickness: 1, style: 'solid', padding: { top: 12, right: 0, bottom: 12, left: 0 } } },
+    defaultProps: {
+      color: '#E5E7EB', thickness: 1, style: 'solid',
+      padding: { top: 20, right: 24, bottom: 20, left: 24 },
+    } },
+
+  // ── Espaço: 32px default (entre seções de conteúdo) ──
   { type: 'spacer', label: 'Espaço', icon: 'MoveVertical', category: 'Conteúdo',
     defaultProps: { height: 32 } },
+
+  // ── Redes Sociais: 24px vertical, centralizado ──
   { type: 'social', label: 'Redes Sociais', icon: 'Share2', category: 'Conteúdo',
-    defaultProps: { networks: [{ type: 'instagram', url: '#', enabled: true }, { type: 'facebook', url: '#', enabled: true }, { type: 'tiktok', url: '', enabled: false }, { type: 'youtube', url: '', enabled: false }], iconSize: 32, spacing: 10, align: 'center', padding: { top: 16, right: 0, bottom: 16, left: 0 } } },
+    defaultProps: {
+      networks: [
+        { type: 'instagram', url: '#', enabled: true },
+        { type: 'facebook', url: '#', enabled: true },
+        { type: 'tiktok', url: '', enabled: false },
+        { type: 'youtube', url: '', enabled: false },
+      ],
+      iconSize: 32, spacing: 12, align: 'center',
+      padding: { top: 24, right: 24, bottom: 24, left: 24 },
+    } },
+
+  // ── Vídeo: 600px placeholder, 0 padding (hero style) ──
   { type: 'video', label: 'Vídeo', icon: 'Play', category: 'Conteúdo',
-    defaultProps: { videoUrl: '', thumbnailUrl: 'https://placehold.co/560x315/111827/FFFFFF?text=Video', padding: { top: 8, right: 0, bottom: 8, left: 0 } } },
+    defaultProps: {
+      videoUrl: '',
+      thumbnailUrl: 'https://placehold.co/600x338/111827/FFFFFF?text=Video',
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+    } },
+
+  // ── HTML: 16px padding padrão ──
   { type: 'html', label: 'HTML', icon: 'Code', category: 'Conteúdo',
-    defaultProps: { code: '<div style="padding:16px;text-align:center;"><p>HTML customizado</p></div>', padding: { top: 8, right: 0, bottom: 8, left: 0 } } },
+    defaultProps: {
+      code: '<div style="padding:16px;text-align:center;"><p>HTML customizado</p></div>',
+      padding: { top: 8, right: 24, bottom: 8, left: 24 },
+    } },
+
+  // ── Produtos: 20px padding, 12px gap, cards com border ──
   { type: 'product-grid', label: 'Produtos', icon: 'ShoppingBag', category: 'E-commerce',
-    defaultProps: { mode: 'dynamic', feedType: 'bestsellers', title: 'Recomendados', columns: 2, rows: 2, maxImageHeight: 200, showName: true, showPrice: true, showComparePrice: true, showButton: true, buttonText: 'Comprar', buttonColor: '#F97316', buttonTextColor: '#FFFFFF', buttonRadius: 6, nameFontSize: 14, nameColor: '#111827', nameWeight: '600', priceFontSize: 16, priceColor: '#F97316', priceWeight: '700', comparePriceColor: '#9CA3AF', productPadding: 8, productBorderColor: '#E5E7EB', productBorderRadius: 8, stackOnMobile: true, padding: { top: 16, right: 0, bottom: 16, left: 0 }, backgroundColor: '' } },
+    defaultProps: {
+      mode: 'dynamic', feedType: 'bestsellers',
+      title: 'Recomendados Para Você',
+      columns: 2, rows: 2, maxImageHeight: 240,
+      showName: true, showPrice: true, showComparePrice: true,
+      showButton: true, buttonText: 'Comprar',
+      buttonColor: '#F97316', buttonTextColor: '#FFFFFF', buttonRadius: 6,
+      nameFontSize: 14, nameColor: '#111827', nameWeight: '600',
+      priceFontSize: 16, priceColor: '#F97316', priceWeight: '700',
+      comparePriceColor: '#9CA3AF',
+      productPadding: 12, productBorderColor: '#E5E7EB', productBorderRadius: 8,
+      stackOnMobile: true,
+      padding: { top: 20, right: 20, bottom: 20, left: 20 },
+      backgroundColor: '',
+    } },
+
+  // ── Carrinho Abandonado: 20px padding, fundo amarelo suave ──
   { type: 'abandoned-cart', label: 'Carrinho', icon: 'ShoppingCart', category: 'E-commerce',
-    defaultProps: { title: 'Você esqueceu algo!', subtitle: 'Seus itens estão esperando', buttonText: 'Finalizar Compra', buttonColor: '#F97316', buttonTextColor: '#FFFFFF', maxItems: 3, showImage: true, showPrice: true, showQuantity: true, padding: { top: 16, right: 0, bottom: 16, left: 0 }, backgroundColor: '#FFFBEB' } },
+    defaultProps: {
+      title: 'Você esqueceu algo!', subtitle: 'Seus itens estão esperando',
+      buttonText: 'Finalizar Compra',
+      buttonColor: '#F97316', buttonTextColor: '#FFFFFF',
+      maxItems: 3, showImage: true, showPrice: true, showQuantity: true,
+      padding: { top: 20, right: 24, bottom: 20, left: 24 },
+      backgroundColor: '#FFFBEB',
+    } },
+
+  // ── Cupom: 32px padding, fundo laranja suave, código grande ──
   { type: 'coupon', label: 'Cupom', icon: 'Tag', category: 'E-commerce',
-    defaultProps: { headerText: 'Seu desconto especial:', code: '{{coupon_code}}', footerText: 'Válido até {{coupon_expiry}}', codeFontSize: 32, codeColor: '#EA580C', borderStyle: 'dashed', borderColor: '#EA580C', borderRadius: 12, padding: { top: 24, right: 0, bottom: 24, left: 0 }, backgroundColor: '#FFF7ED' } },
+    defaultProps: {
+      headerText: 'Seu desconto especial:',
+      code: '{{coupon_code}}',
+      footerText: 'Válido até {{coupon_expiry}}',
+      codeFontSize: 32, codeColor: '#EA580C',
+      borderStyle: 'dashed', borderColor: '#EA580C', borderRadius: 12,
+      padding: { top: 32, right: 24, bottom: 32, left: 24 },
+      backgroundColor: '#FFF7ED',
+    } },
+
+  // ── Cabeçalho: 16px vertical, 24px lateral, logo centralizado ──
   { type: 'header', label: 'Cabeçalho', icon: 'PanelTop', category: 'Estrutura',
-    defaultProps: { logoSrc: 'https://placehold.co/160x45/FFFFFF/F97316?text=LOGO', logoWidth: 160, logoHref: '{{store_url}}', showLinks: false, links: [{ text: 'Loja', url: '{{store_url}}' }], padding: { top: 20, right: 24, bottom: 20, left: 24 }, backgroundColor: '#FFFFFF' } },
+    defaultProps: {
+      logoSrc: 'https://placehold.co/160x45/FFFFFF/F97316?text=LOGO',
+      logoWidth: 160, logoHref: '{{store_url}}',
+      showLinks: false,
+      links: [{ text: 'Loja', url: '{{store_url}}' }],
+      padding: { top: 16, right: 24, bottom: 16, left: 24 },
+      backgroundColor: '#FFFFFF',
+    } },
+
+  // ── Rodapé: 32px vertical, 24px lateral, texto pequeno, fundo cinza ──
   { type: 'footer', label: 'Rodapé', icon: 'PanelBottom', category: 'Estrutura',
-    defaultProps: { companyName: '{{store_name}}', address: '', showUnsubscribe: true, showPreferences: false, showViewInBrowser: true, textColor: '#9CA3AF', fontSize: 11, padding: { top: 24, right: 24, bottom: 24, left: 24 }, backgroundColor: '#F9FAFB' } },
+    defaultProps: {
+      companyName: '{{store_name}}', address: '',
+      showUnsubscribe: true, showPreferences: false, showViewInBrowser: true,
+      textColor: '#9CA3AF', fontSize: 11,
+      padding: { top: 32, right: 24, bottom: 32, left: 24 },
+      backgroundColor: '#F9FAFB',
+    } },
 ]
 
 // ── Helpers ──
