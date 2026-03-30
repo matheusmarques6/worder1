@@ -571,13 +571,17 @@ function SettingsContent() {
         // E-commerce section
         {
           id: 'shopify',
-          name: 'Shopify',
+          name: currentStore ? `Shopify — ${currentStore.name}` : 'Shopify',
           description: 'Sincronize pedidos, clientes e produtos',
           icon: ShopifyIcon,
           connected: status.shopify?.connected || stores.length > 0,
           status: (status.shopify?.connected || stores.length > 0) ? 'healthy' : 'disconnected',
-          lastSync: status.shopify?.lastSync || (stores.length > 0 ? 'Agora' : undefined),
-          stats: status.shopify?.stats || (stores.length > 0 ? { Orders: '0', Customers: '-', Products: '-' } : undefined),
+          lastSync: status.shopify?.lastSync || currentStore?.lastSyncAt || undefined,
+          stats: status.shopify?.stats || (stores.length > 0 ? {
+            Orders: String(currentStore?.totalOrders || 0),
+            Customers: String(currentStore?.totalRevenue ? Math.round(currentStore.totalRevenue) : '-'),
+            Products: '-',
+          } : undefined),
           category: 'ecommerce',
         },
         // Email Marketing section

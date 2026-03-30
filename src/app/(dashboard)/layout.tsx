@@ -336,16 +336,17 @@ export default function DashboardLayout({
             domain: s.shop_domain,
             email: s.shop_email,
             currency: s.currency,
-            isActive: s.is_active,
+            isActive: s.is_active !== false,
             totalOrders: s.total_orders || 0,
             totalRevenue: s.total_revenue || 0,
             lastSyncAt: s.last_sync_at,
           }))
           setStores(formattedStores)
-          if (currentStore) {
-            const storeStillExists = formattedStores.some((s: any) => s.id === currentStore.id)
-            if (!storeStillExists) setCurrentStore(formattedStores[0])
-          } else if (formattedStores.length > 0) {
+
+          // Check if current store still exists in the list
+          const currentExists = currentStore && formattedStores.some((s: any) => s.id === currentStore.id)
+          if (!currentExists) {
+            // Select the first (most recently installed) store
             setCurrentStore(formattedStores[0])
           }
         }
