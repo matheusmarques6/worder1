@@ -528,8 +528,6 @@ export const PRODUCTS_QUERY = `
             compareAtPrice
             inventoryQuantity
             barcode
-            weight
-            weightUnit
             selectedOptions {
               name
               value
