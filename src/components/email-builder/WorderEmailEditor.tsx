@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus } from 'lucide-react'
+import { useState, useCallback, useEffect } from 'react'
+import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye } from 'lucide-react'
 import { BlockPalette } from './panels/BlockPalette'
 import { BlockPreview } from './blocks/BlockPreview'
 import { BlockProperties } from './panels/BlockProperties'
-import { BLOCK_DEFS, type EmailBlock, type EmailDocument } from './config/types'
+import { BLOCK_DEFS, createBlock, DEFAULT_DOCUMENT, type EmailBlock, type EmailDocument } from './config/types'
+import { renderDocumentToHtml } from '@/lib/email/render-html'
 
 interface WorderEmailEditorProps {
   templateName: string
@@ -14,114 +15,31 @@ interface WorderEmailEditorProps {
   onBack: () => void
 }
 
-function createId() {
-  return 'b_' + Math.random().toString(36).substring(2, 9)
-}
-
-function createBlock(type: string): EmailBlock {
-  const def = BLOCK_DEFS.find(d => d.type === type)
-  return {
-    id: createId(),
-    type: type as EmailBlock['type'],
-    props: { ...(def?.defaultProps || {}) },
-  }
-}
-
-const DEFAULT_DOC: EmailDocument = {
-  settings: { backgroundColor: '#f3f4f6', contentWidth: 600, fontFamily: "'DM Sans', Arial, sans-serif" },
-  blocks: [],
-}
-
-function docToHtml(doc: EmailDocument): string {
-  const w = doc.settings.contentWidth || 600
-  const font = doc.settings.fontFamily || "'DM Sans', Arial, sans-serif"
-
-  const blocksHtml = doc.blocks.map(b => {
-    const p = b.props
-    const pad = (p.padding ?? 20) + 'px'
-    switch (b.type) {
-      case 'text':
-        return `<tr><td style="padding:${pad};color:${p.color || '#374151'};font-size:${p.fontSize || 15}px;text-align:${p.align || 'left'};font-family:${font};line-height:1.6;">${p.content || ''}</td></tr>`
-      case 'image':
-        const img = `<img src="${p.src}" alt="${p.alt || ''}" width="${p.width || w}" style="max-width:100%;height:auto;display:block;margin:0 auto;border-radius:4px;" />`
-        const imgContent = p.href ? `<a href="${p.href}" target="_blank">${img}</a>` : img
-        return `<tr><td style="padding:${pad};text-align:center;">${imgContent}</td></tr>`
-      case 'button':
-        return `<tr><td style="padding:${pad};text-align:center;"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;${p.fullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.bgColor || '#F97316'};border-radius:${p.borderRadius || 8}px;padding:12px 28px;text-align:center;"><a href="${p.href || '#'}" style="color:${p.textColor || '#fff'};font-size:${p.fontSize || 15}px;font-weight:bold;text-decoration:none;display:block;font-family:${font};">${p.text || 'Clique'}</a></td></tr></table></td></tr>`
-      case 'divider':
-        return `<tr><td style="padding:${pad};"><hr style="border:none;border-top:${p.thickness || 1}px solid ${p.color || '#E5E7EB'};margin:0;" /></td></tr>`
-      case 'spacer':
-        return `<tr><td style="height:${p.height || 32}px;line-height:${p.height || 32}px;font-size:1px;">&nbsp;</td></tr>`
-      case 'columns':
-        return `<tr><td style="padding:${pad};"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td width="50%" style="padding-right:${(p.gap || 16) / 2}px;vertical-align:top;font-family:${font};font-size:14px;color:#374151;">${p.leftContent || ''}</td><td width="50%" style="padding-left:${(p.gap || 16) / 2}px;vertical-align:top;font-family:${font};font-size:14px;color:#374151;">${p.rightContent || ''}</td></tr></table></td></tr>`
-      case 'html':
-        return `<tr><td style="padding:${pad};">${p.code || ''}</td></tr>`
-      case 'social': {
-        const nets = [p.instagram && '📸', p.facebook && '📘', p.tiktok && '🎵', p.youtube && '▶️'].filter(Boolean)
-        return `<tr><td style="padding:${pad};text-align:center;font-size:${p.iconSize || 28}px;">${nets.join('&nbsp;&nbsp;')}</td></tr>`
-      }
-      case 'header':
-        return `<tr><td style="padding:${pad};background-color:${p.bgColor || '#fff'};text-align:center;"><img src="${p.logoSrc}" alt="Logo" width="${p.logoWidth || 160}" style="display:block;margin:0 auto;" /></td></tr>`
-      case 'footer':
-        return `<tr><td style="padding:${pad};background-color:${p.bgColor || '#F9FAFB'};text-align:center;font-size:12px;color:#9CA3AF;font-family:${font};">${p.text || ''}${p.showUnsubscribe ? '<br/><a href="{{unsubscribe_url}}" style="color:#9CA3AF;text-decoration:underline;">Descadastrar-se</a>' : ''}</td></tr>`
-      case 'product-grid':
-        return `<tr><td style="padding:${pad};"><!-- WORDER_PRODUCT_BLOCK:${p.feedType || 'bestsellers'}:${p.maxProducts || 4}:${p.columns || 2}:${p.showPrice}:true:${p.showButton}:${p.buttonText || 'Comprar'} --></td></tr>`
-      case 'coupon':
-        return `<tr><td style="padding:${pad};background-color:${p.bgColor || '#FFF7ED'};text-align:center;font-family:${font};"><p style="margin:0;font-size:14px;color:#9A3412;">${p.header || ''}</p><p style="margin:8px 0;font-size:${p.fontSize || 28}px;font-weight:bold;color:#EA580C;letter-spacing:4px;border:2px dashed ${p.borderColor || '#EA580C'};border-radius:8px;display:inline-block;padding:8px 24px;">${p.code || ''}</p><p style="margin:0;font-size:12px;color:#9CA3AF;">${p.footer || ''}</p></td></tr>`
-      default:
-        return ''
-    }
-  }).join('\n')
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background-color:${doc.settings.backgroundColor};font-family:${font};"><center><table role="presentation" cellspacing="0" cellpadding="0" border="0" width="${w}" style="max-width:${w}px;margin:0 auto;background-color:#ffffff;">${blocksHtml}</table></center></body></html>`
-}
-
 export default function WorderEmailEditor({ templateName, design, onSave, onBack }: WorderEmailEditorProps) {
+  // ── State ──
   const [doc, setDoc] = useState<EmailDocument>(() => {
     if (design && 'blocks' in design && Array.isArray((design as any).blocks)) return design as EmailDocument
-    return { ...DEFAULT_DOC }
+    return JSON.parse(JSON.stringify(DEFAULT_DOCUMENT))
   })
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [history, setHistory] = useState<EmailDocument[]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
-  const [leftTab, setLeftTab] = useState<'blocks' | 'settings'>('blocks')
-  const [brandPrimary, setBrandPrimary] = useState('#F97316')
-  const [brandText, setBrandText] = useState('#374151')
-  const [brandLogo, setBrandLogo] = useState('')
-  const canvasRef = useRef<HTMLDivElement>(null)
+  const [leftTab, setLeftTab] = useState<'content' | 'styles'>('content')
+  const [previewHtml, setPreviewHtml] = useState('')
+  const [showPreview, setShowPreview] = useState(false)
+
+  // Undo/Redo
+  const [history, setHistory] = useState<string[]>([])
+  const [historyIdx, setHistoryIdx] = useState(-1)
 
   const selectedBlock = doc.blocks.find(b => b.id === selectedId) || null
 
-  // Load brand kit
-  useEffect(() => {
-    fetch('/api/email/brand-kit').then(r => r.json()).then(d => {
-      if (d.brandKit) {
-        setBrandPrimary(d.brandKit.colors?.primary || '#F97316')
-        setBrandText(d.brandKit.colors?.text || '#374151')
-        setBrandLogo(d.brandKit.logo_url || '')
-      }
-    }).catch(() => {})
-  }, [])
-
-  const saveBrandKit = async () => {
-    try {
-      await fetch('/api/email/brand-kit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logo_url: brandLogo, colors: { primary: brandPrimary, text: brandText }, fonts: {} }),
-      })
-      alert('✅ Brand Kit salvo!')
-    } catch { alert('Erro') }
-  }
-
-  // Push to history
   const pushHistory = useCallback((newDoc: EmailDocument) => {
-    setHistory(prev => [...prev.slice(0, historyIndex + 1), newDoc].slice(-50))
-    setHistoryIndex(prev => prev + 1)
-  }, [historyIndex])
+    const json = JSON.stringify(newDoc)
+    setHistory(prev => [...prev.slice(0, historyIdx + 1), json].slice(-40))
+    setHistoryIdx(prev => prev + 1)
+  }, [historyIdx])
 
   const updateDoc = useCallback((newDoc: EmailDocument) => {
     setDoc(newDoc)
@@ -129,25 +47,31 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   }, [pushHistory])
 
   const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      setHistoryIndex(prev => prev - 1)
-      setDoc(history[historyIndex - 1])
+    if (historyIdx > 0) {
+      setHistoryIdx(prev => prev - 1)
+      setDoc(JSON.parse(history[historyIdx - 1]))
     }
-  }, [history, historyIndex])
+  }, [history, historyIdx])
 
   const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      setHistoryIndex(prev => prev + 1)
-      setDoc(history[historyIndex + 1])
+    if (historyIdx < history.length - 1) {
+      setHistoryIdx(prev => prev + 1)
+      setDoc(JSON.parse(history[historyIdx + 1]))
     }
-  }, [history, historyIndex])
+  }, [history, historyIdx])
 
-  // Block operations
+  // ── Block Operations ──
   const addBlock = useCallback((type: string) => {
-    const block = createBlock(type)
-    const newDoc = { ...doc, blocks: [...doc.blocks, block] }
-    updateDoc(newDoc)
+    const block = createBlock(type as any)
+    updateDoc({ ...doc, blocks: [...doc.blocks, block] })
     setSelectedId(block.id)
+  }, [doc, updateDoc])
+
+  const addSavedBlock = useCallback((blockJson: any) => {
+    if (!blockJson) return
+    const restored: EmailBlock = { ...blockJson, id: 'b_' + Math.random().toString(36).substring(2, 9) }
+    updateDoc({ ...doc, blocks: [...doc.blocks, restored] })
+    setSelectedId(restored.id)
   }, [doc, updateDoc])
 
   const removeBlock = useCallback((id: string) => {
@@ -158,7 +82,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const cloneBlock = useCallback((id: string) => {
     const idx = doc.blocks.findIndex(b => b.id === id)
     if (idx === -1) return
-    const clone = { ...doc.blocks[idx], id: createId(), props: { ...doc.blocks[idx].props } }
+    const clone: EmailBlock = { ...JSON.parse(JSON.stringify(doc.blocks[idx])), id: 'b_' + Math.random().toString(36).substring(2, 9) }
     const blocks = [...doc.blocks]
     blocks.splice(idx + 1, 0, clone)
     updateDoc({ ...doc, blocks })
@@ -182,124 +106,111 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     }))
   }, [])
 
-  // Drag and drop
+  // ── Drag & Drop ──
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const type = e.dataTransfer.getData('blockType')
     if (type) addBlock(type)
   }, [addBlock])
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'copy'
-  }, [])
-
-  // Save
+  // ── Save ──
   const handleSave = useCallback(async () => {
     setSaving(true)
-    const html = docToHtml(doc)
-    const success = await onSave(doc as any, html)
+    try {
+      const html = renderDocumentToHtml(doc)
+      const success = await onSave(doc as any, html)
+      if (success) { setSaved(true); setTimeout(() => setSaved(false), 2500) }
+    } catch (err: any) { alert('Erro: ' + err.message) }
     setSaving(false)
-    if (success) {
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
-    }
   }, [doc, onSave])
 
-  // Send test
+  // ── Send Test ──
   const handleSendTest = useCallback(async () => {
     const email = prompt('Email para enviar teste:')
     if (!email || !email.includes('@')) return
-    const html = docToHtml(doc)
     try {
+      const html = renderDocumentToHtml(doc)
       const res = await fetch('/api/email/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ html, testEmail: email, subject: templateName }),
       })
       const data = await res.json()
-      if (res.ok) {
-        alert('✅ Email de teste enviado para ' + email)
-      } else {
-        alert('❌ Erro: ' + (data.error || 'Falha no envio'))
-      }
-    } catch (err: any) {
-      alert('❌ Erro de conexão: ' + (err.message || 'Verifique sua internet'))
-    }
+      alert(res.ok ? '✅ Teste enviado para ' + email : '❌ ' + (data.error || 'Erro'))
+    } catch (err: any) { alert('❌ ' + err.message) }
   }, [doc, templateName])
 
-  // Ctrl+S
+  // ── Preview ──
+  const handlePreview = useCallback(() => {
+    setPreviewHtml(renderDocumentToHtml(doc))
+    setShowPreview(true)
+  }, [doc])
+
+  // ── Keyboard shortcuts ──
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault()
-        handleSave()
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
-        e.preventDefault()
-        if (e.shiftKey) redo()
-        else undo()
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSave() }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
+      if (e.key === 'Delete' && selectedId) { removeBlock(selectedId) }
+      if (e.key === 'Escape') { setSelectedId(null); setShowPreview(false) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleSave, undo, redo])
+  }, [handleSave, undo, redo, selectedId, removeBlock])
 
   const canvasWidth = device === 'mobile' ? 375 : doc.settings.contentWidth
 
+  // ── Render ──
   return (
-    <div className="flex flex-col h-screen w-screen bg-gray-100">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 h-[52px] bg-white border-b border-gray-200 flex-shrink-0 z-10">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+    <div className="flex flex-col h-screen w-screen bg-gray-100 overflow-hidden">
+      {/* ── Toolbar ── */}
+      <div className="flex items-center justify-between px-3 h-[52px] bg-white border-b border-gray-200 flex-shrink-0 z-20">
+        <div className="flex items-center gap-2.5">
+          <button onClick={onBack} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
             <ArrowLeft size={18} />
           </button>
           <div className="h-5 w-px bg-gray-200" />
-          <span className="text-sm font-semibold text-gray-900">{templateName}</span>
-          <span className="text-[9px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded font-bold tracking-wider">WORDER</span>
+          <span className="text-sm font-semibold text-gray-900 truncate max-w-[200px]">{templateName}</span>
+          <span className="text-[9px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
         <div className="flex items-center gap-1">
-          <button onClick={undo} className="p-1.5 text-gray-400 hover:text-gray-600 rounded" title="Desfazer (Ctrl+Z)"><Undo2 size={16} /></button>
-          <button onClick={redo} className="p-1.5 text-gray-400 hover:text-gray-600 rounded" title="Refazer (Ctrl+Shift+Z)"><Redo2 size={16} /></button>
-          <div className="w-px h-5 bg-gray-200 mx-1" />
-          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded ${device === 'desktop' ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-gray-600'}`}><Monitor size={16} /></button>
-          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded ${device === 'mobile' ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-gray-600'}`}><Smartphone size={16} /></button>
+          <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Desfazer"><Undo2 size={15} /></button>
+          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Refazer"><Redo2 size={15} /></button>
+          <div className="w-px h-4 bg-gray-200 mx-1" />
+          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded transition-colors ${device === 'desktop' ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-gray-700'}`}><Monitor size={15} /></button>
+          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded transition-colors ${device === 'mobile' ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-gray-700'}`}><Smartphone size={15} /></button>
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={handleSendTest} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50">
-            <Send size={14} /> Enviar Teste
+          <button onClick={handlePreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+            <Eye size={14} /> Preview
           </button>
-          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-500 text-white text-xs font-semibold rounded-lg hover:bg-brand-600 disabled:opacity-50">
+          <button onClick={handleSendTest} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+            <Send size={14} /> Teste
+          </button>
+          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-500 text-white text-xs font-semibold rounded-lg hover:bg-brand-600 disabled:opacity-50 transition-colors">
             {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
             {saving ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar'}
           </button>
         </div>
       </div>
 
-      {/* Main layout */}
+      {/* ── Main Layout ── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar */}
-        <div className="w-[220px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
-          <div className="flex border-b border-gray-200">
-            <button onClick={() => setLeftTab('blocks')} className={`flex-1 py-2.5 text-[11px] font-semibold ${leftTab === 'blocks' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-gray-400'}`}>Blocos</button>
-            <button onClick={() => setLeftTab('settings')} className={`flex-1 py-2.5 text-[11px] font-semibold ${leftTab === 'settings' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-gray-400'}`}>Config</button>
+        {/* ── Left Sidebar ── */}
+        <div className="w-[240px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+          <div className="flex border-b border-gray-200 flex-shrink-0">
+            <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'content' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Content</button>
+            <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Styles</button>
           </div>
-          <div className="flex-1 overflow-y-auto p-3">
-            {leftTab === 'blocks' ? (
-              <BlockPalette onAddBlock={addBlock} onAddSavedBlock={(blockJson) => {
-                if (blockJson) {
-                  const restored = { ...blockJson, id: createId() }
-                  updateDoc({ ...doc, blocks: [...doc.blocks, restored] })
-                  setSelectedId(restored.id)
-                }
-              }} />
+          <div className="flex-1 overflow-hidden">
+            {leftTab === 'content' ? (
+              <BlockPalette onAddBlock={addBlock} onAddSavedBlock={addSavedBlock} />
             ) : (
-              <div className="space-y-3">
+              <div className="p-4 space-y-4 overflow-y-auto h-full">
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Cor de Fundo</label>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Fundo do Email</label>
                   <div className="flex items-center gap-2">
                     <input type="color" value={doc.settings.backgroundColor} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, backgroundColor: e.target.value } }))}
                       className="w-8 h-8 rounded border border-gray-200 cursor-pointer p-0.5" />
@@ -308,97 +219,127 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   </div>
                 </div>
                 <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Fundo do Conteúdo</label>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={doc.settings.contentBackgroundColor} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, contentBackgroundColor: e.target.value } }))}
+                      className="w-8 h-8 rounded border border-gray-200 cursor-pointer p-0.5" />
+                    <input type="text" value={doc.settings.contentBackgroundColor} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, contentBackgroundColor: e.target.value } }))}
+                      className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-900" />
+                  </div>
+                </div>
+                <div>
                   <label className="block text-[11px] font-medium text-gray-500 mb-1">Largura (px)</label>
                   <input type="number" value={doc.settings.contentWidth} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, contentWidth: Number(e.target.value) } }))}
                     className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm text-gray-900" min={400} max={800} />
                 </div>
-
-                {/* Brand Kit section */}
-                <div className="pt-3 border-t border-gray-100">
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Brand Kit</p>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Cor Primária (botões)</label>
-                      <div className="flex items-center gap-2">
-                        <input type="color" value={brandPrimary} onChange={e => setBrandPrimary(e.target.value)}
-                          className="w-7 h-7 rounded border border-gray-200 cursor-pointer p-0.5" />
-                        <input type="text" value={brandPrimary} onChange={e => setBrandPrimary(e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-200 rounded text-[10px] font-mono text-gray-900" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Cor do Texto</label>
-                      <div className="flex items-center gap-2">
-                        <input type="color" value={brandText} onChange={e => setBrandText(e.target.value)}
-                          className="w-7 h-7 rounded border border-gray-200 cursor-pointer p-0.5" />
-                        <input type="text" value={brandText} onChange={e => setBrandText(e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-200 rounded text-[10px] font-mono text-gray-900" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-gray-500 mb-1">URL do Logo</label>
-                      <input type="text" value={brandLogo} onChange={e => setBrandLogo(e.target.value)} placeholder="https://..."
-                        className="w-full px-2 py-1 border border-gray-200 rounded text-[10px] text-gray-900" />
-                    </div>
-                    <button onClick={saveBrandKit} className="w-full py-1.5 text-[10px] font-medium text-brand-600 bg-brand-50 rounded hover:bg-brand-100 transition-colors">
-                      Salvar Brand Kit
-                    </button>
-                  </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Raio da Borda</label>
+                  <input type="number" value={doc.settings.borderRadius} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, borderRadius: Number(e.target.value) } }))}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm text-gray-900" min={0} max={24} />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Fonte</label>
+                  <select value={doc.settings.fontFamily} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, fontFamily: e.target.value } }))}
+                    className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm text-gray-900 bg-white">
+                    <option value="'DM Sans', Arial, Helvetica, sans-serif">DM Sans</option>
+                    <option value="Arial, Helvetica, sans-serif">Arial</option>
+                    <option value="Georgia, Times, serif">Georgia</option>
+                    <option value="'Courier New', Courier, monospace">Courier New</option>
+                    <option value="Verdana, Geneva, sans-serif">Verdana</option>
+                    <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
+                  </select>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Canvas */}
-        <div className="flex-1 overflow-y-auto" style={{ backgroundColor: doc.settings.backgroundColor }} ref={canvasRef}
-          onDrop={handleDrop} onDragOver={handleDragOver}>
-          <div style={{ maxWidth: canvasWidth, margin: '24px auto', transition: 'max-width 0.3s' }}>
-            <div style={{ backgroundColor: '#ffffff', minHeight: 200, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', borderRadius: 4 }}>
+        {/* ── Canvas ── */}
+        <div className="flex-1 overflow-y-auto" style={{ backgroundColor: doc.settings.backgroundColor }}
+          onDrop={handleDrop} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+          onClick={() => setSelectedId(null)}>
+          <div className="transition-all duration-300 mx-auto my-6" style={{ maxWidth: canvasWidth }}>
+            <div style={{
+              backgroundColor: doc.settings.contentBackgroundColor,
+              borderRadius: doc.settings.borderRadius,
+              minHeight: 200,
+              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+              overflow: 'hidden',
+            }}>
               {doc.blocks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                  <Plus size={32} className="mb-3 text-gray-300" />
-                  <p className="text-sm font-medium">Arraste blocos aqui</p>
-                  <p className="text-xs mt-1">ou clique em um bloco na barra lateral</p>
+                <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+                  <Plus size={36} className="mb-3 text-gray-300" />
+                  <p className="text-sm font-medium text-gray-500">Arraste blocos aqui</p>
+                  <p className="text-xs mt-1 text-gray-400">ou clique em um bloco na barra lateral</p>
                 </div>
               ) : (
                 doc.blocks.map((block, i) => (
-                  <BlockPreview
-                    key={block.id}
-                    block={block}
-                    selected={selectedId === block.id}
-                    onSelect={() => setSelectedId(block.id)}
-                    onMoveUp={() => moveBlock(block.id, 'up')}
-                    onMoveDown={() => moveBlock(block.id, 'down')}
-                    onClone={() => cloneBlock(block.id)}
-                    onDelete={() => removeBlock(block.id)}
-                    isFirst={i === 0}
-                    isLast={i === doc.blocks.length - 1}
-                  />
+                  <div key={block.id} onClick={e => e.stopPropagation()}>
+                    <BlockPreview
+                      block={block}
+                      selected={selectedId === block.id}
+                      onSelect={() => setSelectedId(block.id)}
+                      onMoveUp={() => moveBlock(block.id, 'up')}
+                      onMoveDown={() => moveBlock(block.id, 'down')}
+                      onClone={() => cloneBlock(block.id)}
+                      onDelete={() => removeBlock(block.id)}
+                      isFirst={i === 0}
+                      isLast={i === doc.blocks.length - 1}
+                    />
+                  </div>
                 ))
               )}
             </div>
           </div>
         </div>
 
-        {/* Right sidebar */}
-        <div className="w-[260px] bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
-          <div className="py-2.5 px-4 border-b border-gray-200">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-              {selectedBlock ? `${BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}` : 'Propriedades'}
+        {/* ── Right Sidebar ── */}
+        <div className="w-[280px] bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
+          <div className="py-2.5 px-4 border-b border-gray-200 flex-shrink-0">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              {selectedBlock ? (BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type) : 'Propriedades'}
             </p>
           </div>
           <div className="flex-1 overflow-y-auto p-3">
             {selectedBlock ? (
-              <BlockProperties block={selectedBlock} onChange={(key, value) => updateProp(selectedBlock.id, key, value)} onSaveAsReusable={() => {}} />
+              <BlockProperties
+                block={selectedBlock}
+                onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
+                onSaveAsReusable={() => {
+                  const name = prompt('Nome do bloco reutilizável:')
+                  if (!name) return
+                  fetch('/api/email/saved-blocks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, block_json: selectedBlock }),
+                  }).then(() => alert('✅ Salvo!')).catch(() => alert('Erro'))
+                }}
+              />
             ) : (
-              <div className="text-center py-12 text-gray-400">
-                <p className="text-xs">Selecione um bloco para editar suas propriedades</p>
+              <div className="text-center py-16 text-gray-400">
+                <span className="text-3xl block mb-3">🎨</span>
+                <p className="text-xs font-medium text-gray-500">Selecione um bloco</p>
+                <p className="text-[10px] text-gray-400 mt-1">para editar suas propriedades</p>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* ── Preview Modal ── */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-8" onClick={() => setShowPreview(false)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-[680px] w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <span className="text-sm font-semibold text-gray-900">Preview do Email</span>
+              <button onClick={() => setShowPreview(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 bg-gray-100">
+              <iframe srcDoc={previewHtml} title="Preview" className="w-full border border-gray-200 rounded bg-white" style={{ height: 600 }} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
