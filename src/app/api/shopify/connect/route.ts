@@ -153,10 +153,10 @@ export async function GET(request: NextRequest) {
       orgIds = [...new Set([...orgIds, ...memberOrgIds])]; // Remove duplicados
     }
 
-    // ✅ 2. Buscar lojas de TODAS as organizações
+    // ✅ 2. Buscar lojas de TODAS as organizações (incluindo novos campos)
     const { data: stores, error } = await supabaseAdmin
       .from('shopify_stores')
-      .select('id, organization_id, shop_name, shop_domain, shop_email, currency, is_active, total_orders, total_revenue, last_sync_at')
+      .select('*')
       .in('organization_id', orgIds)
       .order('created_at', { ascending: false });
 
@@ -170,20 +170,40 @@ export async function GET(request: NextRequest) {
     
     const orgMap = new Map(orgs?.map(o => [o.id, o.name]) || []);
 
-    // ✅ 4. Retornar COM organization_id
+    // ✅ 4. Retornar COM todos os campos
     return NextResponse.json({
       stores: stores?.map(s => ({
         id: s.id,
-        organization_id: s.organization_id,  // ✅ INCLUIR!
+        organization_id: s.organization_id,
         organization_name: orgMap.get(s.organization_id) || 'Organização',
         name: s.shop_name,
+        shop_name: s.shop_name,
         domain: s.shop_domain,
+        shop_domain: s.shop_domain,
         email: s.shop_email,
+        shop_email: s.shop_email,
         currency: s.currency,
         isActive: s.is_active,
-        totalOrders: s.total_orders,
-        totalRevenue: s.total_revenue,
+        is_active: s.is_active,
+        connectionStatus: s.connection_status || (s.is_active ? 'active' : 'disconnected'),
+        connection_status: s.connection_status || (s.is_active ? 'active' : 'disconnected'),
+        status: s.status,
+        totalOrders: s.total_orders || 0,
+        total_orders: s.total_orders || 0,
+        totalRevenue: s.total_revenue || 0,
+        total_revenue: s.total_revenue || 0,
+        totalCustomers: s.total_customers || 0,
+        total_customers: s.total_customers || 0,
         lastSyncAt: s.last_sync_at,
+        last_sync_at: s.last_sync_at,
+        // New fields from GraphQL migration
+        api_version: s.api_version,
+        plan_name: s.plan_name,
+        pixel_installed: s.pixel_installed,
+        embed_installed: s.embed_installed,
+        initial_sync_completed: s.initial_sync_completed,
+        installed_at: s.installed_at,
+        settings: s.settings,
       })) || [],
     });
   } catch (error: any) {

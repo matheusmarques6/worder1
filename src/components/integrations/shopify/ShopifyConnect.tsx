@@ -55,10 +55,47 @@ export default function ShopifyConnect() {
   async function fetchStatus() {
     try {
       setLoading(true);
+
+      // Try dedicated status endpoint first
       const res = await fetch('/api/integrations/shopify/status');
       const data = await res.json();
-      setConnected(data.connected);
-      setStore(data.store);
+
+      if (data.connected && data.store) {
+        setConnected(true);
+        setStore(data.store);
+        return;
+      }
+
+      // Fallback: try /api/shopify/connect (used by settings page)
+      const res2 = await fetch('/api/shopify/connect');
+      const data2 = await res2.json();
+
+      if (data2.stores?.length > 0) {
+        const s = data2.stores.find((st: any) => st.is_active || st.isActive) || data2.stores[0];
+        setConnected(true);
+        setStore({
+          id: s.id,
+          shopDomain: s.domain || s.shop_domain,
+          shopName: s.name || s.shop_name,
+          shopEmail: s.email || s.shop_email || '',
+          currency: s.currency || 'BRL',
+          planName: s.plan_name || '',
+          apiVersion: s.api_version || '2026-01',
+          status: s.status || s.connectionStatus || 'active',
+          initialSyncCompleted: s.initial_sync_completed || false,
+          pixelInstalled: s.pixel_installed || false,
+          embedInstalled: s.embed_installed || false,
+          installedAt: s.installed_at || '',
+          lastSyncAt: s.lastSyncAt || s.last_sync_at || '',
+          totalOrders: s.totalOrders || s.total_orders || 0,
+          totalRevenue: s.totalRevenue || s.total_revenue || 0,
+          totalCustomers: s.totalCustomers || s.total_customers || 0,
+        });
+        return;
+      }
+
+      setConnected(false);
+      setStore(null);
     } catch {
       console.error('Failed to fetch shopify status');
     } finally {
