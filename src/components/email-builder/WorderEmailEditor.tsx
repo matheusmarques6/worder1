@@ -608,7 +608,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
               borderRadius: doc.settings.borderRadius,
               minHeight: 200,
               boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-              overflow: 'hidden',
+              overflow: 'visible',
             }}>
               {doc.sections.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-24 text-gray-400">
@@ -625,11 +625,11 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                       style={{ backgroundColor: section.styles.backgroundColor || undefined }}
                       onClick={e => { e.stopPropagation(); selectSection(section.id) }}
                     >
-                      {/* Section label + toolbar INSIDE the section (visible, not clipped) */}
+                      {/* Section toolbar INSIDE the section - always visible */}
                       {selectedSectionId === section.id && (
-                        <div className="absolute left-2 -top-6 z-20 flex items-center gap-1">
-                          <span className="px-2 py-0.5 bg-indigo-500 text-white text-[10px] font-semibold rounded-t-md">Seção</span>
-                          <div className="flex gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5">
+                        <div className="absolute left-1 top-1 z-20 flex items-center gap-1">
+                          <span className="px-2 py-0.5 bg-indigo-500 text-white text-[10px] font-semibold rounded">Seção</span>
+                          <div className="flex gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5">
                             <button onClick={e => { e.stopPropagation(); cloneSection(section.id) }}
                               className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar">
                               <Copy className="w-3 h-3" />

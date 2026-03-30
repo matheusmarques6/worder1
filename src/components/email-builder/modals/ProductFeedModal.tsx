@@ -172,11 +172,23 @@ export function CreateFeedModal({ isOpen, onClose, onCreate }: {
         body: JSON.stringify({ name: name.trim(), feed_type: feedType, fallback_type: fallbackType, time_period: timePeriod, filters }),
       })
       const data = await res.json()
-      if (data.id || data.feed?.id) {
-        onCreate(data.feed || data)
-        onClose()
+      if (!res.ok) {
+        alert('Erro ao criar feed: ' + (data.error || 'Erro desconhecido'))
+        setSaving(false)
+        return
       }
-    } catch {}
+      const feed = data.feed || data
+      if (feed.id) {
+        onCreate(feed)
+        onClose()
+        setName('')
+        setFilters([])
+      } else {
+        alert('Erro: feed criado sem ID')
+      }
+    } catch (err: any) {
+      alert('Erro: ' + (err.message || 'Falha na conexão'))
+    }
     setSaving(false)
   }
 
