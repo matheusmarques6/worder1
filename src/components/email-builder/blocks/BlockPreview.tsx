@@ -86,7 +86,7 @@ export function BlockPreview({
               backgroundColor: p.backgroundColor || undefined,
             }}
           >
-            <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+            <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', lineHeight: 0, fontSize: 0 }}>
               <img
                 src={p.src}
                 alt={p.alt || ''}
@@ -96,6 +96,7 @@ export function BlockPreview({
                   height: 'auto',
                   display: 'block',
                   borderRadius: p.borderRadius,
+                  verticalAlign: 'bottom',
                 }}
               />
               {p.href && (
