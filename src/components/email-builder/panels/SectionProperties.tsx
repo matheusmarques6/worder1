@@ -60,8 +60,8 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
 
       {tab === 'styles' && (
         <div className="space-y-1">
-          {/* Background image (+) */}
-          <Expandable title="Background image">
+          {/* Imagem de fundo (+) */}
+          <Expandable title="Imagem de fundo">
             <div className="space-y-2">
               <input type="text" value={s.backgroundImage || ''} onChange={e => onStyleChange('backgroundImage', e.target.value)}
                 placeholder="URL da imagem de fundo"
@@ -86,9 +86,9 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
 
           <div className="border-t border-gray-100" />
 
-          {/* Content color — Auto / Custom / None */}
+          {/* Cor do conteúdo — Auto / Custom / None */}
           <div className="py-2">
-            <label className="block text-[12px] font-medium text-gray-700 mb-2">Content color</label>
+            <label className="block text-[12px] font-medium text-gray-700 mb-2">Cor do conteúdo</label>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               {(['auto', 'custom', 'none'] as const).map(mode => (
                 <button key={mode} onClick={() => {
@@ -113,8 +113,8 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
 
           <div className="border-t border-gray-100" />
 
-          {/* Section color (+) */}
-          <Expandable title="Section color">
+          {/* Cor da seção (+) */}
+          <Expandable title="Cor da seção">
             <ColorRow label="" value={s.backgroundColor || ''} onChange={v => onStyleChange('backgroundColor', v)} />
           </Expandable>
 
@@ -174,9 +174,9 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
 
           <div className="border-t border-gray-100" />
 
-          {/* Column content alignment */}
+          {/* Alinhamento do conteúdo */}
           <div className="py-2">
-            <label className="block text-[12px] font-medium text-gray-700 mb-2">Column content alignment</label>
+            <label className="block text-[12px] font-medium text-gray-700 mb-2">Alinhamento do conteúdo</label>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               {([
                 { value: 'top', Icon: AlignVerticalJustifyStart },
@@ -195,14 +195,14 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
 
           <div className="border-t border-gray-100" />
 
-          {/* Mobile stacking */}
+          {/* Empilhamento mobile */}
           <div className="py-2">
-            <label className="block text-[12px] font-medium text-gray-700 mb-2">Mobile stacking</label>
+            <label className="block text-[12px] font-medium text-gray-700 mb-2">Empilhamento mobile</label>
             <div className="space-y-1">
               {([
-                { value: 'rtl', label: 'Right to left', icon: '⇄' },
-                { value: 'ltr', label: 'Left to right', icon: '⇆' },
-                { value: 'none', label: 'No stacking', icon: '•••' },
+                { value: 'rtl', label: 'Direita para esquerda', icon: '⇄' },
+                { value: 'ltr', label: 'Esquerda para direita', icon: '⇆' },
+                { value: 'none', label: 'Sem empilhamento', icon: '•••' },
               ] as const).map(opt => (
                 <label key={opt.value} className="flex items-center gap-3 p-2 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
                   <input type="radio" name="mobileStacking" checked={(s.mobileStackOrder || 'rtl') === opt.value}
@@ -249,32 +249,32 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
 
       {tab === 'display' && (
         <div className="space-y-4">
-          {/* Visibility */}
+          {/* Visibilidade */}
           <div>
-            <p className="text-[12px] font-medium text-gray-700 mb-1">Visibility</p>
-            <p className="text-[11px] text-gray-400 mb-3">Device visibility is set on this block's section.</p>
+            <p className="text-[12px] font-medium text-gray-700 mb-1">Visibilidade</p>
+            <p className="text-[11px] text-gray-400 mb-3">A visibilidade por dispositivo é configurada na seção.</p>
           </div>
 
-          {/* Show/hide logic */}
+          {/* Lógica mostrar/ocultar */}
           <div>
-            <p className="text-[12px] font-medium text-gray-700 mb-1">Show/hide logic</p>
-            <p className="text-[11px] text-gray-400 mb-3">Personalize by showing or hiding based on someone's properties or list membership.</p>
+            <p className="text-[12px] font-medium text-gray-700 mb-1">Lógica mostrar/ocultar</p>
+            <p className="text-[11px] text-gray-400 mb-3">Personalize mostrando ou ocultando baseado nas propriedades do contato.</p>
             <div className="flex gap-2">
               <button className="flex-1 py-2 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                Use logic builder
+                Usar construtor lógico
               </button>
               <button className="flex-1 py-2 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                Use code
+                Usar código
               </button>
             </div>
           </div>
 
-          {/* Content repeat */}
+          {/* Repetição de conteúdo */}
           <div>
-            <p className="text-[12px] font-medium text-gray-700 mb-1">Content repeat</p>
-            <p className="text-[11px] text-gray-400 mb-3">To repeat content, specify a variable for iterating over a collection of items.</p>
+            <p className="text-[12px] font-medium text-gray-700 mb-1">Repetição de conteúdo</p>
+            <p className="text-[11px] text-gray-400 mb-3">Para repetir conteúdo, especifique uma variável para iterar sobre uma coleção.</p>
             <button className="w-full py-2 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              Add content repeat
+              Adicionar repetição
             </button>
           </div>
         </div>

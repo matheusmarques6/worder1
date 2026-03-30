@@ -20,40 +20,40 @@ interface ProductFeedModalProps {
 }
 
 const FEED_TYPES = [
-  { value: 'recently_viewed', label: 'Products a customer has recently viewed' },
-  { value: 'bestsellers', label: 'Best-selling products' },
-  { value: 'newest', label: 'Newest products' },
-  { value: 'most_viewed', label: 'Most viewed products' },
-  { value: 'cart_items', label: 'Products in cart' },
-  { value: 'recommendations', label: 'Recommended products' },
+  { value: 'recently_viewed', label: 'Produtos visualizados recentemente' },
+  { value: 'bestsellers', label: 'Produtos mais vendidos' },
+  { value: 'newest', label: 'Produtos mais recentes' },
+  { value: 'most_viewed', label: 'Produtos mais vistos' },
+  { value: 'cart_items', label: 'Produtos no carrinho' },
+  { value: 'recommendations', label: 'Produtos recomendados' },
 ]
 
 const FALLBACK_TYPES = [
-  { value: 'bestsellers', label: 'Best-selling products' },
-  { value: 'newest', label: 'Newest products' },
-  { value: 'most_viewed', label: 'Most viewed products' },
+  { value: 'bestsellers', label: 'Produtos mais vendidos' },
+  { value: 'newest', label: 'Produtos mais recentes' },
+  { value: 'most_viewed', label: 'Produtos mais vistos' },
 ]
 
 const TIME_PERIODS = [
-  { value: '3d', label: 'last 3 days' },
-  { value: '7d', label: 'last 7 days' },
-  { value: '30d', label: 'last 30 days' },
-  { value: '90d', label: 'last 90 days' },
+  { value: '3d', label: 'últimos 3 dias' },
+  { value: '7d', label: 'últimos 7 dias' },
+  { value: '30d', label: 'últimos 30 dias' },
+  { value: '90d', label: 'últimos 90 dias' },
 ]
 
 const FILTER_FIELDS = [
-  { value: 'category', label: 'Category' },
-  { value: 'product_type', label: 'Product type' },
-  { value: 'vendor', label: 'Vendor' },
+  { value: 'category', label: 'Categoria' },
+  { value: 'product_type', label: 'Tipo de produto' },
+  { value: 'vendor', label: 'Fornecedor' },
   { value: 'tags', label: 'Tags' },
-  { value: 'price', label: 'Price' },
+  { value: 'price', label: 'Preço' },
 ]
 
 const FILTER_OPERATORS = [
-  { value: 'includes', label: 'includes' },
-  { value: 'excludes', label: 'excludes' },
-  { value: 'equals', label: 'equals' },
-  { value: 'any_of', label: 'any of' },
+  { value: 'includes', label: 'inclui' },
+  { value: 'excludes', label: 'exclui' },
+  { value: 'equals', label: 'é igual a' },
+  { value: 'any_of', label: 'qualquer de' },
 ]
 
 // ── View All Product Feeds Modal ──
@@ -81,7 +81,7 @@ export function ViewFeedsModal({ isOpen, onClose, onSelect, currentFeedId }: Pro
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-[600px] max-h-[70vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">View all product feeds</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Ver todos os feeds de produtos</h2>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
 
@@ -89,10 +89,10 @@ export function ViewFeedsModal({ isOpen, onClose, onSelect, currentFeedId }: Pro
           <div className="flex items-center gap-2">
             <div className="flex items-center flex-1 border border-gray-200 rounded-lg px-3 py-2">
               <Search className="w-4 h-4 text-gray-400 mr-2" />
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product feeds"
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar feeds de produtos"
                 className="flex-1 text-sm text-gray-900 placeholder-gray-400 outline-none" />
             </div>
-            {search && <button onClick={() => setSearch('')} className="text-sm text-brand-600 hover:text-brand-700">Clear</button>}
+            {search && <button onClick={() => setSearch('')} className="text-sm text-brand-600 hover:text-brand-700">Limpar</button>}
           </div>
         </div>
 
@@ -101,7 +101,7 @@ export function ViewFeedsModal({ isOpen, onClose, onSelect, currentFeedId }: Pro
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="text-left px-6 py-2 text-xs font-medium text-gray-500">Feed</th>
-                <th className="text-left px-6 py-2 text-xs font-medium text-gray-500">Settings Updated</th>
+                <th className="text-left px-6 py-2 text-xs font-medium text-gray-500">Atualizado em</th>
               </tr>
             </thead>
             <tbody>
@@ -133,15 +133,15 @@ export function ViewFeedsModal({ isOpen, onClose, onSelect, currentFeedId }: Pro
               ))}
             </tbody>
           </table>
-          {!loading && <p className="px-6 py-2 text-xs text-gray-400">{filtered.length} of {feeds.length}</p>}
+          {!loading && <p className="px-6 py-2 text-xs text-gray-400">{filtered.length} de {feeds.length}</p>}
         </div>
 
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Close</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Fechar</button>
           <button onClick={() => { const f = feeds.find(f => f.id === selected); if (f) { onSelect(f); onClose() } }}
             disabled={!selected}
             className="px-4 py-2 text-sm font-semibold text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50">
-            Select product feed
+            Selecionar feed
           </button>
         </div>
       </div>
@@ -184,22 +184,22 @@ export function CreateFeedModal({ isOpen, onClose, onCreate }: {
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-[600px] max-w-full">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Create a product feed</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Criar feed de produtos</h2>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="px-6 py-5 space-y-5">
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-1">What would you like to name this product feed?</label>
-            <p className="text-xs text-gray-500 mb-2">The name can only consist of letters, numbers, and underscores.</p>
+            <label className="block text-sm font-medium text-gray-900 mb-1">Qual o nome deste feed de produtos?</label>
+            <p className="text-xs text-gray-500 mb-2">O nome pode conter apenas letras, números e underscores.</p>
             <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="feed_nome"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 outline-none" />
           </div>
 
           {/* Primary feed type */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">What products should the customers view first?</label>
+            <label className="block text-sm font-medium text-gray-900 mb-2">Quais produtos os clientes devem ver primeiro?</label>
             <select value={feedType} onChange={e => setFeedType(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:border-brand-500 outline-none">
               {FEED_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -208,13 +208,13 @@ export function CreateFeedModal({ isOpen, onClose, onCreate }: {
 
           {/* Fallback */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">If the customer has limited history, what should they view instead?</label>
+            <label className="block text-sm font-medium text-gray-900 mb-2">Se o cliente tem histórico limitado, o que deve ver?</label>
             <div className="flex items-center gap-2">
               <select value={fallbackType} onChange={e => setFallbackType(e.target.value)}
                 className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:border-brand-500 outline-none">
                 {FALLBACK_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
-              <span className="text-sm text-gray-500">over</span>
+              <span className="text-sm text-gray-500">nos</span>
               <select value={timePeriod} onChange={e => setTimePeriod(e.target.value)}
                 className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:border-brand-500 outline-none">
                 {TIME_PERIODS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -224,10 +224,10 @@ export function CreateFeedModal({ isOpen, onClose, onCreate }: {
 
           {/* Filters */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">What additional filters would you like to apply?</label>
+            <label className="block text-sm font-medium text-gray-900 mb-2">Quais filtros adicionais deseja aplicar?</label>
             {filters.map((f, i) => (
               <div key={i} className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-gray-500">Show products where</span>
+                <span className="text-sm text-gray-500">Mostrar produtos onde</span>
                 <select value={f.field} onChange={e => { const nf = [...filters]; nf[i].field = e.target.value; setFilters(nf) }}
                   className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white">
                   {FILTER_FIELDS.map(ff => <option key={ff.value} value={ff.value}>{ff.label}</option>)}
@@ -245,16 +245,16 @@ export function CreateFeedModal({ isOpen, onClose, onCreate }: {
             ))}
             <button onClick={() => setFilters([...filters, { field: 'category', operator: 'includes', value: '' }])}
               className="text-sm font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-              Add Filter
+              Adicionar Filtro
             </button>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Close</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Fechar</button>
           <button onClick={handleCreate} disabled={!name.trim() || saving}
             className="px-4 py-2 text-sm font-semibold text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50">
-            {saving ? 'Creating...' : 'Create product feed'}
+            {saving ? 'Criando...' : 'Criar feed de produtos'}
           </button>
         </div>
       </div>

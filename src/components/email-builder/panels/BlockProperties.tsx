@@ -300,7 +300,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
           <div className="border border-gray-100 rounded-lg">
             <details className="group">
               <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
-                Background <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+                Cor de fundo <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
               </summary>
               <div className="px-3 pb-3">
                 <Field label="Cor de Fundo"><ColorInput value={p.backgroundColor || ''} onChange={v => onChange('backgroundColor', v)} /></Field>
@@ -553,8 +553,8 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
       {/* ── Dynamic / Static radio cards ── */}
       <div className="space-y-2">
         {[
-          { value: 'dynamic', label: 'Dynamic', desc: 'Showcase products using a product feed.' },
-          { value: 'static', label: 'Static', desc: 'Choose products to show for all recipients.' },
+          { value: 'dynamic', label: 'Dinâmico', desc: 'Exibir produtos usando um feed de produtos.' },
+          { value: 'static', label: 'Estático', desc: 'Escolher produtos fixos para todos os destinatários.' },
         ].map(opt => (
           <label key={opt.value}
             className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${p.mode === opt.value ? 'border-brand-500 bg-brand-50/30' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -568,11 +568,11 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
         ))}
       </div>
 
-      {/* ── Product selection ── */}
+      {/* ── Seleção de produtos ── */}
       {p.mode === 'dynamic' && (
         <div>
-          <p className="text-[12px] font-medium text-gray-700 mb-1">Product selection</p>
-          <p className="text-[12px] font-medium text-gray-700 mb-2">Product feed</p>
+          <p className="text-[12px] font-medium text-gray-700 mb-1">Seleção de produtos</p>
+          <p className="text-[12px] font-medium text-gray-700 mb-2">Feed de produtos</p>
 
           {/* Selected feed card */}
           <div className="border border-brand-500 rounded-lg p-3 mb-2 bg-brand-50/20">
@@ -597,22 +597,22 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
           <div className="flex gap-2">
             <button onClick={() => setShowViewFeeds(true)}
               className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-              Change selection
+              Alterar seleção
             </button>
             <button onClick={() => setShowCreateFeed(true)}
               className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-              Create product feed
+              Criar feed de produtos
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Product details (checkboxes) ── */}
+      {/* ── Detalhes do produto (checkboxes) ── */}
       <div>
-        <p className="text-[12px] font-medium text-gray-700 mb-2">Product details</p>
+        <p className="text-[12px] font-medium text-gray-700 mb-2">Detalhes do produto</p>
 
         <div className="space-y-1">
-          <Field label="Start with item number">
+          <Field label="Começar pelo item número">
             <SelectInput value={String(p.startItem || 1)} onChange={v => onChange('startItem', Number(v))} options={[
               { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' },
             ]} />
@@ -620,24 +620,24 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
         </div>
 
         <div className="space-y-2 mt-3">
-          {/* Product name */}
+          {/* Nome do produto */}
           <div>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={p.showName !== false} onChange={e => onChange('showName', e.target.checked)}
                 className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
-              <span className="text-xs font-medium text-gray-700">Product name</span>
+              <span className="text-xs font-medium text-gray-700">Nome do produto</span>
             </label>
             {p.showName !== false && (
               <div className="ml-6 mt-1 space-y-1">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="radio" checked={!p.nameLinkEnabled} onChange={() => onChange('nameLinkEnabled', false)}
                     className="w-3.5 h-3.5 text-brand-500 border-gray-300" />
-                  <span className="text-xs text-gray-600">Unlinked</span>
+                  <span className="text-xs text-gray-600">Sem link</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="radio" checked={p.nameLinkEnabled === true} onChange={() => onChange('nameLinkEnabled', true)}
                     className="w-3.5 h-3.5 text-brand-500 border-gray-300" />
-                  <span className="text-xs text-gray-600">Link to product</span>
+                  <span className="text-xs text-gray-600">Link para o produto</span>
                 </label>
               </div>
             )}
@@ -647,20 +647,20 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={p.showPrice !== false} onChange={e => onChange('showPrice', e.target.checked)}
               className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
-            <span className="text-xs font-medium text-gray-700">Price</span>
+            <span className="text-xs font-medium text-gray-700">Preço</span>
           </label>
 
           {/* Original price */}
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={p.showComparePrice === true} onChange={e => onChange('showComparePrice', e.target.checked)}
               className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
-            <span className="text-xs font-medium text-gray-700">Original price for sale products</span>
+            <span className="text-xs font-medium text-gray-700">Preço original para produtos em promoção</span>
           </label>
 
           {/* Rating */}
           <label className="flex items-center gap-2 cursor-pointer opacity-50">
             <input type="checkbox" checked={false} disabled className="w-4 h-4 rounded border-gray-300" />
-            <span className="text-xs text-gray-500">Rating</span>
+            <span className="text-xs text-gray-500">Avaliação</span>
           </label>
 
           {/* Button */}
@@ -668,11 +668,11 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={p.showButton !== false} onChange={e => onChange('showButton', e.target.checked)}
                 className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
-              <span className="text-xs font-medium text-gray-700">Button</span>
+              <span className="text-xs font-medium text-gray-700">Botão</span>
             </label>
             {p.showButton !== false && (
               <div className="ml-6 mt-1">
-                <label className="text-[11px] text-gray-500">Button text</label>
+                <label className="text-[11px] text-gray-500">Texto do botão</label>
                 <input type="text" value={p.buttonText || 'COMPRAR AGORA'} onChange={e => onChange('buttonText', e.target.value)}
                   className="w-full mt-0.5 border border-gray-200 rounded-md px-2.5 py-1.5 text-sm text-gray-900 focus:border-brand-500 focus:outline-none" />
               </div>
@@ -685,32 +685,32 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
       <div>
         <p className="text-[12px] font-medium text-gray-700 mb-2">Layout</p>
         <div className="grid grid-cols-2 gap-2 mb-3">
-          <Field label="Products per row">
+          <Field label="Produtos por linha">
             <SelectInput value={String(p.columns || 2)} onChange={v => onChange('columns', Number(v))} options={[
               { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
             ]} />
           </Field>
-          <Field label="Number of rows">
+          <Field label="Número de linhas">
             <SelectInput value={String(p.rows || 2)} onChange={v => onChange('rows', Number(v))} options={[
               { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
             ]} />
           </Field>
         </div>
-        <Field label="Max image height">
+        <Field label="Altura máx. da imagem">
           <div className="flex items-center gap-1.5">
             <NumberInput value={p.maxImageHeight || 300} onChange={v => onChange('maxImageHeight', v)} min={50} max={600} />
             <span className="text-xs text-gray-400">px</span>
           </div>
         </Field>
         <div className="mt-2">
-          <Toggle value={p.stackOnMobile !== false} onChange={v => onChange('stackOnMobile', v)} label="Stack on mobile" />
+          <Toggle value={p.stackOnMobile !== false} onChange={v => onChange('stackOnMobile', v)} label="Empilhar no mobile" />
         </div>
       </div>
 
-      {/* ── Product border (+) ── */}
+      {/* ── Borda do produto (+) ── */}
       <details className="group border border-gray-100 rounded-lg">
         <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-gray-700 hover:bg-gray-50 rounded-lg">
-          Product border <span className="text-gray-300 group-open:hidden">+</span>
+          Borda do produto <span className="text-gray-300 group-open:hidden">+</span>
         </summary>
         <div className="px-3 pb-3 space-y-2">
           <ColorInput value={p.productBorderColor || '#E5E7EB'} onChange={v => onChange('productBorderColor', v)} />
@@ -755,19 +755,19 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
               </Field>
             </div>
             <Field label="Color"><ColorInput value={p.priceColor || '#F97316'} onChange={v => onChange('priceColor', v)} /></Field>
-            <Field label="Compare price color"><ColorInput value={p.comparePriceColor || '#9CA3AF'} onChange={v => onChange('comparePriceColor', v)} /></Field>
+            <Field label="Cor preço comparativo"><ColorInput value={p.comparePriceColor || '#9CA3AF'} onChange={v => onChange('comparePriceColor', v)} /></Field>
           </div>
         )}
       </div>
 
-      {/* ── Button styles ── */}
+      {/* ── Estilos do botão ── */}
       {p.showButton !== false && (
         <div>
-          <p className="text-[12px] font-medium text-gray-700 mb-2">Button styles</p>
+          <p className="text-[12px] font-medium text-gray-700 mb-2">Estilos do botão</p>
           <div className="space-y-2">
-            <Field label="Background"><ColorInput value={p.buttonColor || '#F97316'} onChange={v => onChange('buttonColor', v)} /></Field>
-            <Field label="Text color"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>
-            <Field label="Border radius"><NumberInput value={p.buttonRadius || 6} onChange={v => onChange('buttonRadius', v)} min={0} max={50} /></Field>
+            <Field label="Cor de fundo"><ColorInput value={p.buttonColor || '#F97316'} onChange={v => onChange('buttonColor', v)} /></Field>
+            <Field label="Cor do texto"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>
+            <Field label="Raio da borda"><NumberInput value={p.buttonRadius || 6} onChange={v => onChange('buttonRadius', v)} min={0} max={50} /></Field>
           </div>
         </div>
       )}

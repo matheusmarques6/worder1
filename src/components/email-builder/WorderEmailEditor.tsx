@@ -625,27 +625,24 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                       style={{ backgroundColor: section.styles.backgroundColor || undefined }}
                       onClick={e => { e.stopPropagation(); selectSection(section.id) }}
                     >
-                      {/* Section label badge */}
+                      {/* Section label + toolbar INSIDE the section (visible, not clipped) */}
                       {selectedSectionId === section.id && (
-                        <div className="absolute -left-0.5 -top-5 z-20">
-                          <span className="px-2 py-0.5 bg-indigo-500 text-white text-[10px] font-semibold rounded-t-md">Section</span>
-                        </div>
-                      )}
-                      {/* Section toolbar — Clone, Star, Delete (like Klaviyo) */}
-                      {selectedSectionId === section.id && (
-                        <div className="absolute -left-10 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-0.5 z-20">
-                          <button onClick={e => { e.stopPropagation(); cloneSection(section.id) }}
-                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Duplicar seção">
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); /* save section */ showToast('Seção salva!') }}
-                            className="p-1.5 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded transition-colors" title="Salvar seção">
-                            <Star className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); removeSection(section.id) }}
-                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="Excluir seção">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="absolute left-2 -top-6 z-20 flex items-center gap-1">
+                          <span className="px-2 py-0.5 bg-indigo-500 text-white text-[10px] font-semibold rounded-t-md">Seção</span>
+                          <div className="flex gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5">
+                            <button onClick={e => { e.stopPropagation(); cloneSection(section.id) }}
+                              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar">
+                              <Copy className="w-3 h-3" />
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); showToast('Seção salva!') }}
+                              className="p-1 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded" title="Salvar">
+                              <Star className="w-3 h-3" />
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); removeSection(section.id) }}
+                              className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded" title="Excluir">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       )}
                       <div
@@ -665,7 +662,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                             >
                               {colBlocks.length === 0 ? (
                                 <div className="flex items-center justify-center h-full min-h-[60px] border border-dashed border-gray-300 bg-gray-50/50 text-gray-400 text-xs gap-2 rounded">
-                                  <span>Drop content here</span>
+                                  <span>Solte conteúdo aqui</span>
                                   <Trash2 className="w-3.5 h-3.5 text-gray-300" />
                                 </div>
                               ) : (
