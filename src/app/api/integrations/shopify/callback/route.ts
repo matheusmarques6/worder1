@@ -275,6 +275,25 @@ export async function GET(request: NextRequest) {
     console.log(`[SHOPIFY CALLBACK] Theme editor URL: ${themeEditorUrl}`);
     console.log('========================================');
 
+    // Trigger initial sync asynchronously (fire-and-forget)
+    // This runs the GraphQL full sync in the background so the merchant
+    // has historical data (90 days of orders, customers, products) immediately.
+    try {
+      fetch(`${appUrl}/api/shopify/trigger-sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Request': 'true',
+        },
+        body: JSON.stringify({ storeId }),
+      }).catch((err) => {
+        console.error('[SHOPIFY CALLBACK] Failed to trigger initial sync:', err);
+      });
+      console.log('[SHOPIFY CALLBACK] Initial sync triggered in background');
+    } catch {
+      // Non-blocking — sync can be triggered manually later
+    }
+
     // Redirecionar para página de sucesso
     return NextResponse.redirect(
       `${appUrl}/integrations/shopify?success=true&webhooks=${successCount}&pixel=${pixelInstalled}`
