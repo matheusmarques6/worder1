@@ -23,14 +23,19 @@ export const WORDER_SHOPIFY_EVENTS = {
   SHIPMENT_CONFIRMED: 'shipment_confirmed',
   SHIPMENT_DELIVERED: 'shipment_delivered',
 
-  // === ON-SITE BEHAVIOR (via Pixel) ===
+  // === ON-SITE BEHAVIOR (via Pixel + App Embed) ===
   ACTIVE_ON_SITE: 'active_on_site',
   VIEWED_PRODUCT: 'viewed_product',
   ADDED_TO_CART: 'added_to_cart',
+  REMOVED_FROM_CART: 'removed_from_cart',
   VIEWED_COLLECTION: 'viewed_collection',
   SUBMITTED_SEARCH: 'submitted_search',
   PAGE_VIEWED: 'page_viewed',
   CART_VIEWED: 'cart_viewed',
+
+  // === CHECKOUT PROGRESS (via Pixel) ===
+  CHECKOUT_CONTACT_SUBMITTED: 'checkout_contact_submitted',
+  PAYMENT_SUBMITTED: 'payment_submitted',
 
   // === PROFILE ===
   SUBSCRIBED_EMAIL: 'subscribed_email',
@@ -48,6 +53,7 @@ export type WorderShopifyEventType =
 
 export const EVENT_SOURCES = {
   SHOPIFY_WEBHOOK: 'shopify_webhook',
+  APP_EMBED: 'app_embed',
   WORDER_PIXEL: 'worder_pixel',
   WORDER_FORM: 'worder_form',
   GRAPHQL_SYNC: 'graphql_sync',

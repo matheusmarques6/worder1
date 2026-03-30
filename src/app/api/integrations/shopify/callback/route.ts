@@ -253,17 +253,26 @@ export async function GET(request: NextRequest) {
       console.error('[SHOPIFY CALLBACK] Pixel installation failed:', pixelError.message);
     }
 
-    // Update store with pixel status
+    // Generate theme editor URL for App Embed activation
+    const themeEditorUrl = `https://${shop}/admin/themes/current/editor?context=apps`;
+
+    // Update store with pixel status and theme editor URL
     await supabase
       .from('shopify_stores')
       .update({
         pixel_installed: pixelInstalled,
         webhook_secret: SHOPIFY_CLIENT_SECRET,
+        embed_installed: false, // Will be true when merchant activates App Embed
+        settings: {
+          theme_editor_url: themeEditorUrl,
+          tracking_endpoint: `${appUrl}/api/track`,
+        },
       })
       .eq('id', storeId);
 
     console.log('========================================');
     console.log(`[SHOPIFY CALLBACK] Complete: ${successCount} webhooks, pixel: ${pixelInstalled}`);
+    console.log(`[SHOPIFY CALLBACK] Theme editor URL: ${themeEditorUrl}`);
     console.log('========================================');
 
     // Redirecionar para página de sucesso

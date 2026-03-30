@@ -3,202 +3,158 @@
 // extensions/worder-pixel/src/index.ts
 //
 // Runs in Shopify's sandboxed Web Pixel environment.
-// Subscribes to standard customer events and sends
-// them to the Worder tracking endpoint.
+// Captures events that the App Embed cannot:
+// - Added to Cart / Removed from Cart
+// - Checkout Started / Completed
+// - Search Submitted / Cart Viewed
+// - Payment Info Submitted
+// - Checkout Contact Info Submitted
+//
+// NOTE: Viewed Product, Viewed Collection, Active on Site
+// are tracked by the App Embed (which has DOM/cookie access).
 // =============================================
 
 import { register } from '@shopify/web-pixels-extension';
 
 register(({ analytics, browser, settings, init }) => {
-  const { accountId, storeId, trackingEndpoint } = settings;
+  const ENDPOINT = settings.trackingEndpoint || 'https://app.worder.com/api/track/event';
+  const ACCOUNT_ID = settings.accountId;
+  const STORE_ID = settings.storeId;
 
-  if (!trackingEndpoint || !accountId) {
-    console.warn('[Worder Pixel] Missing settings: trackingEndpoint or accountId');
-    return;
-  }
+  if (!ENDPOINT || !ACCOUNT_ID) return;
 
-  // =============================================
-  // HELPER: Send event to Worder backend
-  // =============================================
-
-  function sendEvent(eventType: string, properties: Record<string, any>, customerData?: any) {
-    const payload = {
-      accountId,
-      storeId,
-      eventType,
-      properties,
-      clientId: customerData?.id || init.data?.customer?.id || null,
-      email: customerData?.email || init.data?.customer?.email || null,
-      timestamp: new Date().toISOString(),
-      url: properties._url || null,
-      userAgent: navigator.userAgent,
-      sessionId: getSessionId(),
-    };
-
-    // Remove internal fields
-    delete properties._url;
-
-    fetch(trackingEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    }).catch(() => {
-      // Silently fail — tracking should never break the store
-    });
-  }
-
-  function getSessionId(): string {
-    // Generate a simple session ID persisted for the tab session
+  const sendEvent = (eventType: string, data: any) => {
     try {
-      let sid = sessionStorage.getItem('__worder_sid');
-      if (!sid) {
-        sid = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-        sessionStorage.setItem('__worder_sid', sid);
-      }
-      return sid;
-    } catch {
-      return `ws_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountId: ACCOUNT_ID,
+          storeId: STORE_ID,
+          eventType,
+          properties: data,
+          source: 'shopify_pixel',
+          email: init.data?.customer?.email || null,
+          shopifyCustomerId: init.data?.customer?.id || null,
+          timestamp: new Date().toISOString(),
+          url: init.context?.document?.location?.href || null,
+        }),
+        keepalive: true,
+      });
+    } catch (err) {
+      /* sandbox — silently fail */
     }
-  }
+  };
 
   // =============================================
-  // PRODUCT VIEWED
+  // Added to Cart (ONLY the pixel captures this)
   // =============================================
-
-  analytics.subscribe('product_viewed', (event) => {
-    const product = event.data?.productVariant;
-    sendEvent('viewed_product', {
-      product_id: product?.product?.id,
-      product_title: product?.product?.title,
-      product_url: product?.product?.url,
-      variant_id: product?.id,
-      variant_title: product?.title,
-      price: product?.price?.amount,
-      currency: product?.price?.currencyCode,
-      image_url: product?.image?.src || null,
-      _url: event.context?.document?.location?.href,
-    });
-  });
-
-  // =============================================
-  // PRODUCT ADDED TO CART
-  // =============================================
-
-  analytics.subscribe('product_added_to_cart', (event) => {
-    const item = event.data?.cartLine;
-    const merchandise = item?.merchandise;
+  analytics.subscribe('product_added_to_cart', (event: any) => {
+    const line = event.data?.cartLine;
+    const merch = line?.merchandise;
     sendEvent('added_to_cart', {
-      product_id: merchandise?.product?.id,
-      product_title: merchandise?.product?.title,
-      variant_id: merchandise?.id,
-      variant_title: merchandise?.title,
-      price: merchandise?.price?.amount,
-      currency: merchandise?.price?.currencyCode,
-      quantity: item?.quantity || 1,
-      image_url: merchandise?.image?.src || null,
-      _url: event.context?.document?.location?.href,
+      ProductID: merch?.product?.id,
+      ProductName: merch?.product?.title,
+      VariantID: merch?.id,
+      VariantName: merch?.title,
+      Price: parseFloat(merch?.price?.amount || '0'),
+      Quantity: line?.quantity,
+      ImageURL: merch?.image?.src,
+      CartTotal: parseFloat(line?.cost?.totalAmount?.amount || '0'),
+      Currency: line?.cost?.totalAmount?.currencyCode,
     });
   });
 
   // =============================================
-  // CHECKOUT STARTED
+  // Removed from Cart
   // =============================================
-
-  analytics.subscribe('checkout_started', (event) => {
-    const checkout = event.data?.checkout;
-    sendEvent(
-      'checkout_started',
-      {
-        checkout_id: checkout?.token,
-        total_price: checkout?.totalPrice?.amount,
-        currency: checkout?.totalPrice?.currencyCode,
-        item_count: checkout?.lineItems?.length || 0,
-        items: (checkout?.lineItems || []).map((li: any) => ({
-          product_id: li.variant?.product?.id,
-          title: li.title,
-          quantity: li.quantity,
-          price: li.variant?.price?.amount,
-          variant_title: li.variant?.title,
-          image_url: li.variant?.image?.src || null,
-        })),
-        _url: event.context?.document?.location?.href,
-      },
-      checkout?.order?.customer
-    );
-  });
-
-  // =============================================
-  // CHECKOUT COMPLETED
-  // =============================================
-
-  analytics.subscribe('checkout_completed', (event) => {
-    const checkout = event.data?.checkout;
-    sendEvent(
-      'checkout_completed',
-      {
-        checkout_id: checkout?.token,
-        order_id: checkout?.order?.id,
-        total_price: checkout?.totalPrice?.amount,
-        currency: checkout?.totalPrice?.currencyCode,
-        item_count: checkout?.lineItems?.length || 0,
-        _url: event.context?.document?.location?.href,
-      },
-      checkout?.order?.customer
-    );
-  });
-
-  // =============================================
-  // COLLECTION VIEWED
-  // =============================================
-
-  analytics.subscribe('collection_viewed', (event) => {
-    const collection = event.data?.collection;
-    sendEvent('viewed_collection', {
-      collection_id: collection?.id,
-      collection_title: collection?.title,
-      collection_url: event.context?.document?.location?.href,
-      _url: event.context?.document?.location?.href,
+  analytics.subscribe('product_removed_from_cart', (event: any) => {
+    const line = event.data?.cartLine;
+    const merch = line?.merchandise;
+    sendEvent('removed_from_cart', {
+      ProductID: merch?.product?.id,
+      ProductName: merch?.product?.title,
+      VariantID: merch?.id,
+      Price: parseFloat(merch?.price?.amount || '0'),
+      Quantity: line?.quantity,
     });
   });
 
   // =============================================
-  // SEARCH SUBMITTED
+  // Checkout Started
   // =============================================
+  analytics.subscribe('checkout_started', (event: any) => {
+    const checkout = event.data?.checkout;
+    sendEvent('checkout_started', {
+      $value: parseFloat(checkout?.totalPrice?.amount || '0'),
+      ItemCount: checkout?.lineItems?.length || 0,
+      Currency: checkout?.currencyCode,
+      Items: (checkout?.lineItems || []).map((item: any) => ({
+        ProductID: item.variant?.product?.id,
+        ProductName: item.title,
+        VariantName: item.variant?.title,
+        Quantity: item.quantity,
+        Price: parseFloat(item.variant?.price?.amount || '0'),
+        ImageURL: item.variant?.image?.src,
+      })),
+    });
+  });
 
-  analytics.subscribe('search_submitted', (event) => {
-    const search = event.data?.searchResult;
+  // =============================================
+  // Checkout Completed
+  // =============================================
+  analytics.subscribe('checkout_completed', (event: any) => {
+    const checkout = event.data?.checkout;
+    sendEvent('checkout_completed', {
+      $value: parseFloat(checkout?.totalPrice?.amount || '0'),
+      OrderId: checkout?.order?.id,
+      Email: checkout?.email,
+      Phone: checkout?.phone,
+      Currency: checkout?.currencyCode,
+    });
+  });
+
+  // =============================================
+  // Search Submitted
+  // =============================================
+  analytics.subscribe('search_submitted', (event: any) => {
     sendEvent('submitted_search', {
-      query: search?.query || '',
-      results_count: search?.productVariants?.length || 0,
-      _url: event.context?.document?.location?.href,
+      SearchQuery: event.data?.searchResult?.query,
+      ResultCount: event.data?.searchResult?.productVariants?.length || 0,
     });
   });
 
   // =============================================
-  // CART VIEWED
+  // Cart Viewed
   // =============================================
-
-  analytics.subscribe('cart_viewed', (event) => {
-    const cart = event.data?.cart;
+  analytics.subscribe('cart_viewed', (event: any) => {
     sendEvent('cart_viewed', {
-      total_price: cart?.cost?.totalAmount?.amount,
-      currency: cart?.cost?.totalAmount?.currencyCode,
-      item_count: cart?.lines?.length || 0,
-      _url: event.context?.document?.location?.href,
+      CartTotal: parseFloat(event.data?.cart?.cost?.totalAmount?.amount || '0'),
+      ItemCount: event.data?.cart?.lines?.length || 0,
+      Currency: event.data?.cart?.cost?.totalAmount?.currencyCode,
     });
   });
 
   // =============================================
-  // PAGE VIEWED
+  // Checkout Contact Info Submitted (email entered at checkout)
   // =============================================
+  analytics.subscribe('checkout_contact_info_submitted', (event: any) => {
+    const checkout = event.data?.checkout;
+    sendEvent('checkout_contact_submitted', {
+      Email: checkout?.email,
+      Phone: checkout?.phone,
+      $value: parseFloat(checkout?.totalPrice?.amount || '0'),
+    });
+  });
 
-  analytics.subscribe('page_viewed', (event) => {
-    sendEvent('page_viewed', {
-      url: event.context?.document?.location?.href || '',
-      title: event.context?.document?.title || '',
-      referrer: event.context?.document?.referrer || '',
-      _url: event.context?.document?.location?.href,
+  // =============================================
+  // Payment Info Submitted
+  // =============================================
+  analytics.subscribe('payment_info_submitted', (event: any) => {
+    const checkout = event.data?.checkout;
+    sendEvent('payment_submitted', {
+      $value: parseFloat(checkout?.totalPrice?.amount || '0'),
+      Currency: checkout?.currencyCode,
     });
   });
 });

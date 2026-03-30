@@ -4,7 +4,13 @@
 //
 // Identifies an anonymous visitor and links their
 // session events to a known contact.
-// PUBLIC endpoint — used by storefront scripts.
+// Called by App Embed when:
+// - Shopify login ({{ customer }})
+// - UTM email (?utm_email=)
+// - Cookie recall
+// - Custom form (window.worder.identify)
+//
+// PUBLIC endpoint — no auth required.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,7 +20,7 @@ import { WORDER_SHOPIFY_EVENTS, EVENT_SOURCES } from '@/lib/shopify/event-types'
 
 export const dynamic = 'force-dynamic';
 
-const corsHeaders = {
+const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
@@ -22,7 +28,7 @@ const corsHeaders = {
 };
 
 export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: corsHeaders });
+  return new NextResponse(null, { status: 200, headers: CORS_HEADERS });
 }
 
 export async function POST(request: NextRequest) {
@@ -34,99 +40,104 @@ export async function POST(request: NextRequest) {
       storeId,
       email,
       phone,
-      sessionId,
-      anonymousId,
       firstName,
       lastName,
+      shopifyCustomerId,
+      anonymousId,
+      sessionId,
+      source,
       properties,
     } = body;
 
-    if (!accountId) {
+    if (!accountId || !storeId || (!email && !phone)) {
       return NextResponse.json(
-        { error: 'Missing accountId' },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-
-    if (!email && !phone) {
-      return NextResponse.json(
-        { error: 'At least email or phone is required' },
-        { status: 400, headers: corsHeaders }
+        { error: 'Missing required fields' },
+        { status: 400, headers: CORS_HEADERS }
       );
     }
 
     const supabase = getSupabaseAdmin();
 
-    // Resolve organization
-    let organizationId = accountId;
-    if (storeId) {
-      const { data: store } = await supabase
-        .from('shopify_stores')
-        .select('organization_id')
-        .eq('id', storeId)
-        .eq('is_active', true)
-        .maybeSingle();
+    // Validate store and get org ID
+    const { data: store } = await supabase
+      .from('shopify_stores')
+      .select('id, organization_id')
+      .eq('id', storeId)
+      .maybeSingle();
 
-      if (store) {
-        organizationId = store.organization_id;
-      }
+    if (!store) {
+      return NextResponse.json(
+        { error: 'Invalid store' },
+        { status: 404, headers: CORS_HEADERS }
+      );
     }
 
-    // Find or create contact
-    let contactId: string | null = null;
+    const orgId = store.organization_id;
+
+    // Try to find existing contact by email, phone, or shopifyCustomerId
+    let contact: { id: string } | null = null;
 
     if (email) {
-      const { data: existing } = await supabase
+      const { data } = await supabase
         .from('contacts')
         .select('id')
-        .eq('organization_id', organizationId)
+        .eq('organization_id', orgId)
         .ilike('email', email)
         .maybeSingle();
-
-      if (existing) {
-        contactId = existing.id;
-
-        // Update contact with new info
-        const updates: Record<string, any> = {
-          last_active_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        if (firstName) updates.first_name = firstName;
-        if (lastName) updates.last_name = lastName;
-        if (phone) updates.phone = phone;
-        if (properties?.utm_source) updates.utm_source = properties.utm_source;
-        if (properties?.utm_medium) updates.utm_medium = properties.utm_medium;
-        if (properties?.utm_campaign) updates.utm_campaign = properties.utm_campaign;
-
-        await supabase.from('contacts').update(updates).eq('id', contactId);
-      }
+      contact = data;
     }
 
-    if (!contactId && phone) {
-      const { data: existing } = await supabase
+    if (!contact && phone) {
+      const { data } = await supabase
         .from('contacts')
         .select('id')
-        .eq('organization_id', organizationId)
+        .eq('organization_id', orgId)
         .eq('phone', phone)
         .maybeSingle();
-
-      if (existing) {
-        contactId = existing.id;
-      }
+      contact = data;
     }
 
-    // Create new contact if not found
-    if (!contactId) {
+    if (!contact && shopifyCustomerId) {
+      const { data } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('shopify_customer_id', String(shopifyCustomerId))
+        .maybeSingle();
+      contact = data;
+    }
+
+    if (contact) {
+      // Update existing contact with any new data
+      const updates: Record<string, any> = {
+        last_active_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      if (firstName) updates.first_name = firstName;
+      if (lastName) updates.last_name = lastName;
+      if (phone) updates.phone = phone;
+      if (email) updates.email = email.toLowerCase();
+      if (shopifyCustomerId) updates.shopify_customer_id = String(shopifyCustomerId);
+      if (properties?.utm_source) updates.utm_source = properties.utm_source;
+      if (properties?.utm_medium) updates.utm_medium = properties.utm_medium;
+      if (properties?.utm_campaign) updates.utm_campaign = properties.utm_campaign;
+      if (properties?.ordersCount != null) updates.total_orders = properties.ordersCount;
+      if (properties?.totalSpent != null) updates.total_spent = parseFloat(properties.totalSpent);
+
+      await supabase.from('contacts').update(updates).eq('id', contact.id);
+    } else {
+      // Create new contact
       const { data: newContact, error } = await supabase
         .from('contacts')
         .insert({
-          organization_id: organizationId,
-          email: email || null,
+          organization_id: orgId,
+          email: email ? email.toLowerCase() : null,
           phone: phone || null,
           first_name: firstName || null,
           last_name: lastName || null,
-          source: 'pixel',
-          tags: ['pixel-identified'],
+          shopify_customer_id: shopifyCustomerId ? String(shopifyCustomerId) : null,
+          source: source || 'app_embed',
+          tags: [],
           custom_fields: {},
           total_orders: 0,
           total_spent: 0,
@@ -147,77 +158,63 @@ export async function POST(request: NextRequest) {
           const { data: retryContact } = await supabase
             .from('contacts')
             .select('id')
-            .eq('organization_id', organizationId)
+            .eq('organization_id', orgId)
             .ilike('email', email)
             .maybeSingle();
-          contactId = retryContact?.id || null;
+          contact = retryContact;
         } else {
           console.error('[Track Identify] Failed to create contact:', error);
-          return NextResponse.json(
-            { ok: false, error: 'Failed to create contact' },
-            { status: 500, headers: corsHeaders }
-          );
+          return NextResponse.json({ ok: true }, { status: 200, headers: CORS_HEADERS });
         }
       } else {
-        contactId = newContact.id;
+        contact = newContact;
 
         // Create profile_created event
-        await createEvent({
-          organization_id: organizationId,
-          contact_id: contactId,
-          store_id: storeId || null,
-          event_type: WORDER_SHOPIFY_EVENTS.PROFILE_CREATED,
-          event_source: EVENT_SOURCES.WORDER_PIXEL,
-          properties: {
-            email,
-            phone,
-            first_name: firstName,
-            last_name: lastName,
-            source: 'pixel_identify',
-          },
-          occurred_at: new Date().toISOString(),
-          idempotency_key: `profile_created:pixel:${email || phone}`,
-        });
+        try {
+          await createEvent({
+            organization_id: orgId,
+            contact_id: contact!.id,
+            store_id: store.id,
+            event_type: WORDER_SHOPIFY_EVENTS.PROFILE_CREATED,
+            event_source: 'app_embed' as any,
+            properties: {
+              email,
+              phone,
+              first_name: firstName,
+              last_name: lastName,
+              shopify_customer_id: shopifyCustomerId,
+              source: source || 'app_embed',
+            },
+            occurred_at: new Date().toISOString(),
+            idempotency_key: `profile_created:embed:${email || phone}`,
+          });
+        } catch {
+          // Idempotency — event may already exist
+        }
       }
     }
 
-    // Link anonymous events to the now-identified contact
+    // Link anonymous events to the identified contact
     let linkedCount = 0;
-    if (contactId) {
-      if (sessionId) {
-        linkedCount += await linkAnonymousEvents(sessionId, contactId);
+    if (contact?.id) {
+      if (anonymousId) {
+        linkedCount += await linkAnonymousEventsByAnonymousId(anonymousId, contact.id);
       }
-      if (anonymousId && anonymousId !== sessionId) {
-        linkedCount += await linkAnonymousEventsByAnonymousId(anonymousId, contactId);
+      if (sessionId && sessionId !== anonymousId) {
+        linkedCount += await linkAnonymousEvents(sessionId, contact.id);
       }
     }
 
-    // Set cookie with contact ID
-    const response = NextResponse.json(
+    return NextResponse.json(
       {
         ok: true,
-        contactId,
+        contactId: contact?.id || null,
         eventsLinked: linkedCount,
       },
-      { headers: corsHeaders }
+      { status: 200, headers: CORS_HEADERS }
     );
-
-    if (contactId) {
-      response.cookies.set('__worder_id', contactId, {
-        httpOnly: false, // Readable by JS for the pixel
-        secure: true,
-        sameSite: 'none', // Cross-site (Shopify → Worder)
-        maxAge: 365 * 24 * 60 * 60, // 1 year
-        path: '/',
-      });
-    }
-
-    return response;
   } catch (error: any) {
     console.error('[Track Identify] Error:', error);
-    return NextResponse.json(
-      { ok: false, error: error.message },
-      { status: 500, headers: corsHeaders }
-    );
+    return NextResponse.json({ ok: true }, { status: 200, headers: CORS_HEADERS });
   }
 }

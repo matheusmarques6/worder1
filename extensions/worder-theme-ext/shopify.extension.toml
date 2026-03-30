@@ -1,0 +1,10 @@
+api_version = "2026-01"
+
+[[extensions]]
+type = "theme"
+name = "Worder Tracking"
+
+  [[extensions.blocks]]
+  template = "blocks/worder-tracking.liquid"
+  name = "Worder Tracking"
+  target = "body"

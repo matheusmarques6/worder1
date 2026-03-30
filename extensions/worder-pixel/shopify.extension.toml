@@ -1,25 +1,25 @@
 api_version = "2026-01"
 
 [[extensions]]
-type = "web_pixel_extension"
-name = "Worder Tracking Pixel"
+type = "web_pixel"
+name = "Worder Pixel"
 runtime_context = "strict"
 
-[extensions.settings]
-  [extensions.settings.fields.accountId]
-  name = "Account ID"
-  description = "Your Worder organization ID"
-  type = "single_line_text_field"
-  validations = []
+  [extensions.settings]
+    [[extensions.settings.fields]]
+    key = "accountId"
+    type = "single_line_text_field"
+    name = "Account ID"
+    description = "Worder Account ID"
 
-  [extensions.settings.fields.storeId]
-  name = "Store ID"
-  description = "Your Worder store ID"
-  type = "single_line_text_field"
-  validations = []
+    [[extensions.settings.fields]]
+    key = "storeId"
+    type = "single_line_text_field"
+    name = "Store ID"
+    description = "Worder Store ID"
 
-  [extensions.settings.fields.trackingEndpoint]
-  name = "Tracking Endpoint"
-  description = "The URL to send tracking events to"
-  type = "single_line_text_field"
-  validations = []
+    [[extensions.settings.fields]]
+    key = "trackingEndpoint"
+    type = "single_line_text_field"
+    name = "Tracking Endpoint"
+    description = "URL do endpoint de tracking"
