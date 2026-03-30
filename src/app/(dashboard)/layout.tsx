@@ -331,7 +331,15 @@ export default function DashboardLayout({
         const result = await response.json()
         if (result.success && result.stores?.length > 0) {
           const formattedStores = result.stores.map((s: any) => ({
-            id: s.id, name: s.shop_name || s.shop_domain, domain: s.shop_domain, isActive: s.is_active,
+            id: s.id,
+            name: s.shop_name || s.shop_domain,
+            domain: s.shop_domain,
+            email: s.shop_email,
+            currency: s.currency,
+            isActive: s.is_active,
+            totalOrders: s.total_orders || 0,
+            totalRevenue: s.total_revenue || 0,
+            lastSyncAt: s.last_sync_at,
           }))
           setStores(formattedStores)
           if (currentStore) {

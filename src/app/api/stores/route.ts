@@ -51,13 +51,13 @@ export async function GET(request: NextRequest) {
 
     console.log('[/api/stores] Fetching stores for org:', profile.organization_id);
 
-    // ✅ CORREÇÃO: Buscar lojas APENAS da organização do usuário
+    // Buscar lojas ativas da organização do usuário
     const { data: stores, error } = await supabase
       .from('shopify_stores')
-      .select('id, shop_domain, shop_name, shop_email, is_active, last_sync_at, organization_id')
+      .select('id, shop_domain, shop_name, shop_email, is_active, last_sync_at, organization_id, currency, total_orders, total_revenue, total_customers, connection_status, status, api_version, plan_name, pixel_installed, embed_installed, initial_sync_completed, installed_at, settings')
       .eq('organization_id', profile.organization_id)
       .eq('is_active', true)
-      .order('created_at', { ascending: false });
+      .order('installed_at', { ascending: false });
 
     if (error) {
       console.error('[/api/stores] Error:', error.message);
