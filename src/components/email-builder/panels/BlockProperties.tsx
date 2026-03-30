@@ -232,13 +232,47 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     case 'image':
       return (
         <div className="space-y-3">
+          {/* Image preview */}
+          {p.src && (
+            <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+              <img src={p.src} alt={p.alt || ''} className="w-full h-32 object-contain" />
+              <div className="flex gap-1 p-2 border-t border-gray-100">
+                <button onClick={() => onChange('src', '')} className="flex-1 py-1.5 text-[10px] font-medium text-red-600 bg-red-50 rounded hover:bg-red-100 transition-colors">Remover</button>
+              </div>
+            </div>
+          )}
           <Field label="URL da Imagem"><TextInput value={p.src} onChange={v => onChange('src', v)} placeholder="https://..." /></Field>
-          <Field label="Texto Alt"><TextInput value={p.alt} onChange={v => onChange('alt', v)} /></Field>
-          <Field label="Link (opcional)"><TextInput value={p.href} onChange={v => onChange('href', v)} placeholder="https://..." /></Field>
-          <Field label="Largura (px)"><NumberInput value={p.width} onChange={v => onChange('width', v)} min={50} max={600} /></Field>
+          <Field label="Texto Alt"><TextInput value={p.alt} onChange={v => onChange('alt', v)} placeholder="Descrição da imagem" /></Field>
+          <Field label="Link"><TextInput value={p.href} onChange={v => onChange('href', v)} placeholder="https:// ou {{merge_tag}}" /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Largura"><NumberInput value={p.width} onChange={v => onChange('width', v)} min={50} max={600} /></Field>
+            <Field label="Raio da Borda"><NumberInput value={p.borderRadius} onChange={v => onChange('borderRadius', v)} min={0} max={100} /></Field>
+          </div>
           <Field label="Alinhamento"><SelectInput value={p.align} onChange={v => onChange('align', v)} options={ALIGN_OPTIONS} /></Field>
-          <Field label="Borda Radius"><NumberInput value={p.borderRadius} onChange={v => onChange('borderRadius', v)} min={0} max={100} /></Field>
-          <Toggle value={p.fullWidthMobile} onChange={v => onChange('fullWidthMobile', v)} label="Largura total no mobile" />
+          <Toggle value={p.fillColumn} onChange={v => onChange('fillColumn', v)} label="Preencher coluna" />
+          <Toggle value={p.fullWidthMobile !== false} onChange={v => onChange('fullWidthMobile', v)} label="Largura total no mobile" />
+          {/* Advanced */}
+          <div className="border border-gray-100 rounded-lg">
+            <details className="group">
+              <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+                Borda da Imagem <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+              </summary>
+              <div className="px-3 pb-3 space-y-2">
+                <Field label="Largura"><NumberInput value={p.border?.width || 0} onChange={v => onChange('border', { ...(p.border || {}), width: v })} min={0} max={10} /></Field>
+                <Field label="Cor"><ColorInput value={p.border?.color || '#E5E7EB'} onChange={v => onChange('border', { ...(p.border || {}), color: v })} /></Field>
+              </div>
+            </details>
+          </div>
+          <div className="border border-gray-100 rounded-lg">
+            <details className="group">
+              <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+                Background <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+              </summary>
+              <div className="px-3 pb-3">
+                <Field label="Cor de Fundo"><ColorInput value={p.backgroundColor || ''} onChange={v => onChange('backgroundColor', v)} /></Field>
+              </div>
+            </details>
+          </div>
           {commonTail()}
         </div>
       )
@@ -263,9 +297,30 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
             <Field label="Padding V"><NumberInput value={p.paddingV} onChange={v => onChange('paddingV', v)} min={0} max={40} /></Field>
           </div>
           <Toggle value={p.fullWidth} onChange={v => onChange('fullWidth', v)} label="Largura total" />
-          <Field label="Largura da Borda"><NumberInput value={p.borderWidth} onChange={v => onChange('borderWidth', v)} min={0} max={10} /></Field>
-          <Field label="Cor da Borda"><ColorInput value={p.borderColor} onChange={v => onChange('borderColor', v)} /></Field>
           <Field label="Alinhamento"><SelectInput value={p.align} onChange={v => onChange('align', v)} options={ALIGN_OPTIONS} /></Field>
+          {/* Border */}
+          <div className="border border-gray-100 rounded-lg">
+            <details className="group">
+              <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+                Borda <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+              </summary>
+              <div className="px-3 pb-3 space-y-2">
+                <Field label="Largura"><NumberInput value={p.borderWidth || 0} onChange={v => onChange('borderWidth', v)} min={0} max={10} /></Field>
+                <Field label="Cor"><ColorInput value={p.borderColor || '#E5E7EB'} onChange={v => onChange('borderColor', v)} /></Field>
+              </div>
+            </details>
+          </div>
+          {/* Shadow */}
+          <div className="border border-gray-100 rounded-lg">
+            <details className="group">
+              <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+                Sombra <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+              </summary>
+              <div className="px-3 pb-3 space-y-2">
+                <Toggle value={p.shadow?.enabled || false} onChange={v => onChange('shadow', { ...(p.shadow || {}), enabled: v })} label="Ativar sombra" />
+              </div>
+            </details>
+          </div>
           {commonTail()}
         </div>
       )
