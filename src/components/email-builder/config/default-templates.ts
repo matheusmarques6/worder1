@@ -214,4 +214,78 @@ export const DEFAULT_TEMPLATES: PrebuiltTemplate[] = [
   </td></tr>
 </table>`,
   },
+  {
+    id: 'shipping',
+    name: 'Envio / Rastreio',
+    category: 'transactional',
+    description: 'Notificação de envio com link de rastreio',
+    icon: '🚚',
+    html: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+  <tr><td style="padding:30px;text-align:center;"><img src="https://placehold.co/180x50/FFFFFF/F97316?text=LOGO" alt="Logo" width="180" style="display:block;margin:0 auto;" /></td></tr>
+  <tr><td style="padding:0 30px 10px;text-align:center;"><div style="font-size:40px;margin-bottom:12px;">🚚</div><h1 style="margin:0;font-size:24px;font-weight:bold;color:#111827;">Seu pedido está a caminho!</h1></td></tr>
+  <tr><td style="padding:10px 30px 24px;text-align:center;font-size:15px;color:#6B7280;">Olá {{first_name}}, o pedido <strong>{{order_number}}</strong> foi enviado.</td></tr>
+  <tr><td style="padding:0 30px 24px;"><table role="presentation" width="100%" style="background:#F9FAFB;border-radius:8px;"><tr><td style="padding:16px 20px;"><p style="margin:0;font-size:13px;color:#6B7280;">Código de rastreio</p><p style="margin:4px 0 0;font-size:16px;font-weight:600;color:#111827;">{{tracking_number}}</p></td></tr></table></td></tr>
+  <tr><td style="padding:0 30px 30px;text-align:center;"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;"><tr><td style="background-color:#F97316;border-radius:8px;padding:14px 32px;"><a href="{{tracking_url}}" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;">Rastrear Pedido</a></td></tr></table></td></tr>
+  <tr><td style="padding:24px 30px;text-align:center;font-size:11px;color:#9CA3AF;border-top:1px solid #E5E7EB;">{{store_name}} · <a href="{{unsubscribe_url}}" style="color:#9CA3AF;">Descadastrar-se</a></td></tr>
+</table>`,
+  },
+  {
+    id: 'review-request',
+    name: 'Pedir Avaliação',
+    category: 'transactional',
+    description: 'Solicitar avaliação após a compra',
+    icon: '⭐',
+    html: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+  <tr><td style="padding:30px;text-align:center;"><img src="https://placehold.co/180x50/FFFFFF/F97316?text=LOGO" alt="Logo" width="180" style="display:block;margin:0 auto;" /></td></tr>
+  <tr><td style="padding:0 30px 10px;text-align:center;"><h1 style="margin:0;font-size:24px;font-weight:bold;color:#111827;">Como foi sua experiência?</h1></td></tr>
+  <tr><td style="padding:10px 30px 20px;text-align:center;font-size:15px;color:#6B7280;">Olá {{first_name}}, gostaríamos de saber sua opinião sobre sua última compra.</td></tr>
+  <tr><td style="padding:0 30px 20px;text-align:center;font-size:36px;">⭐⭐⭐⭐⭐</td></tr>
+  <tr><td style="padding:0 30px 30px;text-align:center;"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;"><tr><td style="background-color:#F97316;border-radius:8px;padding:14px 32px;"><a href="{{store_url}}/review" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;">Avaliar Agora</a></td></tr></table></td></tr>
+  <tr><td style="padding:24px 30px;text-align:center;font-size:11px;color:#9CA3AF;border-top:1px solid #E5E7EB;">{{store_name}} · <a href="{{unsubscribe_url}}" style="color:#9CA3AF;">Descadastrar-se</a></td></tr>
+</table>`,
+  },
+  {
+    id: 'winback',
+    name: 'Reengajamento',
+    category: 'marketing',
+    description: 'Reconquistar clientes inativos',
+    icon: '💌',
+    html: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+  <tr><td style="padding:30px;text-align:center;"><img src="https://placehold.co/180x50/FFFFFF/F97316?text=LOGO" alt="Logo" width="180" style="display:block;margin:0 auto;" /></td></tr>
+  <tr><td style="padding:0 30px 10px;text-align:center;"><h1 style="margin:0;font-size:24px;font-weight:bold;color:#111827;">Sentimos sua falta, {{first_name}}! 💌</h1></td></tr>
+  <tr><td style="padding:10px 30px 24px;text-align:center;font-size:15px;color:#6B7280;line-height:1.6;">Faz um tempo que não nos visitamos. Preparamos algo especial para você voltar!</td></tr>
+  <tr><td style="padding:0 30px 24px;text-align:center;"><div style="background:#FFF7ED;border:2px dashed #EA580C;border-radius:12px;padding:20px;display:inline-block;"><p style="margin:0;font-size:14px;color:#9A3412;">Cupom exclusivo:</p><p style="margin:8px 0 0;font-size:28px;font-weight:bold;color:#EA580C;letter-spacing:3px;">VOLTEI15</p><p style="margin:6px 0 0;font-size:12px;color:#9CA3AF;">15% OFF · Válido por 48h</p></div></td></tr>
+  <tr><td style="padding:0 30px 30px;text-align:center;"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;"><tr><td style="background-color:#F97316;border-radius:8px;padding:14px 32px;"><a href="{{store_url}}" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;">Voltar à Loja</a></td></tr></table></td></tr>
+  <tr><td style="padding:24px 30px;text-align:center;font-size:11px;color:#9CA3AF;border-top:1px solid #E5E7EB;">{{store_name}} · <a href="{{unsubscribe_url}}" style="color:#9CA3AF;">Descadastrar-se</a></td></tr>
+</table>`,
+  },
+  {
+    id: 'new-arrivals',
+    name: 'Novidades',
+    category: 'marketing',
+    description: 'Apresentar produtos recém-chegados',
+    icon: '✨',
+    html: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+  <tr><td style="padding:30px;text-align:center;"><img src="https://placehold.co/180x50/FFFFFF/F97316?text=LOGO" alt="Logo" width="180" style="display:block;margin:0 auto;" /></td></tr>
+  <tr><td style="padding:0 30px 10px;text-align:center;"><h1 style="margin:0;font-size:24px;font-weight:bold;color:#111827;">✨ Acabou de Chegar!</h1></td></tr>
+  <tr><td style="padding:10px 30px 24px;text-align:center;font-size:15px;color:#6B7280;">Confira os produtos mais novos da nossa loja.</td></tr>
+  <tr><td style="padding:0 20px 20px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td width="50%" style="padding:8px;text-align:center;vertical-align:top;"><div style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;"><img src="https://placehold.co/260x260/F3F4F6/9CA3AF?text=Novo+1" alt="" width="100%" style="display:block;" /><div style="padding:12px;"><p style="margin:0;font-weight:600;color:#111827;font-size:14px;">Produto Novo</p><p style="margin:4px 0 0;font-weight:700;color:#F97316;font-size:18px;">R$ 99,90</p></div></div></td><td width="50%" style="padding:8px;text-align:center;vertical-align:top;"><div style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;"><img src="https://placehold.co/260x260/F3F4F6/9CA3AF?text=Novo+2" alt="" width="100%" style="display:block;" /><div style="padding:12px;"><p style="margin:0;font-weight:600;color:#111827;font-size:14px;">Produto Novo</p><p style="margin:4px 0 0;font-weight:700;color:#F97316;font-size:18px;">R$ 129,90</p></div></div></td></tr></table></td></tr>
+  <tr><td style="padding:0 30px 30px;text-align:center;"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;"><tr><td style="background-color:#F97316;border-radius:8px;padding:14px 32px;"><a href="{{store_url}}" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;">Ver Tudo</a></td></tr></table></td></tr>
+  <tr><td style="padding:24px 30px;text-align:center;font-size:11px;color:#9CA3AF;border-top:1px solid #E5E7EB;">{{store_name}} · <a href="{{unsubscribe_url}}" style="color:#9CA3AF;">Descadastrar-se</a></td></tr>
+</table>`,
+  },
+  {
+    id: 'black-friday',
+    name: 'Black Friday',
+    category: 'marketing',
+    description: 'Campanha Black Friday com countdown',
+    icon: '🖤',
+    html: `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+  <tr><td style="background-color:#111827;padding:40px 30px;text-align:center;"><h1 style="margin:0;font-size:36px;font-weight:bold;color:#FFFFFF;letter-spacing:2px;">BLACK FRIDAY</h1><p style="margin:10px 0 0;font-size:20px;color:#F97316;font-weight:bold;">ATÉ 70% OFF</p></td></tr>
+  <tr><td style="padding:30px;text-align:center;font-size:16px;color:#4B5563;line-height:1.6;">{{first_name}}, as melhores ofertas do ano estão aqui! Corra antes que acabe.</td></tr>
+  <tr><td style="padding:0 20px 20px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td width="50%" style="padding:8px;text-align:center;vertical-align:top;"><div style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;"><img src="https://placehold.co/260x260/111827/F97316?text=DEAL" alt="" width="100%" style="display:block;" /><div style="padding:12px;"><p style="margin:0;font-weight:600;color:#111827;font-size:14px;">Super Oferta</p><p style="margin:2px 0;font-size:12px;color:#9CA3AF;text-decoration:line-through;">R$ 299,90</p><p style="margin:0;font-weight:700;color:#F97316;font-size:20px;">R$ 89,90</p></div></div></td><td width="50%" style="padding:8px;text-align:center;vertical-align:top;"><div style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;"><img src="https://placehold.co/260x260/111827/F97316?text=DEAL" alt="" width="100%" style="display:block;" /><div style="padding:12px;"><p style="margin:0;font-weight:600;color:#111827;font-size:14px;">Super Oferta</p><p style="margin:2px 0;font-size:12px;color:#9CA3AF;text-decoration:line-through;">R$ 199,90</p><p style="margin:0;font-weight:700;color:#F97316;font-size:20px;">R$ 59,90</p></div></div></td></tr></table></td></tr>
+  <tr><td style="padding:0 30px 30px;text-align:center;"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;"><tr><td style="background-color:#F97316;border-radius:8px;padding:14px 40px;"><a href="{{store_url}}" style="color:#ffffff;font-size:18px;font-weight:bold;text-decoration:none;letter-spacing:1px;">COMPRAR AGORA</a></td></tr></table></td></tr>
+  <tr><td style="padding:24px 30px;text-align:center;font-size:11px;color:#9CA3AF;border-top:1px solid #E5E7EB;">{{store_name}} · <a href="{{unsubscribe_url}}" style="color:#9CA3AF;">Descadastrar-se</a></td></tr>
+</table>`,
+  },
 ]
