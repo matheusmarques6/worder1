@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
+
   if (url && key && !url.includes('placeholder')) {
     return createClient(url, key);
   }
@@ -16,28 +16,24 @@ function getSupabaseAdmin() {
 export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
-    
+
     if (!supabase) {
       return NextResponse.json({ success: false, stores: [], error: 'Database not configured' });
     }
 
-    // Pegar token do cookie
     const accessToken = request.cookies.get('sb-access-token')?.value;
-    
+
     if (!accessToken) {
-      console.log('[/api/stores] No access token');
       return NextResponse.json({ success: true, stores: [], hasStores: false });
     }
 
-    // Verificar usuário pelo token
     const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-    
+
     if (authError || !user) {
-      console.log('[/api/stores] Invalid token');
       return NextResponse.json({ success: true, stores: [], hasStores: false });
     }
 
-    // Buscar organization_id do usuário
+    // Get user's organization
     const { data: profile } = await supabase
       .from('profiles')
       .select('organization_id')
@@ -45,17 +41,25 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (!profile?.organization_id) {
-      console.log('[/api/stores] No organization for user:', user.id);
       return NextResponse.json({ success: true, stores: [], hasStores: false });
     }
 
-    console.log('[/api/stores] Fetching stores for org:', profile.organization_id);
+    // Get all orgs the user belongs to
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id);
 
-    // Buscar lojas ativas da organização do usuário
+    let orgIds = [profile.organization_id];
+    if (memberships?.length) {
+      orgIds = [...new Set([...orgIds, ...memberships.map(m => m.organization_id)])];
+    }
+
+    // Fetch active stores from ALL user's organizations
     const { data: stores, error } = await supabase
       .from('shopify_stores')
       .select('id, shop_domain, shop_name, shop_email, is_active, last_sync_at, organization_id, currency, total_orders, total_revenue, total_customers, connection_status, status, api_version, plan_name, pixel_installed, embed_installed, initial_sync_completed, installed_at, settings')
-      .eq('organization_id', profile.organization_id)
+      .in('organization_id', orgIds)
       .eq('is_active', true)
       .order('installed_at', { ascending: false });
 
@@ -64,10 +68,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, stores: [], error: error.message });
     }
 
-    console.log('[/api/stores] Found stores:', stores?.length || 0);
-
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       stores: stores || [],
       hasStores: (stores?.length || 0) > 0
     });

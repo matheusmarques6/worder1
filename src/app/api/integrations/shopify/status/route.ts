@@ -9,36 +9,29 @@ export async function GET(request: NextRequest) {
   if (!auth) return authError();
 
   const supabase = getSupabaseAdmin();
-  const orgId = auth.user.organization_id;
+  const userId = auth.user.id;
+  const userOrgId = auth.user.organization_id;
 
-  // Try 1: Find store for user's organization
-  let { data: store } = await supabase
+  // Get all orgs the user belongs to
+  const { data: memberships } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId);
+
+  let orgIds = [userOrgId];
+  if (memberships?.length) {
+    orgIds = [...new Set([...orgIds, ...memberships.map((m: any) => m.organization_id)])];
+  }
+
+  // Find active store from any of the user's orgs
+  const { data: store } = await supabase
     .from('shopify_stores')
     .select('*')
-    .eq('organization_id', orgId)
+    .in('organization_id', orgIds)
     .eq('is_active', true)
     .order('installed_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-
-  // Try 2: If not found, check if user belongs to an org that has a store
-  // This handles the case where the callback saved with a different org
-  if (!store) {
-    const { data: anyStore } = await supabase
-      .from('shopify_stores')
-      .select('*')
-      .eq('is_active', true)
-      .order('installed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (anyStore) {
-      // Check if this store's org matches any org the user has access to
-      // For single-org setups, just use it
-      store = anyStore;
-      console.log(`[Shopify Status] Found store via fallback: ${anyStore.shop_domain} (org: ${anyStore.organization_id}, user org: ${orgId})`);
-    }
-  }
 
   if (!store) {
     return NextResponse.json({ connected: false, store: null });
