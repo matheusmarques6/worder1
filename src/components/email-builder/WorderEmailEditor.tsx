@@ -289,6 +289,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const [showMergeTags, setShowMergeTags] = useState(false)
   const [showSendTest, setShowSendTest] = useState(false)
   const [showSaveBlockModal, setShowSaveBlockModal] = useState(false)
+  const [showColumnModal, setShowColumnModal] = useState(false)
+  const [columnModalCols, setColumnModalCols] = useState(2)
+  const [columnModalLayout, setColumnModalLayout] = useState<number[]>([50, 50])
   const [saveBlockName, setSaveBlockName] = useState('')
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -573,20 +576,20 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           <div className="flex-1 overflow-hidden">
             {leftTab === 'content' ? (
               <div className="flex flex-col h-full overflow-y-auto">
-                {/* Layouts sub-section */}
+                {/* Layout section — Columns + Section like Klaviyo */}
                 <div className="p-3 border-b border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Layouts</p>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {SECTION_LAYOUTS.map(layout => {
-                      const Icon = LAYOUT_ICONS[layout.icon] || Square
-                      return (
-                        <button key={layout.label} onClick={() => addSection(layout.columns)}
-                          className="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-100 hover:border-brand-300 hover:bg-brand-50 transition-colors text-gray-500 hover:text-brand-600">
-                          <Icon className="w-4 h-4" />
-                          <span className="text-[9px] font-medium leading-tight text-center">{layout.label}</span>
-                        </button>
-                      )
-                    })}
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Layout</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button onClick={() => setShowColumnModal(true)}
+                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                      <Columns className="w-5 h-5 text-gray-500" />
+                      <span className="text-[10px] font-medium text-gray-600">Colunas</span>
+                    </button>
+                    <button onClick={() => addSection([100])}
+                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                      <LayoutGrid className="w-5 h-5 text-gray-500" />
+                      <span className="text-[10px] font-medium text-gray-600">Seção</span>
+                    </button>
                   </div>
                 </div>
                 {/* Block palette */}
@@ -602,29 +605,26 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         <div className="flex-1 overflow-y-auto" style={{ backgroundColor: doc.settings.backgroundColor }}
           onDrop={handleDrop} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
           onClick={clearSelection}>
-          <div className="transition-all duration-300 mx-auto my-6" style={{ maxWidth: canvasWidth }}>
-            <div style={{
-              backgroundColor: doc.settings.contentBackgroundColor,
-              borderRadius: doc.settings.borderRadius,
-              minHeight: 200,
-              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-              overflow: 'visible',
-            }}>
-              {doc.sections.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+          <div className="my-6">
+            {doc.sections.length === 0 ? (
+              <div className="mx-auto transition-all duration-300" style={{ maxWidth: canvasWidth }}>
+                <div style={{ backgroundColor: doc.settings.contentBackgroundColor, borderRadius: doc.settings.borderRadius, minHeight: 200, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}
+                  className="flex flex-col items-center justify-center py-24 text-gray-400">
                   <Plus size={36} className="mb-3 text-gray-300" />
                   <p className="text-sm font-medium text-gray-500">Arraste blocos aqui</p>
                   <p className="text-xs mt-1 text-gray-400">ou adicione um layout na barra lateral</p>
                 </div>
-              ) : (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSortEnd}>
-                  {doc.sections.map((section) => (
-                    <div
-                      key={section.id}
-                      className={`relative group/section ${selectedSectionId === section.id ? 'ring-2 ring-indigo-400 ring-inset' : 'hover:ring-1 hover:ring-indigo-200 hover:ring-inset'}`}
-                      style={{ backgroundColor: section.styles.backgroundColor || undefined }}
-                      onClick={e => { e.stopPropagation(); selectSection(section.id) }}
-                    >
+              </div>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSortEnd}>
+                {doc.sections.map((section) => (
+                  /* Section = FULL WIDTH with section color */
+                  <div
+                    key={section.id}
+                    className={`relative group/section ${selectedSectionId === section.id ? 'ring-2 ring-indigo-400 ring-inset' : 'hover:ring-1 hover:ring-indigo-200 hover:ring-inset'}`}
+                    style={{ backgroundColor: section.styles.backgroundColor || undefined }}
+                    onClick={e => { e.stopPropagation(); selectSection(section.id) }}
+                  >
                       {/* Section toolbar INSIDE the section - always visible */}
                       {selectedSectionId === section.id && (
                         <div className="absolute left-1 top-1 z-20 flex items-center gap-1">
@@ -645,6 +645,13 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                           </div>
                         </div>
                       )}
+                      {/* Content area = centered, max-width, with content bg */}
+                      <div style={{
+                        maxWidth: canvasWidth,
+                        margin: '0 auto',
+                        backgroundColor: section.styles.contentBackgroundColor || doc.settings.contentBackgroundColor || undefined,
+                        borderRadius: doc.settings.borderRadius || undefined,
+                      }}>
                       <div
                         style={{
                           display: 'flex',
@@ -695,11 +702,11 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                           )
                         })}
                       </div>
+                      </div>{/* close content area wrapper */}
                     </div>
                   ))}
                 </DndContext>
               )}
-            </div>
           </div>
         </div>
 
@@ -807,6 +814,78 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                 }).then(() => { showToast('Bloco salvo!'); setShowSaveBlockModal(false) }).catch(() => showToast('Erro', 'error'))
               }} className="px-4 py-2 bg-brand-500 text-white text-sm font-semibold rounded-lg hover:bg-brand-600 disabled:opacity-50">
                 Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Configure Column Layout Modal (Klaviyo-style) ── */}
+      {showColumnModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowColumnModal(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-[480px] p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-semibold text-gray-900">Configurar layout de colunas</h3>
+              <button onClick={() => setShowColumnModal(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Number of columns */}
+            <p className="text-sm font-medium text-gray-700 mb-2">Número de colunas</p>
+            <div className="flex border border-gray-200 rounded-lg overflow-hidden mb-5">
+              {[1, 2, 3, 4].map(n => (
+                <button key={n} onClick={() => {
+                  setColumnModalCols(n)
+                  if (n === 1) setColumnModalLayout([100])
+                  else if (n === 2) setColumnModalLayout([50, 50])
+                  else if (n === 3) setColumnModalLayout([33, 34, 33])
+                  else setColumnModalLayout([25, 25, 25, 25])
+                }}
+                  className={`flex-1 py-2.5 text-sm font-medium transition-colors ${columnModalCols === n ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'}`}>
+                  {n}
+                </button>
+              ))}
+            </div>
+
+            {/* Column layout */}
+            {columnModalCols >= 2 && (
+              <>
+                <p className="text-sm font-medium text-gray-700 mb-2">Layout das colunas</p>
+                <div className="grid grid-cols-3 gap-2 mb-5">
+                  {(columnModalCols === 2 ? [
+                    { label: 'Igual', cols: [50, 50] },
+                    { label: '33% | 67%', cols: [33, 67] },
+                    { label: '67% | 33%', cols: [67, 33] },
+                    { label: '25% | 75%', cols: [25, 75] },
+                    { label: '75% | 25%', cols: [75, 25] },
+                  ] : columnModalCols === 3 ? [
+                    { label: 'Igual', cols: [33, 34, 33] },
+                    { label: '25% | 50% | 25%', cols: [25, 50, 25] },
+                    { label: '50% | 25% | 25%', cols: [50, 25, 25] },
+                  ] : [
+                    { label: 'Igual', cols: [25, 25, 25, 25] },
+                  ]).map(opt => {
+                    const isActive = JSON.stringify(columnModalLayout) === JSON.stringify(opt.cols)
+                    return (
+                      <button key={opt.label} onClick={() => setColumnModalLayout(opt.cols)}
+                        className={`p-3 border-2 rounded-lg text-center transition-all ${isActive ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        <div className="flex gap-0.5 justify-center mb-1">
+                          {opt.cols.map((w, i) => (
+                            <div key={i} className={`h-5 rounded-sm ${isActive ? 'bg-brand-500' : 'bg-gray-300'}`} style={{ width: `${w * 0.6}px` }} />
+                          ))}
+                        </div>
+                        <span className="text-[10px] text-gray-600">{opt.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowColumnModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
+              <button onClick={() => { addSection(columnModalLayout); setShowColumnModal(false) }}
+                className="px-4 py-2 text-sm font-semibold text-white bg-gray-900 rounded-lg hover:bg-gray-800">
+                Adicionar colunas
               </button>
             </div>
           </div>
