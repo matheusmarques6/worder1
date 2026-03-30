@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye } from 'lucide-react'
+import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag } from 'lucide-react'
 import { BlockPalette } from './panels/BlockPalette'
 import { BlockPreview } from './blocks/BlockPreview'
 import { BlockProperties } from './panels/BlockProperties'
+import { MergeTagPicker } from './modals/MergeTagPicker'
 import { BLOCK_DEFS, createBlock, DEFAULT_DOCUMENT, type EmailBlock, type EmailDocument } from './config/types'
 import { renderDocumentToHtml } from '@/lib/email/render-html'
 
@@ -28,6 +29,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const [leftTab, setLeftTab] = useState<'content' | 'styles'>('content')
   const [previewHtml, setPreviewHtml] = useState('')
   const [showPreview, setShowPreview] = useState(false)
+  const [showMergeTags, setShowMergeTags] = useState(false)
 
   // Undo/Redo
   const [history, setHistory] = useState<string[]>([])
@@ -183,6 +185,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         </div>
 
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowMergeTags(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors" title="Merge Tags">
+            <Tag size={14} /> Tags
+          </button>
           <button onClick={handlePreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
             <Eye size={14} /> Preview
           </button>
@@ -340,6 +345,16 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           </div>
         </div>
       )}
+
+      {/* ── Merge Tag Picker Modal ── */}
+      <MergeTagPicker
+        isOpen={showMergeTags}
+        onClose={() => setShowMergeTags(false)}
+        onSelect={(tag) => {
+          navigator.clipboard.writeText(tag).catch(() => {})
+          setShowMergeTags(false)
+        }}
+      />
     </div>
   )
 }
