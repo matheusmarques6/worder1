@@ -1,10 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import type { EmailBlock } from '../config/types'
 
 interface BlockPropertiesProps {
   block: EmailBlock
   onChange: (key: string, value: any) => void
+  onSaveAsReusable?: (block: EmailBlock) => void
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -56,13 +58,78 @@ function SelectInput({ value, onChange, options }: { value: string; onChange: (v
   )
 }
 
-export function BlockProperties({ block, onChange }: BlockPropertiesProps) {
+export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockPropertiesProps) {
   const p = block.props
+  const [savingBlock, setSavingBlock] = useState(false)
+  const [showConditions, setShowConditions] = useState(!!p._condition_enabled)
+
+  const handleSaveAsReusable = async () => {
+    const name = prompt('Nome do bloco reutilizável:')
+    if (!name) return
+    setSavingBlock(true)
+    try {
+      await fetch('/api/email/saved-blocks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, block_json: block }),
+      })
+      alert('✅ Bloco salvo!')
+    } catch { alert('Erro ao salvar') }
+    setSavingBlock(false)
+  }
+
+  const conditionalSection = (
+    <div className="border-t border-gray-100 pt-3 mt-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-semibold text-gray-400 uppercase">Visibilidade Condicional</span>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" checked={showConditions} onChange={e => {
+            setShowConditions(e.target.checked)
+            onChange('_condition_enabled', e.target.checked)
+            if (!e.target.checked) { onChange('_condition_field', ''); onChange('_condition_op', ''); onChange('_condition_value', '') }
+          }} className="sr-only peer" />
+          <div className="w-8 h-4 bg-gray-200 peer-checked:bg-brand-500 rounded-full transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4" />
+        </label>
+      </div>
+      {showConditions && (
+        <div className="space-y-2 p-2 bg-gray-50 rounded-md">
+          <SelectInput value={p._condition_field || ''} onChange={v => onChange('_condition_field', v)} options={[
+            { value: '', label: 'Selecionar campo...' },
+            { value: 'first_name', label: 'Nome' }, { value: 'email', label: 'Email' },
+            { value: 'tags', label: 'Tags' }, { value: 'city', label: 'Cidade' },
+            { value: 'total_orders', label: 'Total Pedidos' }, { value: 'source', label: 'Origem' },
+          ]} />
+          <SelectInput value={p._condition_op || ''} onChange={v => onChange('_condition_op', v)} options={[
+            { value: '', label: 'Operador...' },
+            { value: 'equals', label: 'É igual a' }, { value: 'not_equals', label: 'Não é igual a' },
+            { value: 'contains', label: 'Contém' }, { value: 'is_set', label: 'Está preenchido' },
+            { value: 'is_not_set', label: 'Está vazio' },
+          ]} />
+          {!['is_set', 'is_not_set'].includes(p._condition_op || '') && (
+            <TextInput value={p._condition_value || ''} onChange={v => onChange('_condition_value', v)} placeholder="Valor" />
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  const saveSection = onSaveAsReusable ? (
+    <div className="border-t border-gray-100 pt-3 mt-3">
+      <button onClick={handleSaveAsReusable} disabled={savingBlock}
+        className="w-full py-2 text-xs font-medium text-brand-600 bg-brand-50 rounded-lg hover:bg-brand-100 transition-colors disabled:opacity-50">
+        {savingBlock ? 'Salvando...' : '💾 Salvar como bloco reutilizável'}
+      </button>
+    </div>
+  ) : null
 
   const common = (
-    <Field label="Padding (px)">
-      <NumberInput value={p.padding} onChange={v => onChange('padding', v)} min={0} max={100} />
-    </Field>
+    <>
+      <Field label="Padding (px)">
+        <NumberInput value={p.padding} onChange={v => onChange('padding', v)} min={0} max={100} />
+      </Field>
+      {conditionalSection}
+      {saveSection}
+    </>
   )
 
   switch (block.type) {

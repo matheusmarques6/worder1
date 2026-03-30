@@ -88,9 +88,34 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const [history, setHistory] = useState<EmailDocument[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [leftTab, setLeftTab] = useState<'blocks' | 'settings'>('blocks')
+  const [brandPrimary, setBrandPrimary] = useState('#F97316')
+  const [brandText, setBrandText] = useState('#374151')
+  const [brandLogo, setBrandLogo] = useState('')
   const canvasRef = useRef<HTMLDivElement>(null)
 
   const selectedBlock = doc.blocks.find(b => b.id === selectedId) || null
+
+  // Load brand kit
+  useEffect(() => {
+    fetch('/api/email/brand-kit').then(r => r.json()).then(d => {
+      if (d.brandKit) {
+        setBrandPrimary(d.brandKit.colors?.primary || '#F97316')
+        setBrandText(d.brandKit.colors?.text || '#374151')
+        setBrandLogo(d.brandKit.logo_url || '')
+      }
+    }).catch(() => {})
+  }, [])
+
+  const saveBrandKit = async () => {
+    try {
+      await fetch('/api/email/brand-kit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logo_url: brandLogo, colors: { primary: brandPrimary, text: brandText }, fonts: {} }),
+      })
+      alert('✅ Brand Kit salvo!')
+    } catch { alert('Erro') }
+  }
 
   // Push to history
   const pushHistory = useCallback((newDoc: EmailDocument) => {
@@ -257,7 +282,13 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           </div>
           <div className="flex-1 overflow-y-auto p-3">
             {leftTab === 'blocks' ? (
-              <BlockPalette onAddBlock={addBlock} />
+              <BlockPalette onAddBlock={addBlock} onAddSavedBlock={(blockJson) => {
+                if (blockJson) {
+                  const restored = { ...blockJson, id: createId() }
+                  updateDoc({ ...doc, blocks: [...doc.blocks, restored] })
+                  setSelectedId(restored.id)
+                }
+              }} />
             ) : (
               <div className="space-y-3">
                 <div>
@@ -273,6 +304,39 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   <label className="block text-[11px] font-medium text-gray-500 mb-1">Largura (px)</label>
                   <input type="number" value={doc.settings.contentWidth} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, contentWidth: Number(e.target.value) } }))}
                     className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm text-gray-900" min={400} max={800} />
+                </div>
+
+                {/* Brand Kit section */}
+                <div className="pt-3 border-t border-gray-100">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Brand Kit</p>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Cor Primária (botões)</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={brandPrimary} onChange={e => setBrandPrimary(e.target.value)}
+                          className="w-7 h-7 rounded border border-gray-200 cursor-pointer p-0.5" />
+                        <input type="text" value={brandPrimary} onChange={e => setBrandPrimary(e.target.value)}
+                          className="flex-1 px-2 py-1 border border-gray-200 rounded text-[10px] font-mono text-gray-900" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">Cor do Texto</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={brandText} onChange={e => setBrandText(e.target.value)}
+                          className="w-7 h-7 rounded border border-gray-200 cursor-pointer p-0.5" />
+                        <input type="text" value={brandText} onChange={e => setBrandText(e.target.value)}
+                          className="flex-1 px-2 py-1 border border-gray-200 rounded text-[10px] font-mono text-gray-900" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-500 mb-1">URL do Logo</label>
+                      <input type="text" value={brandLogo} onChange={e => setBrandLogo(e.target.value)} placeholder="https://..."
+                        className="w-full px-2 py-1 border border-gray-200 rounded text-[10px] text-gray-900" />
+                    </div>
+                    <button onClick={saveBrandKit} className="w-full py-1.5 text-[10px] font-medium text-brand-600 bg-brand-50 rounded hover:bg-brand-100 transition-colors">
+                      Salvar Brand Kit
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -319,7 +383,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           </div>
           <div className="flex-1 overflow-y-auto p-3">
             {selectedBlock ? (
-              <BlockProperties block={selectedBlock} onChange={(key, value) => updateProp(selectedBlock.id, key, value)} />
+              <BlockProperties block={selectedBlock} onChange={(key, value) => updateProp(selectedBlock.id, key, value)} onSaveAsReusable={() => {}} />
             ) : (
               <div className="text-center py-12 text-gray-400">
                 <p className="text-xs">Selecione um bloco para editar suas propriedades</p>
