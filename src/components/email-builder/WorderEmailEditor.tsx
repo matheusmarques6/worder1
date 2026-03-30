@@ -54,6 +54,207 @@ function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDel
 
 // SectionProperties imported from './panels/SectionProperties'
 
+// ── Styles Tab (Klaviyo-level) ──
+function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch<React.SetStateAction<EmailDocument>> }) {
+  const s = doc.settings
+  const update = (key: string, value: any) => setDoc(prev => ({ ...prev, settings: { ...prev.settings, [key]: value } }))
+
+  const ColorRow = ({ label, value, field }: { label: string; value: string; field: string }) => (
+    <div>
+      <label className="block text-[11px] font-medium text-gray-500 mb-1">{label}</label>
+      <div className="flex items-center gap-2">
+        <input type="color" value={value || '#ffffff'} onChange={e => update(field, e.target.value)} className="w-7 h-7 rounded border border-gray-200 cursor-pointer p-0.5" />
+        <input type="text" value={value || ''} onChange={e => update(field, e.target.value)} className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="p-3 space-y-5 overflow-y-auto h-full">
+      {/* Backgrounds */}
+      <div>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Fundos</p>
+        <div className="space-y-3">
+          <ColorRow label="Email" value={s.backgroundColor} field="backgroundColor" />
+          <ColorRow label="Conteúdo" value={s.contentBackgroundColor} field="contentBackgroundColor" />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Largura</label>
+              <input type="number" value={s.contentWidth} onChange={e => update('contentWidth', Number(e.target.value))} min={400} max={800}
+                className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 focus:border-brand-500 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Raio Borda</label>
+              <input type="number" value={s.borderRadius} onChange={e => update('borderRadius', Number(e.target.value))} min={0} max={24}
+                className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 focus:border-brand-500 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Typography */}
+      <div>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Tipografia</p>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">Fonte Global</label>
+            <select value={s.fontFamily} onChange={e => update('fontFamily', e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
+              <option value="'DM Sans', Arial, sans-serif">DM Sans</option>
+              <option value="Arial, Helvetica, sans-serif">Arial</option>
+              <option value="Georgia, Times, serif">Georgia</option>
+              <option value="Verdana, Geneva, sans-serif">Verdana</option>
+              <option value="'Inter', sans-serif">Inter</option>
+              <option value="'Montserrat', sans-serif">Montserrat</option>
+              <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
+            </select>
+          </div>
+
+          {/* Text Styles - Body + H1-H4 */}
+          {[
+            { key: 'body', label: 'Body', defaults: { fontSize: 15, color: '#374151', lineHeight: 1.6 } },
+            { key: 'h1', label: 'H1', defaults: { fontSize: 28, color: '#111827', lineHeight: 1.3 } },
+            { key: 'h2', label: 'H2', defaults: { fontSize: 22, color: '#111827', lineHeight: 1.3 } },
+            { key: 'h3', label: 'H3', defaults: { fontSize: 18, color: '#111827', lineHeight: 1.4 } },
+            { key: 'h4', label: 'H4', defaults: { fontSize: 16, color: '#374151', lineHeight: 1.4 } },
+          ].map(style => {
+            const ts = (s as any).textStyles?.[style.key] || style.defaults
+            const updateTS = (field: string, val: any) => {
+              const textStyles = { ...((s as any).textStyles || {}) }
+              textStyles[style.key] = { ...ts, [field]: val }
+              update('textStyles', textStyles)
+            }
+            return (
+              <details key={style.key} className="group border border-gray-100 rounded-lg">
+                <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-semibold text-gray-600 hover:bg-gray-50 rounded-lg">
+                  {style.label}
+                  <span className="text-[10px] font-normal text-gray-400">{ts.fontSize}px</span>
+                </summary>
+                <div className="px-3 pb-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-400">Tamanho</label>
+                      <input type="number" value={ts.fontSize} onChange={e => updateTS('fontSize', Number(e.target.value))} min={8} max={72}
+                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400">Line Height</label>
+                      <input type="number" value={ts.lineHeight} onChange={e => updateTS('lineHeight', Number(e.target.value))} min={0.8} max={3} step={0.1}
+                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400">Cor</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={ts.color} onChange={e => updateTS('color', e.target.value)} className="w-6 h-6 rounded border border-gray-200 cursor-pointer p-0.5" />
+                      <input type="text" value={ts.color} onChange={e => updateTS('color', e.target.value)} className="flex-1 px-2 py-1 border border-gray-200 rounded text-[10px] font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+                    </div>
+                  </div>
+                </div>
+              </details>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Links */}
+      <div>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Links</p>
+        <div className="space-y-2">
+          <div>
+            <label className="text-[11px] font-medium text-gray-500 mb-1 block">Cor do Link</label>
+            <div className="flex items-center gap-2">
+              <input type="color" value={(s as any).textStyles?.link?.color || '#F97316'} onChange={e => {
+                const textStyles = { ...((s as any).textStyles || {}) }
+                textStyles.link = { ...(textStyles.link || {}), color: e.target.value }
+                update('textStyles', textStyles)
+              }} className="w-6 h-6 rounded border border-gray-200 cursor-pointer p-0.5" />
+              <input type="text" value={(s as any).textStyles?.link?.color || '#F97316'} onChange={e => {
+                const textStyles = { ...((s as any).textStyles || {}) }
+                textStyles.link = { ...(textStyles.link || {}), color: e.target.value }
+                update('textStyles', textStyles)
+              }} className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={(s as any).textStyles?.link?.underline !== false}
+              onChange={e => {
+                const textStyles = { ...((s as any).textStyles || {}) }
+                textStyles.link = { ...(textStyles.link || {}), underline: e.target.checked }
+                update('textStyles', textStyles)
+              }} className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
+            <span className="text-xs text-gray-700">Sublinhado</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Buttons */}
+      <div>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Botões Default</p>
+        {['primary', 'secondary'].map(variant => {
+          const bs = (s as any).buttonStyles?.[variant] || { bgColor: variant === 'primary' ? '#F97316' : '#FFFFFF', textColor: variant === 'primary' ? '#FFFFFF' : '#F97316', borderRadius: 8, fontWeight: 'bold' }
+          const updateBS = (field: string, val: any) => {
+            const buttonStyles = { ...((s as any).buttonStyles || {}) }
+            buttonStyles[variant] = { ...bs, [field]: val }
+            update('buttonStyles', buttonStyles)
+          }
+          return (
+            <details key={variant} className="group border border-gray-100 rounded-lg mb-2">
+              <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-semibold text-gray-600 hover:bg-gray-50 rounded-lg capitalize">
+                {variant === 'primary' ? 'Primário' : 'Secundário'}
+                <div className="w-5 h-5 rounded" style={{ backgroundColor: bs.bgColor, border: '1px solid #e5e7eb' }} />
+              </summary>
+              <div className="px-3 pb-3 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-400">Fundo</label>
+                    <div className="flex gap-1">
+                      <input type="color" value={bs.bgColor} onChange={e => updateBS('bgColor', e.target.value)} className="w-6 h-6 rounded border border-gray-200 p-0.5 cursor-pointer" />
+                      <input type="text" value={bs.bgColor} onChange={e => updateBS('bgColor', e.target.value)} className="flex-1 px-1.5 py-1 border border-gray-200 rounded text-[10px] font-mono" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400">Texto</label>
+                    <div className="flex gap-1">
+                      <input type="color" value={bs.textColor} onChange={e => updateBS('textColor', e.target.value)} className="w-6 h-6 rounded border border-gray-200 p-0.5 cursor-pointer" />
+                      <input type="text" value={bs.textColor} onChange={e => updateBS('textColor', e.target.value)} className="flex-1 px-1.5 py-1 border border-gray-200 rounded text-[10px] font-mono" />
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-400">Raio</label>
+                    <input type="number" value={bs.borderRadius} onChange={e => updateBS('borderRadius', Number(e.target.value))} min={0} max={50}
+                      className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400">Peso</label>
+                    <select value={bs.fontWeight} onChange={e => updateBS('fontWeight', e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
+                      <option value="normal">Normal</option>
+                      <option value="500">Médio</option>
+                      <option value="600">Semibold</option>
+                      <option value="bold">Bold</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </details>
+          )
+        })}
+      </div>
+
+      {/* Preheader */}
+      <div>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Preheader</p>
+        <input type="text" value={s.preheaderText || ''} onChange={e => update('preheaderText', e.target.value)}
+          placeholder="Texto de preview no inbox (aceita {{merge_tags}})"
+          className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none" />
+      </div>
+    </div>
+  )
+}
+
 // ── Helpers ──
 function findBlockLocation(doc: EmailDocument, blockId: string): { sectionIdx: number; columnIdx: number; blockIdx: number } | null {
   for (let si = 0; si < doc.sections.length; si++) {
@@ -380,48 +581,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                 <BlockPalette onAddBlock={addBlock} onAddSavedBlock={addSavedBlock} />
               </div>
             ) : (
-              <div className="p-4 space-y-4 overflow-y-auto h-full">
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Fundo do Email</label>
-                  <div className="flex items-center gap-2">
-                    <input type="color" value={doc.settings.backgroundColor} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, backgroundColor: e.target.value } }))}
-                      className="w-8 h-8 rounded border border-gray-200 cursor-pointer p-0.5" />
-                    <input type="text" value={doc.settings.backgroundColor} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, backgroundColor: e.target.value } }))}
-                      className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-900" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Fundo do Conteudo</label>
-                  <div className="flex items-center gap-2">
-                    <input type="color" value={doc.settings.contentBackgroundColor} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, contentBackgroundColor: e.target.value } }))}
-                      className="w-8 h-8 rounded border border-gray-200 cursor-pointer p-0.5" />
-                    <input type="text" value={doc.settings.contentBackgroundColor} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, contentBackgroundColor: e.target.value } }))}
-                      className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-900" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Largura (px)</label>
-                  <input type="number" value={doc.settings.contentWidth} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, contentWidth: Number(e.target.value) } }))}
-                    className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm text-gray-900" min={400} max={800} />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Raio da Borda</label>
-                  <input type="number" value={doc.settings.borderRadius} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, borderRadius: Number(e.target.value) } }))}
-                    className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm text-gray-900" min={0} max={24} />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Fonte</label>
-                  <select value={doc.settings.fontFamily} onChange={e => setDoc(prev => ({ ...prev, settings: { ...prev.settings, fontFamily: e.target.value } }))}
-                    className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm text-gray-900 bg-white">
-                    <option value="'DM Sans', Arial, Helvetica, sans-serif">DM Sans</option>
-                    <option value="Arial, Helvetica, sans-serif">Arial</option>
-                    <option value="Georgia, Times, serif">Georgia</option>
-                    <option value="'Courier New', Courier, monospace">Courier New</option>
-                    <option value="Verdana, Geneva, sans-serif">Verdana</option>
-                    <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
-                  </select>
-                </div>
-              </div>
+              <StylesTab doc={doc} setDoc={setDoc} />
             )}
           </div>
         </div>

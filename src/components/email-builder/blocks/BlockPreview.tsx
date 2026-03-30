@@ -72,7 +72,7 @@ export function BlockPreview({
               textAlign: p.align as React.CSSProperties['textAlign'],
               backgroundColor: p.backgroundColor || undefined,
             }}
-            dangerouslySetInnerHTML={{ __html: p.content || '' }}
+            dangerouslySetInnerHTML={{ __html: p.contentHtml || (typeof p.content === 'string' ? p.content : '') || '<p>Escreva seu texto aqui.</p>' }}
           />
         )
 
