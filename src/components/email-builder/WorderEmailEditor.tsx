@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, Palette, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid } from 'lucide-react'
+import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, Palette, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star } from 'lucide-react'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -352,6 +352,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     if (selectedSectionId === sectionId) clearSelection()
   }, [doc, updateDoc, selectedSectionId, clearSelection])
 
+  const cloneSection = useCallback((sectionId: string) => {
+    const idx = doc.sections.findIndex(s => s.id === sectionId)
+    if (idx === -1) return
+    const clone = JSON.parse(JSON.stringify(doc.sections[idx]))
+    clone.id = 's_' + Date.now().toString(36)
+    clone.columns = clone.columns.map((c: any) => ({ ...c, id: 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), blocks: c.blocks.map((b: any) => ({ ...b, id: 'b_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) })) }))
+    const sections = [...doc.sections]
+    sections.splice(idx + 1, 0, clone)
+    updateDoc({ ...doc, sections })
+    selectSection(clone.id)
+  }, [doc, updateDoc, selectSection])
+
   const updateSectionStyles = useCallback((sectionId: string, patch: Partial<EmailSection['styles']>) => {
     setDoc(prev => ({
       ...prev,
@@ -613,11 +625,25 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                       style={{ backgroundColor: section.styles.backgroundColor || undefined }}
                       onClick={e => { e.stopPropagation(); selectSection(section.id) }}
                     >
-                      {/* Section toolbar */}
+                      {/* Section label badge */}
                       {selectedSectionId === section.id && (
-                        <div className="absolute -right-9 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5 z-20">
+                        <div className="absolute -left-0.5 -top-5 z-20">
+                          <span className="px-2 py-0.5 bg-indigo-500 text-white text-[10px] font-semibold rounded-t-md">Section</span>
+                        </div>
+                      )}
+                      {/* Section toolbar — Clone, Star, Delete (like Klaviyo) */}
+                      {selectedSectionId === section.id && (
+                        <div className="absolute -left-10 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-lg p-0.5 z-20">
+                          <button onClick={e => { e.stopPropagation(); cloneSection(section.id) }}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Duplicar seção">
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={e => { e.stopPropagation(); /* save section */ showToast('Seção salva!') }}
+                            className="p-1.5 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded transition-colors" title="Salvar seção">
+                            <Star className="w-3.5 h-3.5" />
+                          </button>
                           <button onClick={e => { e.stopPropagation(); removeSection(section.id) }}
-                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded" title="Excluir secao">
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="Excluir seção">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -638,12 +664,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                               onDrop={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30'); const type = e.dataTransfer.getData('blockType'); if (type) addBlock(type, section.id, column.id) }}
                             >
                               {colBlocks.length === 0 ? (
-                                <div
-                                  onClick={() => addBlock('text', section.id, column.id)}
-                                  className="flex flex-col items-center justify-center h-full min-h-[80px] border-2 border-dashed border-gray-200 rounded-lg text-gray-300 text-xs cursor-pointer hover:border-brand-400 hover:text-brand-400 hover:bg-brand-50/30 transition-all"
-                                >
-                                  <Plus className="w-4 h-4 mb-1" />
-                                  <span className="text-[10px]">Arraste ou clique</span>
+                                <div className="flex items-center justify-center h-full min-h-[60px] border border-dashed border-gray-300 bg-gray-50/50 text-gray-400 text-xs gap-2 rounded">
+                                  <span>Drop content here</span>
+                                  <Trash2 className="w-3.5 h-3.5 text-gray-300" />
                                 </div>
                               ) : (
                                 <SortableContext items={colBlocks.map(b => b.id)} strategy={verticalListSortingStrategy}>

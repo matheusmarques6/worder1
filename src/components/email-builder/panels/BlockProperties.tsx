@@ -232,12 +232,45 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     case 'image':
       return (
         <div className="space-y-3">
-          {/* Image preview */}
-          {p.src && (
+          {/* Upload zone or preview */}
+          {p.src ? (
             <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
               <img src={p.src} alt={p.alt || ''} className="w-full h-32 object-contain" />
               <div className="flex gap-1 p-2 border-t border-gray-100">
+                <label className="flex-1 py-1.5 text-[10px] font-medium text-gray-600 bg-white border border-gray-200 rounded text-center cursor-pointer hover:bg-gray-50 transition-colors">
+                  Trocar
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]; if (!file) return
+                    const form = new FormData(); form.append('file', file)
+                    try {
+                      const res = await fetch('/api/images/upload', { method: 'POST', body: form })
+                      const data = await res.json()
+                      if (data.url) onChange('src', data.url)
+                      else alert(data.error || 'Erro no upload')
+                    } catch { alert('Erro no upload') }
+                  }} />
+                </label>
                 <button onClick={() => onChange('src', '')} className="flex-1 py-1.5 text-[10px] font-medium text-red-600 bg-red-50 rounded hover:bg-red-100 transition-colors">Remover</button>
+              </div>
+            </div>
+          ) : (
+            <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center bg-gray-50 hover:border-brand-400 hover:bg-brand-50/20 transition-colors">
+              <p className="text-xs font-medium text-gray-600 mb-1">Upload an image</p>
+              <p className="text-[10px] text-gray-400 mb-3">Drag and drop or select image<br/>Accepts .png, .jpg, .gif, .webp. Max 5MB.</p>
+              <div className="flex justify-center gap-2">
+                <label className="px-3 py-1.5 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                  Select image
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]; if (!file) return
+                    const form = new FormData(); form.append('file', file)
+                    try {
+                      const res = await fetch('/api/images/upload', { method: 'POST', body: form })
+                      const data = await res.json()
+                      if (data.url) onChange('src', data.url)
+                      else alert(data.error || 'Erro no upload')
+                    } catch { alert('Erro no upload') }
+                  }} />
+                </label>
               </div>
             </div>
           )}
