@@ -530,13 +530,14 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       )}
 
       {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between px-3 h-[52px] bg-white border-b border-gray-200 flex-shrink-0 z-20">
-        <div className="flex items-center gap-2.5">
-          <button onClick={onBack} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+      <div className="flex items-center justify-between px-4 h-[52px] bg-white border-b border-gray-200 flex-shrink-0 z-20">
+        <div className="flex items-center gap-3">
+          <button onClick={() => { if (confirm('Sair sem salvar? Alterações não salvas serão perdidas.')) onBack() }}
+            className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors" title="Voltar para templates">
             <ArrowLeft size={18} />
           </button>
           <div className="h-5 w-px bg-gray-200" />
-          <span className="text-sm font-semibold text-gray-900 truncate max-w-[200px]">{templateName}</span>
+          <span className="text-sm font-semibold text-gray-900 truncate max-w-[250px]">{templateName}</span>
           <span className="text-[9px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
@@ -568,7 +569,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       {/* ── Main Layout ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left Sidebar ── */}
-        <div className="w-[240px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+        <div className="w-[260px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
           <div className="flex border-b border-gray-200 flex-shrink-0">
             <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'content' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Content</button>
             <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Styles</button>
@@ -605,7 +606,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         <div className="flex-1 overflow-y-auto" style={{ backgroundColor: doc.settings.backgroundColor }}
           onDrop={handleDrop} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
           onClick={clearSelection}>
-          <div className="my-6">
+          <div className="py-4">
             {doc.sections.length === 0 ? (
               <div className="mx-auto transition-all duration-300" style={{ maxWidth: canvasWidth }}>
                 <div style={{ backgroundColor: doc.settings.contentBackgroundColor, borderRadius: doc.settings.borderRadius, minHeight: 200, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}
@@ -711,7 +712,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         </div>
 
         {/* ── Right Sidebar ── */}
-        <div className="w-[280px] bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
+        <div className="w-[310px] bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
           <div className="py-2.5 px-4 border-b border-gray-200 flex-shrink-0">
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
               {selectedBlock ? (BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type)

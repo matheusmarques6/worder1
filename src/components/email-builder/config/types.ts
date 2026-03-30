@@ -94,7 +94,7 @@ export const BLOCK_DEFS: BlockDef[] = [
   { type: 'text', label: 'Texto', icon: 'Type', category: 'Conteúdo',
     defaultProps: { contentHtml: '<p>Escreva seu texto aqui.</p>', fontSize: 15, color: '#374151', lineHeight: 1.6, align: 'left', padding: { top: 12, right: 0, bottom: 12, left: 0 }, backgroundColor: '' } },
   { type: 'image', label: 'Imagem', icon: 'Image', category: 'Conteúdo',
-    defaultProps: { src: 'https://placehold.co/560x280/F3F4F6/9CA3AF?text=Sua+Imagem', alt: '', href: '', width: 560, align: 'center', borderRadius: 0, padding: { top: 8, right: 0, bottom: 8, left: 0 }, backgroundColor: '' } },
+    defaultProps: { src: 'https://placehold.co/560x280/F3F4F6/9CA3AF?text=Sua+Imagem', alt: '', href: '', width: 560, align: 'center', borderRadius: 0, padding: { top: 0, right: 0, bottom: 0, left: 0 }, backgroundColor: '' } },
   { type: 'button', label: 'Botão', icon: 'MousePointerClick', category: 'Conteúdo',
     defaultProps: { text: 'Clique Aqui', href: '#', bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 28, paddingV: 13, align: 'center', fullWidth: false, padding: { top: 12, right: 0, bottom: 12, left: 0 }, backgroundColor: '' } },
   { type: 'divider', label: 'Divisor', icon: 'Minus', category: 'Conteúdo',
@@ -136,7 +136,7 @@ export function createSection(columnWidths: number[] = [100]): EmailSection {
   return {
     id: uid('s'),
     columns: columnWidths.map(w => ({ id: uid('c'), width: w, blocks: [] })),
-    styles: { backgroundColor: '', padding: { top: 16, right: 24, bottom: 16, left: 24 }, stackOnMobile: true },
+    styles: { backgroundColor: '', padding: { top: 0, right: 0, bottom: 0, left: 0 }, stackOnMobile: true },
   }
 }
 
