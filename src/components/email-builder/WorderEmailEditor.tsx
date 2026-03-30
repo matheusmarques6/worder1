@@ -217,8 +217,15 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ html, testEmail: email, subject: templateName }),
       })
-      alert(res.ok ? '✅ Teste enviado para ' + email : '❌ Erro no envio')
-    } catch { alert('❌ Erro') }
+      const data = await res.json()
+      if (res.ok) {
+        alert('✅ Email de teste enviado para ' + email)
+      } else {
+        alert('❌ Erro: ' + (data.error || 'Falha no envio'))
+      }
+    } catch (err: any) {
+      alert('❌ Erro de conexão: ' + (err.message || 'Verifique sua internet'))
+    }
   }, [doc, templateName])
 
   // Ctrl+S
