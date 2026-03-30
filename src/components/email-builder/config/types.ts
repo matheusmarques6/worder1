@@ -37,8 +37,17 @@ export interface EmailSection {
   columns: EmailColumn[]
   styles: {
     backgroundColor: string
+    backgroundImage?: string
+    backgroundRepeat?: string
+    backgroundSize?: string
+    contentBackgroundColor?: string  // Content color (Auto/Custom/None)
+    contentColorMode?: 'auto' | 'custom' | 'none'
+    sectionColor?: string  // Section color (expandable)
     padding: Padding
+    border?: { width: number; color: string; style: string; radius: number }
+    columnAlignment?: 'top' | 'middle' | 'bottom'
     stackOnMobile: boolean
+    mobileStackOrder?: 'rtl' | 'ltr' | 'none'
   }
   label?: string
 }
