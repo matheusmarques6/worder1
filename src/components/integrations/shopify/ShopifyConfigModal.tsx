@@ -219,7 +219,7 @@ export function ShopifyConfigModal({
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -232,7 +232,7 @@ export function ShopifyConfigModal({
               className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === 'status'
                   ? 'text-brand-600 border-b-2 border-primary-500'
-                  : 'text-gray-500 hover:text-white'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               Status
@@ -242,7 +242,7 @@ export function ShopifyConfigModal({
               className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === 'settings'
                   ? 'text-brand-600 border-b-2 border-primary-500'
-                  : 'text-gray-500 hover:text-white'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               Configurações
@@ -332,7 +332,7 @@ export function ShopifyConfigModal({
                     />
                     <button
                       onClick={handleCopyWebhook}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-white rounded-lg text-sm transition-colors"
+                      className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors"
                     >
                       {copied ? (
                         <>
@@ -390,11 +390,11 @@ export function ShopifyConfigModal({
                       onChange={e => setNewTag(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleAddTag()}
                       placeholder="Nova tag..."
-                      className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                      className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors"
                     />
                     <button
                       onClick={handleAddTag}
-                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-xl transition-colors"
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors"
                     >
                       Adicionar
                     </button>
@@ -451,7 +451,7 @@ export function ShopifyConfigModal({
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="px-6 py-2 text-gray-600 hover:text-white transition-colors"
+                className="px-6 py-2 text-gray-600 hover:text-gray-700 transition-colors"
               >
                 Cancelar
               </button>

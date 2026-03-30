@@ -332,7 +332,7 @@ export default function ShopifyImportModal({
             {status !== 'importing' && (
               <button
                 onClick={onClose}
-                className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -567,7 +567,7 @@ export default function ShopifyImportModal({
                         setSelectedPipeline(e.target.value)
                         setSelectedStage('')
                       }}
-                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500"
+                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
                     >
                       <option value="">Nenhum</option>
                       {pipelines.map((pipeline) => (
@@ -586,7 +586,7 @@ export default function ShopifyImportModal({
                       value={selectedStage}
                       onChange={(e) => setSelectedStage(e.target.value)}
                       disabled={!selectedPipeline}
-                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white focus:outline-none focus:border-primary-500 disabled:opacity-50"
+                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500 disabled:opacity-50"
                     >
                       <option value="">Selecione</option>
                       {selectedPipelineData?.stages
@@ -621,7 +621,7 @@ export default function ShopifyImportModal({
                         }`}
                       >
                         <span className={`block text-sm font-medium ${
-                          contactType === option.value ? 'text-brand-600' : 'text-white'
+                          contactType === option.value ? 'text-brand-600' : 'text-gray-900'
                         }`}>
                           {option.label}
                         </span>
@@ -792,7 +792,7 @@ export default function ShopifyImportModal({
                 <p className="text-sm text-red-400 mb-4">{error}</p>
                 <button
                   onClick={loadInitialData}
-                  className="flex items-center gap-2 mx-auto px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
+                  className="flex items-center gap-2 mx-auto px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 transition-colors"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Tentar novamente
@@ -808,7 +808,7 @@ export default function ShopifyImportModal({
             <>
               <button
                 onClick={onClose}
-                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
+                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 transition-colors"
               >
                 Cancelar
               </button>
@@ -830,7 +830,7 @@ export default function ShopifyImportModal({
                   onSuccess()
                   onClose()
                 }}
-                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
+                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 transition-colors"
               >
                 Fechar
               </button>
@@ -847,7 +847,7 @@ export default function ShopifyImportModal({
           {status === 'error' && (
             <button
               onClick={onClose}
-              className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
+              className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-700 transition-colors"
             >
               Fechar
             </button>
