@@ -119,9 +119,10 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
             { key: 'h3', label: 'H3', defaults: { fontSize: 18, color: '#111827', lineHeight: 1.4 } },
             { key: 'h4', label: 'H4', defaults: { fontSize: 16, color: '#374151', lineHeight: 1.4 } },
           ].map(style => {
-            const ts = (s as any).textStyles?.[style.key] || style.defaults
+            const tsKey = style.key as 'body' | 'h1' | 'h2' | 'h3' | 'h4'
+            const ts = s.textStyles?.[tsKey] || style.defaults
             const updateTS = (field: string, val: any) => {
-              const textStyles = { ...((s as any).textStyles || {}) }
+              const textStyles: Record<string, any> = { ...(s.textStyles || {}) }
               textStyles[style.key] = { ...ts, [field]: val }
               update('textStyles', textStyles)
             }
@@ -165,22 +166,22 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
           <div>
             <label className="text-[11px] font-medium text-gray-500 mb-1 block">Cor do Link</label>
             <div className="flex items-center gap-2">
-              <input type="color" value={(s as any).textStyles?.link?.color || '#F97316'} onChange={e => {
-                const textStyles = { ...((s as any).textStyles || {}) }
+              <input type="color" value={s.textStyles?.link?.color || '#F97316'} onChange={e => {
+                const textStyles = { ...(s.textStyles || {}) }
                 textStyles.link = { ...(textStyles.link || {}), color: e.target.value }
                 update('textStyles', textStyles)
               }} className="w-6 h-6 rounded border border-gray-200 cursor-pointer p-0.5" />
-              <input type="text" value={(s as any).textStyles?.link?.color || '#F97316'} onChange={e => {
-                const textStyles = { ...((s as any).textStyles || {}) }
+              <input type="text" value={s.textStyles?.link?.color || '#F97316'} onChange={e => {
+                const textStyles = { ...(s.textStyles || {}) }
                 textStyles.link = { ...(textStyles.link || {}), color: e.target.value }
                 update('textStyles', textStyles)
               }} className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
             </div>
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={(s as any).textStyles?.link?.underline !== false}
+            <input type="checkbox" checked={s.textStyles?.link?.underline !== false}
               onChange={e => {
-                const textStyles = { ...((s as any).textStyles || {}) }
+                const textStyles = { ...(s.textStyles || {}) }
                 textStyles.link = { ...(textStyles.link || {}), underline: e.target.checked }
                 update('textStyles', textStyles)
               }} className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
@@ -192,10 +193,10 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
       {/* Buttons */}
       <div>
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Botões Default</p>
-        {['primary', 'secondary'].map(variant => {
-          const bs = (s as any).buttonStyles?.[variant] || { bgColor: variant === 'primary' ? '#F97316' : '#FFFFFF', textColor: variant === 'primary' ? '#FFFFFF' : '#F97316', borderRadius: 8, fontWeight: 'bold' }
+        {(['primary', 'secondary'] as const).map(variant => {
+          const bs = s.buttonStyles?.[variant] || { bgColor: variant === 'primary' ? '#F97316' : '#FFFFFF', textColor: variant === 'primary' ? '#FFFFFF' : '#F97316', borderRadius: 8, fontWeight: 'bold' }
           const updateBS = (field: string, val: any) => {
-            const buttonStyles = { ...((s as any).buttonStyles || {}) }
+            const buttonStyles: Record<string, any> = { ...(s.buttonStyles || {}) }
             buttonStyles[variant] = { ...bs, [field]: val }
             update('buttonStyles', buttonStyles)
           }

@@ -179,6 +179,20 @@ export function BlockPreview({
         return <div style={{ height: p.height || 32 }} />
 
       // ── Columns ──
+      case 'columns': {
+        const cols = p.columns || 2
+        const gap = p.gap || 12
+        return (
+          <div style={{ ...pad, display: 'flex', gap }}>
+            {Array.from({ length: cols }).map((_, i) => (
+              <div key={i} style={{ flex: 1, minHeight: 60, border: '1px dashed #D1D5DB', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: 11, color: '#9CA3AF' }}>Coluna {i + 1}</span>
+              </div>
+            ))}
+          </div>
+        )
+      }
+
       // ── HTML ──
       case 'html':
         return (

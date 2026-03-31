@@ -54,6 +54,14 @@ export interface EmailSection {
 }
 
 // ── Document ──
+export interface TextStyleConfig {
+  fontSize: number; color: string; lineHeight: number
+}
+
+export interface ButtonStyleConfig {
+  bgColor: string; textColor: string; borderRadius: number; fontWeight: string
+}
+
 export interface EmailDocument {
   version: 2
   settings: {
@@ -63,6 +71,18 @@ export interface EmailDocument {
     fontFamily: string
     borderRadius: number
     preheaderText?: string
+    textStyles?: {
+      body?: TextStyleConfig
+      h1?: TextStyleConfig
+      h2?: TextStyleConfig
+      h3?: TextStyleConfig
+      h4?: TextStyleConfig
+      link?: { color?: string; underline?: boolean }
+    }
+    buttonStyles?: {
+      primary?: ButtonStyleConfig
+      secondary?: ButtonStyleConfig
+    }
   }
   sections: EmailSection[]
 }
@@ -379,6 +399,18 @@ export const DEFAULT_DOCUMENT: EmailDocument = {
     fontFamily: "'DM Sans', Arial, Helvetica, sans-serif",
     borderRadius: 0,
     preheaderText: '',
+    textStyles: {
+      body: { fontSize: 16, color: '#374151', lineHeight: 1.6 },
+      h1: { fontSize: 32, color: '#111827', lineHeight: 1.2 },
+      h2: { fontSize: 24, color: '#111827', lineHeight: 1.3 },
+      h3: { fontSize: 20, color: '#111827', lineHeight: 1.3 },
+      h4: { fontSize: 18, color: '#111827', lineHeight: 1.4 },
+      link: { color: '#F97316', underline: true },
+    },
+    buttonStyles: {
+      primary: { bgColor: '#F97316', textColor: '#FFFFFF', borderRadius: 8, fontWeight: 'bold' },
+      secondary: { bgColor: '#FFFFFF', textColor: '#F97316', borderRadius: 8, fontWeight: 'bold' },
+    },
   },
   sections: [],
 }

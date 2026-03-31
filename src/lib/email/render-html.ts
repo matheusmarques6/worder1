@@ -7,13 +7,22 @@ function pad(p: Padding | number | undefined): string {
   return `${p.top || 0}px ${p.right || 0}px ${p.bottom || 0}px ${p.left || 0}px`
 }
 
-function renderBlock(block: EmailBlock, font: string): string {
+function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['settings']): string {
   const p = block.props
   const blockPad = pad(p.padding)
+  const ts = settings?.textStyles
+  const bs = settings?.buttonStyles
+  const linkColor = ts?.link?.color || '#F97316'
+  const linkUnderline = ts?.link?.underline !== false
 
   switch (block.type) {
-    case 'text':
-      return `<tr><td style="padding:${blockPad};color:${p.color || '#374151'};font-size:${p.fontSize || 16}px;line-height:${p.lineHeight || 1.6};text-align:${p.align || 'left'};font-family:${font};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${p.contentHtml || p.content || ''}</td></tr>`
+    case 'text': {
+      const bodyTs = ts?.body
+      const tColor = p.color || bodyTs?.color || '#374151'
+      const tSize = p.fontSize || bodyTs?.fontSize || 16
+      const tLh = p.lineHeight || bodyTs?.lineHeight || 1.6
+      return `<tr><td style="padding:${blockPad};color:${tColor};font-size:${tSize}px;line-height:${tLh};text-align:${p.align || 'left'};font-family:${font};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${p.contentHtml || p.content || ''}</td></tr>`
+    }
 
     case 'image': {
       const img = `<img src="${p.src || ''}" alt="${p.alt || ''}" width="${p.width || 600}" style="max-width:100%;height:auto;display:block;margin:0 auto;border:0;outline:0;vertical-align:bottom;${p.borderRadius ? `border-radius:${p.borderRadius}px;` : ''}" />`
@@ -37,10 +46,27 @@ function renderBlock(block: EmailBlock, font: string): string {
       return `<tr><td style="padding:${blockPad};text-align:center;line-height:0;font-size:0;"><a href="${p.videoUrl || '#'}" target="_blank" style="display:block;line-height:0;"><img src="${p.thumbnailUrl || ''}" alt="Video" width="600" style="max-width:100%;height:auto;display:block;margin:0 auto;border-radius:8px;vertical-align:bottom;" /></a></td></tr>`
 
     case 'social': {
-      const icons: Record<string, string> = { instagram: '📸', facebook: '📘', tiktok: '🎵', youtube: '▶️', twitter: '🐦', linkedin: '💼', whatsapp: '💬' }
+      const iconUrls: Record<string, string> = {
+        instagram: 'https://cdn2.hubspot.net/hubfs/53/tools/email-signature-generator/icons/instagram-icon-2x.png',
+        facebook: 'https://cdn2.hubspot.net/hubfs/53/tools/email-signature-generator/icons/facebook-icon-2x.png',
+        tiktok: 'https://cdn2.hubspot.net/hubfs/53/tools/email-signature-generator/icons/tiktok-icon-2x.png',
+        youtube: 'https://cdn2.hubspot.net/hubfs/53/tools/email-signature-generator/icons/youtube-icon-2x.png',
+        twitter: 'https://cdn2.hubspot.net/hubfs/53/tools/email-signature-generator/icons/twitter-icon-2x.png',
+        linkedin: 'https://cdn2.hubspot.net/hubfs/53/tools/email-signature-generator/icons/linkedin-icon-2x.png',
+        whatsapp: 'https://cdn2.hubspot.net/hubfs/53/tools/email-signature-generator/icons/whatsapp-icon-2x.png',
+      }
+      const labels: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', twitter: 'Twitter', linkedin: 'LinkedIn', whatsapp: 'WhatsApp' }
       const nets = (p.networks || []).filter((n: any) => n.url && n.enabled !== false)
-      const html = nets.map((n: any) => `<a href="${n.url}" style="text-decoration:none;font-size:${p.iconSize || 32}px;margin:0 ${(p.spacing || 12) / 2}px;" target="_blank">${icons[n.type] || '🔗'}</a>`).join('')
-      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};">${html}</td></tr>`
+      const iconSz = p.iconSize || 32
+      const spacing = (p.spacing || 12) / 2
+      const html = nets.map((n: any) => {
+        const url = iconUrls[n.type]
+        if (url) {
+          return `<a href="${n.url}" target="_blank" style="display:inline-block;margin:0 ${spacing}px;line-height:0;text-decoration:none;"><img src="${url}" alt="${labels[n.type] || n.type}" width="${iconSz}" height="${iconSz}" style="display:block;width:${iconSz}px;height:${iconSz}px;border:0;${p.iconStyle === 'black' ? 'filter:grayscale(1);' : ''}" /></a>`
+        }
+        return `<a href="${n.url}" target="_blank" style="display:inline-block;margin:0 ${spacing}px;font-size:${iconSz}px;text-decoration:none;">${labels[n.type] || n.type}</a>`
+      }).join('')
+      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:0;font-size:0;">${html}</td></tr>`
     }
 
     case 'header':
@@ -107,18 +133,18 @@ function renderBlock(block: EmailBlock, font: string): string {
   }
 }
 
-function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string): string {
+function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string, settings?: EmailDocument['settings']): string {
   const s = section.styles
   const sectionPad = pad(s.padding)
   const sectionBg = s.backgroundColor || ''
   // Respect contentColorMode: 'auto' uses doc default, 'custom' uses section color, 'none' = transparent
-  const contentColorMode = (s as any).contentColorMode || 'auto'
+  const contentColorMode = s.contentColorMode || 'auto'
   const contentAreaBg = contentColorMode === 'none' ? '' : contentColorMode === 'custom' ? (s.contentBackgroundColor || '') : (contentBg || '')
   const stackClass = s.stackOnMobile ? ' class="worder-section-stack"' : ''
 
   // Build blocks HTML for each column
   const renderCol = (blocks: EmailBlock[]) =>
-    blocks.map(b => `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${renderBlock(b, font)}</table>`).join('\n')
+    blocks.map(b => `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${renderBlock(b, font, settings)}</table>`).join('\n')
 
   let innerHtml = ''
 
@@ -158,7 +184,7 @@ export function renderDocumentToHtml(doc: any): string {
   const font = s.fontFamily || "'DM Sans', Arial, sans-serif"
   const w = s.contentWidth || 600
 
-  const sectionsHtml = d.sections.map(sec => renderSection(sec, font, w, s.contentBackgroundColor || '#ffffff')).join('\n')
+  const sectionsHtml = d.sections.map(sec => renderSection(sec, font, w, s.contentBackgroundColor || '#ffffff', s)).join('\n')
 
   return `<!DOCTYPE html>
 <html lang="pt-BR" xmlns="http://www.w3.org/1999/xhtml">
@@ -171,9 +197,11 @@ body,table,td,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}
 table,td{mso-table-lspace:0pt;mso-table-rspace:0pt}
 img{-ms-interpolation-mode:bicubic;border:0;height:auto;line-height:100%;outline:none;text-decoration:none;display:block}
 body{margin:0;padding:0;width:100%!important}
+a{color:${s.textStyles?.link?.color || '#F97316'};${s.textStyles?.link?.underline !== false ? 'text-decoration:underline;' : 'text-decoration:none;'}}
 @media only screen and (max-width:620px){
   .email-container{width:100%!important;max-width:100%!important}
   .worder-section-stack td{display:block!important;width:100%!important}
+  td[style]{font-size:16px!important}
 }
 </style>
 </head>

@@ -257,11 +257,11 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
             </div>
           ) : (
             <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center bg-gray-50 hover:border-brand-400 hover:bg-brand-50/20 transition-colors">
-              <p className="text-xs font-medium text-gray-600 mb-1">Upload an image</p>
-              <p className="text-[10px] text-gray-400 mb-3">Drag and drop or select image<br/>Accepts .png, .jpg, .gif, .webp. Max 5MB.</p>
+              <p className="text-xs font-medium text-gray-600 mb-1">Enviar imagem</p>
+              <p className="text-[10px] text-gray-400 mb-3">Arraste e solte ou selecione a imagem<br/>Aceita .png, .jpg, .gif, .webp. Máx 5MB.</p>
               <div className="flex justify-center gap-2">
                 <label className="px-3 py-1.5 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                  Select image
+                  Selecionar imagem
                   <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                     const file = e.target.files?.[0]; if (!file) return
                     const form = new FormData(); form.append('file', file)
@@ -641,7 +641,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
                   const updated = [...p.links]; updated[i] = { ...updated[i], url: v }; onChange('links', updated)
                 }} placeholder="URL" />
               </div>
-              <button onClick={() => { const updated = p.links.filter((_: any, idx: number) => idx !== i); onChange('links', updated) }}
+              <button onClick={() => { const updated = (p.links || []).filter((_: any, idx: number) => idx !== i); onChange('links', updated) }}
                 className="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
             </div>
           ))}
