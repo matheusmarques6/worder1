@@ -1,22 +1,32 @@
 api_version = "2026-01"
-
-[[extensions]]
-type = "web_pixel"
+type = "web_pixel_extension"
 name = "Worder Pixel"
 handle = "worder-pixel"
 runtime_context = "strict"
 
-[extensions.settings.fields.accountId]
-name = "Account ID"
+[customer_privacy]
+analytics = true
+marketing = true
+preferences = false
+sale_of_data = "enabled"
+
+[settings]
+type = "object"
+
+[settings.fields.accountId]
+name = "AccountId"
 description = "Worder Account ID"
 type = "single_line_text_field"
+validations = []
 
-[extensions.settings.fields.storeId]
-name = "Store ID"
+[settings.fields.storeId]
+name = "StoreId"
 description = "Worder Store ID"
 type = "single_line_text_field"
+validations = []
 
-[extensions.settings.fields.trackingEndpoint]
-name = "Tracking Endpoint"
+[settings.fields.trackingEndpoint]
+name = "TrackingEndpoint"
 description = "URL do endpoint de tracking"
 type = "single_line_text_field"
+validations = []
