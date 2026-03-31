@@ -44,22 +44,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ contact: data });
     }
 
-    // ✅ NOVO: Para listagem, storeId é obrigatório
-    const storeValidation = await validateStoreAccess(supabase, organizationId, storeId);
-    if (!storeValidation.valid) {
-      return NextResponse.json(
-        { error: storeValidation.error },
-        { status: storeValidation.status || 400 }
-      );
-    }
-
+    // Para listagem, storeId é opcional — se não fornecido, busca por org
     let query = supabase
       .from('contacts')
       .select('*, deals(id)', { count: 'exact' })
       .eq('organization_id', organizationId)
-      .eq('store_id', storeId) // ✅ MODIFICADO: Sempre filtrar por store_id
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
+
+    // Se storeId fornecido E válido, filtrar por store
+    if (storeId) {
+      const storeValidation = await validateStoreAccess(supabase, organizationId, storeId);
+      if (storeValidation.valid) {
+        query = query.eq('store_id', storeId);
+      }
+    }
 
     if (search) {
       query = query.or(`email.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%`);

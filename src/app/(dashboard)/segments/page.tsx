@@ -22,7 +22,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import Link from 'next/link'
-import { useStoreStore } from '@/stores'
+import { useStoreStore, useAuthStore } from '@/stores'
 
 interface Segment {
   id: string
@@ -117,12 +117,15 @@ export default function SegmentsPage() {
   const [search, setSearch] = useState('')
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const { currentStore } = useStoreStore()
+  const { user } = useAuthStore()
 
   const fetchSegments = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (currentStore) params.set('store_id', currentStore?.id || '')
+      // API requires organization_id, not store_id
+      params.set('organization_id', user?.organization_id || '')
+      params.set('include_count', 'true')
       const res = await fetch(`/api/segments?${params}`)
       if (res.ok) {
         const data = await res.json()
@@ -133,7 +136,7 @@ export default function SegmentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentStore])
+  }, [user?.organization_id])
 
   useEffect(() => {
     fetchSegments()
