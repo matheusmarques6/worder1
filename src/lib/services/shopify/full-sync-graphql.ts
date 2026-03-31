@@ -465,6 +465,8 @@ async function syncProductsGraphQL(
       }
     );
 
+    console.log(`[GraphQLSync] Products fetched from Shopify: ${nodes.length}`);
+
     for (let i = 0; i < nodes.length; i += 50) {
       const batch = nodes.slice(i, i + 50);
 
@@ -502,14 +504,22 @@ async function syncProductsGraphQL(
         };
       });
 
+      console.log(`[GraphQLSync] Upserting ${products.length} products (batch ${i})...`);
+
       const { error } = await supabase
         .from('shopify_products')
         .upsert(products, { onConflict: 'store_id,shopify_product_id' });
 
-      if (error) errors.push(`Product batch ${i}: ${error.message}`);
+      if (error) {
+        console.error(`[GraphQLSync] Product upsert error:`, error.message, error.code);
+        errors.push(`Product batch ${i}: ${error.message}`);
+      } else {
+        console.log(`[GraphQLSync] Product batch ${i} upserted successfully`);
+      }
       count += batch.length;
     }
   } catch (error: any) {
+    console.error(`[GraphQLSync] Product sync fatal error:`, error.message);
     errors.push(`Product sync: ${error.message}`);
   }
 

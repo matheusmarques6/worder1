@@ -46,8 +46,11 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (!store) {
+    console.error('[Sync Now] No store found for orgIds:', orgIds);
     return NextResponse.json({ error: 'Nenhuma loja encontrada' }, { status: 404 });
   }
+
+  console.log(`[Sync Now] Found store: ${store.shop_name} (${store.shop_domain}), id: ${store.id}, has_token: ${!!store.access_token}, syncType: ${syncType}`);
 
   if (!store.access_token) {
     return NextResponse.json({ error: 'Token de acesso não encontrado. Reconecte a loja.' }, { status: 400 });
@@ -83,6 +86,11 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    console.log(`[Sync Now] Result: success=${result.success}, customers=${result.customersCount}, orders=${result.ordersCount}, products=${result.productsCount}, errors=${result.errors.length}`);
+    if (result.errors.length > 0) {
+      console.error(`[Sync Now] Errors:`, result.errors.slice(0, 10));
+    }
+
     return NextResponse.json({
       success: result.success,
       data: {
@@ -93,7 +101,7 @@ export async function POST(request: NextRequest) {
         totalRevenue: result.totalRevenue,
         durationMs: result.durationMs,
       },
-      errors: result.errors.length > 0 ? result.errors.slice(0, 5) : undefined,
+      errors: result.errors.length > 0 ? result.errors.slice(0, 10) : undefined,
     });
   } catch (error: any) {
     console.error('[Sync Now] Error:', error);
