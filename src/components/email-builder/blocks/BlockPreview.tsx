@@ -549,9 +549,9 @@ export function BlockPreview({
               <p
                 style={{
                   margin: '0 0 4px',
-                  fontSize: 18,
+                  fontSize: p.titleFontSize || 18,
                   fontWeight: 'bold',
-                  color: '#111827',
+                  color: p.titleColor || '#111827',
                   textAlign: 'center',
                 }}
               >
@@ -562,8 +562,8 @@ export function BlockPreview({
               <p
                 style={{
                   margin: '0 0 16px',
-                  fontSize: 14,
-                  color: '#6B7280',
+                  fontSize: p.subtitleFontSize || 14,
+                  color: p.subtitleColor || '#6B7280',
                   textAlign: 'center',
                 }}
               >
@@ -578,10 +578,10 @@ export function BlockPreview({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 12,
-                    background: '#fff',
+                    background: p.itemCardBg || '#fff',
                     borderRadius: 8,
                     padding: 10,
-                    border: '1px solid #E5E7EB',
+                    border: `1px solid ${p.itemBorderColor || '#E5E7EB'}`,
                   }}
                 >
                   {p.showImage !== false && (
@@ -607,8 +607,8 @@ export function BlockPreview({
                       style={{
                         margin: 0,
                         fontWeight: 600,
-                        fontSize: 14,
-                        color: '#111827',
+                        fontSize: p.itemNameFontSize || 14,
+                        color: p.itemNameColor || '#111827',
                       }}
                     >
                       Nome do produto
@@ -624,7 +624,7 @@ export function BlockPreview({
                     >
                       {p.showQuantity !== false && <span>Qtd: 1</span>}
                       {p.showPrice !== false && (
-                        <span style={{ fontWeight: 600, color: '#111827' }}>
+                        <span style={{ fontWeight: 600, color: p.itemPriceColor || '#111827' }}>
                           R$ XX,XX
                         </span>
                       )}
@@ -642,8 +642,8 @@ export function BlockPreview({
                   padding: '12px 32px',
                   background: p.buttonColor || '#F97316',
                   color: p.buttonTextColor || '#FFFFFF',
-                  borderRadius: 8,
-                  fontSize: 15,
+                  borderRadius: p.buttonRadius ?? 8,
+                  fontSize: p.buttonFontSize || 15,
                   fontWeight: 'bold',
                   textDecoration: 'none',
                 }}
@@ -666,7 +666,7 @@ export function BlockPreview({
             }}
           >
             {p.headerText && (
-              <p style={{ margin: '0 0 12px', fontSize: 14, color: '#9A3412' }}>
+              <p style={{ margin: '0 0 12px', fontSize: p.headerFontSize || 14, color: p.headerColor || '#9A3412', fontWeight: 500 }}>
                 {p.headerText}
               </p>
             )}
@@ -674,19 +674,20 @@ export function BlockPreview({
               style={{
                 margin: 0,
                 fontSize: p.codeFontSize || 32,
-                fontWeight: 'bold',
+                fontWeight: p.codeFontWeight || 'bold',
                 color: p.codeColor || '#EA580C',
-                letterSpacing: 4,
-                border: `2px ${p.borderStyle || 'dashed'} ${p.borderColor || '#EA580C'}`,
+                letterSpacing: p.codeLetterSpacing ?? 4,
+                border: p.borderStyle === 'none' ? 'none' : `${p.borderWidth ?? 2}px ${p.borderStyle || 'dashed'} ${p.borderColor || '#EA580C'}`,
                 borderRadius: p.borderRadius ?? 12,
                 display: 'inline-block',
-                padding: '8px 24px',
+                padding: '10px 28px',
+                backgroundColor: p.codeBgColor || undefined,
               }}
             >
-              {p.code}
+              {p.code || 'CODIGO'}
             </p>
             {p.footerText && (
-              <p style={{ margin: '12px 0 0', fontSize: 12, color: '#9CA3AF' }}>
+              <p style={{ margin: '12px 0 0', fontSize: p.footerFontSize || 12, color: p.footerColor || '#9CA3AF' }}>
                 {p.footerText}
               </p>
             )}

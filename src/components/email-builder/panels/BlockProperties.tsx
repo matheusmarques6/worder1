@@ -490,29 +490,49 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     case 'header':
       return (
         <div className="space-y-3">
+          {/* Logo */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Logo</span>
           <Field label="URL do Logo"><TextInput value={p.logoSrc} onChange={v => onChange('logoSrc', v)} placeholder="https://..." /></Field>
-          <Field label="Largura do Logo (px)"><NumberInput value={p.logoWidth} onChange={v => onChange('logoWidth', v)} min={40} max={400} /></Field>
+          {!p.logoSrc && (
+            <label className="block border-2 border-dashed border-gray-200 rounded-lg p-3 text-center bg-gray-50 hover:border-brand-400 cursor-pointer">
+              <span className="text-xs text-gray-500">Upload logo</span>
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0]; if (!file) return
+                const form = new FormData(); form.append('file', file)
+                try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('logoSrc', data.url) } catch { alert('Erro no upload') }
+              }} />
+            </label>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Largura (px)"><NumberInput value={p.logoWidth} onChange={v => onChange('logoWidth', v)} min={40} max={400} /></Field>
+            <Field label="Altura máx (px)"><NumberInput value={p.logoMaxHeight || 80} onChange={v => onChange('logoMaxHeight', v)} min={20} max={200} /></Field>
+          </div>
           <Field label="Link do Logo"><TextInput value={p.logoHref} onChange={v => onChange('logoHref', v)} placeholder="https://..." /></Field>
+          {/* Links */}
           <Toggle value={p.showLinks} onChange={v => onChange('showLinks', v)} label="Mostrar links de navegação" />
           {p.showLinks && (
             <div className="space-y-2 p-2 bg-gray-50 rounded-md">
               <span className="text-[10px] font-semibold text-gray-400 uppercase">Links</span>
               {(p.links || []).map((link: { text: string; url: string }, i: number) => (
-                <div key={i} className="grid grid-cols-2 gap-1.5">
-                  <TextInput value={link.text} onChange={v => {
-                    const updated = [...p.links]
-                    updated[i] = { ...updated[i], text: v }
-                    onChange('links', updated)
-                  }} placeholder="Texto" />
-                  <TextInput value={link.url} onChange={v => {
-                    const updated = [...p.links]
-                    updated[i] = { ...updated[i], url: v }
-                    onChange('links', updated)
-                  }} placeholder="URL" />
+                <div key={i} className="flex gap-1.5 items-center">
+                  <div className="flex-1 grid grid-cols-2 gap-1.5">
+                    <TextInput value={link.text} onChange={v => {
+                      const updated = [...p.links]; updated[i] = { ...updated[i], text: v }; onChange('links', updated)
+                    }} placeholder="Texto" />
+                    <TextInput value={link.url} onChange={v => {
+                      const updated = [...p.links]; updated[i] = { ...updated[i], url: v }; onChange('links', updated)
+                    }} placeholder="URL" />
+                  </div>
+                  <button onClick={() => onChange('links', (p.links || []).filter((_: any, idx: number) => idx !== i))}
+                    className="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
                 </div>
               ))}
               <button onClick={() => onChange('links', [...(p.links || []), { text: '', url: '' }])}
                 className="text-[10px] text-brand-500 hover:text-brand-600 font-medium">+ Adicionar link</button>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <Field label="Cor dos Links"><ColorInput value={p.linkColor || '#6B7280'} onChange={v => onChange('linkColor', v)} /></Field>
+                <Field label="Tamanho"><NumberInput value={p.linkFontSize || 13} onChange={v => onChange('linkFontSize', v)} min={10} max={18} /></Field>
+              </div>
             </div>
           )}
           {commonTail()}
@@ -527,8 +547,19 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
           <Toggle value={p.showUnsubscribe} onChange={v => onChange('showUnsubscribe', v)} label="Mostrar link de descadastro" />
           <Toggle value={p.showPreferences} onChange={v => onChange('showPreferences', v)} label="Mostrar preferências" />
           <Toggle value={p.showViewInBrowser} onChange={v => onChange('showViewInBrowser', v)} label="Mostrar 'ver no navegador'" />
-          <Field label="Cor do Texto"><ColorInput value={p.textColor} onChange={v => onChange('textColor', v)} /></Field>
-          <Field label="Tamanho da Fonte"><NumberInput value={p.fontSize} onChange={v => onChange('fontSize', v)} min={8} max={18} /></Field>
+          <details className="group border border-gray-100 rounded-lg" open>
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+              Tipografia <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Tamanho"><NumberInput value={p.fontSize} onChange={v => onChange('fontSize', v)} min={8} max={18} /></Field>
+                <Field label="Cor do Texto"><ColorInput value={p.textColor} onChange={v => onChange('textColor', v)} /></Field>
+              </div>
+              <Field label="Cor dos Links"><ColorInput value={p.linkColor || p.textColor || '#9CA3AF'} onChange={v => onChange('linkColor', v)} /></Field>
+              <Field label="Alinhamento"><SelectInput value={p.align || 'center'} onChange={v => onChange('align', v)} options={ALIGN_OPTIONS} /></Field>
+            </div>
+          </details>
           {commonTail()}
         </div>
       )
@@ -539,17 +570,47 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     case 'abandoned-cart':
       return (
         <div className="space-y-3">
+          {/* Textos */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Textos</span>
           <Field label="Título"><TextInput value={p.title} onChange={v => onChange('title', v)} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Tamanho Título"><NumberInput value={p.titleFontSize || 18} onChange={v => onChange('titleFontSize', v)} min={12} max={36} /></Field>
+            <Field label="Cor Título"><ColorInput value={p.titleColor || '#111827'} onChange={v => onChange('titleColor', v)} /></Field>
+          </div>
           <Field label="Subtítulo"><TextInput value={p.subtitle} onChange={v => onChange('subtitle', v)} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Tamanho Subtítulo"><NumberInput value={p.subtitleFontSize || 14} onChange={v => onChange('subtitleFontSize', v)} min={10} max={24} /></Field>
+            <Field label="Cor Subtítulo"><ColorInput value={p.subtitleColor || '#6B7280'} onChange={v => onChange('subtitleColor', v)} /></Field>
+          </div>
+          {/* Botão */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Botão</span>
           <Field label="Texto do Botão"><TextInput value={p.buttonText} onChange={v => onChange('buttonText', v)} /></Field>
-          <Field label="Cor do Botão"><ColorInput value={p.buttonColor} onChange={v => onChange('buttonColor', v)} /></Field>
-          <Field label="Cor do Texto do Botão"><ColorInput value={p.buttonTextColor} onChange={v => onChange('buttonTextColor', v)} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Cor do Botão"><ColorInput value={p.buttonColor} onChange={v => onChange('buttonColor', v)} /></Field>
+            <Field label="Cor Texto Botão"><ColorInput value={p.buttonTextColor} onChange={v => onChange('buttonTextColor', v)} /></Field>
+          </div>
+          <Field label="Raio do Botão"><NumberInput value={p.buttonRadius ?? 8} onChange={v => onChange('buttonRadius', v)} min={0} max={32} /></Field>
+          <Field label="Tamanho Fonte Botão"><NumberInput value={p.buttonFontSize || 15} onChange={v => onChange('buttonFontSize', v)} min={10} max={24} /></Field>
+          {/* Items */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Itens</span>
           <Field label="Máx. de Itens"><NumberInput value={p.maxItems} onChange={v => onChange('maxItems', v)} min={1} max={10} /></Field>
           <div className="space-y-1">
-            <Toggle value={p.showImage} onChange={v => onChange('showImage', v)} label="Mostrar imagem" />
-            <Toggle value={p.showPrice} onChange={v => onChange('showPrice', v)} label="Mostrar preço" />
-            <Toggle value={p.showQuantity} onChange={v => onChange('showQuantity', v)} label="Mostrar quantidade" />
+            <Toggle value={p.showImage !== false} onChange={v => onChange('showImage', v)} label="Mostrar imagem" />
+            <Toggle value={p.showPrice !== false} onChange={v => onChange('showPrice', v)} label="Mostrar preço" />
+            <Toggle value={p.showQuantity !== false} onChange={v => onChange('showQuantity', v)} label="Mostrar quantidade" />
           </div>
+          <details className="group border border-gray-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+              Cores dos Itens <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Field label="Cor Nome Produto"><ColorInput value={p.itemNameColor || '#111827'} onChange={v => onChange('itemNameColor', v)} /></Field>
+              <Field label="Tamanho Nome"><NumberInput value={p.itemNameFontSize || 14} onChange={v => onChange('itemNameFontSize', v)} min={10} max={20} /></Field>
+              <Field label="Cor do Preço"><ColorInput value={p.itemPriceColor || '#111827'} onChange={v => onChange('itemPriceColor', v)} /></Field>
+              <Field label="Cor Card"><ColorInput value={p.itemCardBg || '#FFFFFF'} onChange={v => onChange('itemCardBg', v)} /></Field>
+              <Field label="Cor Borda Card"><ColorInput value={p.itemBorderColor || '#E5E7EB'} onChange={v => onChange('itemBorderColor', v)} /></Field>
+            </div>
+          </details>
           {commonTail()}
         </div>
       )
@@ -557,18 +618,60 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     case 'coupon':
       return (
         <div className="space-y-3">
-          <Field label="Texto do Cabeçalho"><TextInput value={p.headerText} onChange={v => onChange('headerText', v)} /></Field>
-          <Field label="Código do Cupom"><TextInput value={p.code} onChange={v => onChange('code', v)} /></Field>
-          <Field label="Texto do Rodapé"><TextInput value={p.footerText} onChange={v => onChange('footerText', v)} /></Field>
-          <Field label="Tamanho da Fonte do Código"><NumberInput value={p.codeFontSize} onChange={v => onChange('codeFontSize', v)} min={12} max={64} /></Field>
-          <Field label="Cor do Código"><ColorInput value={p.codeColor} onChange={v => onChange('codeColor', v)} /></Field>
-          <Field label="Estilo da Borda">
-            <SelectInput value={p.borderStyle} onChange={v => onChange('borderStyle', v)} options={[
-              { value: 'solid', label: 'Sólido' }, { value: 'dashed', label: 'Tracejado' }, { value: 'dotted', label: 'Pontilhado' },
+          {/* Cabeçalho */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Cabeçalho</span>
+          <Field label="Texto"><TextInput value={p.headerText} onChange={v => onChange('headerText', v)} placeholder="Seu desconto especial:" /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Tamanho"><NumberInput value={p.headerFontSize || 14} onChange={v => onChange('headerFontSize', v)} min={10} max={24} /></Field>
+            <Field label="Cor"><ColorInput value={p.headerColor || '#9A3412'} onChange={v => onChange('headerColor', v)} /></Field>
+          </div>
+
+          {/* Código */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Código do Cupom</span>
+          <Field label="Código">
+            <div className="flex gap-1.5">
+              <TextInput value={p.code} onChange={v => onChange('code', v)} placeholder="DESCONTO20" />
+              <button onClick={() => { if (p.code) { navigator.clipboard?.writeText(p.code); } }}
+                className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 flex-shrink-0" title="Copiar código">
+                Copiar
+              </button>
+            </div>
+          </Field>
+          <p className="text-[10px] text-gray-400 -mt-1">Use {'{{coupon_code}}'} para código dinâmico ou digite um código fixo</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Tamanho"><NumberInput value={p.codeFontSize} onChange={v => onChange('codeFontSize', v)} min={16} max={64} /></Field>
+            <Field label="Cor"><ColorInput value={p.codeColor} onChange={v => onChange('codeColor', v)} /></Field>
+          </div>
+          <Field label="Peso da Fonte">
+            <SelectInput value={p.codeFontWeight || 'bold'} onChange={v => onChange('codeFontWeight', v)} options={[
+              { value: 'normal', label: 'Normal' }, { value: 'bold', label: 'Negrito' }, { value: '900', label: 'Extra Bold' },
             ]} />
           </Field>
-          <Field label="Cor da Borda"><ColorInput value={p.borderColor} onChange={v => onChange('borderColor', v)} /></Field>
-          <Field label="Border Radius"><NumberInput value={p.borderRadius} onChange={v => onChange('borderRadius', v)} min={0} max={32} /></Field>
+          <Field label="Espaçamento entre Letras"><NumberInput value={p.codeLetterSpacing ?? 4} onChange={v => onChange('codeLetterSpacing', v)} min={0} max={16} /></Field>
+
+          {/* Borda do código */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Borda do Código</span>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Estilo">
+              <SelectInput value={p.borderStyle} onChange={v => onChange('borderStyle', v)} options={[
+                { value: 'solid', label: 'Sólido' }, { value: 'dashed', label: 'Tracejado' }, { value: 'dotted', label: 'Pontilhado' }, { value: 'none', label: 'Sem Borda' },
+              ]} />
+            </Field>
+            <Field label="Espessura"><NumberInput value={p.borderWidth ?? 2} onChange={v => onChange('borderWidth', v)} min={0} max={6} /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Cor"><ColorInput value={p.borderColor} onChange={v => onChange('borderColor', v)} /></Field>
+            <Field label="Raio"><NumberInput value={p.borderRadius} onChange={v => onChange('borderRadius', v)} min={0} max={32} /></Field>
+          </div>
+          <Field label="Fundo do Código"><ColorInput value={p.codeBgColor || ''} onChange={v => onChange('codeBgColor', v)} /></Field>
+
+          {/* Rodapé */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Rodapé</span>
+          <Field label="Texto"><TextInput value={p.footerText} onChange={v => onChange('footerText', v)} placeholder="Válido até..." /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Tamanho"><NumberInput value={p.footerFontSize || 12} onChange={v => onChange('footerFontSize', v)} min={8} max={18} /></Field>
+            <Field label="Cor"><ColorInput value={p.footerColor || '#9CA3AF'} onChange={v => onChange('footerColor', v)} /></Field>
+          </div>
           {commonTail()}
         </div>
       )
@@ -903,8 +1006,8 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
             </div>
           </details>
 
-          {/* Colors */}
-          <details className="group border border-gray-100 rounded-lg">
+          {/* Colors — always visible for full control */}
+          <details className="group border border-gray-100 rounded-lg" open>
             <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
               Cores Personalizadas <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
             </summary>
