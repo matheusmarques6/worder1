@@ -423,17 +423,28 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     case 'social':
       return (
         <div className="space-y-3">
-          <span className="text-[10px] font-semibold text-gray-400 uppercase">Redes</span>
-          {(p.networks || []).map((net: { type: string; url: string }, i: number) => (
-            <div key={i} className="flex gap-2 items-end">
-              <div className="flex-1">
-                <Field label={net.type.charAt(0).toUpperCase() + net.type.slice(1)}>
-                  <TextInput value={net.url} onChange={v => {
-                    const updated = [...p.networks]
-                    updated[i] = { ...updated[i], url: v }
-                    onChange('networks', updated)
-                  }} placeholder="URL" />
-                </Field>
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Redes Sociais</span>
+          {(p.networks || []).map((net: { type: string; url: string; enabled?: boolean }, i: number) => (
+            <div key={i} className="flex gap-2 items-center">
+              <button type="button" onClick={() => {
+                const updated = [...p.networks]
+                updated[i] = { ...updated[i], enabled: !net.enabled }
+                onChange('networks', updated)
+              }} className={`relative w-8 h-[18px] rounded-full flex-shrink-0 transition-colors ${net.enabled !== false ? 'bg-brand-500' : 'bg-gray-200'}`}>
+                <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-transform ${net.enabled !== false ? 'left-[16px]' : 'left-[2px]'}`} />
+              </button>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-medium text-gray-700 w-20 capitalize">{net.type}</span>
+                  {net.enabled !== false && (
+                    <input type="text" value={net.url || ''} onChange={e => {
+                      const updated = [...p.networks]
+                      updated[i] = { ...updated[i], url: e.target.value }
+                      onChange('networks', updated)
+                    }} placeholder="URL"
+                      className="flex-1 px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                  )}
+                </div>
               </div>
             </div>
           ))}
