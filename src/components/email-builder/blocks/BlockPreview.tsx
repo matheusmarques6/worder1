@@ -682,6 +682,346 @@ export function BlockPreview({
           </div>
         )
 
+      // ── Split ──
+      case 'split': {
+        const isImageLeft = (p.layout || 'image-left') === 'image-left'
+        const ratio = p.splitRatio || 50
+        const imageSide = (
+          <div style={{ flex: `0 0 ${ratio}%`, minWidth: 0 }}>
+            <img
+              src={p.imageSrc}
+              alt={p.imageAlt || ''}
+              style={{
+                width: p.imageWidth || '100%',
+                height: 'auto',
+                display: 'block',
+              }}
+            />
+          </div>
+        )
+        const textSide = (
+          <div style={{ flex: 1, minWidth: 0, padding: 12 }}>
+            {p.textHtml && (
+              <div dangerouslySetInnerHTML={{ __html: p.textHtml }} />
+            )}
+            {p.showButton && p.buttonText && (
+              <a
+                href="#"
+                onClick={preventDefault}
+                style={{
+                  display: 'inline-block',
+                  marginTop: 12,
+                  padding: '10px 20px',
+                  backgroundColor: p.buttonColor || '#F97316',
+                  color: p.buttonTextColor || '#FFFFFF',
+                  borderRadius: 6,
+                  fontSize: 14,
+                  fontWeight: 'bold',
+                  textDecoration: 'none',
+                }}
+              >
+                {p.buttonText}
+              </a>
+            )}
+          </div>
+        )
+        return (
+          <div
+            style={{
+              ...pad,
+              backgroundColor: p.backgroundColor || undefined,
+              display: 'flex',
+              alignItems: 'stretch',
+            }}
+          >
+            {isImageLeft ? (
+              <>
+                {imageSide}
+                {textSide}
+              </>
+            ) : (
+              <>
+                {textSide}
+                {imageSide}
+              </>
+            )}
+          </div>
+        )
+      }
+
+      // ── Header Bar ──
+      case 'header-bar': {
+        const links: { text: string; url: string }[] = p.links || []
+        const separator = p.separator || '|'
+        return (
+          <div
+            style={{
+              ...pad,
+              backgroundColor: p.backgroundColor || undefined,
+              textAlign: (p.align as React.CSSProperties['textAlign']) || 'center',
+            }}
+          >
+            <div
+              style={{
+                display: 'inline-flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 0,
+              }}
+            >
+              {links.map((link, i) => (
+                <span key={i} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                  {i > 0 && (
+                    <span
+                      style={{
+                        color: p.separatorColor || '#9CA3AF',
+                        margin: '0 8px',
+                        fontSize: p.fontSize || 13,
+                      }}
+                    >
+                      {separator}
+                    </span>
+                  )}
+                  <a
+                    href="#"
+                    onClick={preventDefault}
+                    style={{
+                      color: p.textColor || '#6B7280',
+                      fontSize: p.fontSize || 13,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    {link.text}
+                  </a>
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      }
+
+      // ── Drop Shadow ──
+      case 'drop-shadow': {
+        const opacityMap: Record<string, number> = { light: 0.05, dark: 0.12, darker: 0.2 }
+        const opacity = opacityMap[p.shadowType || 'light'] ?? 0.05
+        return (
+          <div
+            style={{
+              ...pad,
+              backgroundColor: p.backgroundColor || undefined,
+            }}
+          >
+            <div
+              style={{
+                height: p.height || 8,
+                background: `linear-gradient(to bottom, rgba(0,0,0,${opacity}), transparent)`,
+              }}
+            />
+          </div>
+        )
+      }
+
+      // ── Table ──
+      case 'table': {
+        const rows = p.rows || 3
+        const cols = p.cols || 3
+        const data: string[][] = p.data || []
+        return (
+          <div
+            style={{
+              ...pad,
+              backgroundColor: p.backgroundColor || undefined,
+              overflowX: 'auto',
+            }}
+          >
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: p.cellFontSize || 13,
+              }}
+            >
+              {p.headerRow && (
+                <thead>
+                  <tr>
+                    {Array.from({ length: cols }).map((_, c) => (
+                      <th
+                        key={c}
+                        style={{
+                          padding: '8px 12px',
+                          backgroundColor: p.headerBgColor || '#111827',
+                          color: p.headerTextColor || '#FFFFFF',
+                          fontWeight: 600,
+                          textAlign: 'left',
+                          border: `${p.borderWidth || 1}px solid ${p.borderColor || '#E5E7EB'}`,
+                        }}
+                      >
+                        {data[0]?.[c] ?? `Header ${c + 1}`}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+              )}
+              <tbody>
+                {Array.from({ length: p.headerRow ? rows - 1 : rows }).map((_, r) => {
+                  const dataRowIdx = p.headerRow ? r + 1 : r
+                  const isStriped = p.stripedRows && r % 2 === 1
+                  return (
+                    <tr key={r}>
+                      {Array.from({ length: cols }).map((_, c) => (
+                        <td
+                          key={c}
+                          style={{
+                            padding: '8px 12px',
+                            color: p.cellTextColor || '#374151',
+                            backgroundColor: isStriped ? (p.stripedColor || '#F9FAFB') : undefined,
+                            border: `${p.borderWidth || 1}px solid ${p.borderColor || '#E5E7EB'}`,
+                            textAlign: 'left',
+                          }}
+                        >
+                          {data[dataRowIdx]?.[c] ?? ''}
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+
+      // ── Review Quote ──
+      case 'review-quote': {
+        const rating = Math.min(5, Math.max(0, p.rating ?? 5))
+        const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating)
+        return (
+          <div
+            style={{
+              ...pad,
+              backgroundColor: p.backgroundColor || undefined,
+              textAlign: 'center',
+            }}
+          >
+            {p.showStars !== false && (
+              <div
+                style={{
+                  fontSize: (p.quoteFontSize || 18) + 4,
+                  color: p.starColor || '#FBBF24',
+                  marginBottom: 8,
+                  letterSpacing: 2,
+                }}
+              >
+                {stars}
+              </div>
+            )}
+            <blockquote
+              style={{
+                margin: 0,
+                fontSize: p.quoteFontSize || 18,
+                color: p.quoteColor || '#374151',
+                fontStyle: p.quoteStyle || 'italic',
+                lineHeight: 1.6,
+              }}
+            >
+              &ldquo;{p.quote || 'Customer quote here.'}&rdquo;
+            </blockquote>
+            {p.author && (
+              <p
+                style={{
+                  marginTop: 12,
+                  marginBottom: 0,
+                  fontSize: p.authorFontSize || 14,
+                  color: p.authorColor || '#6B7280',
+                  fontWeight: 600,
+                }}
+              >
+                — {p.author}
+              </p>
+            )}
+          </div>
+        )
+      }
+
+      // ── Countdown ──
+      case 'countdown': {
+        const styleType = p.style || 'dark'
+        const labels = p.labels || { days: 'Days', hours: 'Hours', minutes: 'Minutes', seconds: 'Seconds' }
+        const placeholders = ['03', '12', '45', '30']
+        const labelKeys = ['days', 'hours', 'minutes', 'seconds'] as const
+        const boxBg = styleType === 'dark' ? '#111827' : styleType === 'light' ? '#F3F4F6' : 'transparent'
+        const defaultNumberColor = styleType === 'dark' ? '#FFFFFF' : '#111827'
+        const defaultLabelColor = styleType === 'dark' ? '#9CA3AF' : '#6B7280'
+        return (
+          <div
+            style={{
+              ...pad,
+              backgroundColor: p.backgroundColor || undefined,
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                display: 'inline-flex',
+                gap: 8,
+                alignItems: 'center',
+              }}
+            >
+              {placeholders.map((num, i) => (
+                <span key={i} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                  {i > 0 && (
+                    <span
+                      style={{
+                        fontSize: p.fontSize || 28,
+                        fontWeight: 'bold',
+                        color: p.numberColor || defaultNumberColor,
+                        marginRight: 8,
+                      }}
+                    >
+                      :
+                    </span>
+                  )}
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      backgroundColor: styleType !== 'minimal' ? boxBg : undefined,
+                      borderRadius: 8,
+                      padding: styleType !== 'minimal' ? '12px 16px' : '4px 8px',
+                      minWidth: 56,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: p.fontSize || 28,
+                        fontWeight: 'bold',
+                        color: p.numberColor || defaultNumberColor,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {num}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: p.labelFontSize || 10,
+                        color: p.labelColor || defaultLabelColor,
+                        marginTop: 4,
+                        textTransform: 'uppercase',
+                        letterSpacing: 1,
+                      }}
+                    >
+                      {labels[labelKeys[i]] || labelKeys[i]}
+                    </span>
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      }
+
       // ── Fallback ──
       default:
         return (

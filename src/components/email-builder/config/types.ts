@@ -8,6 +8,7 @@ export type BlockType =
   | 'columns' | 'html' | 'social' | 'video'
   | 'product-grid' | 'coupon' | 'abandoned-cart'
   | 'header' | 'footer'
+  | 'split' | 'header-bar' | 'drop-shadow' | 'table' | 'review-quote' | 'countdown'
 
 export interface Padding {
   top: number; right: number; bottom: number; left: number
@@ -234,6 +235,91 @@ export const BLOCK_DEFS: BlockDef[] = [
       textColor: '#9CA3AF', fontSize: 11,
       padding: { top: 32, right: 24, bottom: 32, left: 24 },
       backgroundColor: '#F9FAFB',
+    } },
+
+  // ══════════════════════════════════════════
+  // NOVOS BLOCOS (Klaviyo/Omnisend parity)
+  // ══════════════════════════════════════════
+
+  // ── Split: 2 colunas imagem + texto pré-configuradas ──
+  { type: 'split', label: 'Dividido', icon: 'Columns', category: 'Conteúdo',
+    defaultProps: {
+      layout: 'image-left', // 'image-left' | 'image-right'
+      imageSrc: 'https://placehold.co/300x300/F3F4F6/9CA3AF?text=Imagem',
+      imageAlt: '', imageHref: '', imageWidth: 300,
+      textHtml: '<h3 style="margin:0 0 8px;font-size:20px;font-weight:bold;color:#111827;">Título</h3><p style="margin:0;font-size:15px;color:#6B7280;line-height:1.5;">Descrição do conteúdo aqui.</p>',
+      buttonText: 'Saiba Mais', buttonHref: '#', buttonColor: '#F97316', buttonTextColor: '#FFFFFF',
+      showButton: true, splitRatio: '50-50', // '50-50' | '40-60' | '60-40'
+      padding: { top: 20, right: 24, bottom: 20, left: 24 },
+      backgroundColor: '',
+    } },
+
+  // ── Header Bar: barra de links horizontal ──
+  { type: 'header-bar', label: 'Barra de Links', icon: 'Menu', category: 'Estrutura',
+    defaultProps: {
+      links: [
+        { text: 'Loja', url: '{{store_url}}' },
+        { text: 'Novidades', url: '#' },
+        { text: 'Promoções', url: '#' },
+        { text: 'Contato', url: '#' },
+      ],
+      align: 'center', fontSize: 13, textColor: '#374151',
+      separator: '|', separatorColor: '#D1D5DB',
+      padding: { top: 12, right: 24, bottom: 12, left: 24 },
+      backgroundColor: '#FFFFFF',
+    } },
+
+  // ── Drop Shadow: bloco decorativo de sombra ──
+  { type: 'drop-shadow', label: 'Sombra', icon: 'Layers', category: 'Conteúdo',
+    defaultProps: {
+      shadowType: 'light', // 'light' | 'dark' | 'darker'
+      height: 8,
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      backgroundColor: '',
+    } },
+
+  // ── Table: tabela editável com linhas e colunas ──
+  { type: 'table', label: 'Tabela', icon: 'Table', category: 'Conteúdo',
+    defaultProps: {
+      rows: 3, cols: 2,
+      headerRow: true,
+      data: [
+        ['Coluna 1', 'Coluna 2'],
+        ['Dado 1', 'Dado 2'],
+        ['Dado 3', 'Dado 4'],
+      ],
+      headerBgColor: '#F9FAFB', headerTextColor: '#111827', headerFontWeight: '600',
+      cellTextColor: '#374151', cellFontSize: 14,
+      borderColor: '#E5E7EB', borderWidth: 1,
+      stripedRows: false, stripedColor: '#F9FAFB',
+      padding: { top: 16, right: 24, bottom: 16, left: 24 },
+      backgroundColor: '',
+    } },
+
+  // ── Review Quote: avaliação/depoimento de cliente ──
+  { type: 'review-quote', label: 'Avaliação', icon: 'Quote', category: 'Conteúdo',
+    defaultProps: {
+      quote: 'Produto incrível! Superou minhas expectativas. Recomendo para todos.',
+      author: 'Maria Silva',
+      rating: 5, // 1-5 estrelas
+      showStars: true, starColor: '#FBBF24',
+      quoteFontSize: 16, quoteColor: '#374151', quoteStyle: 'italic',
+      authorFontSize: 14, authorColor: '#6B7280',
+      padding: { top: 24, right: 32, bottom: 24, left: 32 },
+      backgroundColor: '#F9FAFB',
+    } },
+
+  // ── Countdown Timer: cronômetro regressivo ──
+  { type: 'countdown', label: 'Cronômetro', icon: 'Clock', category: 'E-commerce',
+    defaultProps: {
+      endDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+      style: 'dark', // 'dark' | 'light' | 'minimal'
+      labels: { days: 'Dias', hours: 'Horas', minutes: 'Min', seconds: 'Seg' },
+      expiredText: 'Oferta encerrada',
+      fontSize: 28, labelFontSize: 11,
+      numberColor: '#111827', labelColor: '#6B7280', bgColor: '#F3F4F6',
+      padding: { top: 20, right: 24, bottom: 20, left: 24 },
+      backgroundColor: '',
     } },
 ]
 

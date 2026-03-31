@@ -61,6 +61,47 @@ function renderBlock(block: EmailBlock, font: string): string {
     case 'columns':
       return ''
 
+    // ══════════════════════════════════════
+    // NEW BLOCKS
+    // ══════════════════════════════════════
+
+    case 'split': {
+      const isImgLeft = p.layout !== 'image-right'
+      const ratios = (p.splitRatio || '50-50').split('-').map(Number)
+      const imgCell = `<td width="${ratios[isImgLeft ? 0 : 1]}%" valign="top" style="vertical-align:top;line-height:0;font-size:0;"><img src="${p.imageSrc || ''}" alt="${p.imageAlt || ''}" width="${p.imageWidth || 300}" style="max-width:100%;height:auto;display:block;vertical-align:bottom;" /></td>`
+      const textCell = `<td width="${ratios[isImgLeft ? 1 : 0]}%" valign="middle" style="vertical-align:middle;padding:16px 20px;font-family:${font};">${p.textHtml || ''}${p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:16px;"><tr><td style="background-color:${p.buttonColor || '#F97316'};border-radius:8px;padding:12px 24px;"><a href="${p.buttonHref || '#'}" style="color:${p.buttonTextColor || '#fff'};font-size:15px;font-weight:bold;text-decoration:none;display:block;font-family:${font};">${p.buttonText || 'Saiba Mais'}</a></td></tr></table>` : ''}</td>`
+      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="worder-section-stack"><tr>${isImgLeft ? imgCell + textCell : textCell + imgCell}</tr></table></td></tr>`
+    }
+
+    case 'header-bar':
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:${p.align || 'center'};font-family:${font};font-size:${p.fontSize || 13}px;">${(p.links || []).map((l: any, i: number) => `${i > 0 ? `<span style="color:${p.separatorColor || '#D1D5DB'};margin:0 8px;">${p.separator || '|'}</span>` : ''}<a href="${l.url || '#'}" style="color:${p.textColor || '#374151'};text-decoration:none;">${l.text}</a>`).join('')}</td></tr>`
+
+    case 'drop-shadow': {
+      const opacity = p.shadowType === 'darker' ? 0.2 : p.shadowType === 'dark' ? 0.12 : 0.05
+      return `<tr><td style="padding:0;line-height:0;font-size:0;height:${p.height || 8}px;background:linear-gradient(to bottom, rgba(0,0,0,${opacity}), transparent);">&nbsp;</td></tr>`
+    }
+
+    case 'table': {
+      const data = p.data || [['', ''], ['', '']]
+      const rows = data.map((row: string[], ri: number) => {
+        const isHeader = p.headerRow && ri === 0
+        const cells = row.map((cell: string) =>
+          `<td style="padding:8px 12px;border:${p.borderWidth || 1}px solid ${p.borderColor || '#E5E7EB'};font-size:${p.cellFontSize || 14}px;color:${isHeader ? (p.headerTextColor || '#111827') : (p.cellTextColor || '#374151')};font-weight:${isHeader ? (p.headerFontWeight || '600') : 'normal'};background-color:${isHeader ? (p.headerBgColor || '#F9FAFB') : (p.stripedRows && ri % 2 === 0 ? (p.stripedColor || '#F9FAFB') : 'transparent')};font-family:${font};">${cell}</td>`
+        ).join('')
+        return `<tr>${cells}</tr>`
+      }).join('')
+      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">${rows}</table></td></tr>`
+    }
+
+    case 'review-quote': {
+      const stars = p.showStars !== false ? `<div style="margin-bottom:12px;font-size:20px;color:${p.starColor || '#FBBF24'};">${'★'.repeat(p.rating || 5)}${'☆'.repeat(5 - (p.rating || 5))}</div>` : ''
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:center;font-family:${font};">${stars}<p style="margin:0;font-size:${p.quoteFontSize || 16}px;color:${p.quoteColor || '#374151'};font-style:${p.quoteStyle || 'italic'};line-height:1.6;">"${p.quote || ''}"</p><p style="margin:12px 0 0;font-size:${p.authorFontSize || 14}px;color:${p.authorColor || '#6B7280'};font-weight:500;">— ${p.author || ''}</p></td></tr>`
+    }
+
+    case 'countdown':
+      // Countdown renders as static placeholder in email (dynamic rendering would need server-side image generation)
+      return `<tr><td style="padding:${blockPad};text-align:center;${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;"><tr>${['00', '00', '00', '00'].map((v, i) => `<td style="padding:0 ${i < 3 ? '4' : '0'}px;text-align:center;"><div style="background-color:${p.bgColor || '#F3F4F6'};border-radius:8px;padding:12px 16px;min-width:60px;"><span style="font-size:${p.fontSize || 28}px;font-weight:bold;color:${p.numberColor || '#111827'};font-family:${font};">${v}</span></div><span style="font-size:${p.labelFontSize || 11}px;color:${p.labelColor || '#6B7280'};display:block;margin-top:4px;">${[p.labels?.days || 'Dias', p.labels?.hours || 'Horas', p.labels?.minutes || 'Min', p.labels?.seconds || 'Seg'][i]}</span></td>${i < 3 ? `<td style="font-size:${p.fontSize || 28}px;font-weight:bold;color:${p.numberColor || '#111827'};padding:0 2px;">:</td>` : ''}`).join('')}</tr></table></td></tr>`
+
     default:
       return ''
   }
