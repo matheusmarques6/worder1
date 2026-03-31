@@ -579,7 +579,7 @@ function SettingsContent() {
           lastSync: status.shopify?.lastSync || currentStore?.lastSyncAt || undefined,
           stats: status.shopify?.stats || (stores.length > 0 ? {
             Orders: String(currentStore?.totalOrders || 0),
-            Customers: String(currentStore?.totalRevenue ? Math.round(currentStore.totalRevenue) : '-'),
+            Customers: '-',
             Products: '-',
           } : undefined),
           category: 'ecommerce',
@@ -734,16 +734,17 @@ function SettingsContent() {
 
   // Handle disconnect
   const handleDisconnect = async (integrationId: string) => {
-    if (!confirm(`Deseja realmente desconectar ${integrationId}?`)) return;
-    
+    if (!confirm(`Deseja realmente desconectar ${integrationId}? Dados importados serão mantidos.`)) return;
+
     setLoadingIntegration(integrationId);
-    
+
     try {
-      // TODO: Call API to disconnect
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setIntegrations(prev => prev.map(i => 
-        i.id === integrationId 
+      if (integrationId === 'shopify') {
+        await fetch('/api/integrations/shopify/disconnect', { method: 'POST' });
+      }
+
+      setIntegrations(prev => prev.map(i =>
+        i.id === integrationId
           ? { ...i, connected: false, status: 'disconnected', stats: undefined, lastSync: undefined }
           : i
       ));
@@ -754,16 +755,23 @@ function SettingsContent() {
     }
   };
 
-  // Handle sync
+  // Handle sync — calls real API for Shopify
   const handleSync = async (integrationId: string) => {
     setLoadingIntegration(integrationId);
-    
+
     try {
-      // TODO: Call API to sync
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setIntegrations(prev => prev.map(i => 
-        i.id === integrationId 
+      if (integrationId === 'shopify') {
+        const res = await fetch('/api/shopify/sync-now', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ syncType: 'all' }),
+        });
+        const data = await res.json();
+        console.log('[Settings] Shopify sync result:', data);
+      }
+
+      setIntegrations(prev => prev.map(i =>
+        i.id === integrationId
           ? { ...i, lastSync: 'Agora' }
           : i
       ));
@@ -885,7 +893,7 @@ function SettingsContent() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -905,7 +913,7 @@ function SettingsContent() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -925,7 +933,7 @@ function SettingsContent() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -945,7 +953,7 @@ function SettingsContent() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}

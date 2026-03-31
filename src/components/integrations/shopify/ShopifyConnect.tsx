@@ -34,6 +34,7 @@ export default function ShopifyConnect() {
   const [shopDomain, setShopDomain] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [syncingAll, setSyncingAll] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -121,6 +122,29 @@ export default function ShopifyConnect() {
     } catch {
       setError('Erro ao conectar. Tente novamente.');
       setConnecting(false);
+    }
+  }
+
+  async function handleSyncAll() {
+    setSyncingAll(true);
+    setError('');
+    try {
+      const res = await fetch('/api/shopify/sync-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncType: 'all' }),
+      });
+      const data = await res.json();
+      if (data.success || data.data) {
+        setSuccessMessage(`Sync concluído: ${data.data?.customers || 0} clientes, ${data.data?.products || 0} produtos, ${data.data?.orders || 0} pedidos`);
+        fetchStatus();
+      } else {
+        setError(data.error || 'Erro no sync');
+      }
+    } catch {
+      setError('Erro ao sincronizar');
+    } finally {
+      setSyncingAll(false);
     }
   }
 
@@ -217,6 +241,14 @@ export default function ShopifyConnect() {
         )}
 
         <div className="flex gap-3 pt-2">
+          <button
+            onClick={handleSyncAll}
+            disabled={syncingAll}
+            className="flex items-center gap-2 px-4 py-2 text-sm border border-emerald-300 rounded-lg hover:bg-emerald-50 text-emerald-700 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncingAll ? 'animate-spin' : ''}`} />
+            {syncingAll ? 'Sincronizando...' : 'Sync Clientes & Produtos'}
+          </button>
           <a
             href={`https://${store.shopDomain}/admin`}
             target="_blank"

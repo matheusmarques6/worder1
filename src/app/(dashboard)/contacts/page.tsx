@@ -27,12 +27,7 @@ import {
 import { useContacts, useHydratedStoreId } from '@/hooks'
 import { useAuthStore } from '@/stores'
 
-const kpis = [
-  { title: 'Total de Contatos', value: '0', icon: UsersThree, color: '#F26B2A' },
-  { title: 'Ativos (30d)', value: '0', icon: CheckCircle, color: '#22C55E' },
-  { title: 'Suprimidos', value: '0', icon: XCircle, color: '#EF4444' },
-  { title: 'Novos (7d)', value: '0', icon: UserPlus, color: '#3B82F6' },
-]
+// KPIs are computed from real data below
 
 export default function ContactsPage() {
   const { storeId } = useHydratedStoreId()
@@ -41,12 +36,37 @@ export default function ContactsPage() {
   const { contacts, loading, refetch } = useContacts({ storeId })
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState('')
 
   useEffect(() => {
-    if (storeId && organizationId) {
+    if (organizationId) {
       refetch()
     }
   }, [storeId, organizationId, refetch])
+
+  const handleSyncFromShopify = async () => {
+    setSyncing(true)
+    setSyncMessage('')
+    try {
+      const res = await fetch('/api/shopify/sync-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncType: 'customers' }),
+      })
+      const data = await res.json()
+      if (data.success || data.data) {
+        setSyncMessage(`Sincronizados: ${data.data?.customers || 0} clientes`)
+        refetch()
+      } else {
+        setSyncMessage(data.error || 'Erro no sync')
+      }
+    } catch {
+      setSyncMessage('Erro ao sincronizar')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const filteredContacts = contacts?.filter((c: any) =>
     !search ||
@@ -66,9 +86,17 @@ export default function ContactsPage() {
           <p className="text-sm text-gray-500 mt-1">Gerencie sua base de contatos e segmentos</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleSyncFromShopify}
+            disabled={syncing}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            <ArrowsClockwise className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} weight="bold" />
+            {syncing ? 'Sincronizando...' : 'Sync Shopify'}
+          </button>
           <Link
             href="/contacts/import"
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 hover:text-white hover:border-gray-200 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
           >
             <Upload className="w-4 h-4" weight="bold" />
             Importar
@@ -83,11 +111,22 @@ export default function ContactsPage() {
         </div>
       </div>
 
+      {/* Sync Message */}
+      {syncMessage && (
+        <div className={`p-3 rounded-xl text-sm ${syncMessage.includes('Erro') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+          {syncMessage}
+        </div>
+      )}
+
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => {
+        {[
+          { title: 'Total de Contatos', value: totalContacts.toString(), icon: UsersThree, color: '#F26B2A' },
+          { title: 'Ativos (30d)', value: contacts?.filter((c: any) => c.last_active_at && new Date(c.last_active_at) > new Date(Date.now() - 30*24*60*60*1000)).length?.toString() || '0', icon: CheckCircle, color: '#22C55E' },
+          { title: 'Com Pedidos', value: contacts?.filter((c: any) => (c.total_orders || 0) > 0).length?.toString() || '0', icon: CurrencyDollar, color: '#8B5CF6' },
+          { title: 'Novos (7d)', value: contacts?.filter((c: any) => c.created_at && new Date(c.created_at) > new Date(Date.now() - 7*24*60*60*1000)).length?.toString() || '0', icon: UserPlus, color: '#3B82F6' },
+        ].map((kpi, i) => {
           const Icon = kpi.icon
-          const values = [totalContacts.toString(), Math.round(totalContacts * 0.72).toString(), Math.round(totalContacts * 0.03).toString(), Math.round(totalContacts * 0.12).toString()]
           return (
             <motion.div
               key={kpi.title}
@@ -99,7 +138,7 @@ export default function ContactsPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1 font-display">{values[i]}</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1 font-display">{kpi.value}</p>
                 </div>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${kpi.color}15` }}>
                   <Icon className="w-5 h-5" style={{ color: kpi.color }} weight="duotone" />
