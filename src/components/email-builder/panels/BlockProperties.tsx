@@ -546,6 +546,280 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
         </div>
       )
 
+    case 'split':
+      return (
+        <div className="space-y-3">
+          <Field label="Layout">
+            <div className="flex gap-1">
+              {[
+                { v: 'image-left', label: 'Imagem à Esquerda' },
+                { v: 'image-right', label: 'Imagem à Direita' },
+              ].map(opt => (
+                <button key={opt.v} onClick={() => onChange('layout', opt.v)}
+                  className={`flex-1 py-1.5 text-[11px] rounded border ${p.layout === opt.v ? 'bg-brand-500 text-white border-brand-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field label="Proporção">
+            <SelectInput value={p.splitRatio || '50-50'} onChange={v => onChange('splitRatio', v)} options={[
+              { value: '50-50', label: '50% / 50%' }, { value: '40-60', label: '40% / 60%' }, { value: '60-40', label: '60% / 40%' },
+            ]} />
+          </Field>
+          {/* Image */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Imagem</span>
+          {p.imageSrc ? (
+            <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+              <img src={p.imageSrc} alt={p.imageAlt || ''} className="w-full h-24 object-contain" />
+              <div className="flex gap-1 p-2 border-t border-gray-100">
+                <label className="flex-1 py-1 text-[10px] font-medium text-gray-600 bg-white border border-gray-200 rounded text-center cursor-pointer hover:bg-gray-50">
+                  Trocar
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]; if (!file) return
+                    const form = new FormData(); form.append('file', file)
+                    try {
+                      const res = await fetch('/api/images/upload', { method: 'POST', body: form })
+                      const data = await res.json()
+                      if (data.url) onChange('imageSrc', data.url)
+                    } catch { alert('Erro no upload') }
+                  }} />
+                </label>
+                <button onClick={() => onChange('imageSrc', '')} className="flex-1 py-1 text-[10px] font-medium text-red-600 bg-red-50 rounded hover:bg-red-100">Remover</button>
+              </div>
+            </div>
+          ) : (
+            <label className="block border-2 border-dashed border-gray-200 rounded-lg p-4 text-center bg-gray-50 hover:border-brand-400 cursor-pointer">
+              <span className="text-xs text-gray-500">Upload imagem</span>
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0]; if (!file) return
+                const form = new FormData(); form.append('file', file)
+                try {
+                  const res = await fetch('/api/images/upload', { method: 'POST', body: form })
+                  const data = await res.json()
+                  if (data.url) onChange('imageSrc', data.url)
+                } catch { alert('Erro no upload') }
+              }} />
+            </label>
+          )}
+          <Field label="URL da Imagem"><TextInput value={p.imageSrc} onChange={v => onChange('imageSrc', v)} placeholder="https://..." /></Field>
+          <Field label="Texto Alt"><TextInput value={p.imageAlt} onChange={v => onChange('imageAlt', v)} /></Field>
+          <Field label="Link da Imagem"><TextInput value={p.imageHref} onChange={v => onChange('imageHref', v)} placeholder="https://..." /></Field>
+          {/* Text */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Texto</span>
+          <Field label="Conteúdo">
+            <RichTextEditor
+              content={p.textHtml || '<p>Escreva seu texto aqui.</p>'}
+              onChange={(html) => onChange('textHtml', html)}
+            />
+          </Field>
+          {/* Button */}
+          <Toggle value={p.showButton} onChange={v => onChange('showButton', v)} label="Mostrar botão" />
+          {p.showButton && (
+            <div className="space-y-2 p-2 bg-gray-50 rounded-md">
+              <Field label="Texto do Botão"><TextInput value={p.buttonText} onChange={v => onChange('buttonText', v)} /></Field>
+              <Field label="Link"><TextInput value={p.buttonHref} onChange={v => onChange('buttonHref', v)} placeholder="https://..." /></Field>
+              <Field label="Cor do Botão"><ColorInput value={p.buttonColor} onChange={v => onChange('buttonColor', v)} /></Field>
+              <Field label="Cor do Texto"><ColorInput value={p.buttonTextColor} onChange={v => onChange('buttonTextColor', v)} /></Field>
+            </div>
+          )}
+          {commonTail()}
+        </div>
+      )
+
+    case 'header-bar':
+      return (
+        <div className="space-y-3">
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Links</span>
+          {(p.links || []).map((link: { text: string; url: string }, i: number) => (
+            <div key={i} className="flex gap-1.5 items-center">
+              <div className="flex-1 grid grid-cols-2 gap-1.5">
+                <TextInput value={link.text} onChange={v => {
+                  const updated = [...p.links]; updated[i] = { ...updated[i], text: v }; onChange('links', updated)
+                }} placeholder="Texto" />
+                <TextInput value={link.url} onChange={v => {
+                  const updated = [...p.links]; updated[i] = { ...updated[i], url: v }; onChange('links', updated)
+                }} placeholder="URL" />
+              </div>
+              <button onClick={() => { const updated = p.links.filter((_: any, idx: number) => idx !== i); onChange('links', updated) }}
+                className="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
+            </div>
+          ))}
+          <button onClick={() => onChange('links', [...(p.links || []), { text: '', url: '' }])}
+            className="text-[10px] text-brand-500 hover:text-brand-600 font-medium">+ Adicionar link</button>
+          <Field label="Alinhamento"><SelectInput value={p.align} onChange={v => onChange('align', v)} options={ALIGN_OPTIONS} /></Field>
+          <Field label="Tamanho da Fonte"><NumberInput value={p.fontSize} onChange={v => onChange('fontSize', v)} min={10} max={20} /></Field>
+          <Field label="Cor do Texto"><ColorInput value={p.textColor} onChange={v => onChange('textColor', v)} /></Field>
+          <Field label="Separador"><TextInput value={p.separator} onChange={v => onChange('separator', v)} placeholder="|" /></Field>
+          <Field label="Cor do Separador"><ColorInput value={p.separatorColor} onChange={v => onChange('separatorColor', v)} /></Field>
+          {commonTail()}
+        </div>
+      )
+
+    case 'drop-shadow':
+      return (
+        <div className="space-y-3">
+          <Field label="Tipo de Sombra">
+            <SelectInput value={p.shadowType || 'light'} onChange={v => onChange('shadowType', v)} options={[
+              { value: 'light', label: 'Leve' }, { value: 'dark', label: 'Escura' }, { value: 'darker', label: 'Mais Escura' },
+            ]} />
+          </Field>
+          <Field label="Altura (px)"><NumberInput value={p.height} onChange={v => onChange('height', v)} min={2} max={30} /></Field>
+          {commonTail()}
+        </div>
+      )
+
+    case 'table': {
+      const data: string[][] = p.data || [['', ''], ['', '']]
+      const updateCell = (r: number, c: number, val: string) => {
+        const newData = data.map(row => [...row])
+        newData[r][c] = val
+        onChange('data', newData)
+      }
+      const addRow = () => {
+        const newRow = Array(data[0]?.length || 2).fill('')
+        onChange('data', [...data, newRow])
+        onChange('rows', (p.rows || data.length) + 1)
+      }
+      const removeRow = () => {
+        if (data.length <= 1) return
+        onChange('data', data.slice(0, -1))
+        onChange('rows', Math.max(1, (p.rows || data.length) - 1))
+      }
+      const addCol = () => {
+        onChange('data', data.map(row => [...row, '']))
+        onChange('cols', (p.cols || data[0]?.length || 2) + 1)
+      }
+      const removeCol = () => {
+        if ((data[0]?.length || 0) <= 1) return
+        onChange('data', data.map(row => row.slice(0, -1)))
+        onChange('cols', Math.max(1, (p.cols || data[0]?.length || 2) - 1))
+      }
+      return (
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <button onClick={addRow} className="text-[10px] font-medium text-brand-600 bg-brand-50 rounded px-2 py-1 hover:bg-brand-100">+ Linha</button>
+            <button onClick={removeRow} className="text-[10px] font-medium text-red-600 bg-red-50 rounded px-2 py-1 hover:bg-red-100">- Linha</button>
+            <button onClick={addCol} className="text-[10px] font-medium text-brand-600 bg-brand-50 rounded px-2 py-1 hover:bg-brand-100">+ Coluna</button>
+            <button onClick={removeCol} className="text-[10px] font-medium text-red-600 bg-red-50 rounded px-2 py-1 hover:bg-red-100">- Coluna</button>
+          </div>
+          <div className="border border-gray-200 rounded-lg overflow-auto max-h-60">
+            <table className="w-full text-xs">
+              <tbody>
+                {data.map((row, ri) => (
+                  <tr key={ri} className={ri === 0 && p.headerRow ? 'bg-gray-100' : ''}>
+                    {row.map((cell, ci) => (
+                      <td key={ci} className="border border-gray-200 p-0">
+                        <input type="text" value={cell} onChange={e => updateCell(ri, ci, e.target.value)}
+                          className="w-full px-1.5 py-1 text-xs text-gray-900 bg-transparent focus:outline-none focus:bg-brand-50/30"
+                          placeholder={ri === 0 && p.headerRow ? 'Cabeçalho' : 'Dado'} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Toggle value={p.headerRow} onChange={v => onChange('headerRow', v)} label="Linha de cabeçalho" />
+          <Toggle value={p.stripedRows} onChange={v => onChange('stripedRows', v)} label="Linhas alternadas" />
+          {p.stripedRows && <Field label="Cor Alternada"><ColorInput value={p.stripedColor || '#F9FAFB'} onChange={v => onChange('stripedColor', v)} /></Field>}
+          <details className="group border border-gray-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+              Cores <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Field label="Cabeçalho - Fundo"><ColorInput value={p.headerBgColor || '#F9FAFB'} onChange={v => onChange('headerBgColor', v)} /></Field>
+              <Field label="Cabeçalho - Texto"><ColorInput value={p.headerTextColor || '#111827'} onChange={v => onChange('headerTextColor', v)} /></Field>
+              <Field label="Células - Texto"><ColorInput value={p.cellTextColor || '#374151'} onChange={v => onChange('cellTextColor', v)} /></Field>
+              <Field label="Borda"><ColorInput value={p.borderColor || '#E5E7EB'} onChange={v => onChange('borderColor', v)} /></Field>
+            </div>
+          </details>
+          <Field label="Tamanho da Fonte"><NumberInput value={p.cellFontSize || 14} onChange={v => onChange('cellFontSize', v)} min={10} max={20} /></Field>
+          {commonTail()}
+        </div>
+      )
+    }
+
+    case 'review-quote':
+      return (
+        <div className="space-y-3">
+          <Field label="Depoimento">
+            <textarea value={p.quote || ''} onChange={e => onChange('quote', e.target.value)} rows={3}
+              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-md text-sm text-gray-900 focus:border-brand-500 focus:outline-none resize-y" />
+          </Field>
+          <Field label="Autor"><TextInput value={p.author} onChange={v => onChange('author', v)} /></Field>
+          <Field label="Avaliação (1-5)">
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map(n => (
+                <button key={n} onClick={() => onChange('rating', n)}
+                  className={`w-8 h-8 text-lg rounded ${n <= (p.rating || 5) ? 'text-yellow-400' : 'text-gray-300'} hover:scale-110 transition-transform`}>
+                  ★
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Toggle value={p.showStars !== false} onChange={v => onChange('showStars', v)} label="Mostrar estrelas" />
+          <Field label="Cor das Estrelas"><ColorInput value={p.starColor || '#FBBF24'} onChange={v => onChange('starColor', v)} /></Field>
+          <details className="group border border-gray-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+              Tipografia <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Field label="Tamanho do Texto"><NumberInput value={p.quoteFontSize || 16} onChange={v => onChange('quoteFontSize', v)} min={12} max={28} /></Field>
+              <Field label="Cor do Texto"><ColorInput value={p.quoteColor || '#374151'} onChange={v => onChange('quoteColor', v)} /></Field>
+              <Field label="Estilo do Texto">
+                <SelectInput value={p.quoteStyle || 'italic'} onChange={v => onChange('quoteStyle', v)} options={[
+                  { value: 'italic', label: 'Itálico' }, { value: 'normal', label: 'Normal' },
+                ]} />
+              </Field>
+              <Field label="Tamanho do Autor"><NumberInput value={p.authorFontSize || 14} onChange={v => onChange('authorFontSize', v)} min={10} max={22} /></Field>
+              <Field label="Cor do Autor"><ColorInput value={p.authorColor || '#6B7280'} onChange={v => onChange('authorColor', v)} /></Field>
+            </div>
+          </details>
+          {commonTail()}
+        </div>
+      )
+
+    case 'countdown':
+      return (
+        <div className="space-y-3">
+          <Field label="Data de Término">
+            <input type="datetime-local" value={p.endDate || ''} onChange={e => onChange('endDate', e.target.value)}
+              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-md text-sm text-gray-900 focus:border-brand-500 focus:outline-none" />
+          </Field>
+          <Field label="Estilo">
+            <SelectInput value={p.style || 'dark'} onChange={v => onChange('style', v)} options={[
+              { value: 'dark', label: 'Escuro' }, { value: 'light', label: 'Claro' }, { value: 'minimal', label: 'Minimalista' },
+            ]} />
+          </Field>
+          <Field label="Texto ao Expirar"><TextInput value={p.expiredText} onChange={v => onChange('expiredText', v)} /></Field>
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Rótulos</span>
+          <div className="grid grid-cols-4 gap-1.5">
+            <div><span className="block text-[9px] text-gray-400 text-center mb-0.5">Dias</span>
+              <TextInput value={p.labels?.days || 'Dias'} onChange={v => onChange('labels', { ...(p.labels || {}), days: v })} /></div>
+            <div><span className="block text-[9px] text-gray-400 text-center mb-0.5">Horas</span>
+              <TextInput value={p.labels?.hours || 'Horas'} onChange={v => onChange('labels', { ...(p.labels || {}), hours: v })} /></div>
+            <div><span className="block text-[9px] text-gray-400 text-center mb-0.5">Min</span>
+              <TextInput value={p.labels?.minutes || 'Min'} onChange={v => onChange('labels', { ...(p.labels || {}), minutes: v })} /></div>
+            <div><span className="block text-[9px] text-gray-400 text-center mb-0.5">Seg</span>
+              <TextInput value={p.labels?.seconds || 'Seg'} onChange={v => onChange('labels', { ...(p.labels || {}), seconds: v })} /></div>
+          </div>
+          <details className="group border border-gray-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+              Cores <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Field label="Tamanho dos Números"><NumberInput value={p.fontSize || 28} onChange={v => onChange('fontSize', v)} min={16} max={48} /></Field>
+              <Field label="Cor dos Números"><ColorInput value={p.numberColor || '#111827'} onChange={v => onChange('numberColor', v)} /></Field>
+              <Field label="Tamanho dos Rótulos"><NumberInput value={p.labelFontSize || 11} onChange={v => onChange('labelFontSize', v)} min={8} max={18} /></Field>
+              <Field label="Cor dos Rótulos"><ColorInput value={p.labelColor || '#6B7280'} onChange={v => onChange('labelColor', v)} /></Field>
+              <Field label="Fundo das Caixas"><ColorInput value={p.bgColor || '#F3F4F6'} onChange={v => onChange('bgColor', v)} /></Field>
+            </div>
+          </details>
+          {commonTail()}
+        </div>
+      )
+
     default:
       return <p className="text-xs text-gray-400 p-3">Selecione um bloco para editar</p>
   }
