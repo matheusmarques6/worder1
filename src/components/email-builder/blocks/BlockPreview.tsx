@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Instagram, Facebook, Music, Youtube, Link2, Zap, ChevronUp, ChevronDown, Copy, X } from 'lucide-react'
 import type { EmailBlock } from '../config/types'
 
@@ -168,7 +169,11 @@ export function BlockPreview({
               style={{
                 border: 'none',
                 borderTop: `${p.thickness ?? 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`,
-                margin: 0,
+                width: `${p.width ?? 100}%`,
+                marginLeft: p.align === 'left' ? 0 : 'auto',
+                marginRight: p.align === 'right' ? 0 : 'auto',
+                marginTop: 0,
+                marginBottom: 0,
               }}
             />
           </div>
@@ -838,63 +843,58 @@ export function BlockPreview({
 
       // ── Table ──
       case 'table': {
-        const rows = p.rows || 3
-        const cols = p.cols || 3
         const data: string[][] = p.data || []
+        const cols = data[0]?.length || p.cols || 2
+        const borderW = p.borderWidth ?? 1
+        const cellPad = p.cellPadding ?? 10
+        const tAlign = (p.textAlign as React.CSSProperties['textAlign']) || 'left'
+        const tableRadius = p.tableBorderRadius ?? 0
+
         return (
-          <div
-            style={{
-              ...pad,
-              backgroundColor: p.backgroundColor || undefined,
-              overflowX: 'auto',
-            }}
-          >
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                fontSize: p.cellFontSize || 13,
-              }}
-            >
-              {p.headerRow && (
+          <div style={{ ...pad, backgroundColor: p.backgroundColor || undefined, overflowX: 'auto' }}>
+            <table style={{
+              width: '100%', borderCollapse: tableRadius > 0 ? 'separate' : 'collapse',
+              borderSpacing: tableRadius > 0 ? 0 : undefined,
+              fontSize: p.cellFontSize || 14,
+              borderRadius: tableRadius,
+              overflow: 'hidden',
+              border: borderW > 0 ? `${borderW}px solid ${p.borderColor || '#E5E7EB'}` : 'none',
+            }}>
+              {p.headerRow && data[0] && (
                 <thead>
                   <tr>
-                    {Array.from({ length: cols }).map((_, c) => (
-                      <th
-                        key={c}
-                        style={{
-                          padding: '8px 12px',
-                          backgroundColor: p.headerBgColor || '#111827',
-                          color: p.headerTextColor || '#FFFFFF',
-                          fontWeight: 600,
-                          textAlign: 'left',
-                          border: `${p.borderWidth || 1}px solid ${p.borderColor || '#E5E7EB'}`,
-                        }}
-                      >
-                        {data[0]?.[c] ?? `Header ${c + 1}`}
+                    {data[0].map((cell: string, c: number) => (
+                      <th key={c} style={{
+                        padding: `${cellPad}px ${cellPad + 4}px`,
+                        backgroundColor: p.headerBgColor || '#111827',
+                        color: p.headerTextColor || '#FFFFFF',
+                        fontWeight: p.headerFontWeight || 600,
+                        textAlign: tAlign,
+                        borderBottom: borderW > 0 ? `${borderW}px solid ${p.borderColor || '#E5E7EB'}` : 'none',
+                        borderRight: c < cols - 1 && borderW > 0 ? `${borderW}px solid ${p.borderColor || '#E5E7EB'}` : 'none',
+                        fontSize: p.headerFontSize || (p.cellFontSize || 14),
+                      }}>
+                        {cell || `Coluna ${c + 1}`}
                       </th>
                     ))}
                   </tr>
                 </thead>
               )}
               <tbody>
-                {Array.from({ length: p.headerRow ? rows - 1 : rows }).map((_, r) => {
-                  const dataRowIdx = p.headerRow ? r + 1 : r
-                  const isStriped = p.stripedRows && r % 2 === 1
+                {data.slice(p.headerRow ? 1 : 0).map((row: string[], ri: number) => {
+                  const isStriped = p.stripedRows && ri % 2 === 1
                   return (
-                    <tr key={r}>
-                      {Array.from({ length: cols }).map((_, c) => (
-                        <td
-                          key={c}
-                          style={{
-                            padding: '8px 12px',
-                            color: p.cellTextColor || '#374151',
-                            backgroundColor: isStriped ? (p.stripedColor || '#F9FAFB') : undefined,
-                            border: `${p.borderWidth || 1}px solid ${p.borderColor || '#E5E7EB'}`,
-                            textAlign: 'left',
-                          }}
-                        >
-                          {data[dataRowIdx]?.[c] ?? ''}
+                    <tr key={ri}>
+                      {row.map((cell: string, ci: number) => (
+                        <td key={ci} style={{
+                          padding: `${cellPad}px ${cellPad + 4}px`,
+                          color: p.cellTextColor || '#374151',
+                          backgroundColor: isStriped ? (p.stripedColor || '#F9FAFB') : (p.cellBgColor || undefined),
+                          borderBottom: ri < data.length - (p.headerRow ? 2 : 1) && borderW > 0 ? `${borderW}px solid ${p.borderColor || '#E5E7EB'}` : 'none',
+                          borderRight: ci < cols - 1 && borderW > 0 ? `${borderW}px solid ${p.borderColor || '#E5E7EB'}` : 'none',
+                          textAlign: tAlign,
+                        }}>
+                          {cell}
                         </td>
                       ))}
                     </tr>
@@ -960,80 +960,85 @@ export function BlockPreview({
 
       // ── Countdown ──
       case 'countdown': {
-        const styleType = p.style || 'dark'
-        const labels = p.labels || { days: 'Days', hours: 'Hours', minutes: 'Minutes', seconds: 'Seconds' }
-        const placeholders = ['03', '12', '45', '30']
-        const labelKeys = ['days', 'hours', 'minutes', 'seconds'] as const
-        const boxBg = styleType === 'dark' ? '#111827' : styleType === 'light' ? '#F3F4F6' : 'transparent'
-        const defaultNumberColor = styleType === 'dark' ? '#FFFFFF' : '#111827'
-        const defaultLabelColor = styleType === 'dark' ? '#9CA3AF' : '#6B7280'
-        return (
-          <div
-            style={{
-              ...pad,
-              backgroundColor: p.backgroundColor || undefined,
-              textAlign: 'center',
-            }}
-          >
-            <div
-              style={{
-                display: 'inline-flex',
-                gap: 8,
-                alignItems: 'center',
-              }}
-            >
-              {placeholders.map((num, i) => (
-                <span key={i} style={{ display: 'inline-flex', alignItems: 'center' }}>
-                  {i > 0 && (
-                    <span
-                      style={{
-                        fontSize: p.fontSize || 28,
-                        fontWeight: 'bold',
-                        color: p.numberColor || defaultNumberColor,
-                        marginRight: 8,
-                      }}
-                    >
-                      :
-                    </span>
+        const CountdownLive = () => {
+          const [now, setNow] = useState(Date.now())
+          useEffect(() => {
+            const id = setInterval(() => setNow(Date.now()), 1000)
+            return () => clearInterval(id)
+          }, [])
+
+          const end = new Date(p.endDate).getTime()
+          const diff = Math.max(0, end - now)
+          const d = Math.floor(diff / (86400000))
+          const h = Math.floor((diff % 86400000) / 3600000)
+          const m = Math.floor((diff % 3600000) / 60000)
+          const s = Math.floor((diff % 60000) / 1000)
+          const values = [d, h, m, s]
+
+          const styleType = p.style || 'dark'
+          const labels = p.labels || { days: 'DIAS', hours: 'HORAS', minutes: 'MIN', seconds: 'SEG' }
+          const labelKeys = ['days', 'hours', 'minutes', 'seconds'] as const
+
+          const presets: Record<string, { numColor: string; lblColor: string; bxColor: string; bg: string; sepColor: string; ttlColor: string }> = {
+            dark: { numColor: '#FFFFFF', lblColor: '#9CA3AF', bxColor: '#1F2937', bg: '#111827', sepColor: '#6B7280', ttlColor: '#F9FAFB' },
+            light: { numColor: '#111827', lblColor: '#6B7280', bxColor: '#F3F4F6', bg: '#FFFFFF', sepColor: '#D1D5DB', ttlColor: '#111827' },
+            brand: { numColor: '#FFFFFF', lblColor: 'rgba(255,255,255,0.75)', bxColor: '#EA580C', bg: '#F97316', sepColor: 'rgba(255,255,255,0.5)', ttlColor: '#FFFFFF' },
+            minimal: { numColor: '#111827', lblColor: '#9CA3AF', bxColor: 'transparent', bg: 'transparent', sepColor: '#D1D5DB', ttlColor: '#374151' },
+            urgent: { numColor: '#FFFFFF', lblColor: 'rgba(255,255,255,0.8)', bxColor: '#991B1B', bg: '#DC2626', sepColor: 'rgba(255,255,255,0.4)', ttlColor: '#FFFFFF' },
+          }
+          const preset = presets[styleType] || presets.dark
+          const nc = p.numberColor || preset.numColor
+          const lc = p.labelColor || preset.lblColor
+          const bc = p.boxColor || preset.bxColor
+          const bgc = p.backgroundColor || preset.bg
+          const sc = p.separatorColor || preset.sepColor
+          const tc = p.titleColor || preset.ttlColor
+          const br = p.boxBorderRadius ?? 12
+          const isExpired = diff <= 0
+
+          return (
+            <div style={{ ...pad, backgroundColor: bgc, textAlign: 'center', padding: '24px 16px' }}>
+              {isExpired ? (
+                <div style={{ fontSize: 20, fontWeight: 700, color: nc }}>{p.expiredText || 'Oferta encerrada'}</div>
+              ) : (
+                <>
+                  {p.title && (
+                    <div style={{ fontSize: 13, fontWeight: 700, color: tc, letterSpacing: 3, textTransform: 'uppercase' as const, marginBottom: 16 }}>
+                      {p.title}
+                    </div>
                   )}
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      backgroundColor: styleType !== 'minimal' ? boxBg : undefined,
-                      borderRadius: 8,
-                      padding: styleType !== 'minimal' ? '12px 16px' : '4px 8px',
-                      minWidth: 56,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: p.fontSize || 28,
-                        fontWeight: 'bold',
-                        color: p.numberColor || defaultNumberColor,
-                        lineHeight: 1,
-                      }}
-                    >
-                      {num}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: p.labelFontSize || 10,
-                        color: p.labelColor || defaultLabelColor,
-                        marginTop: 4,
-                        textTransform: 'uppercase',
-                        letterSpacing: 1,
-                      }}
-                    >
-                      {labels[labelKeys[i]] || labelKeys[i]}
-                    </span>
-                  </span>
-                </span>
-              ))}
+                  <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 0 }}>
+                    {values.map((val, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+                        {i > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '14px 6px 0', marginBottom: 18 }}>
+                            <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: sc }} />
+                            <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: sc }} />
+                          </div>
+                        )}
+                        <div style={{
+                          display: 'flex', flexDirection: 'column', alignItems: 'center',
+                          backgroundColor: bc, borderRadius: br,
+                          padding: styleType === 'minimal' ? '8px 12px 6px' : '14px 18px 10px',
+                          minWidth: 68,
+                          border: p.boxBorder ? `2px solid ${p.boxBorder}` : 'none',
+                        }}>
+                          <span style={{ fontSize: p.fontSize || 36, fontWeight: 800, color: nc, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                            {String(val).padStart(2, '0')}
+                          </span>
+                          <span style={{ fontSize: p.labelFontSize || 10, fontWeight: 600, color: lc, marginTop: 6, letterSpacing: 1.5, textTransform: 'uppercase' as const }}>
+                            {labels[labelKeys[i]] || labelKeys[i]}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        )
+          )
+        }
+        return <CountdownLive />
       }
 
       // ── Fallback ──

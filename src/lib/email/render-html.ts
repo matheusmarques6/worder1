@@ -33,8 +33,12 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'button':
       return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:${p.align === 'left' ? '0' : p.align === 'right' ? '0 0 0 auto' : '0 auto'};${p.fullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.bgColor || '#F97316'};border-radius:${p.borderRadius || 8}px;padding:${p.paddingV || 14}px ${p.paddingH || 32}px;text-align:center;"><a href="${p.href || '#'}" style="color:${p.textColor || '#fff'};font-size:${p.fontSize || 16}px;font-weight:${p.fontWeight || 'bold'};text-decoration:none;display:block;font-family:${font};">${p.text || ''}</a></td></tr></table></td></tr>`
 
-    case 'divider':
-      return `<tr><td style="padding:${blockPad};"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td style="border-top:${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'};font-size:1px;line-height:1px;">&nbsp;</td></tr></table></td></tr>`
+    case 'divider': {
+      const dw = p.width ?? 100
+      const da = p.align || 'center'
+      const margin = da === 'left' ? '0 auto 0 0' : da === 'right' ? '0 0 0 auto' : '0 auto'
+      return `<tr><td style="padding:${blockPad};"><table role="presentation" width="${dw}%" cellspacing="0" cellpadding="0" border="0" style="margin:${margin};"><tr><td style="border-top:${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'};font-size:1px;line-height:1px;">&nbsp;</td></tr></table></td></tr>`
+    }
 
     case 'spacer':
       return `<tr><td style="height:${p.height || 32}px;line-height:${p.height || 32}px;font-size:1px;">&nbsp;</td></tr>`
@@ -109,14 +113,26 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
 
     case 'table': {
       const data = p.data || [['', ''], ['', '']]
+      const bw = p.borderWidth ?? 1
+      const cp = p.cellPadding ?? 10
+      const ta = p.textAlign || 'left'
+      const hfs = p.headerFontSize || p.cellFontSize || 14
+      const tbr = p.tableBorderRadius ?? 0
       const rows = data.map((row: string[], ri: number) => {
         const isHeader = p.headerRow && ri === 0
-        const cells = row.map((cell: string) =>
-          `<td style="padding:8px 12px;border:${p.borderWidth || 1}px solid ${p.borderColor || '#E5E7EB'};font-size:${p.cellFontSize || 14}px;color:${isHeader ? (p.headerTextColor || '#111827') : (p.cellTextColor || '#374151')};font-weight:${isHeader ? (p.headerFontWeight || '600') : 'normal'};background-color:${isHeader ? (p.headerBgColor || '#F9FAFB') : (p.stripedRows && ri % 2 === 0 ? (p.stripedColor || '#F9FAFB') : 'transparent')};font-family:${font};">${cell}</td>`
-        ).join('')
+        const cells = row.map((cell: string, ci: number) => {
+          const isStriped = !isHeader && p.stripedRows && ri % 2 === 0
+          const bgCol = isHeader ? (p.headerBgColor || '#111827') : isStriped ? (p.stripedColor || '#F9FAFB') : (p.cellBgColor || 'transparent')
+          const txtCol = isHeader ? (p.headerTextColor || '#FFFFFF') : (p.cellTextColor || '#374151')
+          const fw = isHeader ? (p.headerFontWeight || '600') : 'normal'
+          const fs = isHeader ? hfs : (p.cellFontSize || 14)
+          const borderStyle = bw > 0 ? `border-bottom:${bw}px solid ${p.borderColor || '#E5E7EB'};${ci < row.length - 1 ? `border-right:${bw}px solid ${p.borderColor || '#E5E7EB'};` : ''}` : ''
+          return `<td style="padding:${cp}px ${cp + 4}px;${borderStyle}font-size:${fs}px;color:${txtCol};font-weight:${fw};background-color:${bgCol};text-align:${ta};font-family:${font};">${cell}</td>`
+        }).join('')
         return `<tr>${cells}</tr>`
       }).join('')
-      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">${rows}</table></td></tr>`
+      const tableStyle = `border-collapse:${tbr > 0 ? 'separate' : 'collapse'};${tbr > 0 ? `border-radius:${tbr}px;overflow:hidden;` : ''}${bw > 0 ? `border:${bw}px solid ${p.borderColor || '#E5E7EB'};` : ''}`
+      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="${tableStyle}">${rows}</table></td></tr>`
     }
 
     case 'review-quote': {
@@ -124,9 +140,31 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:center;font-family:${font};">${stars}<p style="margin:0;font-size:${p.quoteFontSize || 16}px;color:${p.quoteColor || '#374151'};font-style:${p.quoteStyle || 'italic'};line-height:1.6;">"${p.quote || ''}"</p><p style="margin:12px 0 0;font-size:${p.authorFontSize || 14}px;color:${p.authorColor || '#6B7280'};font-weight:500;">— ${p.author || ''}</p></td></tr>`
     }
 
-    case 'countdown':
-      // Countdown renders as static placeholder in email (dynamic rendering would need server-side image generation)
-      return `<tr><td style="padding:${blockPad};text-align:center;${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;"><tr>${['00', '00', '00', '00'].map((v, i) => `<td style="padding:0 ${i < 3 ? '4' : '0'}px;text-align:center;"><div style="background-color:${p.bgColor || '#F3F4F6'};border-radius:8px;padding:12px 16px;min-width:60px;"><span style="font-size:${p.fontSize || 28}px;font-weight:bold;color:${p.numberColor || '#111827'};font-family:${font};">${v}</span></div><span style="font-size:${p.labelFontSize || 11}px;color:${p.labelColor || '#6B7280'};display:block;margin-top:4px;">${[p.labels?.days || 'Dias', p.labels?.hours || 'Horas', p.labels?.minutes || 'Min', p.labels?.seconds || 'Seg'][i]}</span></td>${i < 3 ? `<td style="font-size:${p.fontSize || 28}px;font-weight:bold;color:${p.numberColor || '#111827'};padding:0 2px;">:</td>` : ''}`).join('')}</tr></table></td></tr>`
+    case 'countdown': {
+      // Dynamic countdown: server-generated image that updates on each email open
+      const params = new URLSearchParams()
+      if (p.endDate) params.set('end', p.endDate)
+      if (p.style) params.set('style', p.style)
+      if (p.numberColor) params.set('nc', p.numberColor)
+      if (p.labelColor) params.set('lc', p.labelColor)
+      if (p.boxColor) params.set('bc', p.boxColor)
+      if (p.backgroundColor) params.set('bg', p.backgroundColor)
+      if (p.separatorColor) params.set('sc', p.separatorColor)
+      if (p.boxBorderRadius != null) params.set('br', String(p.boxBorderRadius))
+      if (p.boxBorder) params.set('bb', p.boxBorder)
+      if (p.title) params.set('title', p.title)
+      if (p.titleColor) params.set('tc', p.titleColor)
+      if (p.expiredText) params.set('expired', p.expiredText)
+      if (p.labels?.days) params.set('ld', p.labels.days)
+      if (p.labels?.hours) params.set('lh', p.labels.hours)
+      if (p.labels?.minutes) params.set('lm', p.labels.minutes)
+      if (p.labels?.seconds) params.set('ls', p.labels.seconds)
+      if (p.fontSize) params.set('fs', String(p.fontSize))
+      if (p.labelFontSize) params.set('lfs', String(p.labelFontSize))
+      const imgUrl = `{{countdown_base_url}}/api/email/countdown?${params.toString()}`
+      const h = p.title ? 160 : 120
+      return `<tr><td style="padding:${blockPad};text-align:center;line-height:0;font-size:0;"><img src="${imgUrl}" alt="Countdown Timer" width="600" height="${h}" style="display:block;margin:0 auto;max-width:100%;height:auto;" /></td></tr>`
+    }
 
     default:
       return ''

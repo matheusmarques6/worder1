@@ -333,12 +333,15 @@ export const BLOCK_DEFS: BlockDef[] = [
   { type: 'countdown', label: 'Cronômetro', icon: 'Clock', category: 'E-commerce',
     defaultProps: {
       endDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
-      style: 'dark', // 'dark' | 'light' | 'minimal'
-      labels: { days: 'Dias', hours: 'Horas', minutes: 'Min', seconds: 'Seg' },
+      style: 'dark', // 'dark' | 'light' | 'brand' | 'minimal' | 'urgent'
+      title: '',
+      titleColor: '',
+      labels: { days: 'DIAS', hours: 'HORAS', minutes: 'MIN', seconds: 'SEG' },
       expiredText: 'Oferta encerrada',
-      fontSize: 28, labelFontSize: 11,
-      numberColor: '#111827', labelColor: '#6B7280', bgColor: '#F3F4F6',
-      padding: { top: 20, right: 24, bottom: 20, left: 24 },
+      fontSize: 36, labelFontSize: 11,
+      numberColor: '', labelColor: '', boxColor: '', separatorColor: '',
+      boxBorderRadius: 12, boxBorder: '',
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
       backgroundColor: '',
     } },
 ]

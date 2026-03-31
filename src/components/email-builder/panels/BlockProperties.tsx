@@ -370,6 +370,8 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
               { value: 'solid', label: 'Sólido' }, { value: 'dashed', label: 'Tracejado' }, { value: 'dotted', label: 'Pontilhado' },
             ]} />
           </Field>
+          <Field label="Largura (%)"><NumberInput value={p.width ?? 100} onChange={v => onChange('width', v)} min={10} max={100} /></Field>
+          <Field label="Alinhamento"><SelectInput value={p.align || 'center'} onChange={v => onChange('align', v)} options={ALIGN_OPTIONS} /></Field>
           {commonTail(false)}
         </div>
       )
@@ -377,7 +379,14 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     case 'spacer':
       return (
         <div className="space-y-3">
-          <Field label="Altura (px)"><NumberInput value={p.height} onChange={v => onChange('height', v)} min={8} max={200} /></Field>
+          <Field label="Altura (px)">
+            <div className="space-y-1">
+              <NumberInput value={p.height} onChange={v => onChange('height', v)} min={8} max={200} />
+              <input type="range" min={8} max={200} value={p.height || 32} onChange={e => onChange('height', Number(e.target.value))}
+                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-500" />
+            </div>
+          </Field>
+          {bgColorEditor()}
           {conditionalSection}
           {saveButton}
         </div>
@@ -415,7 +424,25 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
       return (
         <div className="space-y-3">
           <Field label="URL do Vídeo"><TextInput value={p.videoUrl} onChange={v => onChange('videoUrl', v)} placeholder="https://youtube.com/..." /></Field>
-          <Field label="URL da Thumbnail"><TextInput value={p.thumbnailUrl} onChange={v => onChange('thumbnailUrl', v)} placeholder="https://..." /></Field>
+          <Field label="URL da Thumbnail">
+            <TextInput value={p.thumbnailUrl} onChange={v => onChange('thumbnailUrl', v)} placeholder="https://..." />
+          </Field>
+          {!p.thumbnailUrl && (
+            <label className="block border-2 border-dashed border-gray-200 rounded-lg p-4 text-center bg-gray-50 hover:border-brand-400 cursor-pointer">
+              <span className="text-xs text-gray-500">Upload thumbnail</span>
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0]; if (!file) return
+                const form = new FormData(); form.append('file', file)
+                try {
+                  const res = await fetch('/api/images/upload', { method: 'POST', body: form })
+                  const data = await res.json()
+                  if (data.url) onChange('thumbnailUrl', data.url)
+                } catch { alert('Erro no upload') }
+              }} />
+            </label>
+          )}
+          <Field label="Texto do Botão Play"><TextInput value={p.playText || ''} onChange={v => onChange('playText', v)} placeholder="Assistir agora" /></Field>
+          <Field label="Raio da Borda"><NumberInput value={p.borderRadius ?? 4} onChange={v => onChange('borderRadius', v)} min={0} max={32} /></Field>
           {commonTail(false)}
         </div>
       )
@@ -697,21 +724,23 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
       }
       return (
         <div className="space-y-3">
-          <div className="flex gap-2">
-            <button onClick={addRow} className="text-[10px] font-medium text-brand-600 bg-brand-50 rounded px-2 py-1 hover:bg-brand-100">+ Linha</button>
-            <button onClick={removeRow} className="text-[10px] font-medium text-red-600 bg-red-50 rounded px-2 py-1 hover:bg-red-100">- Linha</button>
-            <button onClick={addCol} className="text-[10px] font-medium text-brand-600 bg-brand-50 rounded px-2 py-1 hover:bg-brand-100">+ Coluna</button>
-            <button onClick={removeCol} className="text-[10px] font-medium text-red-600 bg-red-50 rounded px-2 py-1 hover:bg-red-100">- Coluna</button>
+          {/* Data editor */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Dados da Tabela</span>
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={addRow} className="text-[10px] font-medium text-brand-600 bg-brand-50 rounded-md px-2.5 py-1.5 hover:bg-brand-100 transition-colors">+ Linha</button>
+            <button onClick={removeRow} className="text-[10px] font-medium text-red-600 bg-red-50 rounded-md px-2.5 py-1.5 hover:bg-red-100 transition-colors">- Linha</button>
+            <button onClick={addCol} className="text-[10px] font-medium text-brand-600 bg-brand-50 rounded-md px-2.5 py-1.5 hover:bg-brand-100 transition-colors">+ Coluna</button>
+            <button onClick={removeCol} className="text-[10px] font-medium text-red-600 bg-red-50 rounded-md px-2.5 py-1.5 hover:bg-red-100 transition-colors">- Coluna</button>
           </div>
           <div className="border border-gray-200 rounded-lg overflow-auto max-h-60">
             <table className="w-full text-xs">
               <tbody>
                 {data.map((row, ri) => (
-                  <tr key={ri} className={ri === 0 && p.headerRow ? 'bg-gray-100' : ''}>
+                  <tr key={ri} className={ri === 0 && p.headerRow ? 'bg-gray-100 font-semibold' : ''}>
                     {row.map((cell, ci) => (
                       <td key={ci} className="border border-gray-200 p-0">
                         <input type="text" value={cell} onChange={e => updateCell(ri, ci, e.target.value)}
-                          className="w-full px-1.5 py-1 text-xs text-gray-900 bg-transparent focus:outline-none focus:bg-brand-50/30"
+                          className="w-full px-2 py-1.5 text-xs text-gray-900 bg-transparent focus:outline-none focus:bg-brand-50/30"
                           placeholder={ri === 0 && p.headerRow ? 'Cabeçalho' : 'Dado'} />
                       </td>
                     ))}
@@ -720,21 +749,61 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
               </tbody>
             </table>
           </div>
+
+          {/* Structure */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase">Estrutura</span>
           <Toggle value={p.headerRow} onChange={v => onChange('headerRow', v)} label="Linha de cabeçalho" />
           <Toggle value={p.stripedRows} onChange={v => onChange('stripedRows', v)} label="Linhas alternadas" />
           {p.stripedRows && <Field label="Cor Alternada"><ColorInput value={p.stripedColor || '#F9FAFB'} onChange={v => onChange('stripedColor', v)} /></Field>}
+          <Field label="Alinhamento do Texto">
+            <SelectInput value={p.textAlign || 'left'} onChange={v => onChange('textAlign', v)} options={[
+              { value: 'left', label: 'Esquerda' }, { value: 'center', label: 'Centro' }, { value: 'right', label: 'Direita' },
+            ]} />
+          </Field>
+
+          {/* Typography */}
+          <details className="group border border-gray-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+              Tipografia <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Field label="Tamanho - Células"><NumberInput value={p.cellFontSize || 14} onChange={v => onChange('cellFontSize', v)} min={10} max={22} /></Field>
+              <Field label="Tamanho - Cabeçalho"><NumberInput value={p.headerFontSize || 14} onChange={v => onChange('headerFontSize', v)} min={10} max={22} /></Field>
+              <Field label="Peso - Cabeçalho">
+                <SelectInput value={String(p.headerFontWeight || '600')} onChange={v => onChange('headerFontWeight', v)} options={[
+                  { value: '400', label: 'Normal' }, { value: '500', label: 'Médio' }, { value: '600', label: 'Semibold' }, { value: '700', label: 'Bold' },
+                ]} />
+              </Field>
+            </div>
+          </details>
+
+          {/* Colors */}
           <details className="group border border-gray-100 rounded-lg">
             <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
               Cores <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
             </summary>
             <div className="px-3 pb-3 space-y-2">
-              <Field label="Cabeçalho - Fundo"><ColorInput value={p.headerBgColor || '#F9FAFB'} onChange={v => onChange('headerBgColor', v)} /></Field>
-              <Field label="Cabeçalho - Texto"><ColorInput value={p.headerTextColor || '#111827'} onChange={v => onChange('headerTextColor', v)} /></Field>
+              <Field label="Cabeçalho - Fundo"><ColorInput value={p.headerBgColor || '#111827'} onChange={v => onChange('headerBgColor', v)} /></Field>
+              <Field label="Cabeçalho - Texto"><ColorInput value={p.headerTextColor || '#FFFFFF'} onChange={v => onChange('headerTextColor', v)} /></Field>
               <Field label="Células - Texto"><ColorInput value={p.cellTextColor || '#374151'} onChange={v => onChange('cellTextColor', v)} /></Field>
-              <Field label="Borda"><ColorInput value={p.borderColor || '#E5E7EB'} onChange={v => onChange('borderColor', v)} /></Field>
+              <Field label="Células - Fundo"><ColorInput value={p.cellBgColor || ''} onChange={v => onChange('cellBgColor', v)} /></Field>
             </div>
           </details>
-          <Field label="Tamanho da Fonte"><NumberInput value={p.cellFontSize || 14} onChange={v => onChange('cellFontSize', v)} min={10} max={20} /></Field>
+
+          {/* Borders */}
+          <details className="group border border-gray-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+              Bordas <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Field label="Cor da Borda"><ColorInput value={p.borderColor || '#E5E7EB'} onChange={v => onChange('borderColor', v)} /></Field>
+              <Field label="Largura da Borda"><NumberInput value={p.borderWidth ?? 1} onChange={v => onChange('borderWidth', v)} min={0} max={5} /></Field>
+              <Field label="Raio da Borda"><NumberInput value={p.tableBorderRadius ?? 0} onChange={v => onChange('tableBorderRadius', v)} min={0} max={20} /></Field>
+            </div>
+          </details>
+
+          {/* Spacing */}
+          <Field label="Padding das Células (px)"><NumberInput value={p.cellPadding ?? 10} onChange={v => onChange('cellPadding', v)} min={4} max={24} /></Field>
           {commonTail()}
         </div>
       )
@@ -760,6 +829,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
           </Field>
           <Toggle value={p.showStars !== false} onChange={v => onChange('showStars', v)} label="Mostrar estrelas" />
           <Field label="Cor das Estrelas"><ColorInput value={p.starColor || '#FBBF24'} onChange={v => onChange('starColor', v)} /></Field>
+          <Field label="Alinhamento"><SelectInput value={p.quoteAlign || 'center'} onChange={v => onChange('quoteAlign', v)} options={ALIGN_OPTIONS} /></Field>
           <details className="group border border-gray-100 rounded-lg">
             <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
               Tipografia <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
@@ -788,32 +858,74 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
               className="w-full px-2.5 py-1.5 border border-gray-200 rounded-md text-sm text-gray-900 focus:border-brand-500 focus:outline-none" />
           </Field>
           <Field label="Estilo">
-            <SelectInput value={p.style || 'dark'} onChange={v => onChange('style', v)} options={[
-              { value: 'dark', label: 'Escuro' }, { value: 'light', label: 'Claro' }, { value: 'minimal', label: 'Minimalista' },
-            ]} />
+            <div className="grid grid-cols-5 gap-1">
+              {[
+                { v: 'dark', label: 'Escuro', bg: '#111827', fg: '#fff' },
+                { v: 'light', label: 'Claro', bg: '#F3F4F6', fg: '#111827' },
+                { v: 'brand', label: 'Marca', bg: '#F97316', fg: '#fff' },
+                { v: 'minimal', label: 'Mín.', bg: '#fff', fg: '#111827' },
+                { v: 'urgent', label: 'Urg.', bg: '#DC2626', fg: '#fff' },
+              ].map(opt => (
+                <button key={opt.v} onClick={() => onChange('style', opt.v)}
+                  className={`py-2 text-[9px] font-semibold rounded-md border transition-all ${p.style === opt.v ? 'ring-2 ring-brand-500 ring-offset-1' : 'hover:opacity-80'}`}
+                  style={{ backgroundColor: opt.bg, color: opt.fg, borderColor: opt.bg === '#fff' ? '#E5E7EB' : opt.bg }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </Field>
+          <Field label="Título (opcional)"><TextInput value={p.title || ''} onChange={v => onChange('title', v)} placeholder="Ex: OFERTA TERMINA EM" /></Field>
           <Field label="Texto ao Expirar"><TextInput value={p.expiredText} onChange={v => onChange('expiredText', v)} /></Field>
+
+          {/* Labels */}
           <span className="text-[10px] font-semibold text-gray-400 uppercase">Rótulos</span>
           <div className="grid grid-cols-4 gap-1.5">
             <div><span className="block text-[9px] text-gray-400 text-center mb-0.5">Dias</span>
-              <TextInput value={p.labels?.days || 'Dias'} onChange={v => onChange('labels', { ...(p.labels || {}), days: v })} /></div>
+              <TextInput value={p.labels?.days || 'DIAS'} onChange={v => onChange('labels', { ...(p.labels || {}), days: v })} /></div>
             <div><span className="block text-[9px] text-gray-400 text-center mb-0.5">Horas</span>
-              <TextInput value={p.labels?.hours || 'Horas'} onChange={v => onChange('labels', { ...(p.labels || {}), hours: v })} /></div>
+              <TextInput value={p.labels?.hours || 'HORAS'} onChange={v => onChange('labels', { ...(p.labels || {}), hours: v })} /></div>
             <div><span className="block text-[9px] text-gray-400 text-center mb-0.5">Min</span>
-              <TextInput value={p.labels?.minutes || 'Min'} onChange={v => onChange('labels', { ...(p.labels || {}), minutes: v })} /></div>
+              <TextInput value={p.labels?.minutes || 'MIN'} onChange={v => onChange('labels', { ...(p.labels || {}), minutes: v })} /></div>
             <div><span className="block text-[9px] text-gray-400 text-center mb-0.5">Seg</span>
-              <TextInput value={p.labels?.seconds || 'Seg'} onChange={v => onChange('labels', { ...(p.labels || {}), seconds: v })} /></div>
+              <TextInput value={p.labels?.seconds || 'SEG'} onChange={v => onChange('labels', { ...(p.labels || {}), seconds: v })} /></div>
           </div>
-          <details className="group border border-gray-100 rounded-lg">
+
+          {/* Typography */}
+          <details className="group border border-gray-100 rounded-lg" open>
             <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
-              Cores <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+              Números e Rótulos <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
             </summary>
             <div className="px-3 pb-3 space-y-2">
-              <Field label="Tamanho dos Números"><NumberInput value={p.fontSize || 28} onChange={v => onChange('fontSize', v)} min={16} max={48} /></Field>
-              <Field label="Cor dos Números"><ColorInput value={p.numberColor || '#111827'} onChange={v => onChange('numberColor', v)} /></Field>
-              <Field label="Tamanho dos Rótulos"><NumberInput value={p.labelFontSize || 11} onChange={v => onChange('labelFontSize', v)} min={8} max={18} /></Field>
-              <Field label="Cor dos Rótulos"><ColorInput value={p.labelColor || '#6B7280'} onChange={v => onChange('labelColor', v)} /></Field>
-              <Field label="Fundo das Caixas"><ColorInput value={p.bgColor || '#F3F4F6'} onChange={v => onChange('bgColor', v)} /></Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Tamanho Números"><NumberInput value={p.fontSize || 36} onChange={v => onChange('fontSize', v)} min={16} max={56} /></Field>
+                <Field label="Tamanho Rótulos"><NumberInput value={p.labelFontSize || 11} onChange={v => onChange('labelFontSize', v)} min={8} max={18} /></Field>
+              </div>
+            </div>
+          </details>
+
+          {/* Colors */}
+          <details className="group border border-gray-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+              Cores Personalizadas <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <p className="text-[10px] text-gray-400">Deixe em branco para usar as cores do estilo selecionado.</p>
+              <Field label="Cor dos Números"><ColorInput value={p.numberColor || ''} onChange={v => onChange('numberColor', v)} /></Field>
+              <Field label="Cor dos Rótulos"><ColorInput value={p.labelColor || ''} onChange={v => onChange('labelColor', v)} /></Field>
+              <Field label="Cor do Título"><ColorInput value={p.titleColor || ''} onChange={v => onChange('titleColor', v)} /></Field>
+              <Field label="Cor do Separador"><ColorInput value={p.separatorColor || ''} onChange={v => onChange('separatorColor', v)} /></Field>
+            </div>
+          </details>
+
+          {/* Box styling */}
+          <details className="group border border-gray-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
+              Estilo das Caixas <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Field label="Cor de Fundo"><ColorInput value={p.boxColor || ''} onChange={v => onChange('boxColor', v)} /></Field>
+              <Field label="Raio da Borda"><NumberInput value={p.boxBorderRadius ?? 12} onChange={v => onChange('boxBorderRadius', v)} min={0} max={32} /></Field>
+              <Field label="Cor da Borda"><ColorInput value={p.boxBorder || ''} onChange={v => onChange('boxBorder', v)} /></Field>
             </div>
           </details>
           {commonTail()}
