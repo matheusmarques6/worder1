@@ -249,33 +249,103 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
 
       {tab === 'display' && (
         <div className="space-y-4">
-          {/* Visibilidade */}
+          {/* Visibilidade por dispositivo */}
           <div>
-            <p className="text-[12px] font-medium text-gray-700 mb-1">Visibilidade</p>
-            <p className="text-[11px] text-gray-400 mb-3">A visibilidade por dispositivo é configurada na seção.</p>
+            <p className="text-[12px] font-medium text-gray-700 mb-2">Visibilidade por dispositivo</p>
+            <div className="space-y-2">
+              <label className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                <span className="text-xs text-gray-700">Mostrar no Desktop</span>
+                <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).showOnDesktop !== false ? 'bg-brand-500' : 'bg-gray-200'}`}
+                  onClick={() => onStyleChange('showOnDesktop', (s as any).showOnDesktop === false)}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${(s as any).showOnDesktop !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </div>
+              </label>
+              <label className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                <span className="text-xs text-gray-700">Mostrar no Mobile</span>
+                <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).showOnMobile !== false ? 'bg-brand-500' : 'bg-gray-200'}`}
+                  onClick={() => onStyleChange('showOnMobile', (s as any).showOnMobile === false)}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${(s as any).showOnMobile !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </div>
+              </label>
+            </div>
           </div>
 
           {/* Lógica mostrar/ocultar */}
-          <div>
-            <p className="text-[12px] font-medium text-gray-700 mb-1">Lógica mostrar/ocultar</p>
-            <p className="text-[11px] text-gray-400 mb-3">Personalize mostrando ou ocultando baseado nas propriedades do contato.</p>
-            <div className="flex gap-2">
-              <button className="flex-1 py-2 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                Usar construtor lógico
-              </button>
-              <button className="flex-1 py-2 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                Usar código
-              </button>
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-[12px] font-medium text-gray-700 mb-1">Lógica condicional</p>
+            <p className="text-[11px] text-gray-400 mb-3">Mostrar ou ocultar baseado em propriedades do contato.</p>
+            <div className="space-y-2">
+              <label className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                <span className="text-xs text-gray-700">Ativar condição</span>
+                <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).conditionEnabled ? 'bg-brand-500' : 'bg-gray-200'}`}
+                  onClick={() => onStyleChange('conditionEnabled', !(s as any).conditionEnabled)}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${(s as any).conditionEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </div>
+              </label>
+              {(s as any).conditionEnabled && (
+                <div className="space-y-2 p-3 bg-gray-50 rounded-lg">
+                  <select value={(s as any).conditionField || ''} onChange={e => onStyleChange('conditionField', e.target.value)}
+                    className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
+                    <option value="">Selecionar campo...</option>
+                    <option value="first_name">Nome</option>
+                    <option value="email">Email</option>
+                    <option value="tags">Tags</option>
+                    <option value="city">Cidade</option>
+                    <option value="total_orders">Total de Pedidos</option>
+                    <option value="source">Origem</option>
+                    <option value="custom">Campo personalizado</option>
+                  </select>
+                  <select value={(s as any).conditionOp || ''} onChange={e => onStyleChange('conditionOp', e.target.value)}
+                    className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
+                    <option value="">Operador...</option>
+                    <option value="equals">É igual a</option>
+                    <option value="not_equals">Não é igual a</option>
+                    <option value="contains">Contém</option>
+                    <option value="not_contains">Não contém</option>
+                    <option value="greater_than">Maior que</option>
+                    <option value="less_than">Menor que</option>
+                    <option value="is_set">Está preenchido</option>
+                    <option value="is_not_set">Está vazio</option>
+                  </select>
+                  {!['is_set', 'is_not_set'].includes((s as any).conditionOp || '') && (
+                    <input type="text" value={(s as any).conditionValue || ''} onChange={e => onStyleChange('conditionValue', e.target.value)}
+                      placeholder="Valor"
+                      className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
           {/* Repetição de conteúdo */}
-          <div>
+          <div className="border-t border-gray-100 pt-4">
             <p className="text-[12px] font-medium text-gray-700 mb-1">Repetição de conteúdo</p>
-            <p className="text-[11px] text-gray-400 mb-3">Para repetir conteúdo, especifique uma variável para iterar sobre uma coleção.</p>
-            <button className="w-full py-2 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              Adicionar repetição
-            </button>
+            <p className="text-[11px] text-gray-400 mb-3">Repetir esta seção para cada item de uma coleção.</p>
+            <div className="space-y-2">
+              <label className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                <span className="text-xs text-gray-700">Ativar repetição</span>
+                <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).repeatEnabled ? 'bg-brand-500' : 'bg-gray-200'}`}
+                  onClick={() => onStyleChange('repeatEnabled', !(s as any).repeatEnabled)}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${(s as any).repeatEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </div>
+              </label>
+              {(s as any).repeatEnabled && (
+                <div className="space-y-2 p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <label className="text-[10px] text-gray-500 mb-1 block">Variável da coleção</label>
+                    <input type="text" value={(s as any).repeatVariable || ''} onChange={e => onStyleChange('repeatVariable', e.target.value)}
+                      placeholder="Ex: items, products, order.line_items"
+                      className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 mb-1 block">Máximo de repetições</label>
+                    <input type="number" value={(s as any).repeatMax || 10} onChange={e => onStyleChange('repeatMax', Number(e.target.value))}
+                      min={1} max={50}
+                      className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

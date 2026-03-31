@@ -62,11 +62,14 @@ export function BlockPreview({
               color: p.color,
               fontSize: p.fontSize,
               lineHeight: p.lineHeight,
-              textAlign: p.align as React.CSSProperties['textAlign'],
+              textAlign: (p.align as React.CSSProperties['textAlign']) || 'left',
               backgroundColor: p.backgroundColor || undefined,
             }}
-            dangerouslySetInnerHTML={{ __html: p.contentHtml || (typeof p.content === 'string' ? p.content : '') || '<p>Escreva seu texto aqui.</p>' }}
-          />
+          >
+            {/* Wrap in a div that forces text-align on all children */}
+            <style dangerouslySetInnerHTML={{ __html: `.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} p,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h1,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h2,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h3,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h4{text-align:${p.align || 'left'}}` }} />
+            <div className={`worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')}`} dangerouslySetInnerHTML={{ __html: p.contentHtml || (typeof p.content === 'string' ? p.content : '') || '<p>Escreva seu texto aqui.</p>' }} />
+          </div>
         )
 
       // ── Image ──
@@ -434,7 +437,7 @@ export function BlockPreview({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                gridTemplateColumns: `repeat(auto-fit, minmax(${Math.max(140, Math.floor(280 / cols))}px, 1fr))`,
                 gap: p.productPadding ?? 8,
               }}
             >
@@ -687,6 +690,10 @@ export function BlockPreview({
                 display: 'inline-block',
                 padding: `${p.codePaddingV ?? 10}px ${p.codePaddingH ?? 28}px`,
                 backgroundColor: p.codeBgColor || undefined,
+                maxWidth: '100%',
+                boxSizing: 'border-box' as const,
+                wordBreak: 'break-all' as const,
+                overflowWrap: 'break-word' as const,
               }}
             >
               {p.code || 'CODIGO'}
@@ -917,7 +924,7 @@ export function BlockPreview({
             style={{
               ...pad,
               backgroundColor: p.backgroundColor || undefined,
-              textAlign: 'center',
+              textAlign: (p.quoteAlign as React.CSSProperties['textAlign']) || 'center',
             }}
           >
             {p.showStars !== false && (
@@ -1009,11 +1016,11 @@ export function BlockPreview({
                       {p.title}
                     </div>
                   )}
-                  <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 0 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 0, flexWrap: 'wrap', justifyContent: 'center', maxWidth: '100%' }}>
                     {values.map((val, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 0, flexShrink: 0 }}>
                         {i > 0 && (
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '14px 6px 0', marginBottom: 18 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '14px 4px 0', marginBottom: 18 }}>
                             <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: sc }} />
                             <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: sc }} />
                           </div>
@@ -1021,8 +1028,8 @@ export function BlockPreview({
                         <div style={{
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
                           backgroundColor: bc, borderRadius: br,
-                          padding: styleType === 'minimal' ? '8px 12px 6px' : '14px 18px 10px',
-                          minWidth: 68,
+                          padding: styleType === 'minimal' ? '6px 10px 4px' : '12px 14px 8px',
+                          minWidth: 56,
                           border: p.boxBorder ? `2px solid ${p.boxBorder}` : 'none',
                         }}>
                           <span style={{ fontSize: p.fontSize || 36, fontWeight: 800, color: nc, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>

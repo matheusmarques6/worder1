@@ -88,7 +88,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'coupon': {
       const cpv = p.codePaddingV ?? 10
       const cph = p.codePaddingH ?? 28
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFF7ED'};text-align:${p.headerAlign || 'center'};font-family:${font};">${p.headerText ? `<p style="margin:0 0 10px;font-size:${p.headerFontSize || 14}px;color:${p.headerColor || '#9A3412'};font-weight:${p.headerFontWeight || '500'};text-align:${p.headerAlign || 'center'};">${p.headerText}</p>` : ''}<p style="margin:0;font-size:${p.codeFontSize || 32}px;font-weight:${p.codeFontWeight || 'bold'};color:${p.codeColor || '#EA580C'};letter-spacing:${p.codeLetterSpacing ?? 4}px;${p.borderStyle !== 'none' ? `border:${p.borderWidth ?? 2}px ${p.borderStyle || 'dashed'} ${p.borderColor || '#EA580C'};` : ''}border-radius:${p.borderRadius || 12}px;display:inline-block;padding:${cpv}px ${cph}px;${p.codeBgColor ? `background-color:${p.codeBgColor};` : ''}">${p.code || ''}</p>${p.footerText ? `<p style="margin:10px 0 0;font-size:${p.footerFontSize || 12}px;color:${p.footerColor || '#9CA3AF'};font-weight:${p.footerFontWeight || 'normal'};">${p.footerText}</p>` : ''}</td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFF7ED'};text-align:${p.headerAlign || 'center'};font-family:${font};">${p.headerText ? `<p style="margin:0 0 10px;font-size:${p.headerFontSize || 14}px;color:${p.headerColor || '#9A3412'};font-weight:${p.headerFontWeight || '500'};text-align:${p.headerAlign || 'center'};">${p.headerText}</p>` : ''}<p style="margin:0;font-size:${p.codeFontSize || 32}px;font-weight:${p.codeFontWeight || 'bold'};color:${p.codeColor || '#EA580C'};letter-spacing:${p.codeLetterSpacing ?? 4}px;${p.borderStyle !== 'none' ? `border:${p.borderWidth ?? 2}px ${p.borderStyle || 'dashed'} ${p.borderColor || '#EA580C'};` : ''}border-radius:${p.borderRadius || 12}px;display:inline-block;padding:${cpv}px ${cph}px;max-width:100%;box-sizing:border-box;word-break:break-all;${p.codeBgColor ? `background-color:${p.codeBgColor};` : ''}" class="worder-coupon-code">${p.code || ''}</p>${p.footerText ? `<p style="margin:10px 0 0;font-size:${p.footerFontSize || 12}px;color:${p.footerColor || '#9CA3AF'};font-weight:${p.footerFontWeight || 'normal'};">${p.footerText}</p>` : ''}</td></tr>`
     }
 
     case 'columns':
@@ -242,7 +242,10 @@ a{color:${s.textStyles?.link?.color || '#F97316'};${s.textStyles?.link?.underlin
 @media only screen and (max-width:620px){
   .email-container{width:100%!important;max-width:100%!important}
   .worder-section-stack td{display:block!important;width:100%!important}
-  td[style]{font-size:16px!important}
+  .worder-countdown-wrap td{padding:2px!important}
+  .worder-countdown-wrap td div{min-width:50px!important;padding:10px 8px 6px!important}
+  .worder-countdown-wrap td div span:first-child{font-size:24px!important}
+  .worder-coupon-code{font-size:22px!important;letter-spacing:2px!important;padding:8px 16px!important;word-break:break-all!important;max-width:100%!important;box-sizing:border-box!important}
 }
 </style>
 </head>
