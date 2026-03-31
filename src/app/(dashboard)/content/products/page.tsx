@@ -77,16 +77,24 @@ export default function ProductsPage() {
     if (syncing) return
     try {
       setSyncing(true)
+      setError(null)
       const res = await fetch('/api/shopify/sync-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId, syncType: 'products' }),
+        body: JSON.stringify({ syncType: 'products' }),
       })
-      if (!res.ok) throw new Error('Falha no sync')
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || `Sync failed (${res.status})`)
+      }
+      if (data.errors && data.errors.length > 0) {
+        setError(`Sync parcial: ${data.errors[0]}`)
+      }
+      console.log('[Products] Sync result:', data)
       await fetchProducts()
     } catch (err: any) {
       console.error('Sync error:', err)
-      setError(err.message)
+      setError(err.message || 'Erro desconhecido no sync')
     } finally {
       setSyncing(false)
     }
