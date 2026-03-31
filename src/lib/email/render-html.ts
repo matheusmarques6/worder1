@@ -70,7 +70,9 @@ function renderSection(section: EmailSection, font: string, contentWidth: number
   const s = section.styles
   const sectionPad = pad(s.padding)
   const sectionBg = s.backgroundColor || ''
-  const contentAreaBg = s.contentBackgroundColor || contentBg || ''
+  // Respect contentColorMode: 'auto' uses doc default, 'custom' uses section color, 'none' = transparent
+  const contentColorMode = (s as any).contentColorMode || 'auto'
+  const contentAreaBg = contentColorMode === 'none' ? '' : contentColorMode === 'custom' ? (s.contentBackgroundColor || '') : (contentBg || '')
   const stackClass = s.stackOnMobile ? ' class="worder-section-stack"' : ''
 
   // Build blocks HTML for each column
