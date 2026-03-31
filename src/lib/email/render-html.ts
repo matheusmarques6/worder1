@@ -174,7 +174,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
   }
 }
 
-function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string, settings?: EmailDocument['settings']): string {
+function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string, settings?: EmailDocument['settings'], isFirst = false, isLast = false): string {
   const s = section.styles
   const sectionPad = pad(s.padding)
   const sectionBg = s.backgroundColor || ''
@@ -206,7 +206,7 @@ function renderSection(section: EmailSection, font: string, contentWidth: number
   <tr>
     <td align="center" style="padding:0;">
       <!--[if mso]><table role="presentation" cellspacing="0" cellpadding="0" border="0" width="${contentWidth}" align="center"><tr><td><![endif]-->
-      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="${contentWidth}" style="max-width:${contentWidth}px;width:100%;${contentAreaBg ? `background-color:${contentAreaBg};` : ''}">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="${contentWidth}" style="max-width:${contentWidth}px;width:100%;${contentAreaBg ? `background-color:${contentAreaBg};` : ''}${(() => { const br = settings?.borderRadius || 0; if (br > 0) { return `border-radius:${isFirst ? br : 0}px ${isFirst ? br : 0}px ${isLast ? br : 0}px ${isLast ? br : 0}px;overflow:hidden;` } return '' })()}">
         <tr>
           <td style="padding:${sectionPad};">
             ${innerHtml}
@@ -225,7 +225,7 @@ export function renderDocumentToHtml(doc: any): string {
   const font = s.fontFamily || "'DM Sans', Arial, sans-serif"
   const w = s.contentWidth || 600
 
-  const sectionsHtml = d.sections.map(sec => renderSection(sec, font, w, s.contentBackgroundColor || '#ffffff', s)).join('\n')
+  const sectionsHtml = d.sections.map((sec, i) => renderSection(sec, font, w, s.contentBackgroundColor || '#ffffff', s, i === 0, i === d.sections.length - 1)).join('\n')
 
   return `<!DOCTYPE html>
 <html lang="pt-BR" xmlns="http://www.w3.org/1999/xhtml">

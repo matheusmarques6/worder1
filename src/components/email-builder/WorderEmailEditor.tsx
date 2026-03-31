@@ -55,7 +55,7 @@ function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDel
 }
 
 // ── Sortable Section Wrapper (drag sections to reorder) ──
-function SortableSection({ sectionId, children }: { sectionId: string; children: React.ReactNode }) {
+function SortableSection({ sectionId, children, isSelected }: { sectionId: string; children: React.ReactNode; isSelected: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sectionId,
     data: { type: 'section', sectionId },
@@ -64,19 +64,18 @@ function SortableSection({ sectionId, children }: { sectionId: string; children:
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1, zIndex: isDragging ? 40 : 'auto' }}
+      className="relative group/sectiondrag"
     >
-      {/* Drag handle for sections — visible on hover */}
-      <div className="relative group/sectiondrag">
-        <div
-          {...attributes}
-          {...listeners}
-          className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover/sectiondrag:opacity-100 cursor-grab active:cursor-grabbing p-1 text-gray-300 hover:text-indigo-500 transition-opacity z-30 bg-white/80 backdrop-blur-sm rounded shadow-sm border border-gray-200"
-          title="Arrastar seção"
-        >
-          <GripVertical className="w-4 h-4" />
-        </div>
-        {children}
+      {/* Drag handle inside the section at top-right — always accessible */}
+      <div
+        {...attributes}
+        {...listeners}
+        className={`absolute right-2 top-2 cursor-grab active:cursor-grabbing p-1.5 rounded-md z-30 transition-all ${isSelected ? 'opacity-100 bg-indigo-100 text-indigo-600' : 'opacity-0 group-hover/sectiondrag:opacity-100 bg-white/90 text-gray-400 hover:text-indigo-500 border border-gray-200 shadow-sm'}`}
+        title="Arrastar seção"
+      >
+        <GripVertical className="w-3.5 h-3.5" />
       </div>
+      {children}
     </div>
   )
 }
@@ -94,69 +93,91 @@ function DroppableColumn({ columnId, sectionId, children }: { columnId: string; 
   )
 }
 
-// ── Styles Tab (Klaviyo-level) ──
+// ── Inline Color Picker (click to open, doesn't close on drag) ──
+function InlineColorPicker({ value, onChange, label }: { value: string; onChange: (v: string) => void; label?: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return
+    const handler = (e: MouseEvent) => { if (!node.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+  return (
+    <div ref={ref} className="relative">
+      {label && <label className="block text-[11px] font-medium text-gray-500 mb-1">{label}</label>}
+      <div className="flex items-center gap-1.5">
+        <button onClick={() => setOpen(!open)} className="w-8 h-8 rounded-lg border-2 border-gray-200 cursor-pointer flex-shrink-0 hover:border-gray-400 transition-colors" style={{ backgroundColor: value || '#ffffff' }} />
+        <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#000000"
+          className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+      </div>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-xl shadow-xl border border-gray-200 p-3" onMouseDown={e => e.stopPropagation()}>
+          <input type="color" value={value || '#ffffff'} onChange={e => onChange(e.target.value)}
+            className="w-48 h-36 rounded-lg cursor-pointer border-0 p-0 block" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Styles Tab ──
 function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch<React.SetStateAction<EmailDocument>> }) {
   const s = doc.settings
   const update = (key: string, value: any) => setDoc(prev => ({ ...prev, settings: { ...prev.settings, [key]: value } }))
 
-  const ColorRow = ({ label, value, field }: { label: string; value: string; field: string }) => (
-    <div>
-      <label className="block text-[11px] font-medium text-gray-500 mb-1">{label}</label>
-      <div className="flex items-center gap-2">
-        <input type="color" value={value || '#ffffff'} onChange={e => update(field, e.target.value)} className="w-7 h-7 rounded border border-gray-200 cursor-pointer p-0.5" />
-        <input type="text" value={value || ''} onChange={e => update(field, e.target.value)} className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
-      </div>
-    </div>
-  )
+  const FONTS = [
+    { value: "'DM Sans', Arial, sans-serif", label: 'DM Sans' },
+    { value: "Arial, Helvetica, sans-serif", label: 'Arial' },
+    { value: "Georgia, Times, serif", label: 'Georgia' },
+    { value: "Verdana, Geneva, sans-serif", label: 'Verdana' },
+    { value: "'Inter', Arial, sans-serif", label: 'Inter' },
+    { value: "'Montserrat', Arial, sans-serif", label: 'Montserrat' },
+    { value: "'Roboto', Arial, sans-serif", label: 'Roboto' },
+    { value: "Tahoma, Geneva, sans-serif", label: 'Tahoma' },
+    { value: "'Trebuchet MS', sans-serif", label: 'Trebuchet MS' },
+  ]
 
   return (
-    <div className="p-3 space-y-5 overflow-y-auto h-full">
-      {/* Backgrounds */}
-      <div>
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Fundos</p>
+    <div className="overflow-y-auto h-full">
+      {/* ── Layout & Fundos ── */}
+      <div className="p-4 space-y-4 border-b border-gray-100">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Layout</p>
         <div className="space-y-3">
-          <ColorRow label="Email" value={s.backgroundColor} field="backgroundColor" />
-          <ColorRow label="Conteúdo" value={s.contentBackgroundColor} field="contentBackgroundColor" />
-          <div className="grid grid-cols-2 gap-2">
+          <InlineColorPicker label="Fundo do Email" value={s.backgroundColor} onChange={v => update('backgroundColor', v)} />
+          <InlineColorPicker label="Fundo do Conteúdo" value={s.contentBackgroundColor} onChange={v => update('contentBackgroundColor', v)} />
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">Largura</label>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Largura (px)</label>
               <input type="number" value={s.contentWidth} onChange={e => update('contentWidth', Number(e.target.value))} min={400} max={800}
-                className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 focus:border-brand-500 focus:outline-none" />
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all" />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">Raio Borda</label>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Bordas</label>
               <input type="number" value={s.borderRadius} onChange={e => update('borderRadius', Number(e.target.value))} min={0} max={24}
-                className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 focus:border-brand-500 focus:outline-none" />
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Typography */}
-      <div>
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Tipografia</p>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-1">Fonte Global</label>
-            <select value={s.fontFamily} onChange={e => update('fontFamily', e.target.value)}
-              className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
-              <option value="'DM Sans', Arial, sans-serif">DM Sans</option>
-              <option value="Arial, Helvetica, sans-serif">Arial</option>
-              <option value="Georgia, Times, serif">Georgia</option>
-              <option value="Verdana, Geneva, sans-serif">Verdana</option>
-              <option value="'Inter', sans-serif">Inter</option>
-              <option value="'Montserrat', sans-serif">Montserrat</option>
-              <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
-            </select>
-          </div>
-
-          {/* Text Styles - Body + H1-H4 */}
+      {/* ── Tipografia ── */}
+      <div className="p-4 space-y-4 border-b border-gray-100">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tipografia</p>
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 mb-1.5">Fonte Global</label>
+          <select value={s.fontFamily} onChange={e => update('fontFamily', e.target.value)}
+            className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all"
+            style={{ fontFamily: s.fontFamily }}>
+            {FONTS.map(f => <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
           {[
             { key: 'body', label: 'Body', defaults: { fontSize: 15, color: '#374151', lineHeight: 1.6 } },
-            { key: 'h1', label: 'H1', defaults: { fontSize: 28, color: '#111827', lineHeight: 1.3 } },
-            { key: 'h2', label: 'H2', defaults: { fontSize: 22, color: '#111827', lineHeight: 1.3 } },
-            { key: 'h3', label: 'H3', defaults: { fontSize: 18, color: '#111827', lineHeight: 1.4 } },
-            { key: 'h4', label: 'H4', defaults: { fontSize: 16, color: '#374151', lineHeight: 1.4 } },
+            { key: 'h1', label: 'Título H1', defaults: { fontSize: 28, color: '#111827', lineHeight: 1.3 } },
+            { key: 'h2', label: 'Título H2', defaults: { fontSize: 22, color: '#111827', lineHeight: 1.3 } },
+            { key: 'h3', label: 'Título H3', defaults: { fontSize: 18, color: '#111827', lineHeight: 1.4 } },
+            { key: 'h4', label: 'Título H4', defaults: { fontSize: 16, color: '#374151', lineHeight: 1.4 } },
           ].map(style => {
             const tsKey = style.key as 'body' | 'h1' | 'h2' | 'h3' | 'h4'
             const ts = s.textStyles?.[tsKey] || style.defaults
@@ -166,29 +187,38 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
               update('textStyles', textStyles)
             }
             return (
-              <details key={style.key} className="group border border-gray-100 rounded-lg">
-                <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-semibold text-gray-600 hover:bg-gray-50 rounded-lg">
-                  {style.label}
-                  <span className="text-[10px] font-normal text-gray-400">{ts.fontSize}px</span>
+              <details key={style.key} className="group border border-gray-100 rounded-lg overflow-hidden">
+                <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-gray-50/80 transition-colors">
+                  <span className="text-[12px] font-medium text-gray-700">{style.label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-gray-400">{ts.fontSize}px</span>
+                    <div className="w-3 h-3 rounded-full border border-gray-200" style={{ backgroundColor: ts.color }} />
+                  </div>
                 </summary>
-                <div className="px-3 pb-3 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="px-3 pb-3 pt-1 space-y-2 bg-gray-50/40">
+                  <div className="grid grid-cols-3 gap-2">
                     <div>
                       <label className="text-[10px] text-gray-400">Tamanho</label>
                       <input type="number" value={ts.fontSize} onChange={e => updateTS('fontSize', Number(e.target.value))} min={8} max={72}
-                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
                     </div>
                     <div>
-                      <label className="text-[10px] text-gray-400">Line Height</label>
+                      <label className="text-[10px] text-gray-400">Altura</label>
                       <input type="number" value={ts.lineHeight} onChange={e => updateTS('lineHeight', Number(e.target.value))} min={0.8} max={3} step={0.1}
-                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
                     </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-400">Cor</label>
-                    <div className="flex items-center gap-2">
-                      <input type="color" value={ts.color} onChange={e => updateTS('color', e.target.value)} className="w-6 h-6 rounded border border-gray-200 cursor-pointer p-0.5" />
-                      <input type="text" value={ts.color} onChange={e => updateTS('color', e.target.value)} className="flex-1 px-2 py-1 border border-gray-200 rounded text-[10px] font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+                    <div>
+                      <label className="text-[10px] text-gray-400">Cor</label>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => {
+                          const input = document.createElement('input')
+                          input.type = 'color'; input.value = ts.color
+                          input.addEventListener('input', (e) => updateTS('color', (e.target as HTMLInputElement).value))
+                          input.click()
+                        }} className="w-8 h-[30px] rounded-lg border border-gray-200 cursor-pointer flex-shrink-0" style={{ backgroundColor: ts.color }} />
+                        <input type="text" value={ts.color} onChange={e => updateTS('color', e.target.value)}
+                          className="flex-1 min-w-0 px-1.5 py-1.5 border border-gray-200 rounded-lg text-[10px] font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -198,40 +228,25 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
         </div>
       </div>
 
-      {/* Links */}
-      <div>
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Links</p>
-        <div className="space-y-2">
-          <div>
-            <label className="text-[11px] font-medium text-gray-500 mb-1 block">Cor do Link</label>
-            <div className="flex items-center gap-2">
-              <input type="color" value={s.textStyles?.link?.color || '#F97316'} onChange={e => {
-                const textStyles = { ...(s.textStyles || {}) }
-                textStyles.link = { ...(textStyles.link || {}), color: e.target.value }
-                update('textStyles', textStyles)
-              }} className="w-6 h-6 rounded border border-gray-200 cursor-pointer p-0.5" />
-              <input type="text" value={s.textStyles?.link?.color || '#F97316'} onChange={e => {
-                const textStyles = { ...(s.textStyles || {}) }
-                textStyles.link = { ...(textStyles.link || {}), color: e.target.value }
-                update('textStyles', textStyles)
-              }} className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
-            </div>
+      {/* ── Links ── */}
+      <div className="p-4 space-y-3 border-b border-gray-100">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Links</p>
+        <InlineColorPicker label="Cor do Link" value={s.textStyles?.link?.color || '#F97316'} onChange={v => {
+          const textStyles = { ...(s.textStyles || {}) }
+          textStyles.link = { ...(textStyles.link || {}), color: v }
+          update('textStyles', textStyles)
+        }} />
+        <label className="flex items-center gap-2.5 cursor-pointer">
+          <div className={`relative w-9 h-5 rounded-full transition-colors ${s.textStyles?.link?.underline !== false ? 'bg-brand-500' : 'bg-gray-200'}`}>
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${s.textStyles?.link?.underline !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={s.textStyles?.link?.underline !== false}
-              onChange={e => {
-                const textStyles = { ...(s.textStyles || {}) }
-                textStyles.link = { ...(textStyles.link || {}), underline: e.target.checked }
-                update('textStyles', textStyles)
-              }} className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
-            <span className="text-xs text-gray-700">Sublinhado</span>
-          </label>
-        </div>
+          <span className="text-[12px] text-gray-700">Sublinhado</span>
+        </label>
       </div>
 
-      {/* Buttons */}
-      <div>
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Botões Default</p>
+      {/* ── Botões ── */}
+      <div className="p-4 space-y-3">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Botões Padrão</p>
         {(['primary', 'secondary'] as const).map(variant => {
           const bs = s.buttonStyles?.[variant] || { bgColor: variant === 'primary' ? '#F97316' : '#FFFFFF', textColor: variant === 'primary' ? '#FFFFFF' : '#F97316', borderRadius: 8, fontWeight: 'bold' }
           const updateBS = (field: string, val: any) => {
@@ -240,40 +255,31 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
             update('buttonStyles', buttonStyles)
           }
           return (
-            <details key={variant} className="group border border-gray-100 rounded-lg mb-2">
-              <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-semibold text-gray-600 hover:bg-gray-50 rounded-lg capitalize">
-                {variant === 'primary' ? 'Primário' : 'Secundário'}
-                <div className="w-5 h-5 rounded" style={{ backgroundColor: bs.bgColor, border: '1px solid #e5e7eb' }} />
+            <details key={variant} className="group border border-gray-100 rounded-lg overflow-hidden">
+              <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-gray-50/80 transition-colors">
+                <span className="text-[12px] font-medium text-gray-700">{variant === 'primary' ? 'Primário' : 'Secundário'}</span>
+                <div className="flex items-center gap-2">
+                  <div className="px-3 py-0.5 rounded text-[10px] font-semibold" style={{ backgroundColor: bs.bgColor, color: bs.textColor, border: '1px solid #e5e7eb' }}>
+                    Aa
+                  </div>
+                </div>
               </summary>
-              <div className="px-3 pb-3 space-y-2">
+              <div className="px-3 pb-3 pt-1 space-y-2.5 bg-gray-50/40">
                 <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] text-gray-400">Fundo</label>
-                    <div className="flex gap-1">
-                      <input type="color" value={bs.bgColor} onChange={e => updateBS('bgColor', e.target.value)} className="w-6 h-6 rounded border border-gray-200 p-0.5 cursor-pointer" />
-                      <input type="text" value={bs.bgColor} onChange={e => updateBS('bgColor', e.target.value)} className="flex-1 px-1.5 py-1 border border-gray-200 rounded text-[10px] font-mono" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-400">Texto</label>
-                    <div className="flex gap-1">
-                      <input type="color" value={bs.textColor} onChange={e => updateBS('textColor', e.target.value)} className="w-6 h-6 rounded border border-gray-200 p-0.5 cursor-pointer" />
-                      <input type="text" value={bs.textColor} onChange={e => updateBS('textColor', e.target.value)} className="flex-1 px-1.5 py-1 border border-gray-200 rounded text-[10px] font-mono" />
-                    </div>
-                  </div>
+                  <InlineColorPicker label="Fundo" value={bs.bgColor} onChange={v => updateBS('bgColor', v)} />
+                  <InlineColorPicker label="Texto" value={bs.textColor} onChange={v => updateBS('textColor', v)} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10px] text-gray-400">Raio</label>
                     <input type="number" value={bs.borderRadius} onChange={e => updateBS('borderRadius', Number(e.target.value))} min={0} max={50}
-                      className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400">Peso</label>
                     <select value={bs.fontWeight} onChange={e => updateBS('fontWeight', e.target.value)}
-                      className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
                       <option value="normal">Normal</option>
-                      <option value="500">Médio</option>
                       <option value="600">Semibold</option>
                       <option value="bold">Bold</option>
                     </select>
@@ -283,14 +289,6 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
             </details>
           )
         })}
-      </div>
-
-      {/* Preheader */}
-      <div>
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Preheader</p>
-        <input type="text" value={s.preheaderText || ''} onChange={e => update('preheaderText', e.target.value)}
-          placeholder="Texto de preview no inbox (aceita {{merge_tags}})"
-          className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none" />
       </div>
     </div>
   )
@@ -700,8 +698,13 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
             ) : (
               <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                 <SortableContext items={doc.sections.map(s => s.id)} strategy={verticalListSortingStrategy}>
-                {doc.sections.map((section) => (
-                  <SortableSection key={section.id} sectionId={section.id}>
+                {doc.sections.map((section, sectionIndex) => {
+                  const isFirst = sectionIndex === 0
+                  const isLast = sectionIndex === doc.sections.length - 1
+                  const br = doc.settings.borderRadius || 0
+                  const sectionBorderRadius = br > 0 ? `${isFirst ? br : 0}px ${isFirst ? br : 0}px ${isLast ? br : 0}px ${isLast ? br : 0}px` : undefined
+                  return (
+                  <SortableSection key={section.id} sectionId={section.id} isSelected={selectedSectionId === section.id}>
                   {/* Section = FULL WIDTH with section color */}
                   <div
                     className={`relative group/section ${selectedSectionId === section.id ? 'ring-2 ring-indigo-400 ring-inset' : 'hover:ring-1 hover:ring-indigo-200 hover:ring-inset'}`}
@@ -733,7 +736,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                         maxWidth: canvasWidth,
                         margin: '0 auto',
                         backgroundColor: section.styles.contentBackgroundColor || doc.settings.contentBackgroundColor || undefined,
-                        borderRadius: doc.settings.borderRadius || undefined,
+                        borderRadius: sectionBorderRadius,
+                        fontFamily: doc.settings.fontFamily || undefined,
                       }}>
                       <div
                         style={{
@@ -785,7 +789,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                       </div>{/* close content area wrapper */}
                     </div>
                   </SortableSection>
-                  ))}
+                  )
+                })}
                 </SortableContext>
                 </DndContext>
               )}
