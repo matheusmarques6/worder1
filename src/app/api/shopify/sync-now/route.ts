@@ -191,7 +191,53 @@ export async function POST(request: NextRequest) {
           { first: 250, maxPages: 100 }
         );
         console.log(`[Sync] Fetched ${nodes.length} orders from Shopify`);
-        results.orders = nodes.length;
+
+        for (const order of nodes) {
+          const orderId = extractShopifyId(order.id);
+          const orderValue = parseFloat(order.totalPriceSet?.shopMoney?.amount || '0');
+          const currency = order.totalPriceSet?.shopMoney?.currencyCode || 'BRL';
+          const lineItems = (order.lineItems?.nodes || []).map((li: any) => ({
+            title: li.title, quantity: li.quantity, price: li.originalUnitPriceSet?.shopMoney?.amount,
+            sku: li.sku, product_id: li.product?.id ? extractShopifyId(li.product.id) : null,
+          }));
+
+          // Upsert order
+          await supabase.from('shopify_orders').upsert({
+            store_id: store.id,
+            organization_id: store.organization_id,
+            shopify_order_id: orderId,
+            shopify_order_number: order.name?.replace('#', '') || orderId,
+            name: order.name,
+            email: order.email,
+            phone: order.phone,
+            total_price: orderValue,
+            currency,
+            financial_status: (order.financialStatus || 'pending').toLowerCase(),
+            fulfillment_status: order.fulfillmentStatus?.toLowerCase() || null,
+            line_items: lineItems,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'store_id,shopify_order_id' });
+
+          // Create/update contact from order email
+          if (order.email) {
+            const customerName = order.customer ?
+              `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim() : '';
+            await supabase.from('contacts').upsert({
+              organization_id: store.organization_id,
+              store_id: store.id,
+              email: order.email,
+              first_name: order.customer?.firstName || customerName.split(' ')[0] || null,
+              last_name: order.customer?.lastName || null,
+              phone: order.phone || order.customer?.phone || null,
+              source: 'shopify',
+              shopify_customer_id: order.customer?.id ? extractShopifyId(order.customer.id) : null,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'organization_id,email' });
+          }
+
+          results.orders++;
+        }
+        console.log(`[Sync] Upserted ${results.orders} orders`);
       } catch (err: any) {
         console.error(`[Sync] Orders error:`, err.message);
         results.errors.push(`Orders: ${err.message}`);

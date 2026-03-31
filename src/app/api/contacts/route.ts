@@ -11,18 +11,25 @@ export async function GET(request: NextRequest) {
 
   const { user } = auth;
   const supabase = getSupabaseAdmin();
-  const organizationId = user.organization_id;
 
-  // Multi-org lookup
+  // Get ALL org IDs: user's primary org + memberships + any org that has active stores
   const { data: memberships } = await supabase
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', user.id);
 
+  const { data: storeOrgs } = await supabase
+    .from('shopify_stores')
+    .select('organization_id')
+    .eq('is_active', true);
+
   const orgIds = [...new Set([
-    organizationId,
+    user.organization_id,
     ...(memberships?.map((m: any) => m.organization_id) || []),
+    ...(storeOrgs?.map((s: any) => s.organization_id) || []),
   ])];
+
+  console.log(`[Contacts GET] userId=${user.id}, orgIds=${orgIds.join(',')}`);
 
   const searchParams = request.nextUrl.searchParams;
   const contactId = searchParams.get('id');
