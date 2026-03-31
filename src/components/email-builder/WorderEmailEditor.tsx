@@ -650,7 +650,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       {/* ── Main Layout ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left Sidebar ── */}
-        <div className="w-[260px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+        <div className="w-[280px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
           <div className="flex border-b border-gray-200 flex-shrink-0">
             <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'content' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Content</button>
             <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Styles</button>
@@ -793,7 +793,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         </div>
 
         {/* ── Right Sidebar ── */}
-        <div className="w-[310px] bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
+        <div className="w-[340px] bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
           <div className="py-2.5 px-4 border-b border-gray-200 flex-shrink-0">
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
               {selectedBlock ? (BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type)
