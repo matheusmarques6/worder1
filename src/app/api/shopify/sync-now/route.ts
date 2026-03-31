@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
           storeConfig, PRODUCTS_QUERY,
           { sortKey: 'UPDATED_AT' },
           'products',
-          { first: 50, maxPages: 20 }
+          { first: 250, maxPages: 100 }
         );
         console.log(`[Sync] Fetched ${nodes.length} products from Shopify`);
 
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
           storeConfig, CUSTOMERS_QUERY,
           { sortKey: 'UPDATED_AT' },
           'customers',
-          { first: 50, maxPages: 20 }
+          { first: 250, maxPages: 100 }
         );
         console.log(`[Sync] Fetched ${nodes.length} customers from Shopify`);
 
@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
           storeConfig, ORDERS_QUERY,
           { query: `created_at:>'${sinceDate}'`, sortKey: 'CREATED_AT' },
           'orders',
-          { first: 50, maxPages: 20 }
+          { first: 250, maxPages: 100 }
         );
         console.log(`[Sync] Fetched ${nodes.length} orders from Shopify`);
         results.orders = nodes.length;

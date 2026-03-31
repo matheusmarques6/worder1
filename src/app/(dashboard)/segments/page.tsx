@@ -120,16 +120,29 @@ export default function SegmentsPage() {
   const { user } = useAuthStore()
 
   const fetchSegments = useCallback(async () => {
+    if (!user?.organization_id) return
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      // API requires organization_id, not store_id
-      params.set('organization_id', user?.organization_id || '')
+      params.set('organization_id', user.organization_id)
       params.set('include_count', 'true')
       const res = await fetch(`/api/segments?${params}`)
       if (res.ok) {
         const data = await res.json()
-        setSegments(data.segments || [])
+        let segs = data.segments || []
+
+        // Auto-seed default segments if none exist
+        if (segs.length === 0) {
+          await fetch('/api/segments/seed', { method: 'POST' })
+          // Re-fetch after seeding
+          const res2 = await fetch(`/api/segments?${params}`)
+          if (res2.ok) {
+            const data2 = await res2.json()
+            segs = data2.segments || []
+          }
+        }
+
+        setSegments(segs)
       }
     } catch (err) {
       console.error('Failed to fetch segments:', err)

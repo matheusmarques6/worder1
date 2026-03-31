@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { getAuthClient } from '@/lib/api-utils'
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -9,14 +10,36 @@ export const dynamic = 'force-dynamic';
 
 // GET - Listar segmentos
 export async function GET(request: NextRequest) {
+  const supabase = getSupabaseAdmin()
   try {
     const { searchParams } = new URL(request.url)
-    const organization_id = searchParams.get('organization_id')
+    let organization_id = searchParams.get('organization_id')
     const segment_id = searchParams.get('id')
     const include_count = searchParams.get('include_count') === 'true'
 
+    // If no org_id provided, try to get from auth
+    if (!organization_id) {
+      const auth = await getAuthClient()
+      if (auth) {
+        organization_id = auth.user.organization_id
+      }
+    }
+
     if (!organization_id) {
       return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
+    }
+
+    // Multi-org: get all orgs user has access to
+    const auth = await getAuthClient()
+    let orgIds = [organization_id]
+    if (auth) {
+      const { data: memberships } = await supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', auth.user.id)
+      if (memberships?.length) {
+        orgIds = [...new Set([organization_id, ...memberships.map((m: any) => m.organization_id)])]
+      }
     }
 
     // Buscar segmento específico
@@ -25,12 +48,11 @@ export async function GET(request: NextRequest) {
         .from('customer_segments')
         .select('*')
         .eq('id', segment_id)
-        .eq('organization_id', organization_id)
+        .in('organization_id', orgIds)
         .single()
 
       if (error) throw error
 
-      // Buscar membros se for estático
       let members: any[] = []
       if (data.segment_type === 'static') {
         const { data: memberData } = await supabase
@@ -44,14 +66,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ segment: data, members })
     }
 
-    // Listar todos
-    const query = supabase
+    // Listar todos de TODAS as orgs do usuário
+    const { data: segments, error } = await supabase
       .from('customer_segments')
       .select('*')
-      .eq('organization_id', organization_id)
+      .in('organization_id', orgIds)
       .order('created_at', { ascending: false })
 
-    const { data: segments, error } = await query
     if (error) throw error
 
     // Contar membros se solicitado
@@ -72,6 +93,7 @@ export async function GET(request: NextRequest) {
 
 // POST - Criar segmento
 export async function POST(request: NextRequest) {
+  const supabase = getSupabaseAdmin()
   try {
     const body = await request.json()
     const {
@@ -146,6 +168,7 @@ export async function POST(request: NextRequest) {
 
 // PATCH - Atualizar segmento
 export async function PATCH(request: NextRequest) {
+  const supabase = getSupabaseAdmin()
   try {
     const body = await request.json()
     const { id, ...updates } = body
@@ -173,6 +196,7 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE - Remover segmento
 export async function DELETE(request: NextRequest) {
+  const supabase = getSupabaseAdmin()
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -202,6 +226,7 @@ export async function DELETE(request: NextRequest) {
 // HELPER: Contar membros do segmento
 // =============================================
 async function getSegmentCount(segment: any): Promise<number> {
+  const supabase = getSupabaseAdmin()
   try {
     if (segment.segment_type === 'static') {
       const { count } = await supabase
