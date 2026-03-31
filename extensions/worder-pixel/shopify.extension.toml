@@ -6,21 +6,23 @@ name = "Worder Pixel"
 handle = "worder-pixel"
 runtime_context = "strict"
 
+[extensions.runtime_configuration_definition]
+type = "object"
+
   [extensions.settings]
-    [[extensions.settings.fields]]
-    key = "accountId"
-    type = "single_line_text_field"
+  type = "object"
+
+    [extensions.settings.fields.accountId]
     name = "Account ID"
     description = "Worder Account ID"
-
-    [[extensions.settings.fields]]
-    key = "storeId"
     type = "single_line_text_field"
+
+    [extensions.settings.fields.storeId]
     name = "Store ID"
     description = "Worder Store ID"
-
-    [[extensions.settings.fields]]
-    key = "trackingEndpoint"
     type = "single_line_text_field"
+
+    [extensions.settings.fields.trackingEndpoint]
     name = "Tracking Endpoint"
     description = "URL do endpoint de tracking"
+    type = "single_line_text_field"

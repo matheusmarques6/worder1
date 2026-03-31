@@ -65,7 +65,7 @@
 </script>
 
 <!-- Load tracking script (async, doesn't block rendering) -->
-{{ 'worder.js' | asset_url | script_tag }}
+<script src="{{ 'worder.js' | asset_url }}" defer></script>
 
 {% schema %}
 {
