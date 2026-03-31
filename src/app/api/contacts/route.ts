@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { EventBus, EventType } from '@/lib/events';
 export const dynamic = 'force-dynamic';
 
@@ -7,9 +8,21 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  
-  const { supabase, user } = auth;
+
+  const { user } = auth;
+  const supabase = getSupabaseAdmin();
   const organizationId = user.organization_id;
+
+  // Multi-org lookup
+  const { data: memberships } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', user.id);
+
+  const orgIds = [...new Set([
+    organizationId,
+    ...(memberships?.map((m: any) => m.organization_id) || []),
+  ])];
 
   const searchParams = request.nextUrl.searchParams;
   const contactId = searchParams.get('id');
@@ -17,12 +30,10 @@ export async function GET(request: NextRequest) {
   const tags = searchParams.get('tags');
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '50');
-  
-  // ✅ FILTRO POR LOJA - OBRIGATÓRIO (exceto para busca por ID específico)
   const storeId = searchParams.get('storeId');
 
   try {
-    // Se buscar por ID específico, não precisa de storeId
+    // Se buscar por ID específico
     if (contactId) {
       const { data, error } = await supabase
         .from('contacts')
@@ -37,27 +48,24 @@ export async function GET(request: NextRequest) {
           )
         `)
         .eq('id', contactId)
-        .eq('organization_id', organizationId)
+        .in('organization_id', orgIds)
         .single();
 
       if (error) throw error;
       return NextResponse.json({ contact: data });
     }
 
-    // Para listagem, storeId é opcional — se não fornecido, busca por org
+    // Listagem — busca em TODAS as orgs do usuário
     let query = supabase
       .from('contacts')
       .select('*, deals(id)', { count: 'exact' })
-      .eq('organization_id', organizationId)
+      .in('organization_id', orgIds)
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
 
-    // Se storeId fornecido E válido, filtrar por store
+    // Se storeId fornecido, filtrar por store
     if (storeId) {
-      const storeValidation = await validateStoreAccess(supabase, organizationId, storeId);
-      if (storeValidation.valid) {
-        query = query.eq('store_id', storeId);
-      }
+      query = query.eq('store_id', storeId);
     }
 
     if (search) {
