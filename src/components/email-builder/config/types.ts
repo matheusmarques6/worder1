@@ -177,7 +177,7 @@ export const BLOCK_DEFS: BlockDef[] = [
   // ── Produtos: 20px padding, 12px gap, cards com border ──
   { type: 'product-grid', label: 'Produtos', icon: 'ShoppingBag', category: 'E-commerce',
     defaultProps: {
-      mode: 'dynamic', feedType: 'bestsellers',
+      mode: 'dynamic', feedType: '', feedId: '', feedName: '',
       title: 'Recomendados Para Você',
       columns: 2, rows: 2, maxImageHeight: 240,
       showName: true, showPrice: true, showComparePrice: true,

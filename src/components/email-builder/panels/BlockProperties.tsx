@@ -573,39 +573,58 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
       {/* ── Seleção de produtos ── */}
       {p.mode === 'dynamic' && (
         <div>
-          <p className="text-[12px] font-medium text-gray-700 mb-1">Seleção de produtos</p>
           <p className="text-[12px] font-medium text-gray-700 mb-2">Feed de produtos</p>
 
-          {/* Selected feed card */}
-          <div className="border border-brand-500 rounded-lg p-3 mb-2 bg-brand-50/20">
-            <div className="flex items-start gap-2">
-              <div className="w-4 h-4 rounded-full bg-brand-500 flex items-center justify-center mt-0.5 flex-shrink-0">
-                <div className="w-1.5 h-1.5 rounded-full bg-white" />
+          {p.feedId ? (
+            <>
+              {/* Feed selecionado */}
+              <div className="border border-brand-500 rounded-lg p-3 mb-2 bg-brand-50/20">
+                <div className="flex items-start gap-2">
+                  <div className="w-4 h-4 rounded-full bg-brand-500 flex items-center justify-center mt-0.5 flex-shrink-0">
+                    <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{p.feedName || 'Feed selecionado'}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {p.feedType === 'recently_viewed' && 'Exibir produtos visualizados recentemente pelo contato.'}
+                      {p.feedType === 'bestsellers' && 'Exibir produtos mais vendidos de todas as categorias.'}
+                      {p.feedType === 'newest' && 'Exibir produtos mais recentes de todas as categorias.'}
+                      {p.feedType === 'cart_items' && 'Exibir produtos do carrinho do cliente.'}
+                      {p.feedType === 'recommendations' && 'Exibir produtos recomendados baseado no histórico.'}
+                      {p.feedType === 'most_viewed' && 'Exibir produtos mais vistos.'}
+                      {!p.feedType && 'Feed configurado.'}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">{p.feedName || p.feedType || 'bestsellers'}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {p.feedType === 'recently_viewed' && 'Show products a customer has recently viewed. If we run out, show best-selling products.'}
-                  {p.feedType === 'bestsellers' && 'Show best-selling products from All categories.'}
-                  {p.feedType === 'newest' && 'Show newest products from All categories.'}
-                  {p.feedType === 'cart_items' && 'Show products from the customer\'s cart.'}
-                  {p.feedType === 'recommendations' && 'Show recommended products based on purchase history.'}
-                  {!['recently_viewed', 'bestsellers', 'newest', 'cart_items', 'recommendations'].includes(p.feedType) && 'Show products using this feed.'}
-                </p>
+              <div className="flex gap-2">
+                <button onClick={() => setShowViewFeeds(true)}
+                  className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
+                  Alterar seleção
+                </button>
+                <button onClick={() => setShowCreateFeed(true)}
+                  className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
+                  Criar novo feed
+                </button>
+              </div>
+            </>
+          ) : (
+            /* Nenhum feed selecionado */
+            <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center bg-gray-50">
+              <p className="text-xs font-medium text-gray-600 mb-1">Nenhum feed de produtos configurado</p>
+              <p className="text-[10px] text-gray-400 mb-3">Crie um feed para definir quais produtos serão exibidos para cada contato.</p>
+              <div className="flex gap-2 justify-center">
+                <button onClick={() => setShowCreateFeed(true)}
+                  className="text-xs font-semibold text-white bg-brand-500 rounded-lg px-4 py-2 hover:bg-brand-600 transition-colors">
+                  Criar feed de produtos
+                </button>
+                <button onClick={() => setShowViewFeeds(true)}
+                  className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors">
+                  Selecionar existente
+                </button>
               </div>
             </div>
-          </div>
-
-          <div className="flex gap-2">
-            <button onClick={() => setShowViewFeeds(true)}
-              className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-              Alterar seleção
-            </button>
-            <button onClick={() => setShowCreateFeed(true)}
-              className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-              Criar feed de produtos
-            </button>
-          </div>
+          )}
         </div>
       )}
 
