@@ -265,6 +265,7 @@ async function syncCustomersGraphQL(
           .from('contacts')
           .upsert({
             organization_id: store.organization_id,
+            store_id: store.id,
             email: customer.email,
             phone: customer.phone || null,
             first_name: customer.firstName || null,
