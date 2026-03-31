@@ -1,51 +1,77 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { motion } from 'framer-motion'
 import Link from 'next/link'
 import {
   UsersThree,
   UserPlus,
   MagnifyingGlass,
   FunnelSimple,
-  Upload,
-  Download,
-  TrendUp,
   EnvelopeSimple,
-  Phone,
   WhatsappLogo,
   DotsThree,
-  Tag,
   CurrencyDollar,
-  UserCircle,
   CaretLeft,
   CaretRight,
-  CheckCircle,
-  XCircle,
   ArrowsClockwise,
+  ShoppingCart,
+  Export,
+  Tag,
 } from '@phosphor-icons/react'
-import { useContacts, useHydratedStoreId } from '@/hooks'
-import { useAuthStore } from '@/stores'
+import { Loader2 } from 'lucide-react'
+import { useAuthStore, useStoreStore } from '@/stores'
 
-// KPIs are computed from real data below
+const PAGE_SIZE = 50
 
 export default function ContactsPage() {
-  const { storeId } = useHydratedStoreId()
   const { user } = useAuthStore()
-  const organizationId = user?.organization_id
-  const { contacts, loading, refetch } = useContacts({ storeId })
+  const { currentStore } = useStoreStore()
+  const [contacts, setContacts] = useState<any[]>([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState('')
 
-  useEffect(() => {
-    if (organizationId) {
-      refetch()
-    }
-  }, [storeId, organizationId, refetch])
+  const fetchContacts = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(PAGE_SIZE),
+      })
+      if (currentStore?.id) params.set('storeId', currentStore.id)
+      if (search) params.set('search', search)
 
-  const handleSyncFromShopify = async () => {
+      const res = await fetch(`/api/contacts?${params}`)
+      if (res.ok) {
+        const data = await res.json()
+        setContacts(data.contacts || [])
+        setTotalCount(data.pagination?.total || data.contacts?.length || 0)
+      }
+    } catch (err) {
+      console.error('Failed to fetch contacts:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [page, search, currentStore?.id])
+
+  useEffect(() => {
+    fetchContacts()
+  }, [fetchContacts])
+
+  // Debounce search
+  const [searchInput, setSearchInput] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [searchInput])
+
+  const handleSync = async () => {
     setSyncing(true)
     setSyncMessage('')
     try {
@@ -55,11 +81,11 @@ export default function ContactsPage() {
         body: JSON.stringify({ syncType: 'customers' }),
       })
       const data = await res.json()
-      if (data.success || data.data) {
-        setSyncMessage(`Sincronizados: ${data.data?.customers || 0} clientes`)
-        refetch()
+      if (data.data) {
+        setSyncMessage(`${data.data.customers || 0} contatos sincronizados`)
+        fetchContacts()
       } else {
-        setSyncMessage(data.error || 'Erro no sync')
+        setSyncMessage(data.error || 'Erro')
       }
     } catch {
       setSyncMessage('Erro ao sincronizar')
@@ -68,44 +94,41 @@ export default function ContactsPage() {
     }
   }
 
-  const filteredContacts = contacts?.filter((c: any) =>
-    !search ||
-    c.first_name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.last_name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase())
-  ) || []
-
-  const totalContacts = contacts?.length || 0
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  const startIdx = (page - 1) * PAGE_SIZE + 1
+  const endIdx = Math.min(page * PAGE_SIZE, totalCount)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display text-gray-900">Contatos</h1>
-          <p className="text-sm text-gray-500 mt-1">Gerencie sua base de contatos e segmentos</p>
+          <h1 className="text-2xl font-bold text-gray-900">Contatos</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {totalCount > 0 ? `${totalCount.toLocaleString('pt-BR')} contatos` : 'Gerencie sua base de contatos'}
+          </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
-            onClick={handleSyncFromShopify}
+            onClick={handleSync}
             disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
-            <ArrowsClockwise className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} weight="bold" />
+            <ArrowsClockwise className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Sincronizando...' : 'Sync Shopify'}
           </button>
           <Link
-            href="/contacts/import"
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            href="/contacts/lists"
+            className="flex items-center gap-2 px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            <Upload className="w-4 h-4" weight="bold" />
-            Importar
+            <Tag className="w-4 h-4" />
+            Listas & Segmentos
           </Link>
           <Link
             href="/crm/contacts"
-            className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-sm"
+            className="flex items-center gap-2 px-3.5 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors"
           >
-            <UserPlus className="w-4 h-4" weight="bold" />
+            <UserPlus className="w-4 h-4" />
             Novo Contato
           </Link>
         </div>
@@ -113,182 +136,115 @@ export default function ContactsPage() {
 
       {/* Sync Message */}
       {syncMessage && (
-        <div className={`p-3 rounded-xl text-sm ${syncMessage.includes('Erro') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+        <div className={`px-4 py-2.5 rounded-lg text-sm ${
+          syncMessage.includes('Erro') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+        }`}>
           {syncMessage}
         </div>
       )}
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { title: 'Total de Contatos', value: totalContacts.toString(), icon: UsersThree, color: '#F26B2A' },
-          { title: 'Ativos (30d)', value: contacts?.filter((c: any) => c.last_active_at && new Date(c.last_active_at) > new Date(Date.now() - 30*24*60*60*1000)).length?.toString() || '0', icon: CheckCircle, color: '#22C55E' },
-          { title: 'Com Pedidos', value: contacts?.filter((c: any) => (c.total_orders || 0) > 0).length?.toString() || '0', icon: CurrencyDollar, color: '#8B5CF6' },
-          { title: 'Novos (7d)', value: contacts?.filter((c: any) => c.created_at && new Date(c.created_at) > new Date(Date.now() - 7*24*60*60*1000)).length?.toString() || '0', icon: UserPlus, color: '#3B82F6' },
-        ].map((kpi, i) => {
-          const Icon = kpi.icon
-          return (
-            <motion.div
-              key={kpi.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="bg-white rounded-2xl border border-gray-200 p-5"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 font-medium">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1 font-display">{kpi.value}</p>
-                </div>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${kpi.color}15` }}>
-                  <Icon className="w-5 h-5" style={{ color: kpi.color }} weight="duotone" />
-                </div>
-              </div>
-            </motion.div>
-          )
-        })}
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-white rounded-xl border border-gray-200 w-fit">
-        <button className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-50 text-white">
-          Todos os Contatos
-        </button>
-        <Link href="/contacts/lists" className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors">
-          Listas & Segmentos
-        </Link>
-      </div>
-
-      {/* Search & Filters */}
+      {/* Search */}
       <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+        <div className="relative flex-1 max-w-md">
+          <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar contatos..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-brand-500 transition-colors"
+            placeholder="Buscar por nome, email ou telefone..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
           />
         </div>
-        <button className="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
-          <FunnelSimple className="w-4 h-4" />
-          Filtros
-        </button>
-        <button className="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-500 hover:text-white transition-colors">
-          <Download className="w-4 h-4" weight="bold" />
-          Exportar
-        </button>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <ArrowsClockwise className="w-6 h-6 animate-spin text-gray-500" />
+            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
           </div>
-        ) : filteredContacts.length === 0 ? (
+        ) : contacts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
-              <UsersThree className="w-8 h-8 text-gray-400" weight="duotone" />
-            </div>
+            <UsersThree className="w-10 h-10 text-gray-300 mb-3" />
             <p className="text-gray-500 font-medium">Nenhum contato encontrado</p>
-            <p className="text-gray-500 text-sm mt-1">Importe ou adicione contatos para começar</p>
+            <p className="text-gray-400 text-sm mt-1">
+              {search ? 'Tente outro termo de busca' : 'Clique em "Sync Shopify" para importar'}
+            </p>
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Contato</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">E-mail</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Telefone</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Tags</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">LTV</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Última Atividade</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredContacts.slice((page - 1) * 25, page * 25).map((contact: any) => (
-                <tr key={contact.id} className="border-t border-gray-200 hover:bg-gray-50 transition-colors group">
-                  <td className="px-5 py-4">
-                    <Link href={`/contacts/${contact.id}`} className="flex items-center gap-3 hover:text-brand-600 transition-colors">
-                      <div className="w-9 h-9 rounded-lg bg-brand-100 flex items-center justify-center text-xs font-bold text-brand-600">
-                        {(contact.first_name?.[0] || '') + (contact.last_name?.[0] || '')}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 group-hover:text-brand-600 transition-colors">
-                          {contact.first_name} {contact.last_name}
-                        </p>
-                      </div>
-                    </Link>
-                  </td>
-                  <td className="px-5 py-4 text-sm text-gray-600">{contact.email || '-'}</td>
-                  <td className="px-5 py-4 text-sm text-gray-600">{contact.phone || '-'}</td>
-                  <td className="px-5 py-4">
-                    {contact.tags?.length > 0 ? (
-                      <div className="flex items-center gap-1">
-                        {contact.tags.slice(0, 2).map((tag: string) => (
-                          <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-500">
-                            {tag}
-                          </span>
-                        ))}
-                        {contact.tags.length > 2 && (
-                          <span className="text-[10px] text-gray-500">+{contact.tags.length - 2}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-sm font-medium text-gray-900">
-                    {contact.ltv ? `R$ ${contact.ltv.toFixed(2)}` : '-'}
-                  </td>
-                  <td className="px-5 py-4 text-sm text-gray-500">
-                    {contact.updated_at ? new Date(contact.updated_at).toLocaleDateString('pt-BR') : '-'}
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1.5 rounded-lg hover:bg-blue-500/10 text-gray-500 hover:text-blue-400 transition-colors" title="E-mail">
-                        <EnvelopeSimple className="w-4 h-4" weight="fill" />
-                      </button>
-                      <button className="p-1.5 rounded-lg hover:bg-[#25D366]/10 text-gray-500 hover:text-[#25D366] transition-colors" title="WhatsApp">
-                        <WhatsappLogo className="w-4 h-4" weight="fill" />
-                      </button>
-                      <button className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 hover:text-white transition-colors" title="Mais">
-                        <DotsThree className="w-4 h-4" weight="bold" />
-                      </button>
-                    </div>
-                  </td>
+          <>
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50/80 border-b border-gray-200">
+                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Contato</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">E-mail</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Telefone</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Pedidos</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Gasto Total</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Fonte</th>
+                  <th className="w-10"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {contacts.map((c: any) => (
+                  <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors group">
+                    <td className="px-4 py-3">
+                      <Link href={`/contacts/${c.id}`} className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-[11px] font-bold text-brand-600 flex-shrink-0">
+                          {(c.first_name?.[0] || c.email?.[0] || '?').toUpperCase()}
+                        </div>
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-brand-600 transition-colors truncate max-w-[180px]">
+                          {c.first_name || c.last_name ? `${c.first_name || ''} ${c.last_name || ''}`.trim() : c.email?.split('@')[0] || '—'}
+                        </span>
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 truncate max-w-[200px]">{c.email || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{c.phone || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">{c.total_orders || 0}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                      {c.total_spent ? `R$ ${parseFloat(c.total_spent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">
+                        {c.source || 'shopify'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link href={`/contacts/${c.id}`} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+                        <DotsThree className="w-4 h-4" weight="bold" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
-        {/* Pagination */}
-        {filteredContacts.length > 25 && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200">
-            <p className="text-xs text-gray-500">
-              {(page - 1) * 25 + 1}–{Math.min(page * 25, filteredContacts.length)} de {filteredContacts.length}
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 disabled:opacity-30 transition-colors"
-              >
-                <CaretLeft className="w-4 h-4" weight="bold" />
-              </button>
-              <button
-                onClick={() => setPage(p => p + 1)}
-                disabled={page * 25 >= filteredContacts.length}
-                className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 disabled:opacity-30 transition-colors"
-              >
-                <CaretRight className="w-4 h-4" weight="bold" />
-              </button>
+            {/* Pagination */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50/50">
+              <p className="text-xs text-gray-500">
+                {startIdx}–{endIdx} de {totalCount.toLocaleString('pt-BR')}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="p-1.5 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-30 transition-colors"
+                >
+                  <CaretLeft className="w-4 h-4" weight="bold" />
+                </button>
+                <span className="text-xs text-gray-600 px-2">
+                  Página {page} de {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="p-1.5 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-30 transition-colors"
+                >
+                  <CaretRight className="w-4 h-4" weight="bold" />
+                </button>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
