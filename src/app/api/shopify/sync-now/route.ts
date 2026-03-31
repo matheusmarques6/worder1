@@ -147,50 +147,69 @@ export async function POST(request: NextRequest) {
         );
         console.log(`[Sync] Fetched ${nodes.length} customers from Shopify`);
 
-        for (const c of nodes) {
-          const shopifyId = extractShopifyId(c.id);
-          if (c.email) {
-            // Find existing contact by email
-            const { data: existing } = await supabase
-              .from('contacts')
-              .select('id')
-              .eq('email', c.email.toLowerCase())
-              .limit(1)
-              .maybeSingle();
+        // Get all existing emails in batches (Supabase IN limit ~1000)
+        const allEmails = nodes.filter((c: any) => c.email).map((c: any) => c.email.toLowerCase());
+        const existingEmailMap = new Map<string, string>();
 
-            const contactData = {
-              organization_id: store.organization_id,
-              store_id: store.id,
-              email: c.email.toLowerCase(),
-              phone: c.phone || null,
-              first_name: c.firstName || null,
-              last_name: c.lastName || null,
-              source: 'shopify',
-              shopify_customer_id: shopifyId,
-              total_orders: parseInt(c.numberOfOrders || '0'),
-              total_spent: parseFloat(c.amountSpent?.amount || '0'),
-              tags: Array.isArray(c.tags) ? c.tags : [],
-              updated_at: new Date().toISOString(),
-            };
-
-            if (existing) {
-              await supabase.from('contacts').update(contactData).eq('id', existing.id);
-            } else {
-              const { error } = await supabase.from('contacts').insert({
-                ...contactData,
-                created_at: new Date().toISOString(),
-              });
-              if (error) {
-                // Skip duplicates silently
-                if (error.code !== '23505') {
-                  console.error(`[Sync] Contact insert error for ${c.email}:`, error.message);
-                }
-              }
-            }
-          }
-          results.customers++;
+        for (let i = 0; i < allEmails.length; i += 500) {
+          const batch = allEmails.slice(i, i + 500);
+          const { data: existingContacts } = await supabase
+            .from('contacts')
+            .select('id, email')
+            .in('email', batch);
+          (existingContacts || []).forEach((c: any) => {
+            if (c.email) existingEmailMap.set(c.email.toLowerCase(), c.id);
+          });
         }
-        console.log(`[Sync] Synced ${results.customers} customers to contacts`);
+
+        // Split into new vs existing
+        const toInsert: any[] = [];
+        const toUpdate: any[] = [];
+
+        for (const c of nodes) {
+          if (!c.email) continue;
+          const email = c.email.toLowerCase();
+          const shopifyId = extractShopifyId(c.id);
+          const data = {
+            organization_id: store.organization_id,
+            store_id: store.id,
+            email,
+            phone: c.phone || null,
+            first_name: c.firstName || null,
+            last_name: c.lastName || null,
+            source: 'shopify',
+            shopify_customer_id: shopifyId,
+            total_orders: parseInt(c.numberOfOrders || '0'),
+            total_spent: parseFloat(c.amountSpent?.amount || '0'),
+            tags: Array.isArray(c.tags) ? c.tags : [],
+            updated_at: new Date().toISOString(),
+          };
+
+          const existingId = existingEmailMap.get(email);
+          if (existingId) {
+            toUpdate.push({ id: existingId, ...data });
+          } else {
+            toInsert.push({ ...data, created_at: new Date().toISOString() });
+          }
+        }
+
+        // Batch insert new contacts (100 at a time)
+        for (let i = 0; i < toInsert.length; i += 100) {
+          const batch = toInsert.slice(i, i + 100);
+          const { error } = await supabase.from('contacts').insert(batch);
+          if (error) {
+            console.error(`[Sync] Batch insert error (${i}):`, error.message);
+          }
+        }
+
+        // Batch update existing contacts (one by one is fine, they're fewer)
+        for (const contact of toUpdate) {
+          const { id, ...data } = contact;
+          await supabase.from('contacts').update(data).eq('id', id);
+        }
+
+        results.customers = toInsert.length + toUpdate.length;
+        console.log(`[Sync] Contacts: ${toInsert.length} inserted, ${toUpdate.length} updated`);
       } catch (err: any) {
         console.error(`[Sync] Customers error:`, err.message);
         results.errors.push(`Customers: ${err.message}`);
