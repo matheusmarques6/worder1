@@ -108,7 +108,7 @@ function DealCard({ deal, isDragging, onClick }: DealCardProps) {
         </h4>
         <button 
           onClick={(e) => e.stopPropagation()}
-          className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+          className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors opacity-0 group-hover:opacity-100"
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
