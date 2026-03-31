@@ -618,15 +618,23 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     case 'coupon':
       return (
         <div className="space-y-3">
-          {/* Cabeçalho */}
+          {/* ── CABEÇALHO ── */}
           <span className="text-[10px] font-semibold text-gray-400 uppercase">Cabeçalho</span>
           <Field label="Texto"><TextInput value={p.headerText} onChange={v => onChange('headerText', v)} placeholder="Seu desconto especial:" /></Field>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Tamanho"><NumberInput value={p.headerFontSize || 14} onChange={v => onChange('headerFontSize', v)} min={10} max={24} /></Field>
+            <Field label="Tamanho"><NumberInput value={p.headerFontSize || 14} onChange={v => onChange('headerFontSize', v)} min={10} max={28} /></Field>
             <Field label="Cor"><ColorInput value={p.headerColor || '#9A3412'} onChange={v => onChange('headerColor', v)} /></Field>
           </div>
+          <Field label="Peso da Fonte">
+            <SelectInput value={p.headerFontWeight || '500'} onChange={v => onChange('headerFontWeight', v)} options={[
+              { value: 'normal', label: 'Normal' }, { value: '500', label: 'Médio' }, { value: '600', label: 'Semibold' }, { value: 'bold', label: 'Negrito' },
+            ]} />
+          </Field>
+          <Field label="Alinhamento">
+            <SelectInput value={p.headerAlign || 'center'} onChange={v => onChange('headerAlign', v)} options={ALIGN_OPTIONS} />
+          </Field>
 
-          {/* Código */}
+          {/* ── CÓDIGO ── */}
           <span className="text-[10px] font-semibold text-gray-400 uppercase">Código do Cupom</span>
           <Field label="Código">
             <div className="flex gap-1.5">
@@ -642,14 +650,24 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
             <Field label="Tamanho"><NumberInput value={p.codeFontSize} onChange={v => onChange('codeFontSize', v)} min={16} max={64} /></Field>
             <Field label="Cor"><ColorInput value={p.codeColor} onChange={v => onChange('codeColor', v)} /></Field>
           </div>
-          <Field label="Peso da Fonte">
-            <SelectInput value={p.codeFontWeight || 'bold'} onChange={v => onChange('codeFontWeight', v)} options={[
-              { value: 'normal', label: 'Normal' }, { value: 'bold', label: 'Negrito' }, { value: '900', label: 'Extra Bold' },
-            ]} />
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Peso">
+              <SelectInput value={p.codeFontWeight || 'bold'} onChange={v => onChange('codeFontWeight', v)} options={[
+                { value: 'normal', label: 'Normal' }, { value: 'bold', label: 'Negrito' }, { value: '900', label: 'Extra Bold' },
+              ]} />
+            </Field>
+            <Field label="Espaçamento"><NumberInput value={p.codeLetterSpacing ?? 4} onChange={v => onChange('codeLetterSpacing', v)} min={0} max={16} /></Field>
+          </div>
+          <Field label="Fundo do Código"><ColorInput value={p.codeBgColor || ''} onChange={v => onChange('codeBgColor', v)} /></Field>
+          <Field label="Padding do Código">
+            <div className="grid grid-cols-2 gap-2">
+              <NumberInput value={p.codePaddingV ?? 10} onChange={v => onChange('codePaddingV', v)} min={0} max={40} />
+              <NumberInput value={p.codePaddingH ?? 28} onChange={v => onChange('codePaddingH', v)} min={0} max={60} />
+            </div>
+            <div className="flex gap-2 mt-0.5"><span className="text-[9px] text-gray-400 flex-1 text-center">Vertical</span><span className="text-[9px] text-gray-400 flex-1 text-center">Horizontal</span></div>
           </Field>
-          <Field label="Espaçamento entre Letras"><NumberInput value={p.codeLetterSpacing ?? 4} onChange={v => onChange('codeLetterSpacing', v)} min={0} max={16} /></Field>
 
-          {/* Borda do código */}
+          {/* ── BORDA DO CÓDIGO ── */}
           <span className="text-[10px] font-semibold text-gray-400 uppercase">Borda do Código</span>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Estilo">
@@ -663,15 +681,19 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
             <Field label="Cor"><ColorInput value={p.borderColor} onChange={v => onChange('borderColor', v)} /></Field>
             <Field label="Raio"><NumberInput value={p.borderRadius} onChange={v => onChange('borderRadius', v)} min={0} max={32} /></Field>
           </div>
-          <Field label="Fundo do Código"><ColorInput value={p.codeBgColor || ''} onChange={v => onChange('codeBgColor', v)} /></Field>
 
-          {/* Rodapé */}
+          {/* ── RODAPÉ ── */}
           <span className="text-[10px] font-semibold text-gray-400 uppercase">Rodapé</span>
           <Field label="Texto"><TextInput value={p.footerText} onChange={v => onChange('footerText', v)} placeholder="Válido até..." /></Field>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Tamanho"><NumberInput value={p.footerFontSize || 12} onChange={v => onChange('footerFontSize', v)} min={8} max={18} /></Field>
+            <Field label="Tamanho"><NumberInput value={p.footerFontSize || 12} onChange={v => onChange('footerFontSize', v)} min={8} max={20} /></Field>
             <Field label="Cor"><ColorInput value={p.footerColor || '#9CA3AF'} onChange={v => onChange('footerColor', v)} /></Field>
           </div>
+          <Field label="Peso da Fonte">
+            <SelectInput value={p.footerFontWeight || 'normal'} onChange={v => onChange('footerFontWeight', v)} options={[
+              { value: 'normal', label: 'Normal' }, { value: '500', label: 'Médio' }, { value: 'bold', label: 'Negrito' },
+            ]} />
+          </Field>
           {commonTail()}
         </div>
       )

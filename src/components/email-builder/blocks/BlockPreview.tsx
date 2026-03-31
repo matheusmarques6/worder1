@@ -666,7 +666,12 @@ export function BlockPreview({
             }}
           >
             {p.headerText && (
-              <p style={{ margin: '0 0 12px', fontSize: p.headerFontSize || 14, color: p.headerColor || '#9A3412', fontWeight: 500 }}>
+              <p style={{
+                margin: '0 0 12px', fontSize: p.headerFontSize || 14,
+                color: p.headerColor || '#9A3412',
+                fontWeight: p.headerFontWeight || '500',
+                textAlign: (p.headerAlign as React.CSSProperties['textAlign']) || 'center',
+              }}>
                 {p.headerText}
               </p>
             )}
@@ -680,14 +685,18 @@ export function BlockPreview({
                 border: p.borderStyle === 'none' ? 'none' : `${p.borderWidth ?? 2}px ${p.borderStyle || 'dashed'} ${p.borderColor || '#EA580C'}`,
                 borderRadius: p.borderRadius ?? 12,
                 display: 'inline-block',
-                padding: '10px 28px',
+                padding: `${p.codePaddingV ?? 10}px ${p.codePaddingH ?? 28}px`,
                 backgroundColor: p.codeBgColor || undefined,
               }}
             >
               {p.code || 'CODIGO'}
             </p>
             {p.footerText && (
-              <p style={{ margin: '12px 0 0', fontSize: p.footerFontSize || 12, color: p.footerColor || '#9CA3AF' }}>
+              <p style={{
+                margin: '12px 0 0', fontSize: p.footerFontSize || 12,
+                color: p.footerColor || '#9CA3AF',
+                fontWeight: p.footerFontWeight || 'normal',
+              }}>
                 {p.footerText}
               </p>
             )}
