@@ -246,6 +246,8 @@ a{color:${s.textStyles?.link?.color || '#F97316'};${s.textStyles?.link?.underlin
   .worder-countdown-wrap td div{min-width:50px!important;padding:10px 8px 6px!important}
   .worder-countdown-wrap td div span:first-child{font-size:24px!important}
   .worder-coupon-code{font-size:22px!important;letter-spacing:2px!important;padding:8px 16px!important;word-break:break-all!important;max-width:100%!important;box-sizing:border-box!important}
+  .worder-product-grid td{display:block!important;width:100%!important}
+  .worder-product-grid .worder-product-cell{display:block!important;width:100%!important}
 }
 </style>
 </head>

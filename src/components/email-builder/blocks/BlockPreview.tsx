@@ -414,13 +414,19 @@ export function BlockPreview({
         const cols = p.columns || 2
         const rows = p.rows || 2
         const total = cols * rows
+        // eslint-disable-next-line react-hooks/rules-of-hooks
+        const gridId = `pgrid-${block.id.replace(/[^a-z0-9]/gi,'')}`
         return (
           <div
             style={{
               ...pad,
               backgroundColor: p.backgroundColor || undefined,
+              containerType: 'inline-size' as any,
             }}
           >
+            {p.stackOnMobile !== false && (
+              <style dangerouslySetInnerHTML={{ __html: `@container (max-width: 420px) { .${gridId} { grid-template-columns: 1fr !important; } }` }} />
+            )}
             {p.title && (
               <p
                 style={{
@@ -435,9 +441,10 @@ export function BlockPreview({
               </p>
             )}
             <div
+              className={gridId}
               style={{
                 display: 'grid',
-                gridTemplateColumns: `repeat(auto-fit, minmax(${Math.max(140, Math.floor(280 / cols))}px, 1fr))`,
+                gridTemplateColumns: `repeat(${cols}, 1fr)`,
                 gap: p.productPadding ?? 8,
               }}
             >
