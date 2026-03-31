@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, Palette, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star } from 'lucide-react'
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDroppable, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { BlockPalette } from './panels/BlockPalette'
 import { BlockPreview } from './blocks/BlockPreview'
@@ -25,23 +25,24 @@ interface WorderEmailEditorProps {
   onBack: () => void
 }
 
-// ── Sortable Block Wrapper ──
+// ── Sortable Block Wrapper (drag from anywhere on the block) ──
 function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDelete }: {
   blockId: string; children: React.ReactNode; isSelected: boolean;
   onSelect: () => void; onClone: () => void; onDelete: () => void
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: blockId })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: blockId,
+    data: { type: 'block', blockId },
+  })
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, zIndex: isDragging ? 50 : 'auto' }}
+      {...attributes}
+      {...listeners}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1, zIndex: isDragging ? 50 : 'auto' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      className={`relative group ${isSelected ? 'ring-2 ring-brand-500 ring-offset-1' : 'hover:ring-1 hover:ring-brand-300'}`}
+      className={`relative group cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-brand-500 ring-offset-1' : 'hover:ring-1 hover:ring-brand-300'}`}
     >
-      <div {...attributes} {...listeners}
-        className="absolute -left-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing p-0.5 text-gray-300 hover:text-gray-500 transition-opacity z-10">
-        <GripVertical className="w-4 h-4" />
-      </div>
       {isSelected && (
         <div className="absolute -right-9 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5 z-20">
           <button onClick={e => { e.stopPropagation(); onClone() }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar"><Copy className="w-3.5 h-3.5" /></button>
@@ -53,7 +54,45 @@ function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDel
   )
 }
 
-// SectionProperties imported from './panels/SectionProperties'
+// ── Sortable Section Wrapper (drag sections to reorder) ──
+function SortableSection({ sectionId, children }: { sectionId: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: sectionId,
+    data: { type: 'section', sectionId },
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1, zIndex: isDragging ? 40 : 'auto' }}
+    >
+      {/* Drag handle for sections — visible on hover */}
+      <div className="relative group/sectiondrag">
+        <div
+          {...attributes}
+          {...listeners}
+          className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover/sectiondrag:opacity-100 cursor-grab active:cursor-grabbing p-1 text-gray-300 hover:text-indigo-500 transition-opacity z-30 bg-white/80 backdrop-blur-sm rounded shadow-sm border border-gray-200"
+          title="Arrastar seção"
+        >
+          <GripVertical className="w-4 h-4" />
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// ── Droppable Column (accept blocks into empty columns) ──
+function DroppableColumn({ columnId, sectionId, children }: { columnId: string; sectionId: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `column-${columnId}`,
+    data: { type: 'column', columnId, sectionId },
+  })
+  return (
+    <div ref={setNodeRef} className={`${isOver ? 'ring-2 ring-brand-400 ring-inset bg-brand-50/30' : ''}`}>
+      {children}
+    </div>
+  )
+}
 
 // ── Styles Tab (Klaviyo-level) ──
 function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch<React.SetStateAction<EmailDocument>> }) {
@@ -443,17 +482,6 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     selectBlock(clone.id)
   }, [doc, updateDoc, selectBlock])
 
-  const moveBlock = useCallback((id: string, dir: 'up' | 'down') => {
-    const loc = findBlockLocation(doc, id)
-    if (!loc) return
-    const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
-    const blocks = sections[loc.sectionIdx].columns[loc.columnIdx].blocks
-    const target = dir === 'up' ? loc.blockIdx - 1 : loc.blockIdx + 1
-    if (target < 0 || target >= blocks.length) return
-    ;[blocks[loc.blockIdx], blocks[target]] = [blocks[target], blocks[loc.blockIdx]]
-    updateDoc({ ...doc, sections })
-  }, [doc, updateDoc])
-
   const updateProp = useCallback((id: string, key: string, value: any) => {
     setDoc(prev => ({
       ...prev,
@@ -467,18 +495,69 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     }))
   }, [])
 
-  // ── DnD within a column ──
-  const handleSortEnd = useCallback((event: DragEndEvent) => {
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
+
+  // ── DnD: supports reorder within column, cross-column, cross-section, and section reordering ──
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string)
+  }, [])
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    setActiveDragId(null)
     const { active, over } = event
     if (!over || active.id === over.id) return
+
+    const activeData = active.data.current
+    const overData = over.data.current
+
+    // ── Section reordering ──
+    if (activeData?.type === 'section' && overData?.type === 'section') {
+      const oldIdx = doc.sections.findIndex(s => s.id === active.id)
+      const newIdx = doc.sections.findIndex(s => s.id === over.id)
+      if (oldIdx !== -1 && newIdx !== -1 && oldIdx !== newIdx) {
+        updateDoc({ ...doc, sections: arrayMove(doc.sections, oldIdx, newIdx) })
+      }
+      return
+    }
+
+    // ── Block reordering / cross-column move ──
     const activeLoc = findBlockLocation(doc, active.id as string)
-    const overLoc = findBlockLocation(doc, over.id as string)
-    if (!activeLoc || !overLoc) return
-    if (activeLoc.sectionIdx !== overLoc.sectionIdx || activeLoc.columnIdx !== overLoc.columnIdx) return
+    if (!activeLoc) return
+
     const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
-    const blocks = sections[activeLoc.sectionIdx].columns[activeLoc.columnIdx].blocks
-    const [moved] = blocks.splice(activeLoc.blockIdx, 1)
-    blocks.splice(overLoc.blockIdx, 0, moved)
+
+    // Check if dropped onto an empty column droppable
+    if (overData?.type === 'column') {
+      const targetSectionIdx = sections.findIndex(s => s.id === overData.sectionId)
+      const targetSection = sections[targetSectionIdx]
+      if (targetSection) {
+        const targetColIdx = targetSection.columns.findIndex((c: any) => c.id === overData.columnId)
+        if (targetColIdx !== -1) {
+          const srcBlocks = sections[activeLoc.sectionIdx].columns[activeLoc.columnIdx].blocks
+          const [moved] = srcBlocks.splice(activeLoc.blockIdx, 1)
+          sections[targetSectionIdx].columns[targetColIdx].blocks.push(moved)
+          updateDoc({ ...doc, sections })
+        }
+      }
+      return
+    }
+
+    const overLoc = findBlockLocation(doc, over.id as string)
+    if (!overLoc) return
+
+    // Same column — simple reorder
+    if (activeLoc.sectionIdx === overLoc.sectionIdx && activeLoc.columnIdx === overLoc.columnIdx) {
+      const blocks = sections[activeLoc.sectionIdx].columns[activeLoc.columnIdx].blocks
+      const [moved] = blocks.splice(activeLoc.blockIdx, 1)
+      blocks.splice(overLoc.blockIdx, 0, moved)
+    } else {
+      // Cross-column / cross-section move
+      const srcBlocks = sections[activeLoc.sectionIdx].columns[activeLoc.columnIdx].blocks
+      const [moved] = srcBlocks.splice(activeLoc.blockIdx, 1)
+      const dstBlocks = sections[overLoc.sectionIdx].columns[overLoc.columnIdx].blocks
+      dstBlocks.splice(overLoc.blockIdx, 0, moved)
+    }
+
     updateDoc({ ...doc, sections })
   }, [doc, updateDoc])
 
@@ -619,11 +698,12 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                 </div>
               </div>
             ) : (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSortEnd}>
+              <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <SortableContext items={doc.sections.map(s => s.id)} strategy={verticalListSortingStrategy}>
                 {doc.sections.map((section) => (
-                  /* Section = FULL WIDTH with section color */
+                  <SortableSection key={section.id} sectionId={section.id}>
+                  {/* Section = FULL WIDTH with section color */}
                   <div
-                    key={section.id}
                     className={`relative group/section ${selectedSectionId === section.id ? 'ring-2 ring-indigo-400 ring-inset' : 'hover:ring-1 hover:ring-indigo-200 hover:ring-inset'}`}
                     style={{ backgroundColor: section.styles.backgroundColor || undefined }}
                     onClick={e => { e.stopPropagation(); selectSection(section.id) }}
@@ -671,10 +751,11 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                               onDrop={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30'); const type = e.dataTransfer.getData('blockType'); if (type) addBlock(type, section.id, column.id) }}
                             >
                               {colBlocks.length === 0 ? (
-                                <div className="flex items-center justify-center h-full min-h-[60px] border border-dashed border-gray-300 bg-gray-50/50 text-gray-400 text-xs gap-2 rounded">
-                                  <span>Solte conteúdo aqui</span>
-                                  <Trash2 className="w-3.5 h-3.5 text-gray-300" />
-                                </div>
+                                <DroppableColumn columnId={column.id} sectionId={section.id}>
+                                  <div className="flex items-center justify-center h-full min-h-[60px] border border-dashed border-gray-300 bg-gray-50/50 text-gray-400 text-xs gap-2 rounded">
+                                    <span>Solte conteúdo aqui</span>
+                                  </div>
+                                </DroppableColumn>
                               ) : (
                                 <SortableContext items={colBlocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
                                   {colBlocks.map((block) => (
@@ -690,12 +771,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                         block={block}
                                         selected={selectedBlockId === block.id}
                                         onSelect={() => selectBlock(block.id)}
-                                        onMoveUp={() => moveBlock(block.id, 'up')}
-                                        onMoveDown={() => moveBlock(block.id, 'down')}
                                         onClone={() => cloneBlock(block.id)}
                                         onDelete={() => removeBlock(block.id)}
-                                        isFirst={false}
-                                        isLast={false}
                                       />
                                     </SortableBlock>
                                   ))}
@@ -707,7 +784,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                       </div>
                       </div>{/* close content area wrapper */}
                     </div>
+                  </SortableSection>
                   ))}
+                </SortableContext>
                 </DndContext>
               )}
           </div>

@@ -1,19 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Instagram, Facebook, Music, Youtube, Link2, Zap, ChevronUp, ChevronDown, Copy, X } from 'lucide-react'
+import { Instagram, Facebook, Music, Youtube, Link2, Zap, Copy, X } from 'lucide-react'
 import type { EmailBlock } from '../config/types'
 
 interface BlockPreviewProps {
   block: EmailBlock
   selected: boolean
   onSelect: () => void
-  onMoveUp: () => void
-  onMoveDown: () => void
   onClone: () => void
   onDelete: () => void
-  isFirst: boolean
-  isLast: boolean
 }
 
 const DYNAMIC_TYPES = new Set(['product-grid', 'abandoned-cart', 'coupon'])
@@ -49,12 +45,8 @@ export function BlockPreview({
   block,
   selected,
   onSelect,
-  onMoveUp,
-  onMoveDown,
   onClone,
   onDelete,
-  isFirst,
-  isLast,
 }: BlockPreviewProps) {
   const p = block.props
   const pad = parsePadding(p.padding)
@@ -1074,39 +1066,23 @@ export function BlockPreview({
         </div>
       )}
 
-      {/* Floating toolbar */}
+      {/* Floating toolbar — compact, no arrows (drag to reorder) */}
       {selected && (
-        <div className="absolute -top-8 right-0 flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-md px-1 py-0.5 z-10">
-          <button
-            onClick={(e) => { e.stopPropagation(); onMoveUp() }}
-            disabled={isFirst}
-            className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs"
-            title="Mover para cima"
-          >
-            <ChevronUp size={14} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onMoveDown() }}
-            disabled={isLast}
-            className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs"
-            title="Mover para baixo"
-          >
-            <ChevronDown size={14} />
-          </button>
+        <div className="absolute -top-7 right-0 flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-md px-1 py-0.5 z-10">
           <button
             onClick={(e) => { e.stopPropagation(); onClone() }}
             className="p-1 text-gray-400 hover:text-blue-600 text-xs"
             title="Duplicar"
           >
-            <Copy size={14} />
+            <Copy size={13} />
           </button>
-          <div className="w-px h-4 bg-gray-200" />
+          <div className="w-px h-3.5 bg-gray-200" />
           <button
             onClick={(e) => { e.stopPropagation(); onDelete() }}
             className="p-1 text-gray-400 hover:text-red-600 text-xs"
             title="Excluir"
           >
-            <X size={14} />
+            <X size={13} />
           </button>
         </div>
       )}
