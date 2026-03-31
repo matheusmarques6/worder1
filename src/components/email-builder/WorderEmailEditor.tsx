@@ -10,6 +10,7 @@ import { BlockPreview } from './blocks/BlockPreview'
 import { BlockProperties } from './panels/BlockProperties'
 import { MergeTagPicker } from './modals/MergeTagPicker'
 import { SendTestModal } from './modals/SendTestModal'
+import { PreviewModal } from './modals/PreviewModal'
 import { SectionProperties } from './panels/SectionProperties'
 import {
   BLOCK_DEFS, SECTION_LAYOUTS, createBlock, createSection, migrateV1toV2, DEFAULT_DOCUMENT,
@@ -765,19 +766,13 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       </div>
 
       {/* ── Preview Modal ── */}
-      {showPreview && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-8" onClick={() => setShowPreview(false)}>
-          <div className="bg-white rounded-xl shadow-2xl max-w-[680px] w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-              <span className="text-sm font-semibold text-gray-900">Preview do Email</span>
-              <button onClick={() => setShowPreview(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
-            </div>
-            <div className="flex-1 overflow-auto p-4 bg-gray-100">
-              <iframe srcDoc={previewHtml} title="Preview" className="w-full border border-gray-200 rounded bg-white" style={{ height: 600 }} />
-            </div>
-          </div>
-        </div>
-      )}
+      <PreviewModal
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+        html={previewHtml}
+        subject={templateName}
+        onSendTest={() => { setShowPreview(false); setShowSendTest(true) }}
+      />
 
       {/* ── Send Test Modal ── */}
       <SendTestModal
