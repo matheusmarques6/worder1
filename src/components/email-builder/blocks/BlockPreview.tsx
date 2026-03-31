@@ -84,9 +84,11 @@ export function BlockPreview({
               ...pad,
               textAlign: (p.align as React.CSSProperties['textAlign']) || 'center',
               backgroundColor: p.backgroundColor || undefined,
+              lineHeight: 0,
+              fontSize: 0,
             }}
           >
-            <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', lineHeight: 0, fontSize: 0 }}>
+            <div style={{ position: 'relative', maxWidth: '100%', lineHeight: 0, fontSize: 0 }}>
               <img
                 src={p.src}
                 alt={p.alt || ''}
@@ -96,7 +98,7 @@ export function BlockPreview({
                   height: 'auto',
                   display: 'block',
                   borderRadius: p.borderRadius,
-                  verticalAlign: 'bottom',
+                  margin: p.align === 'left' ? '0' : p.align === 'right' ? '0 0 0 auto' : '0 auto',
                 }}
               />
               {p.href && (
