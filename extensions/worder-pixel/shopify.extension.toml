@@ -3,6 +3,7 @@ api_version = "2026-01"
 [[extensions]]
 type = "web_pixel"
 name = "Worder Pixel"
+handle = "worder-pixel"
 runtime_context = "strict"
 
   [extensions.settings]
