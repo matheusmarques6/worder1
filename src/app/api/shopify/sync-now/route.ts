@@ -149,12 +149,19 @@ export async function POST(request: NextRequest) {
 
         for (const c of nodes) {
           const shopifyId = extractShopifyId(c.id);
-          // Upsert into contacts
           if (c.email) {
-            const { error } = await supabase.from('contacts').upsert({
+            // Find existing contact by email
+            const { data: existing } = await supabase
+              .from('contacts')
+              .select('id')
+              .eq('email', c.email.toLowerCase())
+              .limit(1)
+              .maybeSingle();
+
+            const contactData = {
               organization_id: store.organization_id,
               store_id: store.id,
-              email: c.email,
+              email: c.email.toLowerCase(),
               phone: c.phone || null,
               first_name: c.firstName || null,
               last_name: c.lastName || null,
@@ -164,10 +171,21 @@ export async function POST(request: NextRequest) {
               total_spent: parseFloat(c.amountSpent?.amount || '0'),
               tags: Array.isArray(c.tags) ? c.tags : [],
               updated_at: new Date().toISOString(),
-            }, { onConflict: 'organization_id,email' });
+            };
 
-            if (error && error.code !== '23505') {
-              console.error(`[Sync] Contact upsert error for ${c.email}:`, error.message);
+            if (existing) {
+              await supabase.from('contacts').update(contactData).eq('id', existing.id);
+            } else {
+              const { error } = await supabase.from('contacts').insert({
+                ...contactData,
+                created_at: new Date().toISOString(),
+              });
+              if (error) {
+                // Skip duplicates silently
+                if (error.code !== '23505') {
+                  console.error(`[Sync] Contact insert error for ${c.email}:`, error.message);
+                }
+              }
             }
           }
           results.customers++;
@@ -201,8 +219,15 @@ export async function POST(request: NextRequest) {
             sku: li.sku, product_id: li.product?.id ? extractShopifyId(li.product.id) : null,
           }));
 
-          // Upsert order
-          await supabase.from('shopify_orders').upsert({
+          // Insert or update order
+          const { data: existingOrder } = await supabase
+            .from('shopify_orders')
+            .select('id')
+            .eq('store_id', store.id)
+            .eq('shopify_order_id', orderId)
+            .maybeSingle();
+
+          const orderData = {
             store_id: store.id,
             organization_id: store.organization_id,
             shopify_order_id: orderId,
@@ -216,23 +241,44 @@ export async function POST(request: NextRequest) {
             fulfillment_status: order.fulfillmentStatus?.toLowerCase() || null,
             line_items: lineItems,
             updated_at: new Date().toISOString(),
-          }, { onConflict: 'store_id,shopify_order_id' });
+          };
+
+          if (existingOrder) {
+            await supabase.from('shopify_orders').update(orderData).eq('id', existingOrder.id);
+          } else {
+            await supabase.from('shopify_orders').insert(orderData);
+          }
 
           // Create/update contact from order email
           if (order.email) {
-            const customerName = order.customer ?
-              `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim() : '';
-            await supabase.from('contacts').upsert({
-              organization_id: store.organization_id,
-              store_id: store.id,
-              email: order.email,
-              first_name: order.customer?.firstName || customerName.split(' ')[0] || null,
-              last_name: order.customer?.lastName || null,
-              phone: order.phone || order.customer?.phone || null,
-              source: 'shopify',
-              shopify_customer_id: order.customer?.id ? extractShopifyId(order.customer.id) : null,
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'organization_id,email' });
+            const { data: existingContact } = await supabase
+              .from('contacts')
+              .select('id')
+              .eq('email', order.email.toLowerCase())
+              .limit(1)
+              .maybeSingle();
+
+            if (existingContact) {
+              await supabase.from('contacts').update({
+                store_id: store.id,
+                phone: order.phone || order.customer?.phone || null,
+                shopify_customer_id: order.customer?.id ? extractShopifyId(order.customer.id) : null,
+                updated_at: new Date().toISOString(),
+              }).eq('id', existingContact.id);
+            } else {
+              await supabase.from('contacts').insert({
+                organization_id: store.organization_id,
+                store_id: store.id,
+                email: order.email.toLowerCase(),
+                first_name: order.customer?.firstName || null,
+                last_name: order.customer?.lastName || null,
+                phone: order.phone || order.customer?.phone || null,
+                source: 'shopify',
+                shopify_customer_id: order.customer?.id ? extractShopifyId(order.customer.id) : null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              }); // Skip duplicates
+            }
           }
 
           results.orders++;
