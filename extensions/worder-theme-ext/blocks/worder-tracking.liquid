@@ -1,19 +1,15 @@
 <!-- Worder Tracking — App Embed Block -->
-<!-- Injected automatically on ALL pages of the theme -->
-<!-- Merchant activates in: Online Store > Themes > Customize > App Embeds > Worder Tracking -->
+<!-- Auto-configured: uses shop domain to resolve account. No manual setup needed. -->
 
 <script>
   window.__worder = window.__worder || {};
   window.__worder.config = {
-    accountId: {{ block.settings.account_id | json }},
-    storeId: {{ block.settings.store_id | json }},
-    endpoint: {{ block.settings.tracking_endpoint | json }},
     shopDomain: {{ shop.permanent_domain | json }},
+    endpoint: "https://worder1.vercel.app/api/track",
   };
 
   // === AUTOMATIC IDENTIFICATION ===
 
-  // 1. Logged-in Shopify customer → identify by email
   {% if customer %}
     window.__worder.customer = {
       email: {{ customer.email | json }},
@@ -28,7 +24,6 @@
     };
   {% endif %}
 
-  // 2. Product data (if on a product page)
   {% if template contains 'product' and product %}
     window.__worder.product = {
       id: {{ product.id | json }},
@@ -48,7 +43,6 @@
     };
   {% endif %}
 
-  // 3. Collection data (if on a collection page)
   {% if template contains 'collection' and collection %}
     window.__worder.collection = {
       id: {{ collection.id | json }},
@@ -59,37 +53,16 @@
     };
   {% endif %}
 
-  // 4. Current template (to know which page type we're on)
   window.__worder.template = {{ template | json }};
   window.__worder.pageTitle = {{ page_title | json }};
 </script>
 
-<!-- Load tracking script (async, doesn't block rendering) -->
 <script src="{{ 'worder.js' | asset_url }}" defer></script>
 
 {% schema %}
 {
   "name": "Worder Tracking",
   "target": "body",
-  "settings": [
-    {
-      "type": "text",
-      "id": "account_id",
-      "label": "Account ID",
-      "info": "Filled automatically. Do not change."
-    },
-    {
-      "type": "text",
-      "id": "store_id",
-      "label": "Store ID",
-      "info": "Filled automatically. Do not change."
-    },
-    {
-      "type": "text",
-      "id": "tracking_endpoint",
-      "label": "Tracking Endpoint",
-      "default": "https://app.worder.com/api/track"
-    }
-  ]
+  "settings": []
 }
 {% endschema %}

@@ -15,9 +15,9 @@
   'use strict';
 
   var config = window.__worder && window.__worder.config;
-  if (!config || !config.accountId || !config.storeId) return;
+  if (!config || !config.shopDomain) return;
 
-  var ENDPOINT = config.endpoint || 'https://app.worder.com/api/track';
+  var ENDPOINT = config.endpoint || 'https://worder1.vercel.app/api/track';
   var COOKIE_NAME = '__worder_id';
   var COOKIE_EMAIL = '__worder_id_email';
   var COOKIE_DAYS = 730; // 2 years
@@ -210,8 +210,7 @@
 
     var payload = {
       eventId: generateUUID(),
-      accountId: config.accountId,
-      storeId: config.storeId,
+      storeDomain: config.shopDomain,
       eventType: eventType,
       properties: properties || {},
       visitorId: visitorId,
@@ -271,8 +270,7 @@
 
     var payload = {
       eventId: generateUUID(),
-      accountId: config.accountId,
-      storeId: config.storeId,
+      storeDomain: config.shopDomain,
       visitorId: visitorId,
       sessionId: sessionId,
       fingerprint: fingerprint,
