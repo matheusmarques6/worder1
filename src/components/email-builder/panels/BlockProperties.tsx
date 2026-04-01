@@ -1384,7 +1384,7 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
             price: prod.price,
             compare_at_price: prod.compare_at_price,
             image_url: prod.image_url,
-            url: prod.url || (prod.handle ? `https://loja.com/products/${prod.handle}` : ''),
+            url: prod.url || '',
             description: prod.description || '',
             buttonText: p.buttonText || 'Comprar',
           })))
