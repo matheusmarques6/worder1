@@ -82,21 +82,20 @@ export default function SegmentDetailPage() {
   }, [segmentId, user?.organization_id])
 
   const fetchMembers = useCallback(async () => {
-    if (!segment?.rules?.length || !user?.organization_id) return
+    if (!segmentId) return
     try {
-      // Fetch contacts matching segment rules via contacts API
       const params = new URLSearchParams({
         page: String(page),
         limit: String(pageSize),
       })
-      const res = await fetch(`/api/contacts?${params}`)
+      const res = await fetch(`/api/segments/${segmentId}/members?${params}`)
       if (res.ok) {
         const data = await res.json()
         setMembers(data.contacts || [])
-        setTotalMembers(data.pagination?.total || segment.contact_count || 0)
+        setTotalMembers(data.pagination?.total || 0)
       }
     } catch {}
-  }, [segment, page, user?.organization_id])
+  }, [segmentId, page])
 
   useEffect(() => { fetchSegment() }, [fetchSegment])
   useEffect(() => { if (segment) fetchMembers() }, [segment, fetchMembers])
