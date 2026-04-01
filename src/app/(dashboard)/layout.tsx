@@ -602,7 +602,7 @@ export default function DashboardLayout({
       {/* Desktop Sidebar */}
       <aside className={cn(
         'hidden lg:flex fixed left-0 top-0 bottom-0 bg-[#1B1F23] z-40 flex-col transition-all duration-300',
-        collapsed ? 'w-[72px]' : 'w-[240px]'
+        collapsed ? 'w-[72px]' : 'w-[256px]'
       )}>
         <SidebarContent />
       </aside>
@@ -610,7 +610,7 @@ export default function DashboardLayout({
       {/* Main Content */}
       <main className={cn(
         'min-h-screen pt-[72px] lg:pt-0 transition-all duration-300 ml-0',
-        collapsed ? 'lg:ml-[72px]' : 'lg:ml-[240px]'
+        collapsed ? 'lg:ml-[72px]' : 'lg:ml-[256px]'
       )}>
         {/* Desktop Header */}
         <header className="hidden lg:flex sticky top-0 z-30 items-center justify-between px-6 py-3 bg-white border-b border-gray-200">

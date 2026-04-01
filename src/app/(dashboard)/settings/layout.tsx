@@ -17,7 +17,7 @@ const tabs = [
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   return (
-    <div>
+    <div className="-m-4 lg:-m-6">
       {/* Header */}
       <div className="border-b border-gray-200 bg-white">
         <div className="px-6 pt-6 pb-0">
