@@ -579,7 +579,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
 
   // ── Preview ──
   const handlePreview = useCallback(() => {
-    setPreviewHtml(renderDocumentToHtml(doc))
+    let html = renderDocumentToHtml(doc)
+    html = html.replace(/\{\{countdown_base_url\}\}/g, window.location.origin)
+    setPreviewHtml(html)
     setShowPreview(true)
   }, [doc])
 
@@ -737,12 +739,14 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                         margin: '0 auto',
                         backgroundColor: section.styles.contentBackgroundColor || doc.settings.contentBackgroundColor || undefined,
                         borderRadius: sectionBorderRadius,
+                        overflow: sectionBorderRadius ? 'hidden' : undefined,
                         fontFamily: doc.settings.fontFamily || undefined,
                       }}>
                       <div
                         style={{
                           display: 'flex',
                           gap: 0,
+                          alignItems: section.styles.columnAlignment === 'middle' ? 'center' : section.styles.columnAlignment === 'bottom' ? 'flex-end' : 'flex-start',
                           padding: `${section.styles.padding.top}px ${section.styles.padding.right}px ${section.styles.padding.bottom}px ${section.styles.padding.left}px`,
                         }}
                       >

@@ -1355,6 +1355,12 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
             <Field label="Cor de fundo"><ColorInput value={p.buttonColor || '#F97316'} onChange={v => onChange('buttonColor', v)} /></Field>
             <Field label="Cor do texto"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>
             <Field label="Raio da borda"><NumberInput value={p.buttonRadius || 6} onChange={v => onChange('buttonRadius', v)} min={0} max={50} /></Field>
+            <Field label="Tamanho da fonte"><NumberInput value={p.buttonFontSize || 12} onChange={v => onChange('buttonFontSize', v)} min={10} max={20} /></Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Padding H"><NumberInput value={p.buttonPaddingH ?? 16} onChange={v => onChange('buttonPaddingH', v)} min={4} max={40} /></Field>
+              <Field label="Padding V"><NumberInput value={p.buttonPaddingV ?? 6} onChange={v => onChange('buttonPaddingV', v)} min={2} max={20} /></Field>
+            </div>
+            <Toggle value={p.buttonFullWidth} onChange={v => onChange('buttonFullWidth', v)} label="Largura total" />
           </div>
         </div>
       )}

@@ -22,13 +22,30 @@ export async function POST(req: NextRequest) {
     // Use onboarding@resend.dev (always works) or custom domain
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'Worder <onboarding@resend.dev>'
 
+    // Build the app URL for replacing placeholders
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'https://worder1.vercel.app')
+
+    // Replace countdown_base_url and basic merge tags with test values
+    let finalHtml = html || '<h1>Email de teste</h1><p>Este é um email de teste enviado pelo Worder.</p>'
+    finalHtml = finalHtml.replace(/\{\{countdown_base_url\}\}/g, appUrl)
+    finalHtml = finalHtml.replace(/\{\{first_name\}\}/g, 'Cliente')
+    finalHtml = finalHtml.replace(/\{\{last_name\}\}/g, 'Teste')
+    finalHtml = finalHtml.replace(/\{\{email\}\}/g, testEmail)
+    finalHtml = finalHtml.replace(/\{\{store_name\}\}/g, 'Minha Loja')
+    finalHtml = finalHtml.replace(/\{\{store_url\}\}/g, '#')
+    finalHtml = finalHtml.replace(/\{\{unsubscribe_url\}\}/g, '#')
+    finalHtml = finalHtml.replace(/\{\{coupon_code\}\}/g, 'TESTE10')
+    finalHtml = finalHtml.replace(/\{\{coupon_expiry\}\}/g, '31/12/2026')
+    // Note: Product block placeholders (<!-- WORDER_PRODUCT_BLOCK:... -->) are left as-is
+    // because they require server-side product fetching which is not implemented here yet.
+
     console.log('[EmailTest] Sending to:', testEmail, 'from:', fromEmail, 'subject:', subject)
 
     const { data, error } = await resend.emails.send({
       from: fromEmail,
       to: [testEmail],
       subject: `[TESTE] ${subject || 'Email de teste'}`,
-      html: html || '<h1>Email de teste</h1><p>Este é um email de teste enviado pelo Worder.</p>',
+      html: finalHtml,
     })
 
     if (error) {

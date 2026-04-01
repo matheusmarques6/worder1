@@ -522,13 +522,13 @@ export function BlockPreview({
                         href="#"
                         onClick={preventDefault}
                         style={{
-                          display: 'inline-block',
+                          display: p.buttonFullWidth ? 'block' : 'inline-block',
                           marginTop: 8,
-                          padding: '6px 16px',
+                          padding: `${p.buttonPaddingV ?? 6}px ${p.buttonPaddingH ?? 16}px`,
                           background: p.buttonColor || '#F97316',
                           color: p.buttonTextColor || '#FFFFFF',
                           borderRadius: p.buttonRadius ?? 6,
-                          fontSize: 12,
+                          fontSize: p.buttonFontSize || 12,
                           fontWeight: 600,
                           textDecoration: 'none',
                         }}

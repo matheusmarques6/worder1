@@ -194,8 +194,9 @@ function renderSection(section: EmailSection, font: string, contentWidth: number
   if (section.columns.length === 1) {
     innerHtml = renderCol(section.columns[0].blocks)
   } else {
+    const colAlign = (s as any).columnAlignment || 'top'
     const colsHtml = section.columns.map(col =>
-      `<td width="${col.width}%" valign="top" style="vertical-align:top;">${renderCol(col.blocks)}</td>`
+      `<td width="${col.width}%" valign="${colAlign}" style="vertical-align:${colAlign};">${renderCol(col.blocks)}</td>`
     ).join('\n')
     innerHtml = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"${stackClass}><tr>${colsHtml}</tr></table>`
   }

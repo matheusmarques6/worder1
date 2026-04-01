@@ -16,6 +16,7 @@ interface Product {
   updated_at?: string
   status?: string
   category?: string
+  collections?: string[]
   buttonText?: string
 }
 
@@ -31,6 +32,7 @@ interface RawProduct {
   variants?: { price: number; compare_at_price?: number | null }[]
   store_name?: string
   tags?: string[]
+  collections?: string[]
   // From shopify_products table
   image_url?: string
   price?: number
@@ -63,6 +65,7 @@ function normalizeProduct(raw: RawProduct, storeDomain?: string): Product {
     url: productUrl,
     handle,
     category: raw.product_type || '',
+    collections: raw.collections || (raw.product_type ? [raw.product_type] : []),
     status: raw.status,
     shopify_product_id: raw.shopify_product_id || String(raw.id),
   }
@@ -73,6 +76,7 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('')
+  const [collections, setCollections] = useState<{id: number; title: string; products_count: number}[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'all' | 'selected'>('all')
   const [storeDomain, setStoreDomain] = useState('')
@@ -87,22 +91,24 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
       .then(r => r.json())
       .then(data => {
         const rawProds: RawProduct[] = Array.isArray(data) ? data : data.products || data.data || []
-        // Get store domain for building URLs
+        // Get store domain for building URLs (prefer custom primaryDomain over myshopify domain)
         const stores = data.stores || []
-        const domain = stores[0]?.domain || ''
+        const domain = stores[0]?.primaryDomain || stores[0]?.domain || ''
         setStoreDomain(domain)
+        setCollections(data.collections || [])
         setProducts(rawProds.map(p => normalizeProduct(p, domain)))
       })
       .catch(() => setProducts([]))
       .finally(() => setLoading(false))
   }, [isOpen])
 
-  // Extract unique categories from products
+  // Use collections from API (fallback to product categories)
   const categories = useMemo(() => {
+    if (collections.length > 0) return []
     const cats = new Set<string>()
     products.forEach(p => { if (p.category) cats.add(p.category) })
     return Array.from(cats).sort()
-  }, [products])
+  }, [products, collections])
 
   if (!isOpen) return null
 
@@ -111,7 +117,7 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
       const q = search.toLowerCase()
       if (!p.title?.toLowerCase().includes(q) && !p.shopify_product_id?.includes(search)) return false
     }
-    if (category && p.category !== category) return false
+    if (category && !(p.collections || []).includes(category) && p.category !== category) return false
     return true
   })
 
@@ -156,7 +162,15 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
               placeholder="Buscar por nome ou ID do produto"
               className="flex-1 text-sm text-gray-900 placeholder-gray-400 outline-none" />
           </div>
-          {categories.length > 0 && (
+          {collections.length > 0 ? (
+            <select value={category} onChange={e => setCategory(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white">
+              <option value="">Todas coleções ({products.length})</option>
+              {collections.map(c => (
+                <option key={c.id} value={c.title}>{c.title} ({c.products_count})</option>
+              ))}
+            </select>
+          ) : categories.length > 0 ? (
             <select value={category} onChange={e => setCategory(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white">
               <option value="">Todas categorias ({products.length})</option>
@@ -164,7 +178,7 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
                 <option key={c} value={c}>{c} ({products.filter(p => p.category === c).length})</option>
               ))}
             </select>
-          )}
+          ) : null}
         </div>
 
         {/* Tabs */}

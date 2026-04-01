@@ -200,7 +200,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     defaultProps: {
       mode: 'dynamic', feedType: '', feedId: '', feedName: '',
       title: 'Recomendados Para Você',
-      columns: 2, rows: 2, maxImageHeight: 240,
+      columns: 2, rows: 2, maxImageHeight: 300,
       showName: true, showPrice: true, showComparePrice: true,
       showButton: true, buttonText: 'Comprar',
       buttonColor: '#F97316', buttonTextColor: '#FFFFFF', buttonRadius: 6,
