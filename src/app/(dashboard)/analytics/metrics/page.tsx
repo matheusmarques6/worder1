@@ -122,7 +122,7 @@ export default function MetricsPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     {metric.count > 0 && (
-                      <span className="text-xs text-gray-400">{metric.count.toLocaleString('pt-BR')}</span>
+                      <span className="text-sm font-medium text-gray-700">{metric.count.toLocaleString('pt-BR')}</span>
                     )}
                     <button onClick={e => e.preventDefault()} className="p-1 text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
                       <MoreVertical className="w-4 h-4" />

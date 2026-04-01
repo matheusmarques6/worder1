@@ -105,18 +105,24 @@ function ItemsTable({ items }: { items: any[] }) {
           </tr>
         </thead>
         <tbody>
-          {items.map((item: any, i: number) => (
+          {items.map((item: any, i: number) => {
+            const name = typeof item === 'string' ? item : (item.ProductName || item.title || item.name || item.product_title || item.presentment_title || 'Produto')
+            const qty = typeof item === 'string' ? 1 : (item.Quantity || item.quantity || 1)
+            const price = typeof item === 'string' ? null : (item.ItemPrice || item.RowTotal || item.price || item.line_price)
+            const variant = typeof item === 'string' ? null : (item.VariantName || item.variant_title)
+            return (
             <tr key={i} className="border-t border-gray-50">
               <td className="px-3 py-2 text-gray-700">
-                {item.title || item.name || item.product_title || 'Item'}
-                {item.variant_title && <span className="text-gray-400 ml-1">({item.variant_title})</span>}
+                {name}
+                {variant && <span className="text-gray-400 ml-1">— {variant}</span>}
               </td>
-              <td className="px-3 py-2 text-right text-gray-600">{item.quantity || 1}</td>
+              <td className="px-3 py-2 text-right text-gray-600">{qty}</td>
               <td className="px-3 py-2 text-right text-gray-600">
-                {item.price ? `R$ ${Number(item.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
+                {price ? `R$ ${Number(price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
               </td>
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
     </div>

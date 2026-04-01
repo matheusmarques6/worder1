@@ -192,12 +192,13 @@ export default function ContactDetailPage() {
       activity_type: evt.eventType,
       title: shopifyEventLabels[evt.eventType] || evt.eventType,
       description: evt.monetaryValue
-        ? `${evt.currency === 'BRL' ? 'R$ ' : (evt.currency || '') + ' '}${evt.monetaryValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${evt.properties?.order_number ? ` - Pedido #${evt.properties.order_number}` : ''}${evt.properties?.items ? ` - ${evt.properties.items.length} item(ns)` : ''}`
-        : evt.properties?.order_number
-        ? `Pedido #${evt.properties.order_number}`
-        : evt.properties?.product_title || null,
+        ? `${evt.currency === 'BRL' ? 'R$ ' : (evt.currency || '') + ' '}${evt.monetaryValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${evt.properties?.OrderNumber ? ` - Pedido #${evt.properties.OrderNumber}` : evt.properties?.order_number ? ` - Pedido #${evt.properties.order_number}` : ''}${evt.properties?.Items ? ` - ${evt.properties.Items.length} item(ns)` : ''}`
+        : evt.properties?.OrderNumber || evt.properties?.order_number
+        ? `Pedido #${evt.properties.OrderNumber || evt.properties.order_number}`
+        : evt.properties?.ProductName || evt.properties?.product_title || null,
       created_at: evt.occurredAt,
-    } as InboxActivity)
+      source: 'shopify',
+    } as any)
   })
   mergedActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
@@ -486,8 +487,11 @@ export default function ContactDetailPage() {
                       return (
                         <div key={activity.id} className="flex gap-4">
                           <div className="flex flex-col items-center">
-                            <div className={`w-8 h-8 rounded-full ${iconCfg.bgColor} flex items-center justify-center flex-shrink-0`}>
+                            <div className={`w-8 h-8 rounded-full ${iconCfg.bgColor} flex items-center justify-center flex-shrink-0 relative`}>
                               <Icon size={16} className={iconCfg.color} weight="fill" />
+                              {(activity as any).source === 'shopify' && (
+                                <img src="/integrations/icone shopify .png" alt="" className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white p-[1px]" />
+                              )}
                             </div>
                             {i < mergedActivities.length - 1 && <div className="w-px h-full bg-gray-50 min-h-[24px]" />}
                           </div>
