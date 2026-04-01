@@ -246,10 +246,11 @@ async function getSegmentCount(segment: any): Promise<number> {
     }
 
     if (segment.segment_type === 'dynamic' && segment.rules?.length) {
-      let query = supabase
+      let query: any = supabase
         .from('contacts')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', segment.organization_id)
+        .not('store_id', 'is', null) // Only count contacts linked to a store
 
       for (const rule of segment.rules) {
         query = applyRule(query, rule)

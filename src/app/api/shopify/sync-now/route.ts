@@ -202,17 +202,25 @@ export async function POST(request: NextRequest) {
           const existingId = existingEmailMap.get(email);
           if (existingId) {
             toUpdate.push({ id: existingId, ...data });
-          } else {
+          } else if (!toInsert.some(c => c.email === email)) {
+            // Dedup: skip if email already in toInsert batch
             toInsert.push({ ...data, created_at: new Date().toISOString() });
           }
         }
 
-        // Batch insert new contacts (100 at a time)
+        // Batch insert new contacts (100 at a time, fallback to individual on error)
         for (let i = 0; i < toInsert.length; i += 100) {
           const batch = toInsert.slice(i, i + 100);
           const { error } = await supabase.from('contacts').insert(batch);
           if (error) {
-            console.error(`[Sync] Batch insert error (${i}):`, error.message);
+            // Batch failed — insert one by one to skip duplicates
+            console.warn(`[Sync] Batch insert failed (${i}), falling back to individual: ${error.message}`);
+            for (const c of batch) {
+              const { error: individualErr } = await supabase.from('contacts').insert(c);
+              if (individualErr && individualErr.code !== '23505') {
+                console.error(`[Sync] Individual insert failed for ${c.email}: ${individualErr.message}`);
+              }
+            }
           }
         }
 

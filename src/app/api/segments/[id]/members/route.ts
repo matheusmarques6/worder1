@@ -36,6 +36,7 @@ export async function GET(
     .from('contacts')
     .select('*', { count: 'exact' })
     .eq('organization_id', segment.organization_id)
+    .not('store_id', 'is', null) // Only contacts linked to a store
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
