@@ -324,8 +324,8 @@ export function BlockPreview({
                     href="#"
                     onClick={preventDefault}
                     style={{
-                      color: '#6B7280',
-                      fontSize: 13,
+                      color: p.linkColor || '#6B7280',
+                      fontSize: p.linkFontSize || 13,
                       textDecoration: 'none',
                     }}
                   >
@@ -344,7 +344,7 @@ export function BlockPreview({
             style={{
               ...pad,
               backgroundColor: p.backgroundColor || undefined,
-              textAlign: 'center',
+              textAlign: (p.align as React.CSSProperties['textAlign']) || 'center',
               fontSize: p.fontSize || 11,
               color: p.textColor || '#9CA3AF',
             }}
@@ -371,7 +371,7 @@ export function BlockPreview({
                   href="#"
                   onClick={preventDefault}
                   style={{
-                    color: p.textColor || '#9CA3AF',
+                    color: p.linkColor || p.textColor || '#9CA3AF',
                     textDecoration: 'underline',
                     fontSize: p.fontSize || 11,
                   }}
@@ -384,7 +384,7 @@ export function BlockPreview({
                   href="#"
                   onClick={preventDefault}
                   style={{
-                    color: p.textColor || '#9CA3AF',
+                    color: p.linkColor || p.textColor || '#9CA3AF',
                     textDecoration: 'underline',
                     fontSize: p.fontSize || 11,
                   }}
@@ -397,7 +397,7 @@ export function BlockPreview({
                   href="#"
                   onClick={preventDefault}
                   style={{
-                    color: p.textColor || '#9CA3AF',
+                    color: p.linkColor || p.textColor || '#9CA3AF',
                     textDecoration: 'underline',
                     fontSize: p.fontSize || 11,
                   }}

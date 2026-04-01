@@ -74,10 +74,12 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     }
 
     case 'header':
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:center;line-height:0;">${p.logoHref ? `<a href="${p.logoHref}" style="text-decoration:none;display:inline-block;line-height:0;">` : ''}<img src="${p.logoSrc || ''}" alt="Logo" width="${p.logoWidth || 160}" style="display:block;margin:0 auto;max-width:100%;height:auto;vertical-align:bottom;" />${p.logoHref ? '</a>' : ''}${p.showLinks && p.links?.length ? `<p style="margin:12px 0 0;font-size:13px;font-family:${font};line-height:1.4;">${p.links.map((l: any) => `<a href="${l.url}" style="color:#6B7280;text-decoration:none;margin:0 8px;">${l.text}</a>`).join('')}</p>` : ''}</td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:center;line-height:0;">${p.logoHref ? `<a href="${p.logoHref}" style="text-decoration:none;display:inline-block;line-height:0;">` : ''}<img src="${p.logoSrc || ''}" alt="Logo" width="${p.logoWidth || 160}" style="display:block;margin:0 auto;max-width:100%;height:auto;vertical-align:bottom;" />${p.logoHref ? '</a>' : ''}${p.showLinks && p.links?.length ? `<p style="margin:12px 0 0;font-size:${p.linkFontSize || 13}px;font-family:${font};line-height:1.4;">${p.links.map((l: any) => `<a href="${l.url}" style="color:${p.linkColor || '#6B7280'};text-decoration:none;margin:0 8px;">${l.text}</a>`).join('')}</p>` : ''}</td></tr>`
 
-    case 'footer':
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:center;font-size:${p.fontSize || 11}px;color:${p.textColor || '#9CA3AF'};font-family:${font};line-height:1.5;"><p style="margin:0;">${p.companyName || ''}</p>${p.address ? `<p style="margin:4px 0 0;">${p.address}</p>` : ''}<p style="margin:8px 0 0;">${p.showUnsubscribe ? '<a href="{{unsubscribe_url}}" style="color:#9CA3AF;text-decoration:underline;">Descadastrar-se</a>' : ''}${p.showUnsubscribe && p.showViewInBrowser ? ' · ' : ''}${p.showViewInBrowser ? '<a href="{{view_in_browser_url}}" style="color:#9CA3AF;text-decoration:underline;">Ver no navegador</a>' : ''}</p></td></tr>`
+    case 'footer': {
+      const flc = p.linkColor || p.textColor || '#9CA3AF'
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.align || 'center'};font-size:${p.fontSize || 11}px;color:${p.textColor || '#9CA3AF'};font-family:${font};line-height:1.5;"><p style="margin:0;">${p.companyName || ''}</p>${p.address ? `<p style="margin:4px 0 0;">${p.address}</p>` : ''}<p style="margin:8px 0 0;">${p.showUnsubscribe ? `<a href="{{unsubscribe_url}}" style="color:${flc};text-decoration:underline;">Descadastrar-se</a>` : ''}${p.showUnsubscribe && p.showViewInBrowser ? ' · ' : ''}${p.showViewInBrowser ? `<a href="{{view_in_browser_url}}" style="color:${flc};text-decoration:underline;">Ver no navegador</a>` : ''}</p></td></tr>`
+    }
 
     case 'product-grid':
       return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${p.title ? `<p style="margin:0 0 16px;font-size:18px;font-weight:bold;color:#111827;text-align:center;font-family:${font};">${p.title}</p>` : ''}<!-- WORDER_PRODUCT_BLOCK:${p.feedType || 'bestsellers'}:${(p.columns || 2) * (p.rows || 2)}:${p.columns || 2}:${p.showPrice !== false}:${p.showComparePrice !== false}:${p.showButton !== false}:${encodeURIComponent(p.buttonText || 'Comprar')} --></td></tr>`
@@ -140,7 +142,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
 
     case 'review-quote': {
       const stars = p.showStars !== false ? `<div style="margin-bottom:12px;font-size:20px;color:${p.starColor || '#FBBF24'};">${'★'.repeat(p.rating || 5)}${'☆'.repeat(5 - (p.rating || 5))}</div>` : ''
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:center;font-family:${font};">${stars}<p style="margin:0;font-size:${p.quoteFontSize || 16}px;color:${p.quoteColor || '#374151'};font-style:${p.quoteStyle || 'italic'};line-height:1.6;">"${p.quote || ''}"</p><p style="margin:12px 0 0;font-size:${p.authorFontSize || 14}px;color:${p.authorColor || '#6B7280'};font-weight:500;">— ${p.author || ''}</p></td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.quoteAlign || 'center'};font-family:${font};">${stars}<p style="margin:0;font-size:${p.quoteFontSize || 16}px;color:${p.quoteColor || '#374151'};font-style:${p.quoteStyle || 'italic'};line-height:1.6;">"${p.quote || ''}"</p><p style="margin:12px 0 0;font-size:${p.authorFontSize || 14}px;color:${p.authorColor || '#6B7280'};font-weight:500;">— ${p.author || ''}</p></td></tr>`
     }
 
     case 'countdown': {
