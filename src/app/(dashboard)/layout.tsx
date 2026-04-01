@@ -427,7 +427,7 @@ export default function DashboardLayout({
         <div>
           <button onClick={() => toggleExpand(item.name)} className={cn(itemClasses, 'justify-between', isExpanded && 'text-gray-200')}>
             <div className="flex items-center gap-3">
-              <Icon className="w-[18px] h-[18px] flex-shrink-0" />
+              <Icon className="w-[17px] h-[17px] flex-shrink-0" />
               <span className="truncate">{item.name}</span>
             </div>
             <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isExpanded && 'rotate-180')} />
@@ -454,7 +454,7 @@ export default function DashboardLayout({
     return (
       <Link href={item.href} onClick={() => setMobileOpen(false)}>
         <div className={itemClasses}>
-          <Icon className="w-[18px] h-[18px] flex-shrink-0" />
+          <Icon className="w-[17px] h-[17px] flex-shrink-0" />
           {!collapsed && <span className="truncate">{item.name}</span>}
         </div>
       </Link>
@@ -475,7 +475,7 @@ export default function DashboardLayout({
       </div>
 
       {/* Navigation with sections */}
-      <nav className="flex-1 py-2 overflow-y-auto">
+      <nav className="flex-1 py-2 overflow-y-auto overflow-x-hidden hide-scrollbar">
         {navigation.map((section, i) => (
           <div key={i} className={section.label ? 'mt-4' : i > 0 ? 'mt-2 pt-2 border-t border-gray-800/30 mx-3' : ''}>
             {section.label && !collapsed && (
@@ -602,7 +602,7 @@ export default function DashboardLayout({
 
       {/* Desktop Sidebar */}
       <aside className={cn(
-        'hidden lg:flex fixed left-0 top-0 bottom-0 bg-[#1B1F23] z-40 flex-col transition-all duration-300',
+        'hidden lg:flex fixed left-0 top-0 bottom-0 bg-[#1B1F23] z-40 flex-col transition-all duration-300 overflow-hidden',
         collapsed ? 'w-[72px]' : 'w-[256px]'
       )}>
         <SidebarContent />
