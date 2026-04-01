@@ -960,7 +960,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
 
   // CDP: checkout_started event
   try {
-    const checkoutValue = parseFloat(checkout.total_price || '0');
+    const checkoutValue = parseFloat(checkout.total_price || checkout.subtotal_price || checkout.total_line_items_price || '0') || (checkout.line_items || []).reduce((sum: number, item: any) => sum + (parseFloat(item.price || '0') * (item.quantity || 1)), 0);
     await createEvent({
       organization_id: store.organization_id,
       contact_id: contactId,
@@ -970,7 +970,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       properties: {
         $value: checkoutValue,
         CheckoutId: String(checkout.id || checkout.token),
-        CheckoutURL: checkout.abandoned_checkout_url || null,
+        CheckoutURL: checkout.abandoned_checkout_url || (checkout.token ? `https://${store.shop_domain}/checkouts/${checkout.token}` : null),
         Currency: checkout.currency,
         'Customer Locale': checkout.customer_locale || 'pt-BR',
         ItemCount: checkout.line_items?.length || 0,
