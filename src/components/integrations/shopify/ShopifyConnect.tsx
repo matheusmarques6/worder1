@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import { useStoreStore } from '@/stores';
 import {
   ShoppingBag, CheckCircle, AlertCircle, Loader2, Trash2,
   Store, ExternalLink, Wifi, RefreshCw,
@@ -29,6 +30,7 @@ interface StoreData {
 
 export default function ShopifyConnect() {
   const searchParams = useSearchParams();
+  const { currentStore } = useStoreStore();
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [store, setStore] = useState<StoreData | null>(null);
@@ -59,7 +61,8 @@ export default function ShopifyConnect() {
       setLoading(true);
 
       // Try dedicated status endpoint first
-      const res = await fetch('/api/integrations/shopify/status');
+      const storeParam = currentStore?.id ? `?store_id=${currentStore.id}` : '';
+      const res = await fetch(`/api/integrations/shopify/status${storeParam}`);
       const data = await res.json();
 
       if (data.connected && data.store) {

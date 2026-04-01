@@ -25,7 +25,7 @@ interface ConnectedStore {
 export default function IntegrationsPage() {
   const router = useRouter()
   const { user } = useAuthStore()
-  const { stores } = useStoreStore()
+  const { stores, currentStore } = useStoreStore()
   const [loading, setLoading] = useState(true)
   const [connectedStores, setConnectedStores] = useState<ConnectedStore[]>([])
   const [syncing, setSyncing] = useState<string | null>(null)
@@ -34,7 +34,8 @@ export default function IntegrationsPage() {
   useEffect(() => {
     async function loadStores() {
       try {
-        const res = await fetch('/api/integrations/shopify/status')
+        const storeParam = currentStore?.id ? `?store_id=${currentStore.id}` : ''
+        const res = await fetch(`/api/integrations/shopify/status${storeParam}`)
         if (res.ok) {
           const data = await res.json()
           if (data.connected && data.store) {
