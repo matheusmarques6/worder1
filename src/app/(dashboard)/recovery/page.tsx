@@ -86,15 +86,26 @@ export default function RecoveryPage() {
       const res = await fetch(`/api/recovery?${params}`)
       if (res.ok) {
         const data = await res.json()
-        setItems(data.items || [])
-        setStats(
-          data.stats || {
-            total_abandoned: 0,
-            total_recovered: 0,
-            recovery_rate: 0,
-            total_value_recovered: 0,
-          }
-        )
+        const rawItems = (data.items || []).map((item: any) => ({
+          id: item.id,
+          customer_name: item.contacts?.first_name ? `${item.contacts.first_name} ${item.contacts?.last_name || ''}`.trim() : item.customer_name || 'Cliente',
+          customer_email: item.contacts?.email || item.customer_email || '',
+          customer_phone: item.customer_phone || '',
+          amount: parseFloat(item.value || item.amount || '0'),
+          status: item.status || 'pending',
+          type: item.type || activeTab,
+          created_at: item.created_at,
+          recovered_at: item.recovered_at,
+          items_count: item.items_count || 1,
+        }))
+        setItems(rawItems)
+        const s = data.stats || {}
+        setStats({
+          total_abandoned: s.total || s.total_abandoned || 0,
+          total_recovered: s.recovered || s.total_recovered || 0,
+          recovery_rate: parseFloat(s.recovery_rate || '0') || 0,
+          total_value_recovered: s.revenue_recovered || s.total_value_recovered || 0,
+        })
       }
     } catch (err) {
       console.error('Failed to fetch recovery data:', err)

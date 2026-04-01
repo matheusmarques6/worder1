@@ -119,7 +119,6 @@ const navigation: NavSection[] = [
   {
     label: 'Conteúdo',
     items: [
-      { name: 'Templates', href: '/email/templates', icon: Palette },
       { name: 'Produtos', href: '/content/products', icon: Package },
       { name: 'Cupons', href: '/content/coupons', icon: Tag },
       { name: 'Mídia', href: '/content/media', icon: ImageIcon },
@@ -138,11 +137,12 @@ const navigation: NavSection[] = [
         ],
       },
       { name: 'CRM', href: '/crm', icon: Briefcase },
+      { name: 'Recuperação', href: '/recovery', icon: RefreshCcw },
     ],
   },
   {
+    label: 'Sistema',
     items: [
-      { name: 'Recuperação', href: '/recovery', icon: RefreshCcw },
       { name: 'Integrações', href: '/integrations', icon: Puzzle },
       { name: 'Configurações', href: '/settings', icon: Settings },
     ],
