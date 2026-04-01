@@ -170,6 +170,15 @@ export async function POST(request: NextRequest) {
           if (!c.email) continue;
           const email = c.email.toLowerCase();
           const shopifyId = extractShopifyId(c.id);
+          const totalOrders = parseInt(c.numberOfOrders || '0');
+          const totalSpent = parseFloat(c.amountSpent?.amount || '0');
+
+          // Calculate lifecycle stage
+          let lifecycleStage = 'subscriber';
+          if (totalOrders >= 5) lifecycleStage = 'vip';
+          else if (totalOrders >= 2) lifecycleStage = 'repeat_customer';
+          else if (totalOrders >= 1) lifecycleStage = 'customer';
+
           const data = {
             organization_id: store.organization_id,
             store_id: store.id,
@@ -179,9 +188,14 @@ export async function POST(request: NextRequest) {
             last_name: c.lastName || null,
             source: 'shopify',
             shopify_customer_id: shopifyId,
-            total_orders: parseInt(c.numberOfOrders || '0'),
-            total_spent: parseFloat(c.amountSpent?.amount || '0'),
+            total_orders: totalOrders,
+            total_spent: totalSpent,
+            average_order_value: totalOrders > 0 ? totalSpent / totalOrders : 0,
             tags: Array.isArray(c.tags) ? c.tags : [],
+            lifecycle_stage: lifecycleStage,
+            last_active_at: c.updatedAt || new Date().toISOString(),
+            email_consent: c.emailMarketingConsent?.marketingState === 'SUBSCRIBED',
+            sms_consent: c.smsMarketingConsent?.marketingState === 'SUBSCRIBED',
             updated_at: new Date().toISOString(),
           };
 
