@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
   const userId = auth.user.id;
   const userOrgId = auth.user.organization_id;
 
-  // Get all orgs the user belongs to
   const { data: memberships } = await supabase
     .from('organization_members')
     .select('organization_id')
@@ -23,7 +22,6 @@ export async function GET(request: NextRequest) {
     orgIds = [...new Set([...orgIds, ...memberships.map((m: any) => m.organization_id)])];
   }
 
-  // Find active store from any of the user's orgs
   const { data: store } = await supabase
     .from('shopify_stores')
     .select('*')
@@ -35,6 +33,56 @@ export async function GET(request: NextRequest) {
 
   if (!store) {
     return NextResponse.json({ connected: false, store: null });
+  }
+
+  // Count real data from tables
+  let ordersCount = store.total_orders || 0;
+  let customersCount = store.total_customers || 0;
+  let productsCount = store.total_products || 0;
+
+  // Count contacts linked to this store or org
+  try {
+    const { count: contactsCount } = await supabase
+      .from('contacts')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', store.organization_id);
+    if (contactsCount && contactsCount > customersCount) {
+      customersCount = contactsCount;
+    }
+  } catch {}
+
+  // Count orders from contact_events
+  try {
+    const { count: evtOrdersCount } = await supabase
+      .from('contact_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', store.organization_id)
+      .eq('event_type', 'placed_order');
+    if (evtOrdersCount && evtOrdersCount > ordersCount) {
+      ordersCount = evtOrdersCount;
+    }
+  } catch {}
+
+  // Count products (from shopify_products or Shopify API)
+  try {
+    const { count: dbProductsCount } = await supabase
+      .from('shopify_products')
+      .select('id', { count: 'exact', head: true })
+      .eq('store_id', store.id);
+    if (dbProductsCount && dbProductsCount > productsCount) {
+      productsCount = dbProductsCount;
+    }
+  } catch {}
+
+  // If still 0 for products, try from organization
+  if (productsCount === 0) {
+    try {
+      const { count: orgProductsCount } = await supabase
+        .from('shopify_products')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', store.organization_id);
+      if (orgProductsCount) productsCount = orgProductsCount;
+    } catch {}
   }
 
   return NextResponse.json({
@@ -54,9 +102,10 @@ export async function GET(request: NextRequest) {
       embedInstalled: store.embed_installed,
       installedAt: store.installed_at,
       lastSyncAt: store.last_sync_at,
-      totalOrders: store.total_orders || 0,
+      totalOrders: ordersCount,
       totalRevenue: store.total_revenue || 0,
-      totalCustomers: store.total_customers || 0,
+      totalCustomers: customersCount,
+      totalProducts: productsCount,
       settings: store.settings,
     },
   });

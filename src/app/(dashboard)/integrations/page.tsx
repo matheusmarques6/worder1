@@ -39,16 +39,6 @@ export default function IntegrationsPage() {
           const data = await res.json()
           if (data.connected && data.store) {
             const s = data.store
-            // Fetch real counts from products API
-            let productsCount = 0
-            try {
-              const pRes = await fetch('/api/products')
-              if (pRes.ok) {
-                const pData = await pRes.json()
-                productsCount = pData.total || (pData.products?.length ?? 0)
-              }
-            } catch {}
-
             setConnectedStores([{
               id: s.id,
               shop_domain: s.shopDomain || s.shop_domain || '',
@@ -59,10 +49,10 @@ export default function IntegrationsPage() {
               pixel_installed: s.pixelInstalled ?? s.pixel_installed ?? false,
               installed_at: s.installedAt || s.installed_at || '',
               last_sync_at: s.lastSyncAt || s.last_sync_at || null,
-              sync_status: s.syncStatus || s.sync_status || '',
-              orders_count: s.totalOrders ?? s.orders_count ?? s.total_orders ?? 0,
-              customers_count: s.totalCustomers ?? s.customers_count ?? s.total_customers ?? 0,
-              products_count: productsCount,
+              sync_status: '',
+              orders_count: s.totalOrders ?? 0,
+              customers_count: s.totalCustomers ?? 0,
+              products_count: s.totalProducts ?? 0,
             }])
           } else if (data.stores) {
             setConnectedStores(data.stores)
@@ -84,12 +74,28 @@ export default function IntegrationsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ store_id: storeId }),
       })
-      // Reload after sync
+      // Reload after sync with proper mapping
       const res = await fetch('/api/integrations/shopify/status')
       if (res.ok) {
         const data = await res.json()
-        if (data.stores) setConnectedStores(data.stores)
-        else if (data.store) setConnectedStores([data.store])
+        if (data.connected && data.store) {
+          const s = data.store
+          setConnectedStores([{
+            id: s.id,
+            shop_domain: s.shopDomain || s.shop_domain || '',
+            shop_name: s.shopName || s.shop_name || '',
+            access_token: '',
+            status: s.status || 'active',
+            initial_sync_completed: s.initialSyncCompleted ?? s.initial_sync_completed ?? false,
+            pixel_installed: s.pixelInstalled ?? s.pixel_installed ?? false,
+            installed_at: s.installedAt || s.installed_at || '',
+            last_sync_at: s.lastSyncAt || s.last_sync_at || null,
+            sync_status: '',
+            orders_count: s.totalOrders ?? 0,
+            customers_count: s.totalCustomers ?? 0,
+            products_count: s.totalProducts ?? 0,
+          }])
+        }
       }
     } catch (e) {
       console.error('Sync failed:', e)
