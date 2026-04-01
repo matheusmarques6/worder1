@@ -101,3 +101,72 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, stores: [], error: error.message });
   }
 }
+
+// POST: Create a new store (without Shopify integration)
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+    }
+
+    const accessToken = request.cookies.get('sb-access-token')?.value;
+    if (!accessToken) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile?.organization_id) {
+      return NextResponse.json({ error: 'No organization found' }, { status: 400 });
+    }
+
+    const body = await request.json();
+    const { name, segment, currency } = body;
+
+    if (!name?.trim()) {
+      return NextResponse.json({ error: 'Store name is required' }, { status: 400 });
+    }
+
+    // Create the store in shopify_stores (even without Shopify connection)
+    const storeData = {
+      organization_id: profile.organization_id,
+      shop_name: name.trim(),
+      shop_domain: '',
+      access_token: '',
+      is_active: true,
+      status: 'pending',
+      currency: currency || 'BRL',
+      settings: {
+        segment: segment || '',
+        source: 'manual',
+      },
+      installed_at: new Date().toISOString(),
+    };
+
+    const { data: store, error: insertError } = await supabase
+      .from('shopify_stores')
+      .insert(storeData)
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('[/api/stores POST] Error:', insertError);
+      return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ store });
+  } catch (error: any) {
+    console.error('[/api/stores POST] Error:', error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
