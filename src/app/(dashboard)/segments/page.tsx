@@ -7,7 +7,6 @@ import {
   Search,
   Plus,
   Loader2,
-  Zap,
   Heart,
   UserX,
   RefreshCw,
@@ -17,131 +16,71 @@ import {
   Crown,
   ShoppingBag,
   MoreVertical,
-  Edit3,
   Trash2,
   ChevronRight,
+  Eye,
 } from 'lucide-react'
 import Link from 'next/link'
-import { useStoreStore, useAuthStore } from '@/stores'
+import { useRouter } from 'next/navigation'
+import { useAuthStore } from '@/stores'
 
 interface Segment {
   id: string
   name: string
   description?: string
-  type: 'preset' | 'custom'
-  count: number
+  segment_type: string
+  contact_count: number
+  rules?: any[]
+  color?: string
+  icon?: string
+  is_active?: boolean
   created_at: string
-  updated_at: string
+  updated_at?: string
 }
 
-const presets = [
-  {
-    key: 'engaged_30d',
-    name: 'Engajados 30d',
-    description: 'Abriram ou clicaram em email nos últimos 30 dias',
-    icon: Heart,
-    color: 'text-emerald-600',
-    bg: 'bg-emerald-50',
-    border: 'border-emerald-200',
-  },
-  {
-    key: 'not_engaged_90d',
-    name: 'Não Engajados 90d',
-    description: 'Sem interação nos últimos 90 dias',
-    icon: UserX,
-    color: 'text-gray-600',
-    bg: 'bg-gray-50',
-    border: 'border-gray-200',
-  },
-  {
-    key: 'recurring_2plus',
-    name: 'Recorrentes 2+',
-    description: 'Clientes com 2 ou mais compras',
-    icon: RefreshCw,
-    color: 'text-blue-600',
-    bg: 'bg-blue-50',
-    border: 'border-blue-200',
-  },
-  {
-    key: 'new_7d',
-    name: 'Novos 7d',
-    description: 'Cadastrados nos últimos 7 dias',
-    icon: UserPlus,
-    color: 'text-purple-600',
-    bg: 'bg-purple-50',
-    border: 'border-purple-200',
-  },
-  {
-    key: 'never_purchased',
-    name: 'Nunca Comprou',
-    description: 'Contatos que nunca realizaram uma compra',
-    icon: ShoppingCart,
-    color: 'text-amber-600',
-    bg: 'bg-amber-50',
-    border: 'border-amber-200',
-  },
-  {
-    key: 'churn_risk_60d',
-    name: 'Churn Risk 60d',
-    description: 'Clientes inativos há mais de 60 dias',
-    icon: AlertTriangle,
-    color: 'text-red-600',
-    bg: 'bg-red-50',
-    border: 'border-red-200',
-  },
-  {
-    key: 'vip_500',
-    name: 'VIP >R$500',
-    description: 'Clientes com ticket médio acima de R$500',
-    icon: Crown,
-    color: 'text-brand-600',
-    bg: 'bg-brand-50',
-    border: 'border-brand-200',
-  },
-  {
-    key: 'cart_abandonment',
-    name: 'Abandono Carrinho',
-    description: 'Abandonaram carrinho nos últimos 30 dias',
-    icon: ShoppingBag,
-    color: 'text-orange-600',
-    bg: 'bg-orange-50',
-    border: 'border-orange-200',
-  },
-]
+const segmentIcons: Record<string, { icon: any; color: string; bg: string }> = {
+  'Engajados 30d': { icon: Heart, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  'Não Engajados 90d': { icon: UserX, color: 'text-gray-600', bg: 'bg-gray-100' },
+  'Recorrentes 2+': { icon: RefreshCw, color: 'text-blue-600', bg: 'bg-blue-50' },
+  'Novos 7d': { icon: UserPlus, color: 'text-violet-600', bg: 'bg-violet-50' },
+  'Nunca Comprou': { icon: ShoppingCart, color: 'text-amber-600', bg: 'bg-amber-50' },
+  'Risco de Churn': { icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
+  'VIP': { icon: Crown, color: 'text-orange-600', bg: 'bg-orange-50' },
+  'Carrinho Abandonado': { icon: ShoppingBag, color: 'text-pink-600', bg: 'bg-pink-50' },
+}
 
-const formatNumber = (n: number) => new Intl.NumberFormat('pt-BR').format(n)
+const defaultIcon = { icon: Users, color: 'text-gray-600', bg: 'bg-gray-100' }
+const formatNumber = (n: number) => isNaN(n) ? '0' : new Intl.NumberFormat('pt-BR').format(n)
 
 export default function SegmentsPage() {
+  const router = useRouter()
+  const { user } = useAuthStore()
   const [segments, setSegments] = useState<Segment[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [activeMenu, setActiveMenu] = useState<string | null>(null)
-  const { currentStore } = useStoreStore()
-  const { user } = useAuthStore()
+  const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const fetchSegments = useCallback(async () => {
     if (!user?.organization_id) return
     setLoading(true)
     try {
-      const params = new URLSearchParams()
-      params.set('organization_id', user.organization_id)
-      params.set('include_count', 'true')
+      const params = new URLSearchParams({
+        organization_id: user.organization_id,
+        include_count: 'true',
+      })
       const res = await fetch(`/api/segments?${params}`)
       if (res.ok) {
         const data = await res.json()
         let segs = data.segments || []
-
-        // Auto-seed default segments if none exist
         if (segs.length === 0) {
           await fetch('/api/segments/seed', { method: 'POST' })
-          // Re-fetch after seeding
           const res2 = await fetch(`/api/segments?${params}`)
           if (res2.ok) {
             const data2 = await res2.json()
             segs = data2.segments || []
           }
         }
-
         setSegments(segs)
       }
     } catch (err) {
@@ -151,77 +90,52 @@ export default function SegmentsPage() {
     }
   }, [user?.organization_id])
 
-  useEffect(() => {
-    fetchSegments()
-  }, [fetchSegments])
+  useEffect(() => { fetchSegments() }, [fetchSegments])
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este segmento?')) return
+    if (!confirm('Excluir este segmento?')) return
+    setDeleting(id)
     try {
-      const res = await fetch(`/api/segments/${id}`, { method: 'DELETE' })
-      if (res.ok) {
-        setSegments((prev) => prev.filter((s) => s.id !== id))
-      }
-    } catch (err) {
-      console.error('Failed to delete segment:', err)
+      await fetch(`/api/segments?id=${id}`, { method: 'DELETE' })
+      setSegments(prev => prev.filter(s => s.id !== id))
+    } catch {} finally {
+      setDeleting(null)
+      setMenuOpen(null)
     }
-    setActiveMenu(null)
   }
 
-  const filteredSegments = segments.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase())
+  const filtered = segments.filter(s =>
+    !search || s.name.toLowerCase().includes(search.toLowerCase())
   )
+
+  const totalContacts = segments.reduce((sum, s) => sum + (s.contact_count || 0), 0)
+  const dynamicCount = segments.filter(s => s.segment_type === 'dynamic').length
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Segmentos</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Organize seus contatos em segmentos para campanhas direcionadas
+          <h1 className="text-2xl font-bold text-gray-900">Segmentos</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {segments.length} segmentos · {formatNumber(totalContacts)} contatos
           </p>
         </div>
         <Link
           href="/segments/new"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-500 text-white text-sm font-medium rounded-lg hover:bg-brand-600 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-white text-sm font-medium rounded-lg hover:bg-brand-600 transition-colors"
         >
           <Plus className="w-4 h-4" />
           Criar Segmento
         </Link>
-      </div>
-
-      {/* Preset Cards */}
-      <div>
-        <h2 className="text-sm font-medium text-gray-700 mb-3">Segmentos Pré-definidos</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {presets.map((preset, i) => {
-            const Icon = preset.icon
-            return (
-              <motion.div
-                key={preset.key}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
-                className={`bg-white border ${preset.border} rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer group`}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`w-9 h-9 ${preset.bg} rounded-full flex items-center justify-center flex-shrink-0`}
-                  >
-                    <Icon className={`w-4.5 h-4.5 ${preset.color}`} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{preset.name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
-                      {preset.description}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            )
-          })}
-        </div>
       </div>
 
       {/* Search */}
@@ -232,123 +146,104 @@ export default function SegmentsPage() {
           placeholder="Buscar segmentos..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+          className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
         />
       </div>
 
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
-        </div>
-      )}
-
-      {/* Empty */}
-      {!loading && filteredSegments.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-            <Users className="w-7 h-7 text-gray-400" />
-          </div>
-          <h3 className="text-base font-medium text-gray-500 mb-1">
-            Nenhum segmento personalizado
-          </h3>
-          <p className="text-sm text-gray-400 mb-6">
-            {search
-              ? 'Tente ajustar sua busca'
-              : 'Crie segmentos customizados para suas campanhas'}
+      {/* Segments List */}
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-xl border border-gray-200">
+          <Users className="w-10 h-10 text-gray-300 mb-3" />
+          <p className="text-gray-500 font-medium">Nenhum segmento encontrado</p>
+          <p className="text-gray-400 text-sm mt-1">
+            {search ? 'Tente outro termo' : 'Crie seu primeiro segmento'}
           </p>
         </div>
-      )}
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((segment, i) => {
+            const iconConfig = segmentIcons[segment.name] || defaultIcon
+            const Icon = iconConfig.icon
+            const count = segment.contact_count || 0
 
-      {/* Table */}
-      {!loading && filteredSegments.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Segmento
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Tipo
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Contatos
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Atualizado
-                  </th>
-                  <th className="w-10 px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSegments.map((segment) => (
-                  <tr
-                    key={segment.id}
-                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{segment.name}</p>
-                        {segment.description && (
-                          <p className="text-xs text-gray-500 truncate max-w-xs">
-                            {segment.description}
-                          </p>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full ${
-                          segment.type === 'preset'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-gray-50 text-gray-600 border border-gray-200'
-                        }`}
+            return (
+              <motion.div
+                key={segment.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.02 }}
+                className="bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:shadow-sm transition-all group"
+              >
+                <div className="flex items-center px-5 py-4">
+                  {/* Icon */}
+                  <div className={`w-10 h-10 rounded-lg ${iconConfig.bg} flex items-center justify-center mr-4 flex-shrink-0`}>
+                    <Icon className={`w-5 h-5 ${iconConfig.color}`} />
+                  </div>
+
+                  {/* Name & Description */}
+                  <div className="flex-1 min-w-0 mr-4">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-gray-900">{segment.name}</h3>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        segment.segment_type === 'dynamic'
+                          ? 'bg-blue-50 text-blue-600'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {segment.segment_type === 'dynamic' ? 'Dinâmico' : 'Estático'}
+                      </span>
+                    </div>
+                    {segment.description && (
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{segment.description}</p>
+                    )}
+                  </div>
+
+                  {/* Count */}
+                  <div className="text-right mr-4">
+                    <p className="text-lg font-bold text-gray-900">{formatNumber(count)}</p>
+                    <p className="text-[10px] text-gray-400">contatos</p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => router.push(`/contacts?segment=${segment.id}`)}
+                      className="p-2 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                      title="Ver contatos"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === segment.id ? null : segment.id) }}
+                        className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                       >
-                        {segment.type === 'preset' ? 'Pré-definido' : 'Personalizado'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-900">{formatNumber(segment.count)}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-500">
-                        {new Date(segment.updated_at).toLocaleDateString('pt-BR')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="relative">
-                        <button
-                          onClick={() =>
-                            setActiveMenu(activeMenu === segment.id ? null : segment.id)
-                          }
-                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                        {activeMenu === segment.id && (
-                          <div className="absolute right-0 top-8 z-10 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-                            <button className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left">
-                              <Edit3 className="w-4 h-4" />
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => handleDelete(segment.id)}
-                              className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Excluir
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                      {menuOpen === segment.id && (
+                        <div className="absolute right-0 top-10 z-20 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                          <button
+                            onClick={() => { setMenuOpen(null); router.push(`/contacts?segment=${segment.id}`) }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                          >
+                            <Eye className="w-4 h-4" />
+                            Ver Contatos
+                          </button>
+                          <button
+                            onClick={() => handleDelete(segment.id)}
+                            disabled={deleting === segment.id}
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            {deleting === segment.id ? 'Excluindo...' : 'Excluir'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )
+          })}
         </div>
       )}
     </div>
