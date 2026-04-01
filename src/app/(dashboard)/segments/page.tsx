@@ -172,7 +172,8 @@ export default function SegmentsPage() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
-                className="bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:shadow-sm transition-all group"
+                onClick={() => router.push(`/segments/${segment.id}`)}
+                className="bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:shadow-sm transition-all group cursor-pointer"
               >
                 <div className="flex items-center px-5 py-4">
                   {/* Icon */}
@@ -206,9 +207,9 @@ export default function SegmentsPage() {
                   {/* Actions */}
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => router.push(`/contacts?segment=${segment.id}`)}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/segments/${segment.id}`) }}
                       className="p-2 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
-                      title="Ver contatos"
+                      title="Ver segmento"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
@@ -222,11 +223,11 @@ export default function SegmentsPage() {
                       {menuOpen === segment.id && (
                         <div className="absolute right-0 top-10 z-20 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
                           <button
-                            onClick={() => { setMenuOpen(null); router.push(`/contacts?segment=${segment.id}`) }}
+                            onClick={(e) => { e.stopPropagation(); setMenuOpen(null); router.push(`/segments/${segment.id}`) }}
                             className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
                           >
                             <Eye className="w-4 h-4" />
-                            Ver Contatos
+                            Ver Segmento
                           </button>
                           <button
                             onClick={() => handleDelete(segment.id)}
