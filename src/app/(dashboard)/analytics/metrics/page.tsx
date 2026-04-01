@@ -111,15 +111,14 @@ export default function MetricsPage() {
                 <Link key={metric.key} href={`/analytics/metrics/${metric.key}`}
                   className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50 hover:bg-gray-50/80 transition-colors group">
                   <div className="flex items-center gap-3.5">
-                    {/* Integration logo as icon */}
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-gray-50">
                       {isShopify ? (
-                        <Image src="/integrations/shopify.svg" alt="Shopify" width={28} height={28} />
+                        <Image src="/integrations/icone shopify .png" alt="Shopify" width={22} height={22} className="object-contain" />
                       ) : (
-                        <Image src="/logo.svg" alt="Worder" width={28} height={28} />
+                        <Image src="/logo.svg" alt="Worder" width={22} height={22} className="object-contain" />
                       )}
                     </div>
-                    <span className="text-sm font-medium text-brand-600 group-hover:text-brand-700 transition-colors">{metric.label}</span>
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-brand-600 transition-colors">{metric.label}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     {metric.count > 0 && (

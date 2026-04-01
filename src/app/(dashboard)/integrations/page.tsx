@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { Loader2, ExternalLink, RefreshCw, Trash2, Settings, ShoppingBag, CheckCircle, AlertCircle, Wifi, WifiOff } from 'lucide-react'
 import { useStoreStore, useAuthStore } from '@/stores'
 
@@ -143,8 +144,8 @@ export default function IntegrationsPage() {
                 {/* Store header */}
                 <div className="px-6 py-5 flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-[#95BF47]/10 rounded-xl flex items-center justify-center">
-                      <ShoppingBag className="w-6 h-6 text-[#95BF47]" />
+                    <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center">
+                      <Image src="/integrations/icone shopify .png" alt="Shopify" width={32} height={32} className="object-contain" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
@@ -219,8 +220,8 @@ export default function IntegrationsPage() {
             <button onClick={handleConnect}
               className="w-full flex items-center justify-between p-5 bg-white rounded-xl border border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all group">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center group-hover:bg-gray-200 transition-colors">
-                  <ShoppingBag className="w-6 h-6 text-gray-400" />
+                <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center group-hover:bg-gray-100 transition-colors">
+                  <Image src="/integrations/icone shopify .png" alt="Shopify" width={28} height={28} className="object-contain opacity-50 group-hover:opacity-80 transition-opacity" />
                 </div>
                 <div className="text-left">
                   <h3 className="text-sm font-semibold text-gray-900">Conectar loja Shopify</h3>

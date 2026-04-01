@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import {
   ShoppingBag, CheckCircle, AlertCircle, Loader2, Trash2,
   Store, ExternalLink, Wifi, RefreshCw,
@@ -199,8 +200,8 @@ export default function ShopifyConnect() {
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-              <Store className="w-5 h-5 text-emerald-600" />
+            <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
+              <Image src="/integrations/icone shopify .png" alt="Shopify" width={24} height={24} className="object-contain" />
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">{store.shopName}</h3>
