@@ -550,27 +550,6 @@ export default function DashboardLayout({
           )}
         </button>
       </div>
-
-      {/* User Footer */}
-      <div className="border-t border-gray-800/50 p-3">
-        <div className={cn('flex items-center gap-2', collapsed && 'justify-center')}>
-          <div className="w-8 h-8 rounded-full bg-brand-500/20 text-brand-400 flex items-center justify-center text-xs font-medium flex-shrink-0">
-            {userInitials}
-          </div>
-          {!collapsed && (
-            <>
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] text-gray-300 truncate">{userName}</p>
-                <p className="text-[11px] text-gray-500 truncate">{userRole}</p>
-              </div>
-              <button onClick={handleLogout} title="Sair da conta"
-                className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0">
-                <LogOut className="w-4 h-4" />
-              </button>
-            </>
-          )}
-        </div>
-      </div>
     </div>
   )
 
@@ -623,7 +602,7 @@ export default function DashboardLayout({
       {/* Desktop Sidebar */}
       <aside className={cn(
         'hidden lg:flex fixed left-0 top-0 bottom-0 bg-[#1B1F23] z-40 flex-col transition-all duration-300',
-        collapsed ? 'w-[72px]' : 'w-[220px]'
+        collapsed ? 'w-[72px]' : 'w-[240px]'
       )}>
         <SidebarContent />
       </aside>
@@ -631,7 +610,7 @@ export default function DashboardLayout({
       {/* Main Content */}
       <main className={cn(
         'min-h-screen pt-[72px] lg:pt-0 transition-all duration-300 ml-0',
-        collapsed ? 'lg:ml-[72px]' : 'lg:ml-[220px]'
+        collapsed ? 'lg:ml-[72px]' : 'lg:ml-[240px]'
       )}>
         {/* Desktop Header */}
         <header className="hidden lg:flex sticky top-0 z-30 items-center justify-between px-6 py-3 bg-white border-b border-gray-200">

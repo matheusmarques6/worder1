@@ -2,1050 +2,230 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Search,
-  Grid3X3,
-  List,
-  Filter,
-  Check,
-  X,
-  ExternalLink,
-  Settings,
-  Trash2,
-  Play,
-  Pause,
-  AlertCircle,
-  Zap,
-  ShoppingCart,
-  MessageSquare,
-  FileText,
-  Table,
-  Mail,
-  CreditCard,
-  Calendar,
-  Puzzle,
-  ChevronRight,
-  Plus,
-  Sparkles,
-} from 'lucide-react'
-import { useAuthStore, useStoreStore } from '@/stores'
-import WhatsAppIntegrationCard from '@/components/whatsapp/WhatsAppIntegrationCard'
-import ActiveIntegrationsSection from '@/components/integrations/active/ActiveIntegrationsSection'
+import { Loader2, ExternalLink, RefreshCw, Trash2, Settings, ShoppingBag, CheckCircle, AlertCircle, Wifi, WifiOff } from 'lucide-react'
+import { useStoreStore, useAuthStore } from '@/stores'
 
-// Types
-interface IntegrationCategory {
+interface ConnectedStore {
   id: string
-  name: string
-  slug: string
-  description: string
-  icon: string
-  sort_order: number
-}
-
-interface Integration {
-  id: string
-  slug: string
-  name: string
-  short_description: string
-  description: string
-  category_id: string
-  icon_url: string
-  color: string
-  auth_type: 'oauth2' | 'api_key' | 'webhook' | 'none'
-  is_featured: boolean
-  is_premium: boolean
-  is_builtin: boolean
-  is_active: boolean
-  supported_webhooks: string[]
-  category?: IntegrationCategory
-}
-
-interface InstalledIntegration {
-  id: string
-  integration_id: string
-  status: 'pending' | 'configuring' | 'active' | 'paused' | 'error' | 'disconnected'
-  configuration: any
-  default_pipeline_id: string | null
-  auto_tags: string[]
+  shop_domain: string
+  shop_name: string
+  access_token: string
+  status: string
+  initial_sync_completed: boolean
+  pixel_installed: boolean
+  installed_at: string
   last_sync_at: string | null
-  error_count: number
-  last_error_message: string | null
+  sync_status: string
+  orders_count: number
+  customers_count: number
+  products_count: number
 }
 
-// Icon mapping
-const categoryIcons: Record<string, any> = {
-  ecommerce: ShoppingCart,
-  communication: MessageSquare,
-  forms: FileText,
-  spreadsheets: Table,
-  marketing: Mail,
-  payments: CreditCard,
-  productivity: Calendar,
-  others: Puzzle,
-}
-
-// Status badge component
-function StatusBadge({ status }: { status: string }) {
-  const statusConfig: Record<string, { color: string; label: string }> = {
-    active: { color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', label: 'Ativo' },
-    paused: { color: 'bg-amber-500/20 text-amber-400 border-amber-500/30', label: 'Pausado' },
-    error: { color: 'bg-red-500/20 text-red-400 border-red-500/30', label: 'Erro' },
-    configuring: { color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', label: 'Configurando' },
-    pending: { color: 'bg-gray-500/20 text-gray-400 border-gray-500/30', label: 'Pendente' },
-    disconnected: { color: 'bg-gray-500/20 text-gray-400 border-gray-500/30', label: 'Desconectado' },
-  }
-
-  const config = statusConfig[status] || statusConfig.pending
-
-  return (
-    <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${config.color}`}>
-      {config.label}
-    </span>
-  )
-}
-
-// Integration Card Component
-function IntegrationCard({
-  integration,
-  installed,
-  onInstall,
-  onConfigure,
-  onUninstall,
-  onToggle,
-}: {
-  integration: Integration
-  installed?: InstalledIntegration
-  onInstall: () => void
-  onConfigure: () => void
-  onUninstall: () => void
-  onToggle: () => void
-}) {
-  const isInstalled = !!installed
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`
-        relative bg-gray-50 border rounded-2xl p-5 transition-all duration-200 group
-        ${isInstalled 
-          ? 'border-brand-300 hover:border-brand-400' 
-          : 'border-gray-200 hover:border-gray-300'
-        }
-      `}
-    >
-      {/* Featured badge */}
-      {integration.is_featured && !isInstalled && (
-        <div className="absolute -top-2 -right-2">
-          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full text-[10px] font-bold text-gray-900 shadow-lg">
-            <Sparkles className="w-3 h-3" />
-            Popular
-          </span>
-        </div>
-      )}
-
-      {/* Builtin badge */}
-      {integration.is_builtin && (
-        <div className="absolute -top-2 -left-2">
-          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full text-[10px] font-bold text-gray-900 shadow-lg">
-            <Zap className="w-3 h-3" />
-            Nativo
-          </span>
-        </div>
-      )}
-
-      <div className="flex items-start gap-4">
-        {/* Icon */}
-        <div
-          className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: `${integration.color}20` }}
-        >
-          {integration.icon_url ? (
-            <img
-              src={integration.icon_url}
-              alt={integration.name}
-              className="w-8 h-8 object-contain"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement
-                target.style.display = 'none'
-                target.parentElement!.innerHTML = `<span style="color: ${integration.color}" class="text-2xl font-bold">${integration.name[0]}</span>`
-              }}
-            />
-          ) : (
-            <span style={{ color: integration.color }} className="text-2xl font-bold">
-              {integration.name[0]}
-            </span>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-gray-900 truncate">{integration.name}</h3>
-            {isInstalled && <StatusBadge status={installed.status} />}
-          </div>
-          <p className="text-sm text-gray-500 line-clamp-2">
-            {integration.short_description}
-          </p>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="mt-4 flex items-center gap-2">
-        {isInstalled ? (
-          <>
-            <button
-              onClick={onConfigure}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-gray-700 transition-colors"
-            >
-              <Settings className="w-4 h-4" />
-              Configurar
-            </button>
-            <button
-              onClick={onToggle}
-              className={`p-2 rounded-xl transition-colors ${
-                installed.status === 'active'
-                  ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
-                  : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
-              }`}
-              title={installed.status === 'active' ? 'Pausar' : 'Ativar'}
-            >
-              {installed.status === 'active' ? (
-                <Pause className="w-4 h-4" />
-              ) : (
-                <Play className="w-4 h-4" />
-              )}
-            </button>
-            <button
-              onClick={onUninstall}
-              className="p-2 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
-              title="Desinstalar"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={onInstall}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-transparent border-2 border-primary-500 text-primary-500 hover:bg-primary-500 hover:text-white rounded-xl text-sm font-medium transition-all duration-200"
-          >
-            <Plus className="w-4 h-4" />
-            Instalar
-          </button>
-        )}
-      </div>
-
-      {/* Error indicator */}
-      {installed?.status === 'error' && installed.last_error_message && (
-        <div className="mt-3 flex items-start gap-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-red-400 line-clamp-2">{installed.last_error_message}</p>
-        </div>
-      )}
-    </motion.div>
-  )
-}
-
-// Main Page Component
 export default function IntegrationsPage() {
-  const { user } = useAuthStore()
-  const { currentStore } = useStoreStore() // ✅ NOVO: Pegar loja atual
   const router = useRouter()
-  const [categories, setCategories] = useState<IntegrationCategory[]>([])
-  const [integrations, setIntegrations] = useState<Integration[]>([])
-  const [installedMap, setInstalledMap] = useState<Record<string, InstalledIntegration>>({})
+  const { user } = useAuthStore()
+  const { stores } = useStoreStore()
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [showInstalled, setShowInstalled] = useState(false)
+  const [connectedStores, setConnectedStores] = useState<ConnectedStore[]>([])
+  const [syncing, setSyncing] = useState<string | null>(null)
+  const [disconnecting, setDisconnecting] = useState<string | null>(null)
 
-  // Modal states
-  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null)
-  const [showInstallModal, setShowInstallModal] = useState(false)
-  const [showConfigModal, setShowConfigModal] = useState(false)
-
-  // Fetch data
   useEffect(() => {
-    fetchData()
-  }, [user?.organization_id])
-
-  const fetchData = async () => {
-    if (!user?.organization_id) return
-
-    setLoading(true)
-    try {
-      const [categoriesRes, integrationsRes, installedRes] = await Promise.all([
-        fetch('/api/integrations/categories'),
-        fetch('/api/integrations'),
-        fetch(`/api/integrations/installed?organizationId=${user.organization_id}`),
-      ])
-
-      const categoriesData = await categoriesRes.json()
-      const integrationsData = await integrationsRes.json()
-      const installedData = await installedRes.json()
-
-      setCategories(categoriesData.categories || [])
-      setIntegrations(integrationsData.integrations || [])
-
-      // Create installed map
-      const map: Record<string, InstalledIntegration> = {}
-      ;(installedData.installed || []).forEach((inst: InstalledIntegration) => {
-        map[inst.integration_id] = inst
-      })
-      setInstalledMap(map)
-    } catch (error) {
-      console.error('Error fetching integrations:', error)
-    } finally {
+    async function loadStores() {
+      try {
+        const res = await fetch('/api/integrations/shopify/status')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.stores) setConnectedStores(data.stores)
+          else if (data.store) setConnectedStores([data.store])
+        }
+      } catch (e) {
+        console.error('Failed to load integrations:', e)
+      }
       setLoading(false)
     }
-  }
-
-  // Filter integrations
-  const filteredIntegrations = integrations.filter((int) => {
-    // Excluir WhatsApp da lista (já tem card nativo na seção Mensagens)
-    // Cobrir variações do slug: whatsapp, whatsapp-business, whatsappbusiness
-    const slug = int.slug?.toLowerCase() || '';
-    const name = int.name?.toLowerCase() || '';
-    if (slug.includes('whatsapp') || name.includes('whatsapp')) {
-      return false
-    }
-
-    // Search filter
-    if (search) {
-      const searchLower = search.toLowerCase()
-      if (
-        !int.name.toLowerCase().includes(searchLower) &&
-        !int.short_description.toLowerCase().includes(searchLower)
-      ) {
-        return false
-      }
-    }
-
-    // Category filter
-    if (selectedCategory && int.category_id !== selectedCategory) {
-      return false
-    }
-
-    // Installed filter
-    if (showInstalled && !installedMap[int.id]) {
-      return false
-    }
-
-    return true
-  })
-
-  // Sort: featured and builtin first, then installed, then alphabetical
-  const sortedIntegrations = [...filteredIntegrations].sort((a, b) => {
-    // Builtin first
-    if (a.is_builtin && !b.is_builtin) return -1
-    if (!a.is_builtin && b.is_builtin) return 1
-
-    // Featured second
-    if (a.is_featured && !b.is_featured) return -1
-    if (!a.is_featured && b.is_featured) return 1
-
-    // Installed third
-    const aInstalled = !!installedMap[a.id]
-    const bInstalled = !!installedMap[b.id]
-    if (aInstalled && !bInstalled) return -1
-    if (!aInstalled && bInstalled) return 1
-
-    // Alphabetical
-    return a.name.localeCompare(b.name)
-  })
-
-  // Handlers
-  const handleInstall = async (integration: Integration) => {
-    // Redirecionar para página de configuração específica
-    router.push(`/integrations/${integration.slug}`)
-  }
-
-  const handleConfigure = (integration: Integration) => {
-    // Redirecionar para página de configuração específica
-    router.push(`/integrations/${integration.slug}`)
-  }
-
-  const handleUninstall = async (integration: Integration) => {
-    if (!confirm(`Tem certeza que deseja desinstalar ${integration.name}?`)) return
-
-    try {
-      await fetch(`/api/integrations/installed/${installedMap[integration.id].id}`, {
-        method: 'DELETE',
-      })
-      await fetchData()
-    } catch (error) {
-      console.error('Error uninstalling:', error)
-    }
-  }
-
-  const handleToggle = async (integration: Integration) => {
-    const installed = installedMap[integration.id]
-    if (!installed) return
-
-    const newStatus = installed.status === 'active' ? 'paused' : 'active'
-
-    try {
-      await fetch(`/api/integrations/installed/${installed.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      })
-      await fetchData()
-    } catch (error) {
-      console.error('Error toggling:', error)
-    }
-  }
-
-  // Stats
-  const installedCount = Object.keys(installedMap).length
-  const activeCount = Object.values(installedMap).filter((i) => i.status === 'active').length
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Integrações</h1>
-          <p className="text-gray-500 mt-1">
-            Conecte suas ferramentas favoritas para capturar leads automaticamente
-          </p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar integrações..."
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 focus:outline-none focus:border-brand-400"
-          />
-        </div>
-
-        {/* Category Filter */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0">
-          <button
-            onClick={() => setSelectedCategory(null)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
-              !selectedCategory
-                ? 'bg-primary-500 text-white'
-                : 'bg-gray-50 text-gray-600 hover:text-white'
-            }`}
-          >
-            Todas
-          </button>
-          {categories.map((cat) => {
-            const Icon = categoryIcons[cat.slug] || Puzzle
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
-                  selectedCategory === cat.id
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-gray-50 text-gray-600 hover:text-white'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {cat.name}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* View Toggle & Installed Filter */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowInstalled(!showInstalled)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-              showInstalled
-                ? 'bg-brand-100 text-brand-600 border border-brand-300'
-                : 'bg-gray-50 text-gray-600 hover:text-white'
-            }`}
-          >
-            <Check className="w-4 h-4" />
-            Instaladas
-          </button>
-
-          <div className="flex items-center bg-gray-50 rounded-xl p-1">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg transition-colors ${
-                viewMode === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-white'
-              }`}
-            >
-              <Grid3X3 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg transition-colors ${
-                viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-white'
-              }`}
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ====== SUAS INTEGRAÇÕES ATIVAS ====== */}
-      {!search && !selectedCategory && user?.organization_id && (
-        <ActiveIntegrationsSection 
-          organizationId={user.organization_id} 
-          storeId={currentStore?.id} // ✅ NOVO: Passar storeId
-        />
-      )}
-
-      {/* Other Integrations */}
-      {!search && !selectedCategory && integrations.length > 0 && (
-        <div className="flex items-center gap-2 mb-4">
-          <Puzzle className="w-5 h-5 text-brand-600" />
-          <h2 className="text-lg font-semibold text-gray-900">Outras Integrações</h2>
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : (
-        <>
-          {/* Grid */}
-          {sortedIntegrations.length > 0 ? (
-            <div
-              className={
-                viewMode === 'grid'
-                  ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'
-                  : 'space-y-3'
-              }
-            >
-              {sortedIntegrations.map((integration) => (
-                <IntegrationCard
-                  key={integration.id}
-                  integration={integration}
-                  installed={installedMap[integration.id]}
-                  onInstall={() => handleInstall(integration)}
-                  onConfigure={() => handleConfigure(integration)}
-                  onUninstall={() => handleUninstall(integration)}
-                  onToggle={() => handleToggle(integration)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-20">
-              <Puzzle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Nenhuma integração encontrada
-              </h3>
-              <p className="text-gray-500">
-                Tente ajustar os filtros ou busque por outro termo
-              </p>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Install Modal */}
-      <AnimatePresence>
-        {showInstallModal && selectedIntegration && (
-          <IntegrationInstallModal
-            integration={selectedIntegration}
-            onClose={() => {
-              setShowInstallModal(false)
-              setSelectedIntegration(null)
-            }}
-            onSuccess={() => {
-              setShowInstallModal(false)
-              setSelectedIntegration(null)
-              fetchData()
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Config Modal */}
-      <AnimatePresence>
-        {showConfigModal && selectedIntegration && installedMap[selectedIntegration.id] && (
-          <IntegrationConfigModal
-            integration={selectedIntegration}
-            installed={installedMap[selectedIntegration.id]}
-            onClose={() => {
-              setShowConfigModal(false)
-              setSelectedIntegration(null)
-            }}
-            onSuccess={() => {
-              setShowConfigModal(false)
-              setSelectedIntegration(null)
-              fetchData()
-            }}
-          />
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-// Install Modal Component
-function IntegrationInstallModal({
-  integration,
-  onClose,
-  onSuccess,
-}: {
-  integration: Integration
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  const { user } = useAuthStore()
-  const [step, setStep] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [pipelines, setPipelines] = useState<any[]>([])
-  const [selectedPipeline, setSelectedPipeline] = useState<string>('')
-  const [selectedStage, setSelectedStage] = useState<string>('')
-  const [autoTags, setAutoTags] = useState<string[]>([])
-  const [newTag, setNewTag] = useState('')
-
-  useEffect(() => {
-    fetchPipelines()
+    loadStores()
   }, [])
 
-  const fetchPipelines = async () => {
-    if (!user?.organization_id) return
+  const handleSync = async (storeId: string) => {
+    setSyncing(storeId)
     try {
-      const res = await fetch(`/api/deals?type=pipelines&organizationId=${user.organization_id}`)
-      const data = await res.json()
-      setPipelines(data.pipelines || [])
-      if (data.pipelines?.length > 0) {
-        setSelectedPipeline(data.pipelines[0].id)
-        if (data.pipelines[0].stages?.length > 0) {
-          setSelectedStage(data.pipelines[0].stages[0].id)
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching pipelines:', error)
-    }
-  }
-
-  const handleInstall = async () => {
-    if (!user?.organization_id) return
-
-    setLoading(true)
-    try {
-      const response = await fetch('/api/integrations/installed', {
+      await fetch('/api/shopify/sync-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organizationId: user.organization_id,
-          integrationId: integration.id,
-          defaultPipelineId: selectedPipeline || null,
-          defaultStageId: selectedStage || null,
-          autoTags,
-        }),
+        body: JSON.stringify({ store_id: storeId }),
       })
-
-      if (response.ok) {
-        onSuccess()
-      } else {
-        const error = await response.json()
-        alert(`Erro ao instalar: ${error.error}`)
+      // Reload after sync
+      const res = await fetch('/api/integrations/shopify/status')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.stores) setConnectedStores(data.stores)
+        else if (data.store) setConnectedStores([data.store])
       }
-    } catch (error) {
-      console.error('Error installing:', error)
-      alert('Erro ao instalar integração')
-    } finally {
-      setLoading(false)
+    } catch (e) {
+      console.error('Sync failed:', e)
     }
+    setSyncing(null)
   }
 
-  const addTag = () => {
-    if (newTag.trim() && !autoTags.includes(newTag.trim())) {
-      setAutoTags([...autoTags, newTag.trim()])
-      setNewTag('')
-    }
-  }
-
-  const selectedPipelineData = pipelines.find((p) => p.id === selectedPipeline)
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
-      >
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center gap-4">
-            <div
-              className="w-14 h-14 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: `${integration.color}20` }}
-            >
-              {integration.icon_url ? (
-                <img src={integration.icon_url} alt="" className="w-8 h-8" />
-              ) : (
-                <span style={{ color: integration.color }} className="text-2xl font-bold">
-                  {integration.name[0]}
-                </span>
-              )}
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Instalar {integration.name}</h2>
-              <p className="text-gray-500 text-sm">{integration.short_description}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Pipeline Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-2">
-              Pipeline padrão para novos leads
-            </label>
-            <select
-              value={selectedPipeline}
-              onChange={(e) => {
-                setSelectedPipeline(e.target.value)
-                const pipeline = pipelines.find((p) => p.id === e.target.value)
-                if (pipeline?.stages?.length > 0) {
-                  setSelectedStage(pipeline.stages[0].id)
-                }
-              }}
-              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
-            >
-              {pipelines.map((pipeline) => (
-                <option key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Stage Selection */}
-          {selectedPipelineData?.stages?.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">
-                Estágio inicial
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {selectedPipelineData.stages.map((stage: any) => (
-                  <button
-                    key={stage.id}
-                    onClick={() => setSelectedStage(stage.id)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      selectedStage === stage.id
-                        ? 'text-white'
-                        : 'bg-white text-gray-500 hover:text-white'
-                    }`}
-                    style={
-                      selectedStage === stage.id
-                        ? { backgroundColor: stage.color || '#6366f1' }
-                        : {}
-                    }
-                  >
-                    {stage.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Auto Tags */}
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-2">
-              Tags automáticas (opcional)
-            </label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addTag()}
-                placeholder="Digite uma tag..."
-                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
-              />
-              <button
-                onClick={addTag}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
-            </div>
-            {autoTags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {autoTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="flex items-center gap-1 px-2 py-1 bg-brand-100 text-brand-600 rounded-lg text-sm"
-                  >
-                    {tag}
-                    <button onClick={() => setAutoTags(autoTags.filter((t) => t !== tag))}>
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <p className="text-xs text-gray-400 mt-2">
-              Estas tags serão adicionadas automaticamente a todos os leads capturados por esta integração
-            </p>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleInstall}
-            disabled={loading || !selectedPipeline}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-gray-900 font-medium transition-colors"
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Instalando...
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                Instalar
-              </>
-            )}
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  )
-}
-
-// Config Modal Component (simplified)
-function IntegrationConfigModal({
-  integration,
-  installed,
-  onClose,
-  onSuccess,
-}: {
-  integration: Integration
-  installed: InstalledIntegration
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  const { user } = useAuthStore()
-  const [loading, setLoading] = useState(false)
-  const [pipelines, setPipelines] = useState<any[]>([])
-  const [selectedPipeline, setSelectedPipeline] = useState(installed.default_pipeline_id || '')
-  const [autoTags, setAutoTags] = useState<string[]>(installed.auto_tags || [])
-  const [newTag, setNewTag] = useState('')
-
-  useEffect(() => {
-    fetchPipelines()
-  }, [])
-
-  const fetchPipelines = async () => {
-    if (!user?.organization_id) return
+  const handleDisconnect = async (storeId: string) => {
+    if (!confirm('Desconectar esta loja? Os dados sincronizados serão mantidos.')) return
+    setDisconnecting(storeId)
     try {
-      const res = await fetch(`/api/deals?type=pipelines&organizationId=${user.organization_id}`)
-      const data = await res.json()
-      setPipelines(data.pipelines || [])
-    } catch (error) {
-      console.error('Error:', error)
+      await fetch(`/api/integrations/shopify/${storeId}/disconnect`, { method: 'POST' })
+      setConnectedStores(prev => prev.filter(s => s.id !== storeId))
+    } catch (e) {
+      console.error('Disconnect failed:', e)
     }
+    setDisconnecting(null)
   }
 
-  const handleSave = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/integrations/installed/${installed.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          defaultPipelineId: selectedPipeline || null,
-          autoTags,
-        }),
-      })
+  const handleConnect = () => {
+    router.push('/integrations/shopify')
+  }
 
-      if (response.ok) {
-        onSuccess()
-      }
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
+  const formatDate = (d: string | null) => {
+    if (!d) return '—'
+    return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ scale: 0.95 }}
-        animate={{ scale: 1 }}
-        exit={{ scale: 0.95 }}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
-      >
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center gap-4">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: `${integration.color}20` }}
-            >
-              {integration.icon_url ? (
-                <img src={integration.icon_url} alt="" className="w-7 h-7" />
-              ) : (
-                <span style={{ color: integration.color }} className="text-xl font-bold">
-                  {integration.name[0]}
-                </span>
-              )}
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Configurar {integration.name}</h2>
-              <StatusBadge status={installed.status} />
-            </div>
-          </div>
+    <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Integrações</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Conecte suas ferramentas e plataformas</p>
         </div>
+      </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Webhook URL */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* E-Commerce Section */}
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-2">
-              URL do Webhook
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                readOnly
-                value={`${window.location.origin}/api/webhooks/${installed.id}`}
-                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-500 text-sm"
-              />
-              <button
-                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/${installed.id}`)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
-              >
-                Copiar
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 mt-2">
-              Configure esta URL nas configurações de webhook do {integration.name}
-            </p>
-          </div>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">E-commerce</h2>
 
-          {/* Pipeline */}
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-2">
-              Pipeline padrão
-            </label>
-            <select
-              value={selectedPipeline}
-              onChange={(e) => setSelectedPipeline(e.target.value)}
-              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
-            >
-              {pipelines.map((pipeline) => (
-                <option key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Tags */}
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-2">
-              Tags automáticas
-            </label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && newTag.trim()) {
-                    setAutoTags([...autoTags, newTag.trim()])
-                    setNewTag('')
-                  }
-                }}
-                placeholder="Nova tag..."
-                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
-              />
-            </div>
-            {autoTags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {autoTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="flex items-center gap-1 px-2 py-1 bg-brand-100 text-brand-600 rounded-lg text-sm"
-                  >
-                    {tag}
-                    <button onClick={() => setAutoTags(autoTags.filter((t) => t !== tag))}>
-                      <X className="w-3 h-3" />
+            {/* Connected stores */}
+            {connectedStores.map(store => (
+              <div key={store.id} className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4">
+                {/* Store header */}
+                <div className="px-6 py-5 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-[#95BF47]/10 rounded-xl flex items-center justify-center">
+                      <ShoppingBag className="w-6 h-6 text-[#95BF47]" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-semibold text-gray-900">{store.shop_name || 'Shopify'}</h3>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-emerald-50 text-emerald-700">
+                          <Wifi className="w-3 h-3" /> Conectada
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-0.5">{store.shop_domain}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleSync(store.id)} disabled={syncing === store.id}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                      {syncing === store.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                      Sincronizar
                     </button>
-                  </span>
-                ))}
+                    <button onClick={() => router.push('/integrations/shopify')}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                      <Settings className="w-4 h-4" />
+                      Configurar
+                    </button>
+                    <button onClick={() => handleDisconnect(store.id)} disabled={disconnecting === store.id}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50 hover:border-red-200 disabled:opacity-50 transition-colors">
+                      {disconnecting === store.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Store stats */}
+                <div className="border-t border-gray-100 px-6 py-4">
+                  <div className="grid grid-cols-4 gap-6">
+                    <div>
+                      <p className="text-xs font-medium text-gray-400 uppercase">Pedidos</p>
+                      <p className="text-lg font-semibold text-gray-900 mt-0.5">{(store.orders_count || 0).toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-400 uppercase">Clientes</p>
+                      <p className="text-lg font-semibold text-gray-900 mt-0.5">{(store.customers_count || 0).toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-400 uppercase">Produtos</p>
+                      <p className="text-lg font-semibold text-gray-900 mt-0.5">{(store.products_count || 0).toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-400 uppercase">Última Sync</p>
+                      <p className="text-sm font-medium text-gray-900 mt-1">{formatDate(store.last_sync_at)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status indicators */}
+                <div className="border-t border-gray-100 px-6 py-3">
+                  <div className="flex items-center gap-4 text-xs">
+                    <span className={`flex items-center gap-1 ${store.initial_sync_completed ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {store.initial_sync_completed ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                      Sync {store.initial_sync_completed ? 'Completa' : 'Pendente'}
+                    </span>
+                    <span className={`flex items-center gap-1 ${store.pixel_installed ? 'text-emerald-600' : 'text-gray-400'}`}>
+                      {store.pixel_installed ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                      Pixel {store.pixel_installed ? 'Instalado' : 'Não instalado'}
+                    </span>
+                    <span className="text-gray-400">
+                      Conectada em {formatDate(store.installed_at)}
+                    </span>
+                  </div>
+                </div>
               </div>
-            )}
+            ))}
+
+            {/* Add new Shopify store */}
+            <button onClick={handleConnect}
+              className="w-full flex items-center justify-between p-5 bg-white rounded-xl border border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all group">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center group-hover:bg-gray-200 transition-colors">
+                  <ShoppingBag className="w-6 h-6 text-gray-400" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-sm font-semibold text-gray-900">Conectar loja Shopify</h3>
+                  <p className="text-sm text-gray-500">Sincronize pedidos, clientes e produtos automaticamente</p>
+                </div>
+              </div>
+              <span className="text-sm font-medium text-gray-500 group-hover:text-gray-700">Conectar →</span>
+            </button>
           </div>
 
-          {/* Stats */}
-          {installed.last_sync_at && (
-            <div className="p-4 bg-gray-50 rounded-xl">
-              <p className="text-sm text-gray-500">
-                Última sincronização:{' '}
-                <span className="text-gray-900">
-                  {new Date(installed.last_sync_at).toLocaleString('pt-BR')}
-                </span>
-              </p>
+          {/* Coming Soon */}
+          <div>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Em Breve</h2>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { name: 'WooCommerce', desc: 'Integração com WordPress', icon: '🛒' },
+                { name: 'Nuvemshop', desc: 'Plataforma líder na América Latina', icon: '☁️' },
+                { name: 'Meta Ads', desc: 'Facebook e Instagram Ads', icon: '📘' },
+                { name: 'Google Ads', desc: 'Campanhas de pesquisa e display', icon: '🔍' },
+              ].map(item => (
+                <div key={item.name} className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200 opacity-60">
+                  <span className="text-2xl">{item.icon}</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">{item.name}</p>
+                    <p className="text-xs text-gray-400">{item.desc}</p>
+                  </div>
+                  <span className="ml-auto text-[10px] font-medium text-gray-400 uppercase bg-gray-100 px-2 py-0.5 rounded">Em breve</span>
+                </div>
+              ))}
             </div>
-          )}
+          </div>
         </div>
-
-        {/* Footer */}
-        <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={loading}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-gray-900 font-medium transition-colors"
-          >
-            {loading ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Check className="w-4 h-4" />
-            )}
-            Salvar
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
+      )}
+    </div>
   )
 }

@@ -1,49 +1,53 @@
-'use client';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { User, Users, CreditCard, Activity, Link2, Code, Shield, Settings } from 'lucide-react';
-import { cn } from '@/lib/utils';
+'use client'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { cn } from '@/lib/utils'
 
-const settingsNav = [
-  { title: 'Geral', href: '/settings', icon: Settings },
-  { title: 'Conta', href: '/settings/account', icon: User },
-  { title: 'Equipe', href: '/settings/users', icon: Users },
-  { title: 'Faturamento', href: '/settings/billing', icon: CreditCard },
-  { title: 'Rastreamento', href: '/settings/tracking', icon: Activity },
-  { title: 'Atribuição', href: '/settings/attribution', icon: Link2 },
-  { title: 'UTM', href: '/settings/utm', icon: Link2 },
-  { title: 'API', href: '/settings/api', icon: Code },
-  { title: 'Segurança', href: '/settings/security', icon: Shield },
-];
+const tabs = [
+  { title: 'Conta', href: '/settings/account' },
+  { title: 'Faturamento', href: '/settings/billing' },
+  { title: 'E-mail', href: '/settings' },
+  { title: 'Rastreamento', href: '/settings/tracking' },
+  { title: 'Atribuição', href: '/settings/attribution' },
+  { title: 'Dados', href: '/settings/lgpd' },
+  { title: 'API', href: '/settings/api' },
+  { title: 'Segurança', href: '/settings/security' },
+]
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname()
   return (
-    <div className="flex min-h-[calc(100vh-4rem)]">
-      <nav className="w-56 bg-white border-r border-gray-200 p-4 space-y-1 flex-shrink-0">
-        {settingsNav.map(item => {
-          const Icon = item.icon;
-          const isActive =
-            pathname === item.href ||
-            (item.href !== '/settings' && pathname.startsWith(item.href));
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                isActive
-                  ? 'text-orange-600 bg-orange-50 font-medium border-l-2 border-orange-500'
-                  : 'text-gray-600 hover:bg-gray-50'
-              )}
-            >
-              <Icon className="w-4 h-4" />
-              {item.title}
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="flex-1 bg-gray-50">{children}</div>
+    <div>
+      {/* Header */}
+      <div className="border-b border-gray-200 bg-white">
+        <div className="px-6 pt-6 pb-0">
+          <h1 className="text-xl font-semibold text-gray-900">Configurações</h1>
+          <p className="text-sm text-gray-500 mt-0.5 mb-4">Gerencie as configurações da sua conta e organização</p>
+        </div>
+        {/* Horizontal tabs */}
+        <div className="px-6">
+          <nav className="flex gap-0 -mb-px overflow-x-auto">
+            {tabs.map(tab => {
+              const isActive = pathname === tab.href || (tab.href !== '/settings' && pathname.startsWith(tab.href))
+              return (
+                <Link key={tab.href} href={tab.href}
+                  className={cn(
+                    'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+                    isActive
+                      ? 'border-gray-900 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  )}>
+                  {tab.title}
+                </Link>
+              )
+            })}
+          </nav>
+        </div>
+      </div>
+      {/* Content */}
+      <div className="bg-gray-50 min-h-[calc(100vh-12rem)]">
+        {children}
+      </div>
     </div>
-  );
+  )
 }
