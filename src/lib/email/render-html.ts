@@ -81,8 +81,40 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.align || 'center'};font-size:${p.fontSize || 11}px;color:${p.textColor || '#9CA3AF'};font-family:${font};line-height:1.5;"><p style="margin:0;">${p.companyName || ''}</p>${p.address ? `<p style="margin:4px 0 0;">${p.address}</p>` : ''}<p style="margin:8px 0 0;">${p.showUnsubscribe ? `<a href="{{unsubscribe_url}}" style="color:${flc};text-decoration:underline;">Descadastrar-se</a>` : ''}${p.showUnsubscribe && p.showViewInBrowser ? ' · ' : ''}${p.showViewInBrowser ? `<a href="{{view_in_browser_url}}" style="color:${flc};text-decoration:underline;">Ver no navegador</a>` : ''}</p></td></tr>`
     }
 
-    case 'product-grid':
-      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${p.title ? `<p style="margin:0 0 16px;font-size:18px;font-weight:bold;color:#111827;text-align:center;font-family:${font};">${p.title}</p>` : ''}<!-- WORDER_PRODUCT_BLOCK:${p.feedType || 'bestsellers'}:${(p.columns || 2) * (p.rows || 2)}:${p.columns || 2}:${p.showPrice !== false}:${p.showComparePrice !== false}:${p.showButton !== false}:${encodeURIComponent(p.buttonText || 'Comprar')} --></td></tr>`
+    case 'product-grid': {
+      const cols = p.columns || 2
+      const rows = p.rows || 2
+      const total = cols * rows
+      const staticProds = p.staticProducts || []
+      const hasStaticProducts = staticProds.length > 0
+
+      let productsHtml = ''
+      if (hasStaticProducts) {
+        // Render real static products as table grid
+        const prodsToRender = staticProds.slice(0, total)
+        const productRows: string[] = []
+        for (let r = 0; r < Math.ceil(prodsToRender.length / cols); r++) {
+          const rowProds = prodsToRender.slice(r * cols, r * cols + cols)
+          const cellWidth = Math.floor(100 / cols)
+          const cells = rowProds.map((prod: any) => {
+            const imgHtml = prod.image_url ? `<img src="${prod.image_url}" alt="${prod.title || ''}" width="100%" style="display:block;width:100%;height:auto;max-height:${p.maxImageHeight || 300}px;object-fit:cover;border-radius:${p.productBorderRadius ?? 0}px ${p.productBorderRadius ?? 0}px 0 0;" />` : `<div style="height:${p.maxImageHeight || 300}px;background:#f3f4f6;"></div>`
+            const nameHtml = p.showName !== false ? `<p style="margin:0;font-weight:${p.nameWeight || '600'};font-size:${p.nameFontSize || 14}px;color:${p.nameColor || '#111827'};font-family:${font};">${prod.title || ''}</p>` : ''
+            const priceHtml = p.showPrice !== false ? `<p style="margin:4px 0 0;">${p.showComparePrice && prod.compare_at_price ? `<span style="font-size:${(p.priceFontSize || 16) - 3}px;color:${p.comparePriceColor || '#9CA3AF'};text-decoration:line-through;margin-right:6px;">R$ ${Number(prod.compare_at_price).toFixed(2)}</span>` : ''}<span style="font-weight:${p.priceWeight || '700'};font-size:${p.priceFontSize || 16}px;color:${p.priceColor || '#F97316'};">R$ ${Number(prod.price || 0).toFixed(2)}</span></p>` : ''
+            const btnHtml = p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px ${p.buttonFullWidth ? '0' : 'auto'} 0;${p.buttonFullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.buttonColor || '#F97316'};border-radius:${p.buttonRadius ?? 6}px;padding:${p.buttonPaddingV ?? 6}px ${p.buttonPaddingH ?? 16}px;text-align:center;"><a href="${prod.url || '#'}" style="color:${p.buttonTextColor || '#FFFFFF'};font-size:${p.buttonFontSize || 12}px;font-weight:600;text-decoration:none;display:block;font-family:${font};">${p.buttonText || 'Comprar'}</a></td></tr></table>` : ''
+            return `<td width="${cellWidth}%" valign="top" style="vertical-align:top;padding:${p.productPadding ?? 4}px;"><div style="border:1px solid ${p.productBorderColor || '#E5E7EB'};border-radius:${p.productBorderRadius ?? 8}px;overflow:hidden;background:#fff;text-align:center;">${imgHtml}<div style="padding:${p.productPadding ?? 8}px;">${nameHtml}${priceHtml}${btnHtml}</div></div></td>`
+          }).join('')
+          // Pad with empty cells if row not full
+          const emptyCells = cols - rowProds.length > 0 ? `<td width="${Math.floor(100 / cols)}%" style="padding:${p.productPadding ?? 4}px;"></td>`.repeat(cols - rowProds.length) : ''
+          productRows.push(`<tr>${cells}${emptyCells}</tr>`)
+        }
+        productsHtml = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="worder-product-grid">${productRows.join('')}</table>`
+      } else {
+        // Dynamic products: placeholder comment for server-side resolution at send time
+        productsHtml = `<!-- WORDER_PRODUCT_BLOCK:${p.feedType || 'bestsellers'}:${total}:${cols}:${p.showPrice !== false}:${p.showComparePrice !== false}:${p.showButton !== false}:${encodeURIComponent(p.buttonText || 'Comprar')} -->`
+      }
+
+      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${p.title ? `<p style="margin:0 0 16px;font-size:18px;font-weight:bold;color:#111827;text-align:center;font-family:${font};">${p.title}</p>` : ''}${productsHtml}</td></tr>`
+    }
 
     case 'abandoned-cart':
       return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFFBEB'};font-family:${font};"><p style="margin:0 0 4px;font-size:${p.titleFontSize || 22}px;font-weight:bold;color:${p.titleColor || '#111827'};text-align:center;">${p.title || ''}</p><p style="margin:0 0 20px;font-size:${p.subtitleFontSize || 14}px;color:${p.subtitleColor || '#6B7280'};text-align:center;">${p.subtitle || ''}</p><!-- WORDER_PRODUCT_BLOCK:cart_items:${p.maxItems || 3}:1:${p.showPrice !== false}:false:true:${encodeURIComponent(p.buttonText || 'Finalizar Compra')} --></td></tr>`

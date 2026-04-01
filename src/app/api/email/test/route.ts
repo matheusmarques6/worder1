@@ -36,9 +36,8 @@ export async function POST(req: NextRequest) {
     finalHtml = finalHtml.replace(/\{\{unsubscribe_url\}\}/g, '#')
     finalHtml = finalHtml.replace(/\{\{coupon_code\}\}/g, 'TESTE10')
     finalHtml = finalHtml.replace(/\{\{coupon_expiry\}\}/g, '31/12/2026')
-    // Replace product block placeholders with visible notice
-    finalHtml = finalHtml.replace(/<!-- WORDER_PRODUCT_BLOCK:[^>]+ -->/g,
-      '<div style="padding:24px;text-align:center;background:#f9fafb;border:1px dashed #d1d5db;border-radius:8px;margin:8px 0;"><p style="margin:0;font-size:14px;color:#6b7280;">Bloco de Produtos</p><p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">Os produtos reais serão exibidos no envio da campanha.</p></div>')
+    // Note: Static products are rendered as real HTML by render-html.ts
+    // Dynamic product placeholders (<!-- WORDER_PRODUCT_BLOCK:... -->) remain for server-side resolution
 
     console.log('[EmailTest] Sending to:', testEmail, 'from:', fromEmail, 'subject:', subject)
 

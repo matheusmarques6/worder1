@@ -582,9 +582,6 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     let html = renderDocumentToHtml(doc)
     // Resolve countdown timer URLs
     html = html.replace(/\{\{countdown_base_url\}\}/g, window.location.origin)
-    // Replace product block placeholders with a visible notice for preview
-    html = html.replace(/<!-- WORDER_PRODUCT_BLOCK:[^>]+ -->/g,
-      '<div style="padding:24px;text-align:center;background:#f9fafb;border:1px dashed #d1d5db;border-radius:8px;margin:8px 0;"><p style="margin:0;font-size:14px;color:#6b7280;">Bloco de Produtos</p><p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">Os produtos serão exibidos automaticamente no envio.</p></div>')
     // Replace common merge tags with preview values
     html = html.replace(/\{\{first_name\}\}/g, 'Cliente')
     html = html.replace(/\{\{store_name\}\}/g, 'Minha Loja')
