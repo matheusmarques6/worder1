@@ -168,7 +168,7 @@ export default function ShopifyDiagnosticoPage() {
         <div className="flex items-center gap-4">
           <Link
             href="/integrations"
-            className="p-2 rounded-lg bg-white hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-white hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>

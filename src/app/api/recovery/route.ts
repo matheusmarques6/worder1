@@ -43,8 +43,8 @@ export async function GET(request: NextRequest) {
       const { data: items, count, error } = await query;
 
       if (error) {
-        // Table might not exist
-        if (error.message?.includes('relation') || error.code === '42P01') {
+        // Table might not exist or column missing
+        if (error.message?.includes('relation') || error.code === '42P01' || error.code === '42703') {
           return NextResponse.json({
             items: [],
             total: 0,

@@ -38,6 +38,32 @@ import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { InboxContact, InboxActivity, InboxNote, InboxTask, InboxOrder, InboxDeal } from '@/types/inbox'
 
+interface ShopifyEvent {
+  id: string
+  eventType: string
+  eventSource: string
+  properties: Record<string, any>
+  monetaryValue: number | null
+  currency: string | null
+  occurredAt: string
+  shopifyResourceId: string | null
+  shopifyResourceType: string | null
+}
+
+const shopifyEventLabels: Record<string, string> = {
+  placed_order: 'Pedido Realizado',
+  ordered_product: 'Produto Comprado',
+  fulfilled_order: 'Pedido Entregue',
+  cancelled_order: 'Pedido Cancelado',
+  refunded_order: 'Pedido Reembolsado',
+  checkout_started: 'Checkout Iniciado',
+  checkout_abandoned: 'Carrinho Abandonado',
+  viewed_product: 'Produto Visualizado',
+  added_to_cart: 'Adicionou ao Carrinho',
+  subscribed_email: 'Inscreveu-se por E-mail',
+  profile_created: 'Perfil Criado',
+}
+
 const activityIconMap: Record<string, { icon: React.ComponentType<any>; color: string; bgColor: string }> = {
   conversation_started: { icon: ChatCircle, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
   conversation_closed: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
@@ -63,6 +89,18 @@ const activityIconMap: Record<string, { icon: React.ComponentType<any>; color: s
   campaign_clicked: { icon: CursorClick, color: 'text-brand-600', bgColor: 'bg-brand-500/10' },
   bot_interaction: { icon: Lightning, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
   blocked: { icon: Warning, color: 'text-red-400', bgColor: 'bg-red-500/10' },
+  // Shopify CDP events
+  placed_order: { icon: ShoppingCart, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  ordered_product: { icon: ShoppingCart, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  fulfilled_order: { icon: CheckCircle, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  cancelled_order: { icon: Warning, color: 'text-red-400', bgColor: 'bg-red-500/10' },
+  refunded_order: { icon: CurrencyDollar, color: 'text-red-400', bgColor: 'bg-red-500/10' },
+  checkout_started: { icon: ShoppingCart, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  checkout_abandoned: { icon: ShoppingCart, color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' },
+  viewed_product: { icon: Eye, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' },
+  added_to_cart: { icon: ShoppingCart, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+  subscribed_email: { icon: EnvelopeSimple, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+  profile_created: { icon: UserCircle, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
 }
 
 const defaultActivityIcon = { icon: Eye, color: 'text-gray-500', bgColor: 'bg-zinc-500/10' }
@@ -112,8 +150,9 @@ export default function ContactDetailPage() {
   const router = useRouter()
   const params = useParams()
   const contactId = params.id as string
-  const [activeTab, setActiveTab] = useState<'timeline' | 'notes' | 'tasks'>('timeline')
+  const [activeTab, setActiveTab] = useState<'timeline' | 'notes'>('timeline')
   const [noteText, setNoteText] = useState('')
+  const [shopifyEvents, setShopifyEvents] = useState<ShopifyEvent[]>([])
 
   const {
     contact,
@@ -137,8 +176,30 @@ export default function ContactDetailPage() {
   useEffect(() => {
     if (contactId) {
       fetchContact(contactId)
+      // Fetch Shopify CDP events
+      fetch(`/api/contacts/${contactId}/shopify-events`)
+        .then((res) => res.json())
+        .then((data) => setShopifyEvents(data.events || []))
+        .catch((err) => console.error('Error fetching shopify events:', err))
     }
   }, [contactId, fetchContact])
+
+  // Merge shopify events into timeline activities
+  const mergedActivities = [...activities]
+  shopifyEvents.forEach((evt) => {
+    mergedActivities.push({
+      id: evt.id,
+      activity_type: evt.eventType,
+      title: shopifyEventLabels[evt.eventType] || evt.eventType,
+      description: evt.monetaryValue
+        ? `${evt.currency === 'BRL' ? 'R$ ' : (evt.currency || '') + ' '}${evt.monetaryValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${evt.properties?.order_number ? ` - Pedido #${evt.properties.order_number}` : ''}${evt.properties?.items ? ` - ${evt.properties.items.length} item(ns)` : ''}`
+        : evt.properties?.order_number
+        ? `Pedido #${evt.properties.order_number}`
+        : evt.properties?.product_title || null,
+      created_at: evt.occurredAt,
+    } as InboxActivity)
+  })
+  mergedActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
   const handleAddNote = async () => {
     if (!noteText.trim() || !contactId) return
@@ -153,8 +214,19 @@ export default function ContactDetailPage() {
   const tabs = [
     { id: 'timeline' as const, label: 'Timeline' },
     { id: 'notes' as const, label: `Notas${notes.length > 0 ? ` (${notes.length})` : ''}` },
-    { id: 'tasks' as const, label: `Tarefas${tasks.length > 0 ? ` (${tasks.length})` : ''}` },
   ]
+
+  const handleDelete = async () => {
+    if (!confirm('Tem certeza que deseja excluir este contato? Esta ação é irreversível.')) return
+    try {
+      const res = await fetch(`/api/contacts?id=${contactId}`, { method: 'DELETE' })
+      if (res.ok) {
+        router.push('/contacts')
+      }
+    } catch (err) {
+      console.error('Error deleting contact:', err)
+    }
+  }
 
   // Loading state
   if (isLoading && !contact) {
@@ -170,7 +242,7 @@ export default function ContactDetailPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/contacts')} className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors">
+          <button onClick={() => router.push('/contacts')} className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors">
             <ArrowLeft size={18} weight="bold" />
           </button>
           <h1 className="text-2xl font-bold font-display text-gray-900">Contato</h1>
@@ -203,7 +275,7 @@ export default function ContactDetailPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push('/contacts')}
-            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
           >
             <ArrowLeft size={18} weight="bold" />
           </button>
@@ -215,15 +287,14 @@ export default function ContactDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
-            <PencilSimple size={14} />
-            Editar
+          <button
+            onClick={handleDelete}
+            className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-xs transition-colors"
+          >
+            <Trash size={14} />
+            Excluir
           </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
-            <Export size={14} />
-            Exportar
-          </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg hover:opacity-90 text-xs font-medium">
+          <button className="flex items-center gap-2 px-3 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-xs font-medium transition-colors">
             <PaperPlaneTilt size={14} />
             Enviar E-mail
           </button>
@@ -244,7 +315,7 @@ export default function ContactDetailPage() {
                 />
               ) : (
                 <div className="w-20 h-20 rounded-full bg-brand-500 flex items-center justify-center mb-4">
-                  <span className="text-2xl font-bold text-gray-900">{initials}</span>
+                  <span className="text-2xl font-bold text-white">{initials}</span>
                 </div>
               )}
               <h2 className="text-lg font-bold text-gray-900">{contactName}</h2>
@@ -385,7 +456,7 @@ export default function ContactDetailPage() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex-1 px-4 py-3 text-sm font-medium transition-colors relative ${
-                    activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-gray-700'
+                    activeTab === tab.id ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   {tab.label}
@@ -403,13 +474,13 @@ export default function ContactDetailPage() {
               {/* Timeline Tab */}
               {activeTab === 'timeline' && (
                 <div className="space-y-1">
-                  {activities.length === 0 ? (
+                  {mergedActivities.length === 0 ? (
                     <div className="text-center py-8">
                       <Clock size={24} className="text-zinc-700 mx-auto mb-2" weight="duotone" />
                       <p className="text-sm text-gray-500">Nenhuma atividade registrada</p>
                     </div>
                   ) : (
-                    activities.map((activity, i) => {
+                    mergedActivities.map((activity, i) => {
                       const iconCfg = activityIconMap[activity.activity_type] || defaultActivityIcon
                       const Icon = iconCfg.icon
                       return (
@@ -418,7 +489,7 @@ export default function ContactDetailPage() {
                             <div className={`w-8 h-8 rounded-full ${iconCfg.bgColor} flex items-center justify-center flex-shrink-0`}>
                               <Icon size={16} className={iconCfg.color} weight="fill" />
                             </div>
-                            {i < activities.length - 1 && <div className="w-px h-full bg-gray-50 min-h-[24px]" />}
+                            {i < mergedActivities.length - 1 && <div className="w-px h-full bg-gray-50 min-h-[24px]" />}
                           </div>
                           <div className="pb-5">
                             <p className="text-sm text-gray-700">{activity.title}</p>
@@ -485,62 +556,7 @@ export default function ContactDetailPage() {
                 </div>
               )}
 
-              {/* Tasks Tab */}
-              {activeTab === 'tasks' && (
-                <div className="space-y-4">
-                  {tasks.length === 0 ? (
-                    <div className="text-center py-8">
-                      <ClipboardText size={24} className="text-zinc-700 mx-auto mb-2" weight="duotone" />
-                      <p className="text-sm text-gray-500">Nenhuma tarefa criada</p>
-                    </div>
-                  ) : (
-                    tasks.map((task) => {
-                      const isCompleted = task.status === 'completed'
-                      return (
-                        <div key={task.id} className="bg-gray-50/30 rounded-lg p-4 flex items-start gap-3 group">
-                          {isCompleted ? (
-                            <CheckCircle size={18} className="text-emerald-400 mt-0.5 flex-shrink-0" weight="fill" />
-                          ) : (
-                            <button
-                              onClick={() => completeTask(task.id)}
-                              className="w-[18px] h-[18px] rounded-full border-2 border-gray-200 mt-0.5 flex-shrink-0 hover:border-emerald-400 transition-colors"
-                            />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-                              {task.title}
-                            </p>
-                            {task.description && (
-                              <p className="text-xs text-gray-400 mt-0.5">{task.description}</p>
-                            )}
-                            <div className="flex items-center gap-3 mt-1">
-                              {task.due_date && (
-                                <span className={`text-xs ${task.is_overdue ? 'text-red-400' : 'text-gray-400'}`}>
-                                  Prazo: {new Date(task.due_date).toLocaleDateString('pt-BR')}
-                                </span>
-                              )}
-                              {task.assigned_to_name && (
-                                <span className="text-xs text-gray-400">· {task.assigned_to_name}</span>
-                              )}
-                              {isCompleted && task.completed_at && (
-                                <span className="text-xs text-gray-400">
-                                  Concluída {formatDistanceToNow(new Date(task.completed_at), { addSuffix: true, locale: ptBR })}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => deleteTask(task.id)}
-                            className="p-1 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                          >
-                            <Trash size={12} />
-                          </button>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              )}
+              {/* Tasks tab removed */}
             </div>
           </div>
         </div>
@@ -664,6 +680,48 @@ export default function ContactDetailPage() {
                     </div>
                   )
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Products Purchased (from Shopify events) */}
+          {shopifyEvents.filter(e => e.eventType === 'ordered_product' || e.eventType === 'placed_order').length > 0 && (
+            <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                <ShoppingCart size={14} className="text-blue-500" />
+                Produtos Comprados
+              </h3>
+              <div className="space-y-2">
+                {shopifyEvents
+                  .filter(e => e.eventType === 'ordered_product')
+                  .slice(0, 10)
+                  .map((evt) => (
+                    <div key={evt.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-700 font-medium truncate">
+                          {evt.properties?.ProductName || evt.properties?.title || 'Produto'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {evt.properties?.Quantity || evt.properties?.quantity || 1}x · {evt.properties?.SKU || evt.properties?.sku || ''}
+                        </p>
+                      </div>
+                      <p className="text-sm text-gray-900 font-medium ml-3">
+                        {evt.monetaryValue ? `R$ ${evt.monetaryValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
+                      </p>
+                    </div>
+                  ))}
+                {shopifyEvents.filter(e => e.eventType === 'ordered_product').length === 0 &&
+                  shopifyEvents.filter(e => e.eventType === 'placed_order').slice(0, 5).map((evt) => (
+                    <div key={evt.id} className="py-2 border-b border-gray-100 last:border-0">
+                      <p className="text-sm text-gray-700 font-medium">
+                        Pedido #{evt.properties?.OrderNumber || evt.properties?.order_number || '—'}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {evt.properties?.ItemCount || evt.properties?.item_count || 0} itens · R$ {evt.monetaryValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0'}
+                      </p>
+                    </div>
+                  ))
+                }
               </div>
             </div>
           )}

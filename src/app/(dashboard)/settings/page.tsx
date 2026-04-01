@@ -571,13 +571,17 @@ function SettingsContent() {
         // E-commerce section
         {
           id: 'shopify',
-          name: 'Shopify',
+          name: currentStore ? `Shopify — ${currentStore.name}` : 'Shopify',
           description: 'Sincronize pedidos, clientes e produtos',
           icon: ShopifyIcon,
           connected: status.shopify?.connected || stores.length > 0,
           status: (status.shopify?.connected || stores.length > 0) ? 'healthy' : 'disconnected',
-          lastSync: status.shopify?.lastSync || (stores.length > 0 ? 'Agora' : undefined),
-          stats: status.shopify?.stats || (stores.length > 0 ? { Orders: '0', Customers: '-', Products: '-' } : undefined),
+          lastSync: status.shopify?.lastSync || currentStore?.lastSyncAt || undefined,
+          stats: status.shopify?.stats || (stores.length > 0 ? {
+            Orders: String(currentStore?.totalOrders || 0),
+            Customers: '-',
+            Products: '-',
+          } : undefined),
           category: 'ecommerce',
         },
         // Email Marketing section
@@ -730,16 +734,17 @@ function SettingsContent() {
 
   // Handle disconnect
   const handleDisconnect = async (integrationId: string) => {
-    if (!confirm(`Deseja realmente desconectar ${integrationId}?`)) return;
-    
+    if (!confirm(`Deseja realmente desconectar ${integrationId}? Dados importados serão mantidos.`)) return;
+
     setLoadingIntegration(integrationId);
-    
+
     try {
-      // TODO: Call API to disconnect
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setIntegrations(prev => prev.map(i => 
-        i.id === integrationId 
+      if (integrationId === 'shopify') {
+        await fetch('/api/integrations/shopify/disconnect', { method: 'POST' });
+      }
+
+      setIntegrations(prev => prev.map(i =>
+        i.id === integrationId
           ? { ...i, connected: false, status: 'disconnected', stats: undefined, lastSync: undefined }
           : i
       ));
@@ -750,16 +755,23 @@ function SettingsContent() {
     }
   };
 
-  // Handle sync
+  // Handle sync — calls real API for Shopify
   const handleSync = async (integrationId: string) => {
     setLoadingIntegration(integrationId);
-    
+
     try {
-      // TODO: Call API to sync
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setIntegrations(prev => prev.map(i => 
-        i.id === integrationId 
+      if (integrationId === 'shopify') {
+        const res = await fetch('/api/shopify/sync-now', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ syncType: 'all' }),
+        });
+        const data = await res.json();
+        console.log('[Settings] Shopify sync result:', data);
+      }
+
+      setIntegrations(prev => prev.map(i =>
+        i.id === integrationId
           ? { ...i, lastSync: 'Agora' }
           : i
       ));
@@ -839,7 +851,7 @@ function SettingsContent() {
                     'w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-colors',
                     activeTab === tab.id
                       ? 'bg-gray-100 text-gray-900'
-                      : 'text-gray-500 hover:text-white hover:bg-gray-100'
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
                   )}
                 >
                   <Icon className="w-5 h-5" />
@@ -881,7 +893,7 @@ function SettingsContent() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -901,7 +913,7 @@ function SettingsContent() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -921,7 +933,7 @@ function SettingsContent() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -941,7 +953,7 @@ function SettingsContent() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -1176,7 +1188,7 @@ function SettingsContent() {
                       <h2 className="text-xl font-semibold text-gray-900">Adicionar API Key</h2>
                       <button
                         onClick={() => setShowAddKeyModal(false)}
-                        className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+                        className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
                       >
                         <X className="w-5 h-5" />
                       </button>

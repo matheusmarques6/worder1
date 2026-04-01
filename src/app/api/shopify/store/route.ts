@@ -1,23 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const organizationId = auth.user.organization_id;
 
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-  }
+  const supabase = getSupabaseAdmin();
+  const userId = auth.user.id;
+  const userOrgId = auth.user.organization_id;
+
+  // Multi-org lookup: get all orgs the user belongs to
+  const { data: memberships } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId);
+
+  const orgIds = [...new Set([
+    userOrgId,
+    ...(memberships?.map((m: any) => m.organization_id) || []),
+  ])];
 
   const { searchParams } = new URL(request.url);
-  const orgParam = searchParams.get('organizationId') || searchParams.get('organization_id');
-  if (orgParam && orgParam !== organizationId) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
   const storeId = searchParams.get('storeId');
 
   try {
@@ -26,7 +32,7 @@ export async function GET(request: NextRequest) {
         .from('shopify_stores')
         .select('*')
         .eq('id', storeId)
-        .eq('organization_id', organizationId)
+        .in('organization_id', orgIds)
         .single();
 
       if (error) throw error;
@@ -36,7 +42,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase
       .from('shopify_stores')
       .select('*')
-      .eq('organization_id', organizationId)
+      .in('organization_id', orgIds)
       .order('created_at', { ascending: false });
 
     if (error) throw error;

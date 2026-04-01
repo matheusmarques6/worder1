@@ -218,7 +218,7 @@ export default function PipelinesPage() {
               <div className="flex items-center gap-4 p-4">
                 <button
                   onClick={() => setExpandedPipeline(expandedPipeline === pipeline.id ? null : pipeline.id)}
-                  className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+                  className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
                 >
                   <ChevronRight className={`w-5 h-5 transition-transform ${expandedPipeline === pipeline.id ? 'rotate-90' : ''}`} />
                 </button>
@@ -245,7 +245,7 @@ export default function PipelinesPage() {
                   </Link>
                   <button
                     onClick={() => setEditingPipeline(pipeline)}
-                    className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-100 transition-colors"
+                    className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
