@@ -578,8 +578,28 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   }, [doc, onSave, showToast])
 
   // ── Preview ──
-  const handlePreview = useCallback(() => {
-    let html = renderDocumentToHtml(doc)
+  const handlePreview = useCallback(async () => {
+    // Resolve dynamic product blocks before rendering
+    let resolvedDoc = doc
+    const hasDynamicProducts = doc.sections?.some((s: any) =>
+      s.columns?.some((c: any) =>
+        c.blocks?.some((b: any) => b.type === 'product-grid' && (!b.props.staticProducts || b.props.staticProducts.length === 0))
+      )
+    )
+    if (hasDynamicProducts) {
+      try {
+        const { resolveProductBlocks } = await import('@/lib/email/render-html')
+        resolvedDoc = await resolveProductBlocks(doc, async () => {
+          const res = await fetch('/api/products')
+          if (!res.ok) return []
+          const data = await res.json()
+          return data.products || []
+        })
+      } catch (e) {
+        console.error('Failed to resolve products:', e)
+      }
+    }
+    let html = renderDocumentToHtml(resolvedDoc)
     // Resolve countdown timer URLs
     html = html.replace(/\{\{countdown_base_url\}\}/g, window.location.origin)
     // Replace common merge tags with preview values
@@ -874,7 +894,16 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       <SendTestModal
         isOpen={showSendTest}
         onClose={() => setShowSendTest(false)}
-        html={renderDocumentToHtml(doc)}
+        html={(() => {
+          let h = previewHtml || renderDocumentToHtml(doc)
+          h = h.replace(/\{\{countdown_base_url\}\}/g, typeof window !== 'undefined' ? window.location.origin : '')
+          h = h.replace(/\{\{first_name\}\}/g, 'Cliente')
+          h = h.replace(/\{\{store_name\}\}/g, 'Minha Loja')
+          h = h.replace(/\{\{store_url\}\}/g, typeof window !== 'undefined' ? window.location.origin : '')
+          h = h.replace(/\{\{unsubscribe_url\}\}/g, '#')
+          h = h.replace(/\{\{view_in_browser_url\}\}/g, '#')
+          return h
+        })()}
         defaultSubject={templateName}
       />
 

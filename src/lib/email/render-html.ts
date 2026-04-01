@@ -1,6 +1,46 @@
 import type { EmailBlock, EmailSection, EmailDocument, Padding } from '@/components/email-builder/config/types'
 import { migrateV1toV2 } from '@/components/email-builder/config/types'
 
+// Resolve dynamic product blocks by fetching real products from Shopify
+// Call this BEFORE renderDocumentToHtml if you need dynamic products resolved
+export async function resolveProductBlocks(doc: any, fetchProducts: () => Promise<any[]>): Promise<any> {
+  const resolved = JSON.parse(JSON.stringify(doc))
+  const d = resolved.version === 2 ? resolved : migrateV1toV2(resolved)
+
+  let products: any[] | null = null
+
+  for (const section of d.sections || []) {
+    for (const column of section.columns || []) {
+      for (const block of column.blocks || []) {
+        if (block.type === 'product-grid' && (!block.props.staticProducts || block.props.staticProducts.length === 0)) {
+          // Dynamic product block — fetch products if not yet fetched
+          if (products === null) {
+            try {
+              products = await fetchProducts()
+            } catch {
+              products = []
+            }
+          }
+          // Inject products as staticProducts so render-html generates real HTML
+          const total = (block.props.columns || 2) * (block.props.rows || 2)
+          block.props.staticProducts = products.slice(0, total).map((p: any) => ({
+            id: String(p.id),
+            title: p.title || '',
+            price: p.price_min ?? p.price ?? 0,
+            compare_at_price: p.compare_at_price || null,
+            image_url: p.image || p.image_url || '',
+            url: p.url || '',
+            description: '',
+            buttonText: block.props.buttonText || 'Comprar',
+          }))
+        }
+      }
+    }
+  }
+
+  return d
+}
+
 function pad(p: Padding | number | undefined): string {
   if (!p) return '0'
   if (typeof p === 'number') return `${p}px`
