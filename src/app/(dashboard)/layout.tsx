@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -163,7 +163,24 @@ export default function DashboardLayout({
   const pathname = usePathname()
 
   const { stores, currentStore, setStores, setCurrentStore, addStore, _hasHydrated } = useStoreStore()
-  const { user, setUser } = useAuthStore()
+  const { user, setUser, signOut } = useAuthStore()
+  const router = useRouter()
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+
+  // Close user menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleLogout = async () => {
+    await signOut()
+    router.push('/login')
+  }
 
   // ============================================
   // Notifications State
@@ -541,10 +558,16 @@ export default function DashboardLayout({
             {userInitials}
           </div>
           {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-[13px] text-gray-300 truncate">{userName}</p>
-              <p className="text-[11px] text-gray-500 truncate">{userRole}</p>
-            </div>
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] text-gray-300 truncate">{userName}</p>
+                <p className="text-[11px] text-gray-500 truncate">{userRole}</p>
+              </div>
+              <button onClick={handleLogout} title="Sair da conta"
+                className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0">
+                <LogOut className="w-4 h-4" />
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -723,14 +746,43 @@ export default function DashboardLayout({
 
             <div className="w-px h-8 bg-gray-200" />
 
-            <div className="flex items-center gap-2 px-2">
-              <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center">
-                <span className="text-white font-semibold text-xs">{userInitials}</span>
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-medium text-gray-900">{userName}</p>
-                <p className="text-[11px] text-gray-500">{userRole}</p>
-              </div>
+            <div className="relative" ref={userMenuRef}>
+              <button onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors">
+                <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center">
+                  <span className="text-white font-semibold text-xs">{userInitials}</span>
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium text-gray-900">{userName}</p>
+                  <p className="text-[11px] text-gray-500">{userRole}</p>
+                </div>
+                <ChevronDown className={cn('w-3.5 h-3.5 text-gray-400 transition-transform', userMenuOpen && 'rotate-180')} />
+              </button>
+              {userMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-gray-200 py-1 z-50">
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    <p className="text-sm font-medium text-gray-900 truncate">{userName}</p>
+                    <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                  </div>
+                  <Link href="/settings/account" onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                    <Settings className="w-4 h-4 text-gray-400" />
+                    Configurações
+                  </Link>
+                  <Link href="/settings/billing" onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    Plano e Faturamento
+                  </Link>
+                  <div className="border-t border-gray-100 mt-1 pt-1">
+                    <button onClick={handleLogout}
+                      className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                      <LogOut className="w-4 h-4" />
+                      Sair da conta
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
