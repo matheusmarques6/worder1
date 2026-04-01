@@ -48,6 +48,22 @@ export const MERGE_TAGS: MergeTagGroup[] = [
     ],
   },
   {
+    name: 'Evento', icon: 'Zap',
+    tags: [
+      { name: 'Nome do Produto', value: '{{event.ProductName}}', sample: 'Camiseta Premium' },
+      { name: 'Preço', value: '{{event.Price}}', sample: 'R$ 89,90' },
+      { name: 'Imagem do Produto', value: '{{event.ImageURL}}', sample: 'https://cdn.shopify.com/image.jpg' },
+      { name: 'URL do Produto', value: '{{event.ProductURL}}', sample: 'https://loja.com/produto' },
+      { name: 'Nº do Pedido', value: '{{event.OrderId}}', sample: '#1234' },
+      { name: 'Valor', value: '{{event.Value}}', sample: 'R$ 199,90' },
+      { name: 'Moeda', value: '{{event.Currency}}', sample: 'BRL' },
+      { name: 'Itens', value: '{{event.Items}}', sample: '[Camiseta, Calça]' },
+      { name: 'Qtd. de Itens', value: '{{event.ItemCount}}', sample: '3' },
+      { name: 'URL do Checkout', value: '{{event.CheckoutURL}}', sample: 'https://loja.com/checkout' },
+      { name: 'Código de Desconto', value: '{{event.DiscountCode}}', sample: 'BEMVINDO10' },
+    ],
+  },
+  {
     name: 'Sistema', icon: 'Link',
     tags: [
       { name: 'Descadastrar', value: '{{unsubscribe_url}}', sample: '#' },

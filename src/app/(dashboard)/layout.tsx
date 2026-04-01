@@ -134,6 +134,7 @@ const navigation: NavSection[] = [
           { name: 'Vendas', href: '/analytics/sales' },
           { name: 'Campanhas', href: '/analytics/email' },
           { name: 'Entregabilidade', href: '/analytics/deliverability' },
+          { name: 'Métricas', href: '/analytics/metrics' },
         ],
       },
       { name: 'CRM', href: '/crm', icon: Briefcase },
