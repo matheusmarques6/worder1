@@ -13,16 +13,19 @@ const fields: Field[] = [
   { name: 'first_name', label: 'Nome' },
   { name: 'last_name', label: 'Sobrenome' },
   { name: 'phone', label: 'Telefone' },
-  { name: 'city', label: 'Cidade' },
-  { name: 'state', label: 'Estado' },
-  { name: 'country', label: 'País' },
-  { name: 'email_consent', label: 'Consentimento Email' },
   { name: 'source', label: 'Origem' },
-  { name: 'tags', label: 'Tags' },
-  { name: 'created_at', label: 'Data de Criação' },
-  { name: 'last_activity_at', label: 'Última Atividade' },
+  { name: 'lifecycle_stage', label: 'Estágio do Ciclo de Vida' },
   { name: 'total_orders', label: 'Total de Pedidos' },
-  { name: 'total_spent', label: 'Total Gasto' },
+  { name: 'total_spent', label: 'Total Gasto (R$)' },
+  { name: 'average_order_value', label: 'Ticket Médio (R$)' },
+  { name: 'email_consent', label: 'Aceita Email Marketing' },
+  { name: 'sms_consent', label: 'Aceita SMS' },
+  { name: 'tags', label: 'Tags (contém)' },
+  { name: 'created_at', label: 'Data de Cadastro' },
+  { name: 'last_active_at', label: 'Última Atividade' },
+  { name: 'days_since_last_order', label: 'Dias desde Último Pedido' },
+  { name: 'shopify_customer_id', label: 'ID Shopify' },
+  { name: 'churn_risk', label: 'Risco de Churn (0-1)' },
 ]
 
 const defaultQuery: RuleGroupType = {
@@ -77,16 +80,29 @@ export default function CreateSegmentPage() {
     if (!name.trim() || !user?.organization_id) return
     setSaving(true)
     try {
-      const supabase = createBrowserClient()
-      const { error } = await supabase.from('segments').insert({
-        organization_id: user.organization_id,
-        name: name.trim(),
-        description: description.trim() || null,
-        conditions: query,
-        type: 'dynamic',
-        contact_count: previewCount ?? 0,
+      // Convert react-querybuilder format to our rules format
+      const rules = query.rules
+        .filter((r: any) => 'field' in r && r.field && r.value)
+        .map((r: any) => ({
+          field: r.field,
+          operator: r.operator === '=' ? 'equals' : r.operator === '!=' ? 'not_equals' : r.operator === 'contains' ? 'contains' : r.operator === '>' ? 'greater_than' : r.operator === '<' ? 'less_than' : r.operator === '>=' ? 'greater_than' : r.operator === '<=' ? 'less_than' : 'equals',
+          value: r.value,
+        }))
+
+      const res = await fetch('/api/segments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id: user.organization_id,
+          name: name.trim(),
+          description: description.trim() || null,
+          segment_type: 'dynamic',
+          rules,
+          rules_logic: query.combinator?.toUpperCase() || 'AND',
+        }),
       })
-      if (error) throw error
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar')
       router.push('/segments')
     } catch (err) {
       console.error('Error saving segment:', err)
