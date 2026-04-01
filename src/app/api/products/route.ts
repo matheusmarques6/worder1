@@ -184,11 +184,13 @@ export async function GET(request: NextRequest) {
           return {
             id: product.id,
             title: product.title,
+            handle: product.handle,
             vendor: product.vendor,
             product_type: product.product_type,
             status: product.status,
             tags: product.tags?.split(',').map((t: string) => t.trim()) || [],
             image: product.image?.src || product.images?.[0]?.src || null,
+            url: `https://${primaryDomain}/products/${product.handle}`,
 
             // Preços
             price_min: Math.min(...prices),

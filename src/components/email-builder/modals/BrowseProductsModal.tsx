@@ -53,8 +53,8 @@ function normalizeProduct(raw: RawProduct, storeDomain?: string): Product {
   const price = raw.price ?? raw.price_min ?? raw.variants?.[0]?.price ?? 0
   const comparePrice = raw.compare_at_price ?? raw.variants?.[0]?.compare_at_price ?? undefined
   const imageUrl = raw.image_url || raw.image || ''
-  const handle = raw.handle || raw.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || ''
-  const productUrl = raw.url || (storeDomain ? `https://${storeDomain}/products/${handle}` : `/products/${handle}`)
+  const handle = raw.handle || ''
+  const productUrl = raw.url || (handle && storeDomain ? `https://${storeDomain}/products/${handle}` : '')
 
   return {
     id: String(raw.id),
