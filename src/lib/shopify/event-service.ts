@@ -127,6 +127,40 @@ export async function createEvent(input: CreateEventInput): Promise<EventRecord 
     throw error;
   }
 
+  // Bridge CDP event to flow engine's event_logs
+  try {
+    const flowEventMap: Record<string, string> = {
+      'placed_order': 'order.created',
+      'ordered_product': 'order.created',
+      'fulfilled_order': 'order.fulfilled',
+      'cancelled_order': 'order.cancelled',
+      'refunded_order': 'order.refunded',
+      'checkout_started': 'checkout.completed',
+      'checkout_abandoned': 'checkout.abandoned',
+      'profile_created': 'contact.created',
+      'profile_updated': 'contact.updated',
+      'subscribed_email': 'contact.created',
+      'added_to_cart': 'custom.added_to_cart',
+      'viewed_product': 'custom.viewed_product',
+    };
+
+    const flowEventType = flowEventMap[input.event_type];
+    if (flowEventType && input.contact_id) {
+      try {
+        await supabase.from('event_logs').insert({
+          organization_id: input.organization_id,
+          event_type: flowEventType,
+          contact_id: input.contact_id,
+          payload: input.properties || {},
+          status: 'pending',
+          created_at: new Date().toISOString(),
+        })
+      } catch {} // Don't fail the main event if flow bridge fails
+    }
+  } catch {
+    // Silently ignore - flow bridge is non-critical
+  }
+
   return data as EventRecord;
 }
 

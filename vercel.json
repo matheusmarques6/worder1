@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/check-delayed-runs",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/check-abandoned-carts",
