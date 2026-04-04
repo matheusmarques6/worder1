@@ -17,12 +17,17 @@ export async function GET(request: NextRequest) {
     const { user } = auth;
     const { searchParams } = request.nextUrl;
     const status = searchParams.get('status');
+    const storeId = searchParams.get('store_id');
 
     let query = supabaseAdmin
       .from('email_campaigns')
       .select('*, email_templates(id, name)')
       .eq('organization_id', user.organization_id)
       .order('created_at', { ascending: false });
+
+    if (storeId) {
+      query = query.eq('store_id', storeId);
+    }
 
     if (status) {
       query = query.eq('status', status);

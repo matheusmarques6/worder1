@@ -332,3 +332,29 @@ ${sectionsHtml}
 </body>
 </html>`
 }
+
+export function injectEmailTracking(html: string, campaignId: string, contactId: string, orgId: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app'
+
+  // 1. Inject open tracking pixel before </body>
+  const pixel = `<img src="${baseUrl}/api/email/track/open?c=${campaignId}&r=${contactId}&o=${orgId}" width="1" height="1" style="display:none;width:1px;height:1px;opacity:0;" alt="" />`
+  let tracked = html.replace('</body>', `${pixel}</body>`)
+
+  // 2. Wrap links with click tracking (skip unsubscribe and view-in-browser)
+  tracked = tracked.replace(/href="(https?:\/\/[^"]+)"/g, (match, url) => {
+    // Don't track unsubscribe or system links
+    if (url.includes('unsubscribe') || url.includes('view_in_browser') || url.includes('/api/email/track/')) {
+      return match
+    }
+    const trackUrl = `${baseUrl}/api/email/track/click?url=${encodeURIComponent(url)}&c=${campaignId}&r=${contactId}&o=${orgId}`
+    return `href="${trackUrl}"`
+  })
+
+  // 3. Replace unsubscribe placeholder
+  tracked = tracked.replace(/\{\{unsubscribe_url\}\}/g, `${baseUrl}/unsubscribe?r=${contactId}&o=${orgId}`)
+
+  // 4. Replace view in browser placeholder
+  tracked = tracked.replace(/\{\{view_in_browser_url\}\}/g, `${baseUrl}/api/email/view?c=${campaignId}&r=${contactId}`)
+
+  return tracked
+}

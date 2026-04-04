@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores'
 
 interface Segment {
   id: string
@@ -55,6 +55,7 @@ const formatNumber = (n: number) => isNaN(n) ? '0' : new Intl.NumberFormat('pt-B
 export default function SegmentsPage() {
   const router = useRouter()
   const { user } = useAuthStore()
+  const { currentStore } = useStoreStore()
   const [segments, setSegments] = useState<Segment[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -69,6 +70,7 @@ export default function SegmentsPage() {
         organization_id: user.organization_id,
         include_count: 'true',
       })
+      if (currentStore?.id) params.set('store_id', currentStore.id)
       const res = await fetch(`/api/segments?${params}`)
       if (res.ok) {
         const data = await res.json()
@@ -88,7 +90,7 @@ export default function SegmentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [user?.organization_id])
+  }, [user?.organization_id, currentStore?.id])
 
   useEffect(() => { fetchSegments() }, [fetchSegments])
 

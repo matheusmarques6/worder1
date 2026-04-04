@@ -14,11 +14,20 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthClient();
     if (!auth) return authError();
 
-    const { data: templates, error } = await supabaseAdmin
+    const { searchParams } = request.nextUrl;
+    const storeId = searchParams.get('store_id');
+
+    let query = supabaseAdmin
       .from('email_templates')
       .select('*')
       .eq('organization_id', auth.user.organization_id)
       .order('updated_at', { ascending: false });
+
+    if (storeId) {
+      query = query.eq('store_id', storeId);
+    }
+
+    const { data: templates, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -41,16 +50,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
 
+    const storeId = body.store_id;
+
+    const insertData: Record<string, any> = {
+      organization_id: auth.user.organization_id,
+      name: body.name,
+      subject: body.subject || '',
+      html: body.html || '',
+      category: body.category || 'marketing',
+      created_by: auth.user.id,
+    };
+    if (storeId) insertData.store_id = storeId;
+
     const { data: template, error } = await supabaseAdmin
       .from('email_templates')
-      .insert({
-        organization_id: auth.user.organization_id,
-        name: body.name,
-        subject: body.subject || '',
-        html: body.html || '',
-        category: body.category || 'marketing',
-        created_by: auth.user.id,
-      })
+      .insert(insertData)
       .select()
       .single();
 

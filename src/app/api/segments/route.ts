@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     let organization_id = searchParams.get('organization_id')
     const segment_id = searchParams.get('id')
     const include_count = searchParams.get('include_count') === 'true'
+    const storeId = searchParams.get('store_id')
 
     // If no org_id provided, try to get from auth
     if (!organization_id) {
@@ -44,12 +45,17 @@ export async function GET(request: NextRequest) {
 
     // Buscar segmento específico
     if (segment_id) {
-      const { data, error } = await supabase
+      let singleQuery = supabase
         .from('customer_segments')
         .select('*')
         .eq('id', segment_id)
         .in('organization_id', orgIds)
-        .single()
+
+      if (storeId) {
+        singleQuery = singleQuery.eq('store_id', storeId)
+      }
+
+      const { data, error } = await singleQuery.single()
 
       if (error) throw error
 
@@ -67,11 +73,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Listar todos de TODAS as orgs do usuário
-    const { data: segments, error } = await supabase
+    let listQuery = supabase
       .from('customer_segments')
       .select('*')
       .in('organization_id', orgIds)
       .order('created_at', { ascending: false })
+
+    if (storeId) {
+      listQuery = listQuery.eq('store_id', storeId)
+    }
+
+    const { data: segments, error } = await listQuery
 
     if (error) throw error
 
@@ -107,6 +119,7 @@ export async function POST(request: NextRequest) {
       rules_logic = 'AND',
       rfm_segments = [],
       contact_ids = [],
+      store_id,
     } = body
 
     if (!organization_id || !name) {
@@ -114,20 +127,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Criar segmento
+    const insertData: Record<string, any> = {
+      organization_id,
+      name,
+      description,
+      color,
+      icon,
+      segment_type,
+      rules,
+      rules_logic,
+      rfm_segments,
+      is_active: true,
+    }
+    if (store_id) insertData.store_id = store_id
+
     const { data: segment, error } = await supabase
       .from('customer_segments')
-      .insert({
-        organization_id,
-        name,
-        description,
-        color,
-        icon,
-        segment_type,
-        rules,
-        rules_logic,
-        rfm_segments,
-        is_active: true,
-      })
+      .insert(insertData)
       .select()
       .single()
 
