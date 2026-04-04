@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { getAuthClient, authError } from '@/lib/api-utils'
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -10,9 +11,12 @@ export const dynamic = 'force-dynamic';
 // POST - Registrar evento
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organization_id = auth.user.organization_id
+
     const body = await request.json()
     const {
-      organization_id,
       event_type,
       event_source = 'web',
       
@@ -47,8 +51,8 @@ export async function POST(request: NextRequest) {
       event_data = {},
     } = body
 
-    if (!organization_id || !event_type) {
-      return NextResponse.json({ error: 'organization_id and event_type required' }, { status: 400 })
+    if (!event_type) {
+      return NextResponse.json({ error: 'event_type required' }, { status: 400 })
     }
 
     // Extrair info do request
@@ -161,16 +165,15 @@ export async function POST(request: NextRequest) {
 // GET - Buscar eventos
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organization_id = auth.user.organization_id
+
     const { searchParams } = new URL(request.url)
-    const organization_id = searchParams.get('organization_id')
     const contact_id = searchParams.get('contact_id')
     const event_type = searchParams.get('event_type')
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
-    }
 
     let query = supabase
       .from('customer_events')

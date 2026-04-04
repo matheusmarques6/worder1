@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthClient, authError } from '@/lib/api-utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,14 +12,13 @@ const supabase = createClient(
 // =============================================
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organizationId = auth.user.organization_id
+
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
     const surveyId = searchParams.get('survey_id')
     const includeResponses = searchParams.get('include_responses') === 'true'
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     // If survey_id provided, get single survey with responses
     if (surveyId) {
@@ -95,12 +95,15 @@ export async function GET(request: NextRequest) {
 // =============================================
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organization_id = auth.user.organization_id
+
     const body = await request.json()
     const { action = 'create_survey', ...data } = body
 
     if (action === 'create_survey') {
       const {
-        organization_id,
         store_id,
         created_by,
         name,
@@ -111,9 +114,9 @@ export async function POST(request: NextRequest) {
         channel = 'whatsapp',
       } = data
 
-      if (!organization_id || !name) {
+      if (!name) {
         return NextResponse.json(
-          { error: 'organization_id and name are required' },
+          { error: 'name is required' },
           { status: 400 }
         )
       }
@@ -143,7 +146,6 @@ export async function POST(request: NextRequest) {
 
     if (action === 'submit_response') {
       const {
-        organization_id,
         survey_id,
         contact_id,
         deal_id,
@@ -153,9 +155,9 @@ export async function POST(request: NextRequest) {
         conversation_id,
       } = data
 
-      if (!organization_id || !survey_id || score === undefined) {
+      if (!survey_id || score === undefined) {
         return NextResponse.json(
-          { error: 'organization_id, survey_id, and score are required' },
+          { error: 'survey_id and score are required' },
           { status: 400 }
         )
       }
@@ -231,6 +233,9 @@ export async function POST(request: NextRequest) {
 // =============================================
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+
     const body = await request.json()
     const { id, ...updates } = body
 
@@ -261,6 +266,9 @@ export async function PUT(request: NextRequest) {
 // =============================================
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 

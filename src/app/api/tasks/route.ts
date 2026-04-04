@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -17,8 +18,11 @@ export const dynamic = 'force-dynamic';
 // =============================================
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const organizationId = auth.user.organization_id;
+
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
     const status = searchParams.get('status');
     const assignedTo = searchParams.get('assigned_to');
     const contactId = searchParams.get('contact_id');
@@ -30,11 +34,6 @@ export async function GET(request: NextRequest) {
     const overdue = searchParams.get('overdue');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
-
-    // ⚠️ CRÍTICO: organization_id é obrigatório para isolamento de dados
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     // ⚠️ SEGURANÇA: SEMPRE filtrar por organization_id
     let query = supabaseAdmin
@@ -127,9 +126,12 @@ export async function GET(request: NextRequest) {
 // =============================================
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const organization_id = auth.user.organization_id;
+
     const body = await request.json();
     const {
-      organization_id,
       store_id,
       contact_id,
       deal_id,
@@ -150,11 +152,6 @@ export async function POST(request: NextRequest) {
       tags,
       metadata = {},
     } = body;
-
-    // ⚠️ CRÍTICO: organization_id é obrigatório para isolamento de dados
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     if (!title?.trim()) {
       return NextResponse.json({ error: 'title é obrigatório' }, { status: 400 });

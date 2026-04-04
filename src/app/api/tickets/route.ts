@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -16,8 +17,11 @@ export const dynamic = 'force-dynamic';
 // =============================================
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const organizationId = auth.user.organization_id;
+
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
     const status = searchParams.get('status');
     const category = searchParams.get('category');
     const priority = searchParams.get('priority');
@@ -27,11 +31,6 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
-
-    // ⚠️ CRÍTICO: organization_id é obrigatório para isolamento de dados
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     // ⚠️ SEGURANÇA: SEMPRE filtrar por organization_id
     let query = supabaseAdmin
@@ -91,9 +90,12 @@ export async function GET(request: NextRequest) {
 // =============================================
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const organization_id = auth.user.organization_id;
+
     const body = await request.json();
     const {
-      organization_id,
       store_id,
       title,
       description,
@@ -120,11 +122,6 @@ export async function POST(request: NextRequest) {
       created_by,
       created_by_name,
     } = body;
-
-    // ⚠️ CRÍTICO: organization_id é obrigatório para isolamento de dados
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     if (!title?.trim()) {
       return NextResponse.json({ error: 'title é obrigatório' }, { status: 400 });
