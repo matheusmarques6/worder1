@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     const { supabase, user } = auth
     const body = await request.json()
-    const { name, description, pipeline_id, stage_id, theme, store_id } = body
+    const { name, description, pipeline_id, stage_id, theme, store_id, form_type, design_json, behavior, audience, tags, list_id } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
@@ -110,6 +110,12 @@ export async function POST(request: NextRequest) {
         pipeline_id: pipeline_id || null,
         stage_id: stage_id || null,
         theme: theme ? { ...defaultTheme, ...theme } : defaultTheme,
+        form_type: form_type || 'embed',
+        design_json: design_json || {},
+        behavior: behavior || {},
+        audience: audience || {},
+        tags: tags || [],
+        list_id: list_id || null,
         status: 'draft',
       })
       .select()

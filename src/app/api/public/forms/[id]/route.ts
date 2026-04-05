@@ -26,6 +26,7 @@ export async function GET(
         id, name, slug, description, status,
         theme, logo_url, success_message, redirect_url,
         facebook_pixel_id, google_ads_id, google_analytics_id,
+        form_type, design_json, behavior, audience, tags, list_id,
         fields:crm_form_fields(
           id, field_type, label, placeholder, description,
           required, position, options, validation, conditional
