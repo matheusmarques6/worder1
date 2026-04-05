@@ -2,12 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent, DragOverlay, type DragStartEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   ArrowLeft, Save, Loader2, Monitor, Smartphone, Plus, Trash2, X,
-  ChevronDown, ChevronRight, GripVertical,
+  ChevronDown, ChevronRight, GripVertical, Users, CalendarDays, Target,
   AtSign, ShieldCheck, Phone, TextCursorInput, User, Calendar,
   CircleDot, CheckSquare, Type, MousePointerClick, ImageIcon, Minus,
-  GripHorizontal, Tag, Clock, Eye, Settings, Palette,
+  GripHorizontal, Tag, Clock, Eye, Settings, Palette, Upload,
 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -397,18 +400,57 @@ function BlockEditor({ block, onChange, onDelete }: { block: Block; onChange: (b
 
 // ── Behavior Panel ─────────────────────────────────────────────────────────────
 function BehaviorPanel({ beh, onChange }: { beh: PopupDesign['behavior']; onChange: (b: PopupDesign['behavior']) => void }) {
-  const set = <K extends keyof PopupDesign['behavior']>(key: K, val: Partial<PopupDesign['behavior'][K]>) =>
-    onChange({ ...beh, [key]: { ...beh[key], ...val } })
+  const set = (key: string, val: any) =>
+    onChange({ ...beh, [key]: { ...(beh as any)[key], ...val } })
   return (
     <div>
       <Section title="Exibição" defaultOpen>
-        <Field label="Gatilho">
-          <select className={sel} value={beh.display.trigger} onChange={e => set('display', { trigger: e.target.value as any })}>
-            <option value="time_delay">Tempo</option><option value="scroll">Scroll</option><option value="exit_intent">Exit Intent</option><option value="click">Clique</option>
-          </select>
-        </Field>
-        {beh.display.trigger === 'time_delay' && <Field label="Atraso (seg)"><input type="number" className={inp} value={beh.display.delay} onChange={e => set('display', { delay: +e.target.value })} /></Field>}
-        {beh.display.trigger === 'scroll' && <Field label="Scroll (%)"><input type="number" className={inp} value={beh.display.scrollPercent} onChange={e => set('display', { scrollPercent: +e.target.value })} /></Field>}
+        <p className="text-xs text-gray-500 mb-3">Decidir quando mostrar este formulário:</p>
+        <div className="space-y-3">
+          <label className="flex items-start gap-2.5 cursor-pointer" onClick={() => set('display', { trigger: 'time_delay' })}>
+            <input type="radio" name="trigger" checked={beh.display.trigger === 'time_delay'} readOnly className="mt-1 w-4 h-4 text-emerald-500" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-700">Tempo na página</p>
+              <p className="text-xs text-gray-400">Tempo que o visitante precisa permanecer.</p>
+              {beh.display.trigger === 'time_delay' && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input type="number" className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm" value={beh.display.delay} onChange={e => set('display', { delay: +e.target.value })} onClick={e => e.stopPropagation()} />
+                  <span className="text-xs text-gray-400">segundos</span>
+                </div>
+              )}
+            </div>
+          </label>
+          <label className="flex items-start gap-2.5 cursor-pointer" onClick={() => set('display', { trigger: 'scroll' })}>
+            <input type="radio" name="trigger" checked={beh.display.trigger === 'scroll'} readOnly className="mt-1 w-4 h-4 text-emerald-500" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-700">Profundidade do scroll</p>
+              <p className="text-xs text-gray-400">O quanto o visitante precisa rolar.</p>
+              {beh.display.trigger === 'scroll' && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input type="number" className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm" value={beh.display.scrollPercent} onChange={e => set('display', { scrollPercent: +e.target.value })} onClick={e => e.stopPropagation()} />
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+              )}
+            </div>
+          </label>
+          <label className="flex items-start gap-2.5 cursor-pointer" onClick={() => set('display', { trigger: 'exit_intent' })}>
+            <input type="radio" name="trigger" checked={beh.display.trigger === 'exit_intent'} readOnly className="mt-1 w-4 h-4 text-emerald-500" />
+            <div>
+              <p className="text-sm font-medium text-gray-700">Intenção de saída</p>
+              <p className="text-xs text-gray-400">Exibir quando o visitante está prestes a sair.</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-2.5 cursor-pointer" onClick={() => set('display', { trigger: 'click' })}>
+            <input type="radio" name="trigger" checked={beh.display.trigger === 'click'} readOnly className="mt-1 w-4 h-4 text-emerald-500" />
+            <div>
+              <p className="text-sm font-medium text-gray-700">Gatilho personalizado</p>
+              <p className="text-xs text-gray-400">Exibir ao clicar em um elemento.</p>
+            </div>
+          </label>
+        </div>
+        <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+          <p className="text-xs text-blue-700">O formulário aparecerá quando a condição selecionada for atendida.</p>
+        </div>
       </Section>
       <Section title="Visibilidade">
         <Field label="Dispositivos">
@@ -492,21 +534,78 @@ function ThemePanel({ design, onChange }: { design: PopupDesign; onChange: (d: P
         </>}
       </Section>
       <Section title="Imagem Lateral">
-        <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={s.sideImage.enabled} onChange={e => setSi({ enabled: e.target.checked })} /> Ativar</label>
-        {s.sideImage.enabled && <>
-          <Field label="URL"><input className={inp} value={s.sideImage.src} onChange={e => setSi({ src: e.target.value })} /></Field>
+        <label className="flex items-center gap-2.5 text-sm text-gray-700 cursor-pointer">
+          <div className={`relative w-9 h-5 rounded-full transition-colors ${s.sideImage.enabled ? 'bg-emerald-500' : 'bg-gray-200'}`} onClick={() => setSi({ enabled: !s.sideImage.enabled })}>
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${s.sideImage.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+          </div>
+          Ativar imagem lateral
+        </label>
+        {s.sideImage.enabled && <div className="mt-3 space-y-3">
+          <p className="text-xs text-gray-400">JPG, PNG e GIF. Máximo 2000px.</p>
+          {s.sideImage.src ? (
+            <div className="space-y-2">
+              <img src={s.sideImage.src} alt="" className="w-full h-24 object-cover rounded-lg border" />
+              <div className="flex gap-2">
+                <label className="flex-1 py-1.5 text-xs font-medium text-center text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                  Trocar
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]; if (!file) return
+                    const form = new FormData(); form.append('file', file)
+                    try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) setSi({ src: data.url }) } catch {}
+                  }} />
+                </label>
+                <button onClick={() => setSi({ src: '' })} className="flex-1 py-1.5 text-xs font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
+              </div>
+            </div>
+          ) : (
+            <label className="block border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-brand-400">
+              <Upload className="w-6 h-6 text-gray-300 mx-auto mb-2" />
+              <span className="text-xs text-gray-500">Clique para enviar imagem</span>
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0]; if (!file) return
+                const form = new FormData(); form.append('file', file)
+                try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) setSi({ src: data.url }) } catch {}
+              }} />
+            </label>
+          )}
           <Field label="Posição">
-            <select className={sel} value={s.sideImage.position} onChange={e => setSi({ position: e.target.value as any })}>
-              <option value="left">Esquerda</option><option value="right">Direita</option>
-            </select>
+            <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+              <button onClick={() => setSi({ position: 'left' })} className={`flex-1 py-1.5 text-xs font-medium ${s.sideImage.position === 'left' ? 'bg-gray-900 text-white' : 'text-gray-500'}`}>Esquerda</button>
+              <button onClick={() => setSi({ position: 'right' })} className={`flex-1 py-1.5 text-xs font-medium ${s.sideImage.position === 'right' ? 'bg-gray-900 text-white' : 'text-gray-500'}`}>Direita</button>
+            </div>
           </Field>
-          <Field label="Largura (px)"><input type="number" className={inp} value={s.sideImage.width} onChange={e => setSi({ width: +e.target.value })} /></Field>
-        </>}
+          <Field label="Largura">
+            <div className="flex items-center gap-2">
+              <input type="range" min={100} max={400} value={s.sideImage.width} onChange={e => setSi({ width: +e.target.value })} className="flex-1" />
+              <span className="text-xs text-gray-500 w-12 text-right">{s.sideImage.width}px</span>
+            </div>
+          </Field>
+        </div>}
       </Section>
       <Section title="Botão Fechar">
         <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={s.closeButton.show} onChange={e => setCb({ show: e.target.checked })} /> Mostrar</label>
         {s.closeButton.show && <Field label="Cor"><input type="color" value={s.closeButton.color} onChange={e => setCb({ color: e.target.value })} className="w-full h-8 rounded cursor-pointer" /></Field>}
       </Section>
+    </div>
+  )
+}
+
+// ── Sortable Block Wrapper ────────────────────────────────────────────────────
+function SortablePopupBlock({ block, isSelected, onSelect, onDelete }: {
+  block: Block; isSelected: boolean; onSelect: () => void; onDelete: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
+  return (
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      onClick={e => { e.stopPropagation(); onSelect() }}
+      className={`group relative rounded-md cursor-pointer transition ${isSelected ? 'ring-2 ring-orange-400 ring-offset-1' : 'hover:ring-1 hover:ring-gray-300'}`}>
+      <div {...attributes} {...listeners} className="absolute -left-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing p-0.5 text-gray-300 hover:text-gray-500 z-10">
+        <GripVertical className="w-3.5 h-3.5" />
+      </div>
+      <BlockPreview block={block} />
+      <div className="absolute -top-2 right-2 hidden group-hover:flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5">
+        <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1 text-gray-400 hover:text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
+      </div>
     </div>
   )
 }
@@ -526,8 +625,19 @@ export default function PopupEditorPage() {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [rightTab, setRightTab] = useState<'block' | 'behavior' | 'theme'>('theme')
 
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   const activeStep = showSuccess ? design.successStep : design.steps[activeStepIdx]
   const selectedBlock = activeStep?.blocks.find(b => b.id === selectedBlockId) ?? null
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const blocks = activeStep.blocks
+    const oldIdx = blocks.findIndex(b => b.id === active.id)
+    const newIdx = blocks.findIndex(b => b.id === over.id)
+    if (oldIdx === -1 || newIdx === -1) return
+    updateBlocks(arrayMove(blocks, oldIdx, newIdx))
+  }, [activeStep])
 
   // Load
   useEffect(() => {
@@ -623,19 +733,18 @@ export default function PopupEditorPage() {
                 {/* Popup body */}
                 <div style={{ backgroundColor: s.backgroundColor, borderRadius: s.borderRadius, padding: s.padding, fontFamily: s.fontFamily, flexGrow: 1 }} className="relative">
                   {s.closeButton.show && <button className="absolute top-3 right-3"><X style={{ color: s.closeButton.color }} className="w-5 h-5" /></button>}
-                  <div className="space-y-3">
-                    {activeStep.blocks.map(block => (
-                      <div key={block.id} onClick={() => { setSelectedBlockId(block.id); setRightTab('block') }}
-                        className={`group relative rounded-md cursor-pointer transition ${selectedBlockId === block.id ? 'ring-2 ring-orange-400 ring-offset-1' : 'hover:ring-1 hover:ring-gray-300'}`}>
-                        <BlockPreview block={block} />
-                        <button onClick={e => { e.stopPropagation(); deleteBlock(block.id) }}
-                          className="absolute -top-2 -right-2 hidden group-hover:flex w-5 h-5 bg-red-500 text-white rounded-full items-center justify-center">
-                          <X className="w-3 h-3" />
-                        </button>
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext items={activeStep.blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
+                      <div className="space-y-2 min-h-[60px]">
+                        {activeStep.blocks.map(block => (
+                          <SortablePopupBlock key={block.id} block={block} isSelected={selectedBlockId === block.id}
+                            onSelect={() => { setSelectedBlockId(block.id); setRightTab('block') }}
+                            onDelete={() => deleteBlock(block.id)} />
+                        ))}
+                        {activeStep.blocks.length === 0 && <div className="py-12 text-center text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-lg">Clique em um bloco na paleta para adicionar</div>}
                       </div>
-                    ))}
-                    {activeStep.blocks.length === 0 && <div className="py-12 text-center text-gray-400 text-sm">Clique em um bloco para adicionar</div>}
-                  </div>
+                    </SortableContext>
+                  </DndContext>
                 </div>
                 {/* Side image right */}
                 {s.sideImage.enabled && s.sideImage.position === 'right' && (
