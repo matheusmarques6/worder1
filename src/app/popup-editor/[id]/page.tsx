@@ -88,7 +88,7 @@ const defaultDesign: PopupDesign = {
     { id: uid(), type: 'text', props: { content: 'Obrigado!', fontSize: 24, color: '#111827', fontWeight: 'bold', align: 'center' } },
   ]},
   styles: {
-    width: 480, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 32, fontFamily: 'Inter, sans-serif',
+    width: 420, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 32, fontFamily: 'Inter, sans-serif',
     overlay: { enabled: true, color: '#000000', opacity: 50, closeOnClick: true },
     closeButton: { show: true, color: '#6B7280', size: 24 },
     sideImage: { enabled: false, src: '', position: 'left', width: 200 },
@@ -133,7 +133,7 @@ function BlockPreview({ block }: { block: Block }) {
       return <input readOnly placeholder={p.placeholder} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white" />
     case 'date-input': return <input type="date" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white" />
     case 'button': return <button style={{ backgroundColor: p.bgColor, color: p.textColor, borderRadius: p.borderRadius, width: p.fullWidth ? '100%' : 'auto' }} className="px-6 py-2.5 font-semibold text-sm">{p.text}</button>
-    case 'image': return p.src ? <img src={p.src} alt={p.alt} style={{ width: p.width }} /> : <div className="w-full h-24 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">Imagem</div>
+    case 'image': return p.src ? <img src={p.src} alt={p.alt} style={{ width: (p.imgWidth || 100) + '%', maxHeight: p.maxHeight || 300, objectFit: 'contain' as const, borderRadius: p.borderRadius || 0, display: 'block', margin: p.align === 'center' ? '0 auto' : p.align === 'right' ? '0 0 0 auto' : '0' }} /> : <div className="w-full h-24 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">Imagem</div>
     case 'spacer': return <div style={{ height: p.height }} />
     case 'line': return <hr style={{ borderColor: p.color, borderWidth: p.thickness }} />
     case 'coupon': return <div className="border-2 border-dashed border-orange-300 rounded-lg p-3 text-center"><code className="text-lg font-bold text-orange-600">{p.code}</code><p className="text-xs text-gray-500 mt-1">{p.description}</p></div>
@@ -305,6 +305,21 @@ function BlockEditor({ block, onChange, onDelete }: { block: Block; onChange: (b
           <Field label="URL da imagem"><input className={inp} value={p.src || ''} onChange={e => up('src', e.target.value)} placeholder="https://" /></Field>
           <Field label="Texto alternativo"><input className={inp} value={p.alt || ''} onChange={e => up('alt', e.target.value)} placeholder="Descreva a imagem" /></Field>
           <Field label="Link"><input className={inp} value={p.href || ''} onChange={e => up('href', e.target.value)} placeholder="https://" /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Largura">
+              <div className="flex items-center gap-1">
+                <input type="number" className={inp} value={p.imgWidth ?? 100} onChange={e => up('imgWidth', +e.target.value)} min={10} max={100} />
+                <span className="text-xs text-gray-400 flex-shrink-0">%</span>
+              </div>
+            </Field>
+            <Field label="Altura máx">
+              <div className="flex items-center gap-1">
+                <input type="number" className={inp} value={p.maxHeight ?? 300} onChange={e => up('maxHeight', +e.target.value)} min={50} max={800} />
+                <span className="text-xs text-gray-400 flex-shrink-0">px</span>
+              </div>
+            </Field>
+          </div>
+          <Field label="Raio da borda"><input type="number" className={inp} value={p.borderRadius ?? 0} onChange={e => up('borderRadius', +e.target.value)} min={0} max={50} /></Field>
           <Field label="Alinhamento"><AlignButtons value={p.align || 'center'} onChange={v => up('align', v)} /></Field>
           <Field label="Padding (px)"><input type="number" className={inp} value={p.padding ?? 0} onChange={e => up('padding', +e.target.value)} /></Field>
         </>
@@ -723,13 +738,19 @@ export default function PopupEditorPage() {
         <main className="flex-1 flex flex-col items-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.15)' }}>
           <div className="flex-1 flex items-center justify-center w-full p-8">
             {/* Popup container */}
-            <div className="relative flex rounded-2xl overflow-hidden shadow-2xl" style={{
-              width: preview === 'mobile' ? 360 : s.width + (s.sideImage.enabled ? s.sideImage.width : 0),
+            <div className="relative flex overflow-hidden shadow-2xl" style={{
+              width: preview === 'mobile' ? 360 : s.width + (s.sideImage.enabled && s.sideImage.src ? s.sideImage.width : 0),
               maxWidth: '95%',
               borderRadius: s.borderRadius,
             }}>
+              {/* Close button — always top-right of entire popup */}
+              {s.closeButton.show && (
+                <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 flex items-center justify-center transition-colors z-20">
+                  <X style={{ color: s.closeButton.color || '#FFFFFF' }} className="w-4 h-4" />
+                </button>
+              )}
               {/* Side image LEFT */}
-              {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && !( preview === 'mobile') && (
+              {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && !(preview === 'mobile') && (
                 <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="overflow-hidden">
                   <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                 </div>
@@ -742,11 +763,6 @@ export default function PopupEditorPage() {
                 flexGrow: 1,
                 minHeight: 200,
               }} className="relative">
-                {s.closeButton.show && (
-                  <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors z-10">
-                    <X style={{ color: s.closeButton.color }} className="w-4 h-4" />
-                  </button>
-                )}
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={activeStep.blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
                     <div className="space-y-2 min-h-[100px]">
