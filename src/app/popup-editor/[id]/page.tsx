@@ -143,47 +143,253 @@ function BlockPreview({ block }: { block: Block }) {
   }
 }
 
-// ── Block Props Editor ─────────────────────────────────────────────────────────
+// ── Block Props Editor (Omnisend-style per-block panels) ──────────────────────
 function BlockEditor({ block, onChange, onDelete }: { block: Block; onChange: (b: Block) => void; onDelete: () => void }) {
   const up = (key: string, val: any) => onChange({ ...block, props: { ...block.props, [key]: val } })
   const p = block.props
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-gray-700 capitalize">{block.type}</span>
-        <button onClick={onDelete} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+  const [tab, setTab] = useState<'props' | 'layout'>('props')
+
+  const blockLabel: Record<string, string> = {
+    email: 'Email', phone: 'Telefone', 'name-input': 'Nome', 'text-input': 'Campo',
+    'date-input': 'Data', dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
+    'legal-consent': 'Consentimento', text: 'Texto', button: 'Botão', image: 'Imagem',
+    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem',
+  }
+
+  const AlignButtons = ({ value, onChange: oc }: { value: string; onChange: (v: string) => void }) => (
+    <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+      {['left', 'center', 'right', 'full'].map(a => (
+        <button key={a} onClick={() => oc(a === 'full' ? 'full' : a)}
+          className={`flex-1 py-1.5 text-xs font-medium ${value === a ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+          {a === 'left' ? 'Esq' : a === 'center' ? 'Centro' : a === 'right' ? 'Dir' : 'Total'}
+        </button>
+      ))}
+    </div>
+  )
+
+  const ColorField = ({ label, value, onChange: oc }: { label: string; value: string; onChange: (v: string) => void }) => (
+    <Field label={label}>
+      <div className="flex items-center gap-2">
+        <input type="text" className={inp} value={value || ''} onChange={e => oc(e.target.value)} placeholder="#000000" />
+        <input type="color" value={value || '#000000'} onChange={e => oc(e.target.value)} className="w-8 h-8 rounded border border-gray-200 p-0.5 cursor-pointer flex-shrink-0" />
       </div>
-      {p.content !== undefined && <Field label="Conteúdo"><textarea className={inp} rows={2} value={p.content} onChange={e => up('content', e.target.value)} /></Field>}
-      {p.text !== undefined && block.type !== 'text' && <Field label="Texto"><input className={inp} value={p.text} onChange={e => up('text', e.target.value)} /></Field>}
-      {p.placeholder !== undefined && <Field label="Placeholder"><input className={inp} value={p.placeholder} onChange={e => up('placeholder', e.target.value)} /></Field>}
-      {p.fontSize !== undefined && <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize} onChange={e => up('fontSize', +e.target.value)} /></Field>}
-      {p.color !== undefined && <Field label="Cor"><input type="color" value={p.color} onChange={e => up('color', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></Field>}
-      {p.bgColor !== undefined && <Field label="Cor fundo"><input type="color" value={p.bgColor} onChange={e => up('bgColor', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></Field>}
-      {p.textColor !== undefined && <Field label="Cor texto"><input type="color" value={p.textColor} onChange={e => up('textColor', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></Field>}
-      {p.src !== undefined && <Field label="URL imagem"><input className={inp} value={p.src} onChange={e => up('src', e.target.value)} /></Field>}
-      {p.code !== undefined && <Field label="Código cupom"><input className={inp} value={p.code} onChange={e => up('code', e.target.value)} /></Field>}
-      {p.height !== undefined && <Field label="Altura (px)"><input type="number" className={inp} value={p.height} onChange={e => up('height', +e.target.value)} /></Field>}
-      {p.align !== undefined && (
-        <Field label="Alinhamento">
-          <select className={sel} value={p.align} onChange={e => up('align', e.target.value)}>
-            <option value="left">Esquerda</option><option value="center">Centro</option><option value="right">Direita</option>
-          </select>
-        </Field>
-      )}
-      {p.options !== undefined && (
-        <Field label="Opções (uma por linha)">
-          <textarea className={inp} rows={3} value={(p.options as string[]).join('\n')} onChange={e => up('options', e.target.value.split('\n'))} />
-        </Field>
-      )}
-      {p.fullWidth !== undefined && (
-        <label className="flex items-center gap-2 text-xs text-gray-600">
-          <input type="checkbox" checked={p.fullWidth} onChange={e => up('fullWidth', e.target.checked)} /> Largura total
-        </label>
-      )}
-      {p.required !== undefined && (
-        <label className="flex items-center gap-2 text-xs text-gray-600">
-          <input type="checkbox" checked={p.required} onChange={e => up('required', e.target.checked)} /> Obrigatório
-        </label>
+    </Field>
+  )
+
+  const Toggle = ({ label, checked, onChange: oc }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
+    <label className="flex items-center gap-2.5 cursor-pointer py-0.5">
+      <div className={`relative w-9 h-5 rounded-full transition-colors ${checked ? 'bg-emerald-500' : 'bg-gray-200'}`} onClick={() => oc(!checked)}>
+        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
+      </div>
+      <span className="text-sm text-gray-700">{label}</span>
+    </label>
+  )
+
+  const renderProps = () => {
+    switch (block.type) {
+      case 'email':
+        return <>
+          <Field label="Placeholder"><input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} /></Field>
+          <Toggle label="Adicionar label" checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
+          {p.showLabel && <Field label="Texto do label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>}
+          <Toggle label="Campo obrigatório" checked={p.required !== false} onChange={v => up('required', v)} />
+          {p.required !== false && <Field label="Mensagem obrigatório"><input className={inp} value={p.requiredMsg || 'Este campo é obrigatório'} onChange={e => up('requiredMsg', e.target.value)} /></Field>}
+          <Field label="Mensagem de erro"><input className={inp} value={p.errorMsg || 'Email deve conter @ e domínio'} onChange={e => up('errorMsg', e.target.value)} /></Field>
+          <Field label="Alinhamento"><AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} /></Field>
+        </>
+
+      case 'phone':
+        return <>
+          <Field label="Placeholder"><input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} /></Field>
+          <Field label="País padrão">
+            <select className={sel} value={p.countryCode || '+55'} onChange={e => up('countryCode', e.target.value)}>
+              <option value="+55">Brasil (+55)</option><option value="+1">EUA (+1)</option><option value="+351">Portugal (+351)</option>
+            </select>
+          </Field>
+          <Toggle label="Adicionar label" checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
+          {p.showLabel && <Field label="Texto do label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>}
+          <Toggle label="Campo obrigatório" checked={p.required || false} onChange={v => up('required', v)} />
+          {p.required && <Field label="Mensagem obrigatório"><input className={inp} value={p.requiredMsg || 'Este campo é obrigatório'} onChange={e => up('requiredMsg', e.target.value)} /></Field>}
+          <Field label="Mensagem de erro"><input className={inp} value={p.errorMsg || 'Telefone inválido'} onChange={e => up('errorMsg', e.target.value)} /></Field>
+          <Field label="Alinhamento"><AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} /></Field>
+        </>
+
+      case 'text':
+        return <>
+          <Field label="Estilo do texto">
+            <select className={sel} value={p.tag || 'p'} onChange={e => up('tag', e.target.value)}>
+              <option value="h1">Título 1</option><option value="h2">Título 2</option><option value="h3">Título 3</option><option value="p">Parágrafo</option>
+            </select>
+          </Field>
+          <Field label="Conteúdo"><textarea className={inp} rows={3} value={p.content || ''} onChange={e => up('content', e.target.value)} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Fonte">
+              <select className={sel} value={p.fontFamily || 'inherit'} onChange={e => up('fontFamily', e.target.value)}>
+                <option value="inherit">Padrão</option><option value="Georgia, serif">Georgia</option><option value="Arial, sans-serif">Arial</option><option value="'Inter', sans-serif">Inter</option>
+              </select>
+            </Field>
+            <Field label="Tamanho"><input type="number" className={inp} value={p.fontSize || 16} onChange={e => up('fontSize', +e.target.value)} /></Field>
+          </div>
+          <Field label="Altura da linha">
+            <select className={sel} value={String(p.lineHeight || 1.5)} onChange={e => up('lineHeight', +e.target.value)}>
+              <option value="1">1.0</option><option value="1.2">1.2</option><option value="1.5">1.5</option><option value="1.8">1.8</option><option value="2">2.0</option>
+            </select>
+          </Field>
+          <ColorField label="Cor do texto" value={p.color || '#111827'} onChange={v => up('color', v)} />
+          <ColorField label="Cor do link" value={p.linkColor || '#0094EB'} onChange={v => up('linkColor', v)} />
+          <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1">
+            {[{ v: 'bold', l: 'B', s: 'font-bold' }, { v: 'italic', l: 'I', s: 'italic' }, { v: 'underline', l: 'U', s: 'underline' }].map(f => (
+              <button key={f.v} onClick={() => up(f.v === 'bold' ? 'fontWeight' : f.v === 'italic' ? 'fontStyle' : 'textDecoration',
+                p[f.v === 'bold' ? 'fontWeight' : f.v === 'italic' ? 'fontStyle' : 'textDecoration'] === f.v ? 'normal' : f.v)}
+                className={`px-2.5 py-1 text-sm rounded ${f.s} ${(p.fontWeight === 'bold' && f.v === 'bold') || (p.fontStyle === 'italic' && f.v === 'italic') || (p.textDecoration === 'underline' && f.v === 'underline') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>
+                {f.l}
+              </button>
+            ))}
+          </div>
+          <Field label="Alinhamento"><AlignButtons value={p.align || 'left'} onChange={v => up('align', v)} /></Field>
+        </>
+
+      case 'button':
+        return <>
+          <Field label="Ação do botão">
+            <select className={sel} value={p.action || 'submit'} onChange={e => up('action', e.target.value)}>
+              <option value="submit">Enviar formulário</option><option value="url">Abrir link</option><option value="next-step">Próxima etapa</option><option value="close">Fechar popup</option>
+            </select>
+          </Field>
+          {p.action === 'url' && <Field label="URL"><input className={inp} value={p.url || ''} onChange={e => up('url', e.target.value)} placeholder="https://" /></Field>}
+          <Field label="Texto do botão"><input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <ColorField label="Cor fundo" value={p.bgColor || '#111827'} onChange={v => up('bgColor', v)} />
+            <ColorField label="Cor texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 15} onChange={e => up('fontSize', +e.target.value)} /></Field>
+            <Field label="Raio borda"><input type="number" className={inp} value={p.borderRadius || 8} onChange={e => up('borderRadius', +e.target.value)} /></Field>
+          </div>
+          <Field label="Alinhamento"><AlignButtons value={p.fullWidth ? 'full' : (p.align || 'full')} onChange={v => { up('fullWidth', v === 'full'); if (v !== 'full') up('align', v) }} /></Field>
+          <ColorField label="Cor hover" value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
+        </>
+
+      case 'image':
+        return <>
+          <p className="text-xs text-gray-400">JPG, PNG e GIF. Máximo 2000px.</p>
+          {p.src ? (
+            <div className="space-y-2">
+              <img src={p.src} alt="" className="w-full h-24 object-contain bg-gray-50 rounded-lg border" />
+              <div className="flex gap-2">
+                <label className="flex-1 py-1.5 text-xs font-medium text-center text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                  Trocar
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]; if (!file) return
+                    const form = new FormData(); form.append('file', file)
+                    try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) up('src', data.url) } catch {}
+                  }} />
+                </label>
+                <button onClick={() => up('src', '')} className="flex-1 py-1.5 text-xs font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
+              </div>
+            </div>
+          ) : (
+            <label className="block border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-brand-400">
+              <ImageIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <span className="text-xs text-gray-500">Clique para enviar imagem</span>
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0]; if (!file) return
+                const form = new FormData(); form.append('file', file)
+                try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) up('src', data.url) } catch {}
+              }} />
+            </label>
+          )}
+          <Field label="URL da imagem"><input className={inp} value={p.src || ''} onChange={e => up('src', e.target.value)} placeholder="https://" /></Field>
+          <Field label="Texto alternativo"><input className={inp} value={p.alt || ''} onChange={e => up('alt', e.target.value)} placeholder="Descreva a imagem" /></Field>
+          <Field label="Link"><input className={inp} value={p.href || ''} onChange={e => up('href', e.target.value)} placeholder="https://" /></Field>
+          <Field label="Alinhamento"><AlignButtons value={p.align || 'center'} onChange={v => up('align', v)} /></Field>
+          <Field label="Padding (px)"><input type="number" className={inp} value={p.padding ?? 0} onChange={e => up('padding', +e.target.value)} /></Field>
+        </>
+
+      case 'name-input': case 'text-input': case 'date-input':
+        return <>
+          <Field label="Placeholder"><input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} /></Field>
+          <Toggle label="Adicionar label" checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
+          {p.showLabel && <Field label="Texto do label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>}
+          <Toggle label="Campo obrigatório" checked={p.required || false} onChange={v => up('required', v)} />
+          <Field label="Mapear para contato">
+            <select className={sel} value={p.mapTo || ''} onChange={e => up('mapTo', e.target.value)}>
+              <option value="">Nenhum</option><option value="first_name">Nome</option><option value="last_name">Sobrenome</option><option value="company">Empresa</option><option value="city">Cidade</option>
+            </select>
+          </Field>
+          <Field label="Alinhamento"><AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} /></Field>
+        </>
+
+      case 'dropdown': case 'radio': case 'checkbox':
+        return <>
+          <Field label="Label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>
+          <Field label="Opções (uma por linha)"><textarea className={inp} rows={4} value={(p.options || []).join('\n')} onChange={e => up('options', e.target.value.split('\n').filter(Boolean))} /></Field>
+          <Toggle label="Campo obrigatório" checked={p.required || false} onChange={v => up('required', v)} />
+          {block.type === 'radio' && <Field label="Direção">
+            <select className={sel} value={p.layout || 'vertical'} onChange={e => up('layout', e.target.value)}>
+              <option value="vertical">Vertical</option><option value="horizontal">Horizontal</option>
+            </select>
+          </Field>}
+        </>
+
+      case 'legal-consent':
+        return <>
+          <Field label="Texto de consentimento"><textarea className={inp} rows={3} value={p.text || ''} onChange={e => up('text', e.target.value)} /></Field>
+          <Toggle label="Obrigatório" checked={p.required !== false} onChange={v => up('required', v)} />
+          <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 12} onChange={e => up('fontSize', +e.target.value)} /></Field>
+          <ColorField label="Cor do texto" value={p.color || '#6B7280'} onChange={v => up('color', v)} />
+        </>
+
+      case 'coupon':
+        return <>
+          <Field label="Código do cupom"><input className={inp} value={p.code || ''} onChange={e => up('code', e.target.value)} /></Field>
+          <Field label="Descrição"><input className={inp} value={p.description || ''} onChange={e => up('description', e.target.value)} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <ColorField label="Cor fundo" value={p.bgColor || '#FFF7ED'} onChange={v => up('bgColor', v)} />
+            <ColorField label="Cor borda" value={p.borderColor || '#F97316'} onChange={v => up('borderColor', v)} />
+          </div>
+          <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 20} onChange={e => up('fontSize', +e.target.value)} /></Field>
+        </>
+
+      case 'spacer':
+        return <Field label="Altura (px)"><input type="range" min={4} max={80} value={p.height || 16} onChange={e => up('height', +e.target.value)} className="w-full" /><span className="text-xs text-gray-400">{p.height || 16}px</span></Field>
+
+      case 'line':
+        return <>
+          <ColorField label="Cor" value={p.color || '#E5E7EB'} onChange={v => up('color', v)} />
+          <Field label="Espessura"><input type="number" className={inp} value={p.thickness || 1} onChange={e => up('thickness', +e.target.value)} min={1} max={5} /></Field>
+        </>
+
+      default:
+        return <p className="text-sm text-gray-400">Selecione um bloco</p>
+    }
+  }
+
+  return (
+    <div>
+      {/* Block type tabs like Omnisend: "Email | Layout" */}
+      <div className="flex border-b border-gray-200 mb-4">
+        <button onClick={() => setTab('props')} className={`flex-1 py-2.5 text-xs font-semibold ${tab === 'props' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}>
+          {blockLabel[block.type] || block.type}
+        </button>
+        <button onClick={() => setTab('layout')} className={`flex-1 py-2.5 text-xs font-semibold ${tab === 'layout' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}>
+          Layout
+        </button>
+      </div>
+
+      {tab === 'props' ? (
+        <div className="space-y-3 px-1">{renderProps()}</div>
+      ) : (
+        <div className="space-y-3 px-1">
+          <Field label="Margem superior (px)"><input type="number" className={inp} value={p.marginTop ?? 0} onChange={e => up('marginTop', +e.target.value)} /></Field>
+          <Field label="Margem inferior (px)"><input type="number" className={inp} value={p.marginBottom ?? 8} onChange={e => up('marginBottom', +e.target.value)} /></Field>
+          <Field label="Padding (px)"><input type="number" className={inp} value={p.blockPadding ?? 0} onChange={e => up('blockPadding', +e.target.value)} /></Field>
+          <ColorField label="Cor de fundo" value={p.blockBg || ''} onChange={v => up('blockBg', v)} />
+          <Field label="Raio borda"><input type="number" className={inp} value={p.blockRadius ?? 0} onChange={e => up('blockRadius', +e.target.value)} /></Field>
+          <button onClick={onDelete} className="w-full py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 mt-4">
+            Remover bloco
+          </button>
+        </div>
       )}
     </div>
   )
