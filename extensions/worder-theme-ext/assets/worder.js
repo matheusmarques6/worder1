@@ -484,4 +484,34 @@
       return fingerprint;
     },
   };
+
+  // ============================================
+  // AUTO-LOAD PUBLISHED POPUPS
+  // ============================================
+  // Fetch published popups for this store and inject their scripts
+  (function loadPopups() {
+    var popupEndpoint = (config.endpoint || 'https://worder1.vercel.app/api/track').replace('/api/track', '');
+    var domain = config.shopDomain || '';
+    if (!domain) return;
+
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', popupEndpoint + '/api/public/forms?domain=' + encodeURIComponent(domain) + '&status=published&type=popup', true);
+      xhr.onload = function () {
+        if (xhr.status !== 200) return;
+        try {
+          var data = JSON.parse(xhr.responseText);
+          var forms = data.forms || data || [];
+          forms.forEach(function (form) {
+            if (!form.id) return;
+            var s = document.createElement('script');
+            s.src = popupEndpoint + '/api/public/forms/' + form.id + '/script';
+            s.async = true;
+            document.head.appendChild(s);
+          });
+        } catch (e) {}
+      };
+      xhr.send();
+    } catch (e) {}
+  })();
 })();
