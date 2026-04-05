@@ -402,54 +402,57 @@ function BlockEditor({ block, onChange, onDelete }: { block: Block; onChange: (b
 function BehaviorPanel({ beh, onChange }: { beh: PopupDesign['behavior']; onChange: (b: PopupDesign['behavior']) => void }) {
   const set = (key: string, val: any) =>
     onChange({ ...beh, [key]: { ...(beh as any)[key], ...val } })
+  const d = beh.display as any
+  const timeOn = d.trigger === 'time_delay' || d.timeEnabled || false
+  const scrollOn = d.trigger === 'scroll' || d.scrollEnabled || false
+  const exitOn = d.trigger === 'exit_intent' || d.exitEnabled || false
   return (
     <div>
       <Section title="Exibição" defaultOpen>
-        <p className="text-xs text-gray-500 mb-3">Decidir quando mostrar este formulário:</p>
+        <p className="text-xs text-gray-500 mb-3">Decidir quando mostrar este formulário ao visitante:</p>
         <div className="space-y-3">
-          <label className="flex items-start gap-2.5 cursor-pointer" onClick={() => set('display', { trigger: 'time_delay' })}>
-            <input type="radio" name="trigger" checked={beh.display.trigger === 'time_delay'} readOnly className="mt-1 w-4 h-4 text-emerald-500" />
+          <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors">
+            <input type="checkbox" checked={timeOn}
+              onChange={e => set('display', { timeEnabled: e.target.checked, trigger: e.target.checked ? 'time_delay' : beh.display.trigger })}
+              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-700">Tempo na página</p>
-              <p className="text-xs text-gray-400">Tempo que o visitante precisa permanecer.</p>
-              {beh.display.trigger === 'time_delay' && (
+              <p className="text-sm font-medium text-gray-800">Tempo na página</p>
+              <p className="text-xs text-gray-400 mt-0.5">Tempo que o visitante precisa permanecer.</p>
+              {timeOn && (
                 <div className="flex items-center gap-2 mt-2">
-                  <input type="number" className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm" value={beh.display.delay} onChange={e => set('display', { delay: +e.target.value })} onClick={e => e.stopPropagation()} />
+                  <input type="number" className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none" value={beh.display.delay} onChange={e => set('display', { delay: +e.target.value })} />
                   <span className="text-xs text-gray-400">segundos</span>
                 </div>
               )}
             </div>
           </label>
-          <label className="flex items-start gap-2.5 cursor-pointer" onClick={() => set('display', { trigger: 'scroll' })}>
-            <input type="radio" name="trigger" checked={beh.display.trigger === 'scroll'} readOnly className="mt-1 w-4 h-4 text-emerald-500" />
+          <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors">
+            <input type="checkbox" checked={scrollOn}
+              onChange={e => set('display', { scrollEnabled: e.target.checked, trigger: e.target.checked ? 'scroll' : beh.display.trigger })}
+              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-700">Profundidade do scroll</p>
-              <p className="text-xs text-gray-400">O quanto o visitante precisa rolar.</p>
-              {beh.display.trigger === 'scroll' && (
+              <p className="text-sm font-medium text-gray-800">Profundidade do scroll</p>
+              <p className="text-xs text-gray-400 mt-0.5">O quanto o visitante precisa rolar.</p>
+              {scrollOn && (
                 <div className="flex items-center gap-2 mt-2">
-                  <input type="number" className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm" value={beh.display.scrollPercent} onChange={e => set('display', { scrollPercent: +e.target.value })} onClick={e => e.stopPropagation()} />
+                  <input type="number" className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none" value={beh.display.scrollPercent} onChange={e => set('display', { scrollPercent: +e.target.value })} />
                   <span className="text-xs text-gray-400">%</span>
                 </div>
               )}
             </div>
           </label>
-          <label className="flex items-start gap-2.5 cursor-pointer" onClick={() => set('display', { trigger: 'exit_intent' })}>
-            <input type="radio" name="trigger" checked={beh.display.trigger === 'exit_intent'} readOnly className="mt-1 w-4 h-4 text-emerald-500" />
+          <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors">
+            <input type="checkbox" checked={exitOn}
+              onChange={e => set('display', { exitEnabled: e.target.checked, trigger: e.target.checked ? 'exit_intent' : beh.display.trigger })}
+              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500" />
             <div>
-              <p className="text-sm font-medium text-gray-700">Intenção de saída</p>
-              <p className="text-xs text-gray-400">Exibir quando o visitante está prestes a sair.</p>
-            </div>
-          </label>
-          <label className="flex items-start gap-2.5 cursor-pointer" onClick={() => set('display', { trigger: 'click' })}>
-            <input type="radio" name="trigger" checked={beh.display.trigger === 'click'} readOnly className="mt-1 w-4 h-4 text-emerald-500" />
-            <div>
-              <p className="text-sm font-medium text-gray-700">Gatilho personalizado</p>
-              <p className="text-xs text-gray-400">Exibir ao clicar em um elemento.</p>
+              <p className="text-sm font-medium text-gray-800">Intenção de saída</p>
+              <p className="text-xs text-gray-400 mt-0.5">Exibir quando o visitante está prestes a sair da página.</p>
             </div>
           </label>
         </div>
-        <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-          <p className="text-xs text-blue-700">O formulário aparecerá quando a condição selecionada for atendida.</p>
+        <div className="mt-3 p-3 bg-brand-50 rounded-xl border border-brand-100">
+          <p className="text-xs text-brand-700">O formulário aparecerá quando <strong>qualquer</strong> condição ativada for atendida.</p>
         </div>
       </Section>
       <Section title="Visibilidade">
@@ -683,7 +686,6 @@ export default function PopupEditorPage() {
   if (loading) return <div className="flex items-center justify-center h-screen"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
 
   const s = design.styles
-  const canvasW = preview === 'mobile' ? 375 : Math.min(s.width + (s.sideImage.enabled ? s.sideImage.width : 0), 700)
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
@@ -718,60 +720,93 @@ export default function PopupEditorPage() {
         </aside>
 
         {/* Center canvas */}
-        <main className="flex-1 flex flex-col items-center overflow-y-auto">
+        <main className="flex-1 flex flex-col items-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.15)' }}>
           <div className="flex-1 flex items-center justify-center w-full p-8">
-            {/* Overlay */}
-            <div style={{ width: canvasW + 80, minHeight: 300 }} className="relative rounded-xl overflow-hidden shadow-2xl">
-              {s.overlay.enabled && <div className="absolute inset-0" style={{ backgroundColor: s.overlay.color, opacity: s.overlay.opacity / 100 }} />}
-              <div className="relative flex" style={{ margin: '40px auto', width: canvasW }}>
-                {/* Side image left */}
-                {s.sideImage.enabled && s.sideImage.position === 'left' && (
-                  <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="bg-gray-200 rounded-l-xl overflow-hidden">
-                    {s.sideImage.src ? <img src={s.sideImage.src} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Imagem</div>}
-                  </div>
-                )}
-                {/* Popup body */}
-                <div style={{ backgroundColor: s.backgroundColor, borderRadius: s.borderRadius, padding: s.padding, fontFamily: s.fontFamily, flexGrow: 1 }} className="relative">
-                  {s.closeButton.show && <button className="absolute top-3 right-3"><X style={{ color: s.closeButton.color }} className="w-5 h-5" /></button>}
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                    <SortableContext items={activeStep.blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
-                      <div className="space-y-2 min-h-[60px]">
-                        {activeStep.blocks.map(block => (
-                          <SortablePopupBlock key={block.id} block={block} isSelected={selectedBlockId === block.id}
-                            onSelect={() => { setSelectedBlockId(block.id); setRightTab('block') }}
-                            onDelete={() => deleteBlock(block.id)} />
-                        ))}
-                        {activeStep.blocks.length === 0 && <div className="py-12 text-center text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-lg">Clique em um bloco na paleta para adicionar</div>}
-                      </div>
-                    </SortableContext>
-                  </DndContext>
+            {/* Popup container */}
+            <div className="relative flex rounded-2xl overflow-hidden shadow-2xl" style={{
+              width: preview === 'mobile' ? 360 : s.width + (s.sideImage.enabled ? s.sideImage.width : 0),
+              maxWidth: '95%',
+              borderRadius: s.borderRadius,
+            }}>
+              {/* Side image LEFT */}
+              {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && !( preview === 'mobile') && (
+                <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="overflow-hidden">
+                  <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                 </div>
-                {/* Side image right */}
-                {s.sideImage.enabled && s.sideImage.position === 'right' && (
-                  <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="bg-gray-200 rounded-r-xl overflow-hidden">
-                    {s.sideImage.src ? <img src={s.sideImage.src} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Imagem</div>}
-                  </div>
+              )}
+              {/* Popup body */}
+              <div style={{
+                backgroundColor: s.backgroundColor,
+                padding: s.padding,
+                fontFamily: s.fontFamily,
+                flexGrow: 1,
+                minHeight: 200,
+              }} className="relative">
+                {s.closeButton.show && (
+                  <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors z-10">
+                    <X style={{ color: s.closeButton.color }} className="w-4 h-4" />
+                  </button>
                 )}
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={activeStep.blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2 min-h-[100px]">
+                      {activeStep.blocks.map(block => (
+                        <SortablePopupBlock key={block.id} block={block} isSelected={selectedBlockId === block.id}
+                          onSelect={() => { setSelectedBlockId(block.id); setRightTab('block') }}
+                          onDelete={() => deleteBlock(block.id)} />
+                      ))}
+                      {activeStep.blocks.length === 0 && (
+                        <div className="py-16 text-center border-2 border-dashed border-gray-200 rounded-xl">
+                          <Plus className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm text-gray-400">Clique em um bloco na paleta</p>
+                        </div>
+                      )}
+                    </div>
+                  </SortableContext>
+                </DndContext>
               </div>
+              {/* Side image RIGHT */}
+              {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && !(preview === 'mobile') && (
+                <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="overflow-hidden">
+                  <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
+                </div>
+              )}
+              {/* Side image placeholder (no src) */}
+              {s.sideImage.enabled && !s.sideImage.src && !(preview === 'mobile') && (
+                <div style={{ width: s.sideImage.width, flexShrink: 0, order: s.sideImage.position === 'left' ? -1 : 1 }}
+                  className="bg-gray-100 flex items-center justify-center">
+                  <div className="text-center text-gray-400">
+                    <ImageIcon className="w-8 h-8 mx-auto mb-1" />
+                    <p className="text-xs">Imagem lateral</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Step tabs */}
-          <div className="flex items-center gap-1 px-4 py-2 bg-white border-t border-gray-200 w-full overflow-x-auto shrink-0">
+          {/* Step tabs - professional design */}
+          <div className="flex items-center gap-2 px-6 py-3 bg-white border-t border-gray-200 w-full shrink-0">
             {design.steps.map((step, i) => (
-              <button key={step.id} onClick={() => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
-                className={`px-3 py-1.5 text-xs rounded-md font-medium whitespace-nowrap ${!showSuccess && activeStepIdx === i ? 'bg-orange-100 text-orange-700' : 'text-gray-500 hover:bg-gray-100'}`}>
-                {step.name}
-              </button>
+              <div key={step.id} className="flex items-center gap-2">
+                <button onClick={() => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
+                  className={`px-4 py-2 text-sm rounded-lg font-medium whitespace-nowrap transition-colors ${!showSuccess && activeStepIdx === i ? 'bg-brand-500 text-white shadow-sm' : 'text-gray-600 bg-gray-100 hover:bg-gray-200'}`}>
+                  {step.name}
+                </button>
+                {i < design.steps.length - 1 && <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />}
+              </div>
             ))}
+            <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
             <button onClick={() => { setShowSuccess(true); setSelectedBlockId(null) }}
-              className={`px-3 py-1.5 text-xs rounded-md font-medium whitespace-nowrap ${showSuccess ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'}`}>
+              className={`px-4 py-2 text-sm rounded-lg font-medium whitespace-nowrap transition-colors ${showSuccess ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-600 bg-gray-100 hover:bg-gray-200'}`}>
               Sucesso
             </button>
-            <button onClick={addStep} className="p-1 rounded-md text-gray-400 hover:text-orange-500 hover:bg-gray-100"><Plus className="w-4 h-4" /></button>
+            <div className="flex-1" />
+            <button onClick={addStep} className="flex items-center gap-1 px-3 py-2 text-sm text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors">
+              <Plus className="w-3.5 h-3.5" /> Adicionar etapa
+            </button>
             {design.steps.length > 1 && !showSuccess && (
               <button onClick={() => { setDesign(d => ({ ...d, steps: d.steps.filter((_, i) => i !== activeStepIdx) })); setActiveStepIdx(Math.max(0, activeStepIdx - 1)) }}
-                className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-gray-100 ml-auto"><Trash2 className="w-4 h-4" /></button>
+                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
             )}
           </div>
         </main>
