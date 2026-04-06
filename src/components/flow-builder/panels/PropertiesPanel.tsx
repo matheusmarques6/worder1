@@ -687,8 +687,8 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   </div>
                 )}
 
-                <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                  <p className="text-[11px] text-purple-300">
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                  <p className="text-[11px] text-purple-700">
                     A automação pausará neste ponto até a data/hora especificada
                   </p>
                 </div>
@@ -1210,12 +1210,23 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     ~{Math.ceil((selectedNode.data.config?.message || '').length / 160)} segmento(s)
                   </span>
                 </div>
-                <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                  <p className="text-[11px] text-purple-300">
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                  <p className="text-[11px] text-purple-700">
                     SMS será enviado para o telefone do contato
                   </p>
                 </div>
               </>
+            )}
+
+            {/* LIST ACTIONS */}
+            {(selectedNode.data.nodeType === 'action_add_to_list' ||
+              selectedNode.data.nodeType === 'action_remove_from_list') && (
+              <ListActionConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                organizationId={organizationId}
+                isRemove={selectedNode.data.nodeType === 'action_remove_from_list'}
+              />
             )}
           </section>
 
@@ -2311,6 +2322,63 @@ function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<s
       </div>
     </div>
   )
+}
+
+// ============================================
+// LIST ACTION CONFIG
+// ============================================
+
+function ListActionConfig({ config, onUpdate, organizationId, isRemove }: {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+  organizationId?: string;
+  isRemove: boolean;
+}) {
+  const [lists, setLists] = useState<Array<{ id: string; name: string }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!organizationId) return;
+    setLoading(true);
+    fetch(`/api/lists?organizationId=${organizationId}`)
+      .then(r => r.json())
+      .then(data => setLists(data.lists || data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [organizationId]);
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <label className="text-xs text-gray-600/60">
+          {isRemove ? 'Remover da Lista' : 'Adicionar à Lista'}
+        </label>
+        <select
+          value={config.listId || ''}
+          onChange={(e) => onUpdate('listId', e.target.value)}
+          className={cn(
+            'w-full px-3 py-2 rounded-lg',
+            'bg-white border border-gray-200',
+            'text-sm text-gray-700',
+            'focus:outline-none focus:border-blue-500/50'
+          )}
+        >
+          <option value="">Selecione uma lista...</option>
+          {lists.map(l => (
+            <option key={l.id} value={l.id}>{l.name}</option>
+          ))}
+        </select>
+        {loading && <p className="text-[10px] text-gray-400">Carregando listas...</p>}
+      </div>
+      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+        <p className="text-[11px] text-gray-600">
+          {isRemove
+            ? 'O contato será removido da lista selecionada.'
+            : 'O contato será adicionado à lista selecionada.'}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 // ============================================

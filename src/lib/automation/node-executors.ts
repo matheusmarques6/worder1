@@ -855,6 +855,53 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
     },
   },
+
+  // ========== ADD TO LIST ==========
+  action_add_to_list: {
+    async execute({ config, context, supabase, isTest, organizationId }) {
+      const contactId = context.contact?.id;
+      if (isTest) {
+        return { status: 'success', output: { added: true, listId: config.listId, test: true } };
+      }
+      if (!contactId || !organizationId) {
+        return { status: 'error', output: null, error: 'Contato ou organização não encontrado' };
+      }
+      try {
+        await supabase.from('list_contacts').upsert({
+          list_id: config.listId,
+          contact_id: contactId,
+          organization_id: organizationId,
+        }, { onConflict: 'list_id,contact_id' });
+        return { status: 'success', output: { added: true, listId: config.listId } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // ========== REMOVE FROM LIST ==========
+  action_remove_from_list: {
+    async execute({ config, context, supabase, isTest, organizationId }) {
+      const contactId = context.contact?.id;
+      if (isTest) {
+        return { status: 'success', output: { removed: true, listId: config.listId, test: true } };
+      }
+      if (!contactId || !organizationId) {
+        return { status: 'error', output: null, error: 'Contato ou organização não encontrado' };
+      }
+      try {
+        await supabase
+          .from('list_contacts')
+          .delete()
+          .eq('list_id', config.listId)
+          .eq('contact_id', contactId)
+          .eq('organization_id', organizationId);
+        return { status: 'success', output: { removed: true, listId: config.listId } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
 };
 
 // ============================================
@@ -1144,11 +1191,40 @@ function evaluateCondition(value1: any, operator: string, value2: any): boolean 
       }
     
     case 'in':
+    case 'in_list':
       return Array.isArray(v2) ? v2.includes(v1) : String(v2).split(',').map(s => s.trim()).includes(v1);
-    
+
     case 'not_in':
+    case 'not_in_list':
       return Array.isArray(v2) ? !v2.includes(v1) : !String(v2).split(',').map(s => s.trim()).includes(v1);
-    
+
+    case 'is_set':
+      return v1 !== null && v1 !== undefined && v1 !== '';
+
+    case 'is_not_set':
+      return v1 === null || v1 === undefined || v1 === '';
+
+    case 'before_date':
+      return new Date(v1).getTime() < new Date(v2).getTime();
+
+    case 'after_date':
+      return new Date(v1).getTime() > new Date(v2).getTime();
+
+    case 'in_last_x_days':
+    case 'not_in_last_x_days': {
+      const daysAgo = new Date(Date.now() - Number(v2) * 24 * 60 * 60 * 1000);
+      const dateVal = new Date(v1);
+      const isInRange = dateVal >= daysAgo;
+      return operator === 'in_last_x_days' ? isInRange : !isInRange;
+    }
+
+    case 'between': {
+      const num = parseFloat(v1);
+      const parts = String(v2).split(',').map(s => parseFloat(s.trim()));
+      if (parts.length >= 2) return num >= parts[0] && num <= parts[1];
+      return false;
+    }
+
     default:
       return v1 === v2;
   }
