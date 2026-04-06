@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Copy, Settings, ChevronDown, Sparkles, MessageCircle, ExternalLink } from 'lucide-react';
+import { X, Trash2, Copy, Settings, ChevronDown, Sparkles, MessageCircle, ExternalLink, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useSelectedNode } from '@/stores/flowStore';
 import { getNodeDefinition, getNodeColor } from '../nodes/nodeTypes';
@@ -113,24 +113,20 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         className="w-[340px] bg-white border-l border-gray-200 flex flex-col h-full shrink-0 overflow-hidden"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className={cn('p-2 rounded-lg', colors.bg)}>
-              <Icon className={cn('w-4 h-4', colors.text)} />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">
-                {definition?.label || 'Configurar'}
-              </h3>
-              <p className="text-[11px] text-gray-400 capitalize">
-                {selectedNode.data.category}
-              </p>
-            </div>
+        {/* Header - Omnisend style */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">
+              {selectedNode.data.nodeType === 'action_email' ? 'Edit email' :
+               selectedNode.data.nodeType === 'control_delay' ? 'Edit delay' :
+               selectedNode.data.nodeType === 'condition_field' ? 'Edit condition' :
+               selectedNode.data.nodeType === 'logic_split' ? 'Edit A/B test' :
+               definition?.label || 'Configurar'}
+            </h3>
           </div>
           <button
             onClick={handleClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
+            className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -2149,10 +2145,8 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
 // EMAIL ACTION CONFIG (template selector, not credentials)
 // ============================================
 function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<string, any>; onUpdate: (key: string, value: any) => void; triggerType: string }) {
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([])
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; thumbnail_url?: string }>>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [showMergeTags, setShowMergeTags] = useState(false)
   const storeId = useFlowStore.getState().automationConfig?.storeId;
 
   useEffect(() => {
@@ -2167,158 +2161,135 @@ function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<s
       .finally(() => setLoadingTemplates(false))
   }, [storeId])
 
-  const MERGE_TAGS = [
-    { group: 'Contato', tags: [
-      '{{contact.first_name}}', '{{contact.last_name}}', '{{contact.email}}',
-      '{{contact.phone}}', '{{contact.city}}', '{{contact.total_orders}}', '{{contact.total_spent}}',
-    ]},
-    { group: 'Evento', tags: [
-      '{{event.ProductName}}', '{{event.Price}}', '{{event.CartTotal}}',
-      '{{event.OrderId}}', '{{event.$value}}', '{{event.Currency}}',
-    ]},
-    { group: 'Loja', tags: [
-      '{{store.name}}', '{{store.domain}}',
-    ]},
-  ];
-
-  const insertTag = (field: string, tag: string) => {
-    onUpdate(field, ((config[field] as string) || '') + tag);
-    setShowMergeTags(false);
-  };
+  const inputCls = 'w-full px-3 py-2.5 rounded-md bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500';
 
   return (
-    <div className="space-y-4">
-      {/* Template Selection */}
-      <div className="space-y-2">
-        <label className="text-xs font-medium text-gray-500">Template de Email</label>
-        <select value={(config.templateId as string) || ''} onChange={(e) => onUpdate('templateId', e.target.value)}
-          className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-blue-500">
+    <div className="space-y-5">
+      {/* CONTENT section header */}
+      <div>
+        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Conteudo</h4>
+
+        {/* Subject line - like Omnisend */}
+        <div className="space-y-1.5 mb-4">
+          <label className="text-sm font-medium text-gray-700">Subject line</label>
+          <div className="relative">
+            <input type="text" value={config.subject || ''} onChange={(e) => onUpdate('subject', e.target.value)}
+              placeholder="Ainda pensando naquela camisa?"
+              className={inputCls} />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <VariableButton triggerType={triggerType} onSelect={(v) => onUpdate('subject', (config.subject || '') + v)} className="scale-75" />
+            </div>
+          </div>
+        </div>
+
+        {/* Preheader - like Omnisend */}
+        <div className="space-y-1.5 mb-4">
+          <label className="text-sm font-medium text-gray-700">Preheader</label>
+          <div className="relative">
+            <input type="text" value={config.preheader || ''} onChange={(e) => onUpdate('preheader', e.target.value)}
+              placeholder="Salvamos ela pra voce + mais 3 modelos..."
+              className={inputCls} />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+              <VariableButton triggerType={triggerType} onSelect={(v) => onUpdate('preheader', (config.preheader || '') + v)} className="scale-75" />
+            </div>
+          </div>
+        </div>
+
+        {/* Sender's name */}
+        <div className="space-y-1.5 mb-4">
+          <label className="text-sm font-medium text-gray-700">Sender's name</label>
+          <input type="text" value={config.senderName || ''} onChange={(e) => onUpdate('senderName', e.target.value)}
+            placeholder="Minha Loja" className={inputCls} />
+        </div>
+
+        {/* Sender's email */}
+        <div className="space-y-1.5 mb-4">
+          <label className="text-sm font-medium text-gray-700">Sender's email address</label>
+          <input type="email" value={config.senderEmail || ''} onChange={(e) => onUpdate('senderEmail', e.target.value)}
+            placeholder="contato@minhaloja.com.br" className={inputCls} />
+        </div>
+
+        {/* Reply-to checkbox */}
+        <label className="flex items-center gap-2 cursor-pointer mb-4">
+          <input type="checkbox" checked={config.useReplyTo || false} onChange={(e) => onUpdate('useReplyTo', e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500" />
+          <span className="text-sm text-gray-700">Receive replies to a different email address</span>
+        </label>
+        {config.useReplyTo && (
+          <div className="space-y-1.5 mb-4">
+            <input type="email" value={config.replyToEmail || ''} onChange={(e) => onUpdate('replyToEmail', e.target.value)}
+              placeholder="Choose a reply-to email" className={inputCls} />
+          </div>
+        )}
+      </div>
+
+      {/* Template selection */}
+      <div>
+        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Template</h4>
+        <select value={config.templateId || ''} onChange={(e) => onUpdate('templateId', e.target.value)}
+          className={inputCls}>
           <option value="">Nenhum (usar HTML abaixo)</option>
           {templates.map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
         </select>
-        {loadingTemplates && <p className="text-[10px] text-gray-400">Carregando templates...</p>}
-      </div>
+        {loadingTemplates && <p className="text-xs text-gray-400 mt-1">Carregando...</p>}
 
-      {/* Subject */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-500">Assunto</label>
-          <VariableButton triggerType={triggerType} onSelect={(v) => insertTag('subject', v)} className="scale-90" />
-        </div>
-        <input type="text" value={(config.subject as string) || ''} onChange={(e) => onUpdate('subject', e.target.value)}
-          placeholder="Ex: {{ contact.first_name }}, seu pedido foi confirmado!"
-          className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500" />
-      </div>
-
-      {/* Preheader */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-500">Preheader</label>
-          <VariableButton triggerType={triggerType} onSelect={(v) => insertTag('preheader', v)} className="scale-90" />
-        </div>
-        <input type="text" value={(config.preheader as string) || ''} onChange={(e) => onUpdate('preheader', e.target.value)}
-          placeholder="Texto de preview no inbox"
-          className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500" />
-      </div>
-
-      {/* HTML body when no template */}
-      {!config.templateId && (
-        <MessageEditor value={(config.html as string) || ''} onChange={(v) => onUpdate('html', v)} triggerType={triggerType}
-          label="Corpo do Email (HTML)" placeholder="<p>Olá {{ contact.first_name }}!</p>" rows={6} />
-      )}
-
-      {config.templateId && (
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-[11px] text-blue-700">Usando template salvo. Conteúdo será renderizado no envio.</p>
-        </div>
-      )}
-
-      {/* Merge Tags Reference */}
-      <div className="space-y-2">
-        <button
-          onClick={() => setShowMergeTags(!showMergeTags)}
-          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-        >
-          {showMergeTags ? 'Ocultar variáveis' : 'Ver variáveis disponíveis'}
-        </button>
-        {showMergeTags && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
-            {MERGE_TAGS.map(group => (
-              <div key={group.group}>
-                <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1">{group.group}</p>
-                <div className="flex flex-wrap gap-1">
-                  {group.tags.map(tag => (
-                    <button
-                      key={tag}
-                      onClick={() => insertTag('subject', tag)}
-                      className="px-1.5 py-0.5 text-[10px] bg-white border border-gray-200 rounded text-gray-600 hover:bg-blue-50 hover:border-blue-200 transition-colors"
-                    >
-                      {tag}
-                    </button>
-                  ))}
+        {/* Template preview thumbnail */}
+        {config.templateId && (
+          <div className="mt-3 rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
+            <div className="p-4 flex items-center justify-center min-h-[120px]">
+              {templates.find(t => t.id === config.templateId)?.thumbnail_url ? (
+                <img
+                  src={templates.find(t => t.id === config.templateId)?.thumbnail_url}
+                  alt="Template preview"
+                  className="max-h-[200px] rounded shadow-sm"
+                />
+              ) : (
+                <div className="text-center">
+                  <Mail className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-xs text-gray-400">Preview do template</p>
                 </div>
-              </div>
-            ))}
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* HTML editor when no template */}
+        {!config.templateId && (
+          <div className="mt-3">
+            <MessageEditor value={config.html || ''} onChange={(v) => onUpdate('html', v)} triggerType={triggerType}
+              label="Corpo do Email (HTML)" placeholder="<p>Ola {{ contact.first_name }}!</p>" rows={6} />
           </div>
         )}
       </div>
 
-      {/* Advanced Settings */}
-      <div className="border-t border-gray-200 pt-3">
-        <button
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 font-medium"
-        >
-          <ChevronDown className={cn('w-3 h-3 transition-transform', showAdvanced && 'rotate-180')} />
-          Configurações Avançadas
-        </button>
-        {showAdvanced && (
-          <div className="mt-3 space-y-3">
-            {/* Sender */}
-            <div className="space-y-2">
-              <label className="text-xs text-gray-600/60">Nome do Remetente</label>
-              <input type="text" value={(config.senderName as string) || ''} onChange={(e) => onUpdate('senderName', e.target.value)}
-                placeholder="Default da organização"
-                className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs text-gray-600/60">Email do Remetente</label>
-              <input type="email" value={(config.senderEmail as string) || ''} onChange={(e) => onUpdate('senderEmail', e.target.value)}
-                placeholder="Default do domínio verificado"
-                className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50" />
-            </div>
-            {/* Smart Sending */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={(config.smartSending as boolean) || false} onChange={(e) => onUpdate('smartSending', e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-500" />
-              <span className="text-xs text-gray-600">Smart Sending (pular se recebeu email recentemente)</span>
-            </label>
-            {config.smartSending && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Pular se recebeu nas últimas</span>
-                <input type="number" min="1" value={(config.smartSendingHours as number) || 16} onChange={(e) => onUpdate('smartSendingHours', parseInt(e.target.value) || 16)}
-                  className="w-16 px-2 py-1 rounded-md bg-white border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500/50" />
-                <span className="text-xs text-gray-500">horas</span>
-              </div>
-            )}
-            {/* UTM Tracking */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={(config.utmTracking as boolean) || false} onChange={(e) => onUpdate('utmTracking', e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-500" />
-              <span className="text-xs text-gray-600">UTM Tracking</span>
-            </label>
-            {config.utmTracking && (
-              <div className="space-y-2">
-                <input type="text" value={(config.utmSource as string) || 'worder'} onChange={(e) => onUpdate('utmSource', e.target.value)}
-                  placeholder="utm_source" className="w-full px-2 py-1.5 rounded-md bg-white border border-gray-200 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50" />
-                <input type="text" value={(config.utmMedium as string) || 'email'} onChange={(e) => onUpdate('utmMedium', e.target.value)}
-                  placeholder="utm_medium" className="w-full px-2 py-1.5 rounded-md bg-white border border-gray-200 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50" />
-                <input type="text" value={(config.utmCampaign as string) || ''} onChange={(e) => onUpdate('utmCampaign', e.target.value)}
-                  placeholder="utm_campaign" className="w-full px-2 py-1.5 rounded-md bg-white border border-gray-200 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50" />
-              </div>
-            )}
+      {/* Smart Sending */}
+      <div>
+        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Envio</h4>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={config.smartSending || false} onChange={(e) => onUpdate('smartSending', e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500" />
+          <span className="text-sm text-gray-700">Smart Sending</span>
+        </label>
+        {config.smartSending && (
+          <div className="flex items-center gap-2 mt-2 ml-6">
+            <span className="text-xs text-gray-500">Pular se recebeu nas ultimas</span>
+            <input type="number" min="1" value={config.smartSendingHours || 16} onChange={(e) => onUpdate('smartSendingHours', parseInt(e.target.value) || 16)}
+              className="w-14 px-2 py-1 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
+            <span className="text-xs text-gray-500">horas</span>
           </div>
         )}
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex gap-2 pt-2 border-t border-gray-100">
+        <button className="text-xs text-red-500 hover:text-red-700 font-medium">Delete</button>
+        <div className="flex-1" />
+        <button
+          onClick={() => {/* handled by parent save */}}
+          className="px-4 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors"
+        >
+          Update
+        </button>
       </div>
     </div>
   )

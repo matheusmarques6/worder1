@@ -597,7 +597,7 @@ function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNod
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-3 grid grid-cols-2 gap-2">
+            <div className="px-3 pb-3 space-y-1">
               {section.items.map((item) => (
                 <NodeButton
                   key={item.type}
@@ -628,51 +628,28 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
   const Icon = node.icon;
 
   return (
-    <motion.button
+    <button
       draggable
       onDragStart={(e) => onDragStart(e as unknown as DragEvent, node)}
       onClick={onClick}
       className={cn(
-        'flex items-center gap-2.5 p-3 rounded-lg',
-        'bg-white border border-gray-300',
-        'hover:border-gray-300 hover:bg-gray-100',
+        'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md',
+        'hover:bg-gray-50',
         'cursor-grab active:cursor-grabbing',
-        'transition-all duration-150 text-left relative',
-        'group'
+        'transition-colors duration-100 text-left group'
       )}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
     >
-      {/* Ícone */}
       <div
         className="p-1.5 rounded-md shrink-0"
-        style={{ backgroundColor: `${node.color}20` }}
+        style={{ backgroundColor: `${node.color}15` }}
       >
-        <Icon
-          className="w-4 h-4"
-          style={{ color: node.color }}
-        />
+        <Icon className="w-4 h-4" style={{ color: node.color }} />
       </div>
-
-      {/* Label */}
-      <span className="text-xs text-gray-700 font-medium leading-tight line-clamp-2 group-hover:text-gray-900">
+      <span className="text-[13px] text-gray-700 group-hover:text-gray-900 flex-1 truncate">
         {node.label}
       </span>
-
-      {/* Badge Premium */}
-      {node.isPremium && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center">
-          <Sparkles className="w-2.5 h-2.5 text-white" />
-        </div>
-      )}
-
-      {/* Badge IA */}
-      {node.hasAI && !node.isPremium && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
-          <span className="text-[8px] text-white font-bold">IA</span>
-        </div>
-      )}
-    </motion.button>
+      <GripVertical className="w-3.5 h-3.5 text-gray-300 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+    </button>
   );
 }
 
