@@ -156,37 +156,24 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
       {/* Card */}
       <div
         className={cn(
-          'w-[280px] bg-white rounded-lg border overflow-hidden',
+          'w-[260px] bg-white rounded-lg border overflow-hidden',
           'transition-all duration-150',
           selected
-            ? 'border-blue-400 shadow-[0_0_0_2px_rgba(59,130,246,0.2)] shadow-blue-100'
+            ? 'border-blue-400 shadow-[0_0_0_2px_rgba(59,130,246,0.15)]'
             : 'border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300',
-          status === 'running' && 'border-blue-400 shadow-blue-100',
         )}
       >
-        {/* Header row: category dot + label + icon + menu */}
-        <div className="px-3.5 pt-3 pb-1 flex items-center gap-2">
-          <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', cat.dotColor)} />
-          <span className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase">
-            {typeLabel}
-          </span>
-          <div className="flex-1" />
-          <button className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-100 transition-opacity">
-            <MoreVertical className="w-3.5 h-3.5 text-gray-400" />
-          </button>
-        </div>
-
-        {/* Main content */}
-        <div className="px-3.5 pb-3 flex items-start gap-2.5">
-          <div className={cn('p-1.5 rounded-md shrink-0 mt-0.5', cat.iconBg)}>
-            <IconComponent className={cn('w-4 h-4', cat.iconColor)} />
+        {/* Main content - Klaviyo style: icon + title + description */}
+        <div className="px-3 py-3 flex items-start gap-2.5">
+          <div className={cn('p-2 rounded-lg shrink-0', cat.iconBg)}>
+            <IconComponent className={cn('w-4.5 h-4.5', cat.iconColor)} />
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-medium text-gray-900 leading-tight truncate">
+          <div className="flex-1 min-w-0 pt-0.5">
+            <p className="text-[13px] font-semibold text-gray-900 leading-tight">
               {label}
             </p>
             {summary && (
-              <p className="text-[11px] text-gray-500 mt-0.5 leading-snug line-clamp-2">
+              <p className="text-[11px] text-gray-500 mt-1 leading-snug line-clamp-2">
                 {summary}
               </p>
             )}
@@ -196,6 +183,9 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
               </p>
             )}
           </div>
+          <button className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-100 transition-opacity shrink-0 mt-0.5">
+            <MoreVertical className="w-3.5 h-3.5 text-gray-400" />
+          </button>
         </div>
 
         {/* Metrics row (Omnisend style) */}

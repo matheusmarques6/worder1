@@ -1,5 +1,5 @@
 // Pre-built flow templates for the Worder automation platform.
-// Each template contains nodes and edges arrays compatible with React Flow.
+// Each template uses REAL node types that match nodeTypes.ts exactly.
 
 export interface FlowTemplate {
   id: string;
@@ -16,6 +16,7 @@ export interface FlowTemplate {
       description: string;
       category: 'trigger' | 'action' | 'condition' | 'control';
       nodeType: string;
+      icon?: string;
       config: Record<string, any>;
     };
   }>;
@@ -27,668 +28,250 @@ export interface FlowTemplate {
     targetHandle?: string;
     type?: string;
   }>;
-  exitConditions?: Array<{ type: string; value: string }>;
-  frequencyConfig?: { type: string; value?: number; unit?: string };
 }
 
-// ---------------------------------------------------------------------------
-// 1. Abandoned Cart
-// trigger_abandon -> delay 1h -> email #1 -> delay 24h -> condition (cart_value > 200)
-//   SIM -> email #2 -> delay 48h -> email #3
-//   NAO -> email #2b -> delay 48h -> email #3
-// ---------------------------------------------------------------------------
-
-const abandonedCartTemplate: FlowTemplate = {
+// ==============================
+// 1. Carrinho Abandonado (3 emails)
+// ==============================
+const abandonedCart: FlowTemplate = {
   id: 'abandoned-cart',
   name: 'Carrinho Abandonado',
-  description:
-    'Recupere vendas perdidas com uma sequencia de 3 emails enviados apos o abandono do carrinho.',
-  triggerType: 'cart_abandon',
-  tags: ['ecommerce', 'recuperacao', 'carrinho'],
+  description: 'Recupere vendas com 3 emails apos abandono do carrinho.',
+  triggerType: 'trigger_abandon',
+  tags: ['Recomendado', 'ecommerce'],
   nodes: [
     {
-      id: 'trigger_abandon',
-      type: 'triggerNode',
-      position: { x: 400, y: 100 },
-      data: {
-        label: 'Abandono de Carrinho',
-        description: 'Dispara quando um carrinho e abandonado',
-        category: 'trigger',
-        nodeType: 'trigger_cart_abandon',
-        config: { event: 'cart_abandon' },
-      },
+      id: 'n1', type: 'trigger_abandon', position: { x: 400, y: 80 },
+      data: { label: 'Carrinho Abandonado', description: 'Dispara quando cliente abandona carrinho', category: 'trigger', nodeType: 'trigger_abandon', icon: 'ShoppingCart', config: {} },
     },
     {
-      id: 'delay_1h',
-      type: 'delayNode',
-      position: { x: 400, y: 250 },
-      data: {
-        label: 'Aguardar 1 hora',
-        description: 'Espera 1 hora antes de enviar o primeiro email',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 1, unit: 'hours' },
-      },
+      id: 'n2', type: 'control_delay', position: { x: 400, y: 220 },
+      data: { label: 'Aguardar 1 hora', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 1, unit: 'hours' } },
     },
     {
-      id: 'email_1',
-      type: 'emailNode',
-      position: { x: 400, y: 400 },
-      data: {
-        label: 'Email #1 - Lembrete',
-        description: 'Primeiro lembrete sobre o carrinho abandonado',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Voce esqueceu algo no carrinho',
-          templateId: '',
-        },
-      },
+      id: 'n3', type: 'action_email', position: { x: 400, y: 360 },
+      data: { label: 'Email #1 - Lembrete', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Voce esqueceu algo no carrinho' } },
     },
     {
-      id: 'delay_24h',
-      type: 'delayNode',
-      position: { x: 400, y: 550 },
-      data: {
-        label: 'Aguardar 24 horas',
-        description: 'Espera 24 horas antes de verificar o valor do carrinho',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 24, unit: 'hours' },
-      },
+      id: 'n4', type: 'control_delay', position: { x: 400, y: 500 },
+      data: { label: 'Aguardar 24 horas', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 24, unit: 'hours' } },
     },
     {
-      id: 'condition_cart_value',
-      type: 'conditionNode',
-      position: { x: 400, y: 700 },
-      data: {
-        label: 'Valor do carrinho > R$200?',
-        description: 'Verifica se o valor do carrinho e maior que R$200',
-        category: 'condition',
-        nodeType: 'condition_field',
-        config: { field: 'cart_value', operator: 'greater_than', value: '200' },
-      },
+      id: 'n5', type: 'condition_field', position: { x: 400, y: 640 },
+      data: { label: 'Valor do carrinho > R$200?', description: '', category: 'condition', nodeType: 'condition_field', icon: 'GitBranch', config: { field: 'event.cart_value', operator: 'greater_than', value: '200' } },
     },
     {
-      id: 'email_2_sim',
-      type: 'emailNode',
-      position: { x: 250, y: 850 },
-      data: {
-        label: 'Email #2 - Oferta VIP',
-        description: 'Oferta especial para carrinhos de alto valor',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Uma oferta exclusiva para voce finalizar sua compra',
-          templateId: '',
-        },
-      },
+      id: 'n6', type: 'action_email', position: { x: 250, y: 800 },
+      data: { label: 'Email #2 - Frete gratis', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Frete gratis no seu carrinho!' } },
     },
     {
-      id: 'email_2b_nao',
-      type: 'emailNode',
-      position: { x: 550, y: 850 },
-      data: {
-        label: 'Email #2b - Lembrete',
-        description: 'Segundo lembrete padrao sobre o carrinho',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Seus itens ainda estao esperando por voce',
-          templateId: '',
-        },
-      },
+      id: 'n7', type: 'action_email', position: { x: 550, y: 800 },
+      data: { label: 'Email #2 - Lembrete', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Seus itens estao esperando' } },
     },
     {
-      id: 'delay_48h',
-      type: 'delayNode',
-      position: { x: 400, y: 1000 },
-      data: {
-        label: 'Aguardar 48 horas',
-        description: 'Espera 48 horas antes do ultimo email',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 48, unit: 'hours' },
-      },
+      id: 'n8', type: 'control_delay', position: { x: 400, y: 950 },
+      data: { label: 'Aguardar 48 horas', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 48, unit: 'hours' } },
     },
     {
-      id: 'email_3',
-      type: 'emailNode',
-      position: { x: 400, y: 1150 },
-      data: {
-        label: 'Email #3 - Ultima chance',
-        description: 'Ultimo email de recuperacao do carrinho',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Ultima chance: seu carrinho expira em breve',
-          templateId: '',
-        },
-      },
+      id: 'n9', type: 'action_email', position: { x: 400, y: 1090 },
+      data: { label: 'Email #3 - Desconto 10%', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Ultima chance: 10% de desconto' } },
     },
   ],
   edges: [
-    { id: 'e-trigger-delay1', source: 'trigger_abandon', target: 'delay_1h' },
-    { id: 'e-delay1-email1', source: 'delay_1h', target: 'email_1' },
-    { id: 'e-email1-delay24', source: 'email_1', target: 'delay_24h' },
-    { id: 'e-delay24-cond', source: 'delay_24h', target: 'condition_cart_value' },
-    {
-      id: 'e-cond-sim',
-      source: 'condition_cart_value',
-      target: 'email_2_sim',
-      sourceHandle: 'sim',
-      type: 'smoothstep',
-    },
-    {
-      id: 'e-cond-nao',
-      source: 'condition_cart_value',
-      target: 'email_2b_nao',
-      sourceHandle: 'nao',
-      type: 'smoothstep',
-    },
-    { id: 'e-email2sim-delay48', source: 'email_2_sim', target: 'delay_48h' },
-    { id: 'e-email2bnao-delay48', source: 'email_2b_nao', target: 'delay_48h' },
-    { id: 'e-delay48-email3', source: 'delay_48h', target: 'email_3' },
+    { id: 'e1', source: 'n1', target: 'n2', type: 'smoothstep' },
+    { id: 'e2', source: 'n2', target: 'n3', type: 'smoothstep' },
+    { id: 'e3', source: 'n3', target: 'n4', type: 'smoothstep' },
+    { id: 'e4', source: 'n4', target: 'n5', type: 'smoothstep' },
+    { id: 'e5', source: 'n5', target: 'n6', sourceHandle: 'true', type: 'smoothstep' },
+    { id: 'e6', source: 'n5', target: 'n7', sourceHandle: 'false', type: 'smoothstep' },
+    { id: 'e7', source: 'n6', target: 'n8', type: 'smoothstep' },
+    { id: 'e8', source: 'n7', target: 'n8', type: 'smoothstep' },
+    { id: 'e9', source: 'n8', target: 'n9', type: 'smoothstep' },
   ],
-  exitConditions: [
-    { type: 'event', value: 'purchase_completed' },
-    { type: 'event', value: 'cart_cleared' },
-  ],
-  frequencyConfig: { type: 'once_per_cart', value: 1, unit: 'days' },
 };
 
-// ---------------------------------------------------------------------------
-// 2. Welcome Series
-// trigger_signup -> email #1 (immediate) -> delay 2d -> email #2 -> delay 3d
-//   -> condition (has_ordered)
-//     SIM -> end
-//     NAO -> email #3
-// ---------------------------------------------------------------------------
-
-const welcomeSeriesTemplate: FlowTemplate = {
+// ==============================
+// 2. Boas-vindas (3 emails)
+// ==============================
+const welcomeSeries: FlowTemplate = {
   id: 'welcome-series',
   name: 'Serie de Boas-vindas',
-  description:
-    'Engaje novos assinantes com uma sequencia de 3 emails de boas-vindas.',
-  triggerType: 'signup',
-  tags: ['onboarding', 'boas-vindas', 'engajamento'],
+  description: 'Receba novos contatos com uma sequencia de 3 emails.',
+  triggerType: 'trigger_signup',
+  tags: ['Recomendado', 'onboarding'],
   nodes: [
     {
-      id: 'trigger_signup',
-      type: 'triggerNode',
-      position: { x: 400, y: 100 },
-      data: {
-        label: 'Novo Cadastro',
-        description: 'Dispara quando um novo usuario se cadastra',
-        category: 'trigger',
-        nodeType: 'trigger_signup',
-        config: { event: 'signup' },
-      },
+      id: 'n1', type: 'trigger_signup', position: { x: 400, y: 80 },
+      data: { label: 'Contato Criado', description: 'Quando novo contato e criado', category: 'trigger', nodeType: 'trigger_signup', icon: 'UserPlus', config: {} },
     },
     {
-      id: 'email_1',
-      type: 'emailNode',
-      position: { x: 400, y: 250 },
-      data: {
-        label: 'Email #1 - Boas-vindas',
-        description: 'Email de boas-vindas enviado imediatamente',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Bem-vindo! Conheca nossa loja',
-          templateId: '',
-        },
-      },
+      id: 'n2', type: 'action_email', position: { x: 400, y: 220 },
+      data: { label: 'Email #1 - Bem-vindo', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Bem-vindo! Aqui esta seu cupom' } },
     },
     {
-      id: 'delay_2d',
-      type: 'delayNode',
-      position: { x: 400, y: 400 },
-      data: {
-        label: 'Aguardar 2 dias',
-        description: 'Espera 2 dias antes do segundo email',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 2, unit: 'days' },
-      },
+      id: 'n3', type: 'control_delay', position: { x: 400, y: 360 },
+      data: { label: 'Aguardar 2 dias', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 2, unit: 'days' } },
     },
     {
-      id: 'email_2',
-      type: 'emailNode',
-      position: { x: 400, y: 550 },
-      data: {
-        label: 'Email #2 - Destaques',
-        description: 'Apresenta produtos em destaque',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Confira nossos produtos mais populares',
-          templateId: '',
-        },
-      },
+      id: 'n4', type: 'action_email', position: { x: 400, y: 500 },
+      data: { label: 'Email #2 - Best-sellers', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Conheca nossos best-sellers' } },
     },
     {
-      id: 'delay_3d',
-      type: 'delayNode',
-      position: { x: 400, y: 700 },
-      data: {
-        label: 'Aguardar 3 dias',
-        description: 'Espera 3 dias antes de verificar se ja comprou',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 3, unit: 'days' },
-      },
+      id: 'n5', type: 'control_delay', position: { x: 400, y: 640 },
+      data: { label: 'Aguardar 3 dias', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 3, unit: 'days' } },
     },
     {
-      id: 'condition_has_ordered',
-      type: 'conditionNode',
-      position: { x: 400, y: 850 },
-      data: {
-        label: 'Ja fez um pedido?',
-        description: 'Verifica se o usuario ja realizou uma compra',
-        category: 'condition',
-        nodeType: 'condition_field',
-        config: { field: 'has_ordered', operator: 'equals', value: 'true' },
-      },
+      id: 'n6', type: 'condition_field', position: { x: 400, y: 780 },
+      data: { label: 'Ja fez pedido?', description: '', category: 'condition', nodeType: 'condition_field', icon: 'GitBranch', config: { field: 'contact.total_orders', operator: 'greater_than', value: '0' } },
     },
     {
-      id: 'end_sim',
-      type: 'endNode',
-      position: { x: 250, y: 1000 },
-      data: {
-        label: 'Fim do Fluxo',
-        description: 'Usuario ja comprou, encerra o fluxo',
-        category: 'control',
-        nodeType: 'end',
-        config: {},
-      },
-    },
-    {
-      id: 'email_3',
-      type: 'emailNode',
-      position: { x: 550, y: 1000 },
-      data: {
-        label: 'Email #3 - Incentivo',
-        description: 'Oferece incentivo para a primeira compra',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Um presente especial para sua primeira compra',
-          templateId: '',
-        },
-      },
+      id: 'n7', type: 'action_email', position: { x: 550, y: 930 },
+      data: { label: 'Email #3 - Cupom expira', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Ultima chance para seu cupom de boas-vindas' } },
     },
   ],
   edges: [
-    { id: 'e-trigger-email1', source: 'trigger_signup', target: 'email_1' },
-    { id: 'e-email1-delay2d', source: 'email_1', target: 'delay_2d' },
-    { id: 'e-delay2d-email2', source: 'delay_2d', target: 'email_2' },
-    { id: 'e-email2-delay3d', source: 'email_2', target: 'delay_3d' },
-    { id: 'e-delay3d-cond', source: 'delay_3d', target: 'condition_has_ordered' },
-    {
-      id: 'e-cond-sim',
-      source: 'condition_has_ordered',
-      target: 'end_sim',
-      sourceHandle: 'sim',
-      type: 'smoothstep',
-    },
-    {
-      id: 'e-cond-nao',
-      source: 'condition_has_ordered',
-      target: 'email_3',
-      sourceHandle: 'nao',
-      type: 'smoothstep',
-    },
+    { id: 'e1', source: 'n1', target: 'n2', type: 'smoothstep' },
+    { id: 'e2', source: 'n2', target: 'n3', type: 'smoothstep' },
+    { id: 'e3', source: 'n3', target: 'n4', type: 'smoothstep' },
+    { id: 'e4', source: 'n4', target: 'n5', type: 'smoothstep' },
+    { id: 'e5', source: 'n5', target: 'n6', type: 'smoothstep' },
+    { id: 'e6', source: 'n6', target: 'n7', sourceHandle: 'false', type: 'smoothstep' },
   ],
-  exitConditions: [{ type: 'event', value: 'unsubscribed' }],
-  frequencyConfig: { type: 'once_per_contact' },
 };
 
-// ---------------------------------------------------------------------------
-// 3. Post-Purchase
-// trigger_order -> delay 3d -> email #1 -> delay 7d -> email #2
-// ---------------------------------------------------------------------------
-
-const postPurchaseTemplate: FlowTemplate = {
+// ==============================
+// 3. Pos-Compra (2 emails)
+// ==============================
+const postPurchase: FlowTemplate = {
   id: 'post-purchase',
   name: 'Pos-Compra',
-  description:
-    'Acompanhe o cliente apos a compra com emails de agradecimento e solicitacao de avaliacao.',
-  triggerType: 'order',
-  tags: ['ecommerce', 'pos-compra', 'avaliacao'],
+  description: 'Acompanhe clientes apos a compra com review e cross-sell.',
+  triggerType: 'trigger_order',
+  tags: ['ecommerce', 'retencao'],
   nodes: [
     {
-      id: 'trigger_order',
-      type: 'triggerNode',
-      position: { x: 400, y: 100 },
-      data: {
-        label: 'Pedido Realizado',
-        description: 'Dispara quando um pedido e confirmado',
-        category: 'trigger',
-        nodeType: 'trigger_order',
-        config: { event: 'order_completed' },
-      },
+      id: 'n1', type: 'trigger_order', position: { x: 400, y: 80 },
+      data: { label: 'Pedido Realizado', description: 'Quando um pedido e criado', category: 'trigger', nodeType: 'trigger_order', icon: 'Package', config: {} },
     },
     {
-      id: 'delay_3d',
-      type: 'delayNode',
-      position: { x: 400, y: 250 },
-      data: {
-        label: 'Aguardar 3 dias',
-        description: 'Espera 3 dias apos o pedido',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 3, unit: 'days' },
-      },
+      id: 'n2', type: 'control_delay', position: { x: 400, y: 220 },
+      data: { label: 'Aguardar 3 dias', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 3, unit: 'days' } },
     },
     {
-      id: 'email_1',
-      type: 'emailNode',
-      position: { x: 400, y: 400 },
-      data: {
-        label: 'Email #1 - Agradecimento',
-        description: 'Email de agradecimento pela compra',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Obrigado pela sua compra! Como foi sua experiencia?',
-          templateId: '',
-        },
-      },
+      id: 'n3', type: 'action_email', position: { x: 400, y: 360 },
+      data: { label: 'Email #1 - Review', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Como esta seu pedido? Conta pra gente!' } },
     },
     {
-      id: 'delay_7d',
-      type: 'delayNode',
-      position: { x: 400, y: 550 },
-      data: {
-        label: 'Aguardar 7 dias',
-        description: 'Espera 7 dias antes de pedir avaliacao',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 7, unit: 'days' },
-      },
+      id: 'n4', type: 'control_delay', position: { x: 400, y: 500 },
+      data: { label: 'Aguardar 7 dias', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 7, unit: 'days' } },
     },
     {
-      id: 'email_2',
-      type: 'emailNode',
-      position: { x: 400, y: 700 },
-      data: {
-        label: 'Email #2 - Avaliacao',
-        description: 'Solicita uma avaliacao do produto',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Avalie seu produto e ganhe um cupom exclusivo',
-          templateId: '',
-        },
-      },
+      id: 'n5', type: 'action_email', position: { x: 400, y: 640 },
+      data: { label: 'Email #2 - Cross-sell', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Produtos que combinam com o que voce comprou' } },
     },
   ],
   edges: [
-    { id: 'e-trigger-delay3d', source: 'trigger_order', target: 'delay_3d' },
-    { id: 'e-delay3d-email1', source: 'delay_3d', target: 'email_1' },
-    { id: 'e-email1-delay7d', source: 'email_1', target: 'delay_7d' },
-    { id: 'e-delay7d-email2', source: 'delay_7d', target: 'email_2' },
+    { id: 'e1', source: 'n1', target: 'n2', type: 'smoothstep' },
+    { id: 'e2', source: 'n2', target: 'n3', type: 'smoothstep' },
+    { id: 'e3', source: 'n3', target: 'n4', type: 'smoothstep' },
+    { id: 'e4', source: 'n4', target: 'n5', type: 'smoothstep' },
   ],
-  exitConditions: [{ type: 'event', value: 'order_refunded' }],
-  frequencyConfig: { type: 'once_per_order' },
 };
 
-// ---------------------------------------------------------------------------
-// 4. Winback
-// trigger_segment -> email #1 -> delay 7d -> email #2 -> delay 14d -> email #3
-// ---------------------------------------------------------------------------
-
-const winbackTemplate: FlowTemplate = {
+// ==============================
+// 4. Reconquistar Clientes (3 emails)
+// ==============================
+const winback: FlowTemplate = {
   id: 'winback',
-  name: 'Reativacao de Clientes',
-  description:
-    'Reengaje clientes inativos com uma sequencia de 3 emails ao longo de 3 semanas.',
-  triggerType: 'segment',
-  tags: ['reativacao', 'winback', 'engajamento'],
+  name: 'Reconquistar Clientes',
+  description: 'Re-engaje clientes inativos com descontos progressivos.',
+  triggerType: 'trigger_segment',
+  tags: ['retencao', 'winback'],
   nodes: [
     {
-      id: 'trigger_segment',
-      type: 'triggerNode',
-      position: { x: 400, y: 100 },
-      data: {
-        label: 'Segmento Inativo',
-        description: 'Dispara para contatos no segmento de inativos',
-        category: 'trigger',
-        nodeType: 'trigger_segment',
-        config: { event: 'segment_entry', segmentId: '' },
-      },
+      id: 'n1', type: 'trigger_segment', position: { x: 400, y: 80 },
+      data: { label: 'Sem compra ha 60 dias', description: 'Contato entrou no segmento de inativos', category: 'trigger', nodeType: 'trigger_segment', icon: 'Users', config: {} },
     },
     {
-      id: 'email_1',
-      type: 'emailNode',
-      position: { x: 400, y: 250 },
-      data: {
-        label: 'Email #1 - Sentimos sua falta',
-        description: 'Primeiro email de reativacao',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Faz tempo que nao te vemos por aqui!',
-          templateId: '',
-        },
-      },
+      id: 'n2', type: 'action_email', position: { x: 400, y: 220 },
+      data: { label: 'Email #1 - Sentimos falta', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Sentimos sua falta! Veja as novidades' } },
     },
     {
-      id: 'delay_7d',
-      type: 'delayNode',
-      position: { x: 400, y: 400 },
-      data: {
-        label: 'Aguardar 7 dias',
-        description: 'Espera 7 dias antes do segundo email',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 7, unit: 'days' },
-      },
+      id: 'n3', type: 'control_delay', position: { x: 400, y: 360 },
+      data: { label: 'Aguardar 7 dias', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 7, unit: 'days' } },
     },
     {
-      id: 'email_2',
-      type: 'emailNode',
-      position: { x: 400, y: 550 },
-      data: {
-        label: 'Email #2 - Novidades',
-        description: 'Mostra novidades e produtos recentes',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Veja o que ha de novo na nossa loja',
-          templateId: '',
-        },
-      },
+      id: 'n4', type: 'action_email', position: { x: 400, y: 500 },
+      data: { label: 'Email #2 - 10% OFF', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: '10% OFF especial para voce voltar' } },
     },
     {
-      id: 'delay_14d',
-      type: 'delayNode',
-      position: { x: 400, y: 700 },
-      data: {
-        label: 'Aguardar 14 dias',
-        description: 'Espera 14 dias antes do ultimo email',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 14, unit: 'days' },
-      },
+      id: 'n5', type: 'control_delay', position: { x: 400, y: 640 },
+      data: { label: 'Aguardar 14 dias', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 14, unit: 'days' } },
     },
     {
-      id: 'email_3',
-      type: 'emailNode',
-      position: { x: 400, y: 850 },
-      data: {
-        label: 'Email #3 - Oferta final',
-        description: 'Oferta exclusiva de reativacao',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Ultima chance: desconto exclusivo so para voce',
-          templateId: '',
-        },
-      },
+      id: 'n6', type: 'action_email', position: { x: 400, y: 780 },
+      data: { label: 'Email #3 - Ultimo aviso', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Ultimo aviso: seu desconto expira amanha' } },
     },
   ],
   edges: [
-    { id: 'e-trigger-email1', source: 'trigger_segment', target: 'email_1' },
-    { id: 'e-email1-delay7d', source: 'email_1', target: 'delay_7d' },
-    { id: 'e-delay7d-email2', source: 'delay_7d', target: 'email_2' },
-    { id: 'e-email2-delay14d', source: 'email_2', target: 'delay_14d' },
-    { id: 'e-delay14d-email3', source: 'delay_14d', target: 'email_3' },
+    { id: 'e1', source: 'n1', target: 'n2', type: 'smoothstep' },
+    { id: 'e2', source: 'n2', target: 'n3', type: 'smoothstep' },
+    { id: 'e3', source: 'n3', target: 'n4', type: 'smoothstep' },
+    { id: 'e4', source: 'n4', target: 'n5', type: 'smoothstep' },
+    { id: 'e5', source: 'n5', target: 'n6', type: 'smoothstep' },
   ],
-  exitConditions: [
-    { type: 'event', value: 'purchase_completed' },
-    { type: 'event', value: 'unsubscribed' },
-  ],
-  frequencyConfig: { type: 'once_per_contact' },
 };
 
-// ---------------------------------------------------------------------------
-// 5. Browse Abandonment
-// trigger_viewed_product -> delay 2h -> email #1 -> delay 24h
-//   -> condition (viewed_3_products)
-//     SIM -> email #2
-//     NAO -> end
-// ---------------------------------------------------------------------------
-
-const browseAbandonmentTemplate: FlowTemplate = {
+// ==============================
+// 5. Navegacao Abandonada (2 emails)
+// ==============================
+const browseAbandonment: FlowTemplate = {
   id: 'browse-abandonment',
-  name: 'Abandono de Navegacao',
-  description:
-    'Reengaje visitantes que visualizaram produtos mas nao adicionaram ao carrinho.',
-  triggerType: 'viewed_product',
-  tags: ['ecommerce', 'navegacao', 'recuperacao'],
+  name: 'Navegacao Abandonada',
+  description: 'Recupere visitantes que viram produtos mas nao compraram.',
+  triggerType: 'trigger_viewed_product',
+  tags: ['ecommerce', 'recuperacao'],
   nodes: [
     {
-      id: 'trigger_viewed_product',
-      type: 'triggerNode',
-      position: { x: 400, y: 100 },
-      data: {
-        label: 'Produto Visualizado',
-        description: 'Dispara quando um produto e visualizado sem adicao ao carrinho',
-        category: 'trigger',
-        nodeType: 'trigger_viewed_product',
-        config: { event: 'product_viewed' },
-      },
+      id: 'n1', type: 'trigger_viewed_product', position: { x: 400, y: 80 },
+      data: { label: 'Produto Visualizado', description: 'Quando contato ve um produto', category: 'trigger', nodeType: 'trigger_viewed_product', icon: 'Eye', config: {} },
     },
     {
-      id: 'delay_2h',
-      type: 'delayNode',
-      position: { x: 400, y: 250 },
-      data: {
-        label: 'Aguardar 2 horas',
-        description: 'Espera 2 horas antes de enviar o primeiro email',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 2, unit: 'hours' },
-      },
+      id: 'n2', type: 'control_delay', position: { x: 400, y: 220 },
+      data: { label: 'Aguardar 2 horas', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 2, unit: 'hours' } },
     },
     {
-      id: 'email_1',
-      type: 'emailNode',
-      position: { x: 400, y: 400 },
-      data: {
-        label: 'Email #1 - Produto visitado',
-        description: 'Lembra o visitante sobre o produto que ele viu',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Ainda interessado? O produto que voce viu esta disponivel',
-          templateId: '',
-        },
-      },
+      id: 'n3', type: 'action_email', position: { x: 400, y: 360 },
+      data: { label: 'Email #1 - Ainda interessado?', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Ainda interessado em {{event.product_title}}?' } },
     },
     {
-      id: 'delay_24h',
-      type: 'delayNode',
-      position: { x: 400, y: 550 },
-      data: {
-        label: 'Aguardar 24 horas',
-        description: 'Espera 24 horas antes de verificar o engajamento',
-        category: 'control',
-        nodeType: 'delay',
-        config: { value: 24, unit: 'hours' },
-      },
+      id: 'n4', type: 'control_delay', position: { x: 400, y: 500 },
+      data: { label: 'Aguardar 24 horas', description: '', category: 'control', nodeType: 'control_delay', icon: 'Clock', config: { value: 24, unit: 'hours' } },
     },
     {
-      id: 'condition_viewed_3',
-      type: 'conditionNode',
-      position: { x: 400, y: 700 },
-      data: {
-        label: 'Visualizou 3+ produtos?',
-        description: 'Verifica se o visitante viu 3 ou mais produtos',
-        category: 'condition',
-        nodeType: 'condition_field',
-        config: {
-          field: 'viewed_3_products',
-          operator: 'equals',
-          value: 'true',
-        },
-      },
+      id: 'n5', type: 'condition_field', position: { x: 400, y: 640 },
+      data: { label: 'Viu 3+ produtos?', description: '', category: 'condition', nodeType: 'condition_field', icon: 'GitBranch', config: { field: 'contact.total_views', operator: 'greater_or_equal', value: '3' } },
     },
     {
-      id: 'email_2',
-      type: 'emailNode',
-      position: { x: 250, y: 850 },
-      data: {
-        label: 'Email #2 - Recomendacoes',
-        description: 'Envia recomendacoes baseadas nos produtos visualizados',
-        category: 'action',
-        nodeType: 'send_email',
-        config: {
-          subject: 'Selecionamos produtos especiais para voce',
-          templateId: '',
-        },
-      },
-    },
-    {
-      id: 'end_nao',
-      type: 'endNode',
-      position: { x: 550, y: 850 },
-      data: {
-        label: 'Fim do Fluxo',
-        description: 'Encerra o fluxo para visitantes com baixo engajamento',
-        category: 'control',
-        nodeType: 'end',
-        config: {},
-      },
+      id: 'n6', type: 'action_email', position: { x: 250, y: 800 },
+      data: { label: 'Email #2 - Recomendacoes', description: '', category: 'action', nodeType: 'action_email', icon: 'Mail', config: { subject: 'Selecionamos produtos para voce' } },
     },
   ],
   edges: [
-    { id: 'e-trigger-delay2h', source: 'trigger_viewed_product', target: 'delay_2h' },
-    { id: 'e-delay2h-email1', source: 'delay_2h', target: 'email_1' },
-    { id: 'e-email1-delay24h', source: 'email_1', target: 'delay_24h' },
-    { id: 'e-delay24h-cond', source: 'delay_24h', target: 'condition_viewed_3' },
-    {
-      id: 'e-cond-sim',
-      source: 'condition_viewed_3',
-      target: 'email_2',
-      sourceHandle: 'sim',
-      type: 'smoothstep',
-    },
-    {
-      id: 'e-cond-nao',
-      source: 'condition_viewed_3',
-      target: 'end_nao',
-      sourceHandle: 'nao',
-      type: 'smoothstep',
-    },
+    { id: 'e1', source: 'n1', target: 'n2', type: 'smoothstep' },
+    { id: 'e2', source: 'n2', target: 'n3', type: 'smoothstep' },
+    { id: 'e3', source: 'n3', target: 'n4', type: 'smoothstep' },
+    { id: 'e4', source: 'n4', target: 'n5', type: 'smoothstep' },
+    { id: 'e5', source: 'n5', target: 'n6', sourceHandle: 'true', type: 'smoothstep' },
   ],
-  exitConditions: [
-    { type: 'event', value: 'cart_created' },
-    { type: 'event', value: 'purchase_completed' },
-  ],
-  frequencyConfig: { type: 'throttle', value: 1, unit: 'days' },
 };
-
-// ---------------------------------------------------------------------------
-// Exported collection
-// ---------------------------------------------------------------------------
 
 export const FLOW_TEMPLATES: FlowTemplate[] = [
-  abandonedCartTemplate,
-  welcomeSeriesTemplate,
-  postPurchaseTemplate,
-  winbackTemplate,
-  browseAbandonmentTemplate,
+  abandonedCart,
+  welcomeSeries,
+  postPurchase,
+  winback,
+  browseAbandonment,
 ];
+
+export default FLOW_TEMPLATES;
