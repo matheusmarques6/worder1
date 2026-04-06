@@ -111,7 +111,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 320, opacity: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="fb-properties w-80 bg-gray-50 border-l border-gray-200 flex flex-col h-full"
+        className="w-[340px] bg-white border-l border-gray-200 flex flex-col h-full shrink-0 overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">

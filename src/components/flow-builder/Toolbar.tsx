@@ -148,7 +148,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   };
 
   return (
-    <div className="fb-toolbar h-14 bg-white border-b border-gray-200 flex items-center px-2 sm:px-4 gap-2 sm:gap-4">
+    <div className="h-14 bg-white border-b border-gray-200 flex items-center px-2 sm:px-4 gap-2 sm:gap-4 shrink-0">
       {/* Left Section - Close Button + Name */}
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink-0">
         <button

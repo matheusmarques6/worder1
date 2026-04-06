@@ -40,7 +40,16 @@ import {
   Paperclip,
   Image,
   FileText,
-  LucideIcon,
+  Eye,
+  PlusCircle,
+  Package,
+  Truck,
+  Smartphone,
+  UserCog,
+  List,
+  Shuffle,
+  MessageCircle,
+  type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore } from '@/stores/flowStore';
@@ -82,6 +91,9 @@ const iconMap: Record<string, LucideIcon> = {
   ArrowRight, Trophy, XCircle, Calendar, Users, Webhook, MessageSquare,
   Mail, Phone, Bell, Edit, Trash, Send, UserMinus, Target, Globe,
   GitBranch, Percent, Filter, Clock, Zap,
+  // Added for all sidebar node types
+  Eye, PlusCircle, Package, Truck, Smartphone, UserCog, List,
+  Shuffle, MessageCircle, FileText,
 };
 
 // ============================================
@@ -613,7 +625,7 @@ function BaseNodeComponent(props: BaseNodeProps) {
         opacity: disabled ? 0.5 : 1,
       }}
       className={cn(
-        'relative min-w-[280px] max-w-[360px]',
+        'relative w-[240px]',
         'rounded-lg bg-white border border-gray-200 border-l-4 shadow-sm',
         catConfig.leftBorder,
         selected && 'ring-2 ring-blue-500 ring-offset-2 shadow-md',
