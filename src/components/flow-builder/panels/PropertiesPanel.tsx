@@ -2210,17 +2210,6 @@ function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<s
 
       {/* === SECTION: Template (Klaviyo style) === */}
       <div className="py-5">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-semibold text-gray-900">Template</h4>
-          {config.templateId && (
-            <div className="flex items-center gap-1">
-              <button className="px-3 py-1 rounded-md border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50">
-                Edit
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Template selector */}
         <select value={config.templateId || ''} onChange={(e) => onUpdate('templateId', e.target.value)}
           className={cn(inputCls, 'mb-3')}>
@@ -2230,9 +2219,16 @@ function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<s
         </select>
         {loadingTemplates && <p className="text-xs text-gray-400">Carregando...</p>}
 
-        {/* Template preview */}
+        {/* Template preview with Desktop/Mobile + Edit */}
         {config.templateId && config.templateId !== '__new__' && (
-          <EmailTemplatePreview templateId={config.templateId} />
+          <EmailTemplatePreview
+            templateId={config.templateId}
+            onEdit={() => {
+              // Navigate to email editor in new tab
+              const url = `/email/templates/${config.templateId}/edit`;
+              window.open(url, '_blank');
+            }}
+          />
         )}
 
         {/* New email from scratch */}
@@ -2711,9 +2707,10 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
 // EMAIL TEMPLATE PREVIEW
 // ============================================
 
-function EmailTemplatePreview({ templateId }: { templateId: string }) {
+function EmailTemplatePreview({ templateId, onEdit }: { templateId: string; onEdit?: () => void }) {
   const [html, setHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
 
   useEffect(() => {
     if (!templateId) return;
@@ -2727,31 +2724,83 @@ function EmailTemplatePreview({ templateId }: { templateId: string }) {
       .finally(() => setLoading(false));
   }, [templateId]);
 
-  if (loading) {
-    return (
-      <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-6 flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!html) {
-    return (
-      <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
-        <Mail className="w-6 h-6 text-gray-300 mx-auto mb-1" />
-        <p className="text-xs text-gray-400">Sem preview disponivel</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="mt-3 rounded-lg border border-gray-200 overflow-hidden bg-white">
-      <iframe
-        srcDoc={html}
-        className="w-full h-[200px] border-0"
-        sandbox="allow-same-origin"
-        title="Email preview"
-      />
+    <div className="mt-4">
+      {/* Toolbar: Template label + Desktop/Mobile + Edit */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-medium text-gray-700">Template</span>
+        <div className="flex items-center gap-2">
+          {/* Desktop/Mobile toggle */}
+          <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('desktop')}
+              className={cn(
+                'p-1.5 rounded-md transition-colors',
+                viewMode === 'desktop' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'
+              )}
+              title="Desktop"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setViewMode('mobile')}
+              className={cn(
+                'p-1.5 rounded-md transition-colors',
+                viewMode === 'mobile' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'
+              )}
+              title="Mobile"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="5" y="2" width="14" height="20" rx="2" /><path d="M12 18h.01" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Edit button */}
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              className="px-3 py-1.5 rounded-md border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Preview */}
+      {loading ? (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-8 flex items-center justify-center">
+          <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : !html ? (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center">
+          <Mail className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+          <p className="text-xs text-gray-400">Sem preview disponivel</p>
+          {onEdit && (
+            <button onClick={onEdit} className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium">
+              Criar template
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className={cn(
+          'rounded-xl border border-gray-200 overflow-hidden bg-white mx-auto transition-all duration-200',
+          viewMode === 'mobile' ? 'max-w-[320px]' : 'w-full'
+        )}>
+          <iframe
+            srcDoc={html}
+            className={cn(
+              'w-full border-0 transition-all duration-200',
+              viewMode === 'mobile' ? 'h-[480px]' : 'h-[360px]'
+            )}
+            sandbox="allow-same-origin"
+            title="Email preview"
+          />
+        </div>
+      )}
     </div>
   );
 }
