@@ -308,45 +308,33 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         {/* Divider - hidden on small screens */}
         <div className="hidden sm:block w-px h-8 bg-gray-100" />
 
-        {/* Save */}
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className={cn(
-            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'bg-gray-100 hover:bg-gray-200 border border-gray-300',
-            'text-gray-700 text-sm font-medium',
-            'transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-          title="Salvar"
-        >
-          {saveStatus === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
-          {saveStatus === 'saved' && <Check className="w-4 h-4 text-green-600" />}
-          {saveStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-600" />}
-          {saveStatus === 'idle' && <Save className="w-4 h-4" />}
-          <span className="hidden sm:inline">SALVAR</span>
-        </button>
+        {/* Save status indicator */}
+        {saveStatus === 'saving' && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-400">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span className="hidden sm:inline">Salvando...</span>
+          </div>
+        )}
+        {saveStatus === 'saved' && (
+          <div className="flex items-center gap-1.5 text-xs text-green-600">
+            <Check className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Salvo</span>
+          </div>
+        )}
 
-        {/* Save and Close */}
+        {/* Save & Close */}
         <button
           onClick={handleSaveAndClose}
           disabled={isSaving}
           className={cn(
-            'flex items-center gap-2 p-2 sm:px-4 sm:py-2 rounded-lg',
-            'bg-blue-600 hover:bg-blue-700',
+            'flex items-center gap-2 px-4 py-2 rounded-lg',
+            'bg-gray-900 hover:bg-gray-800',
             'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
-          title="Salvar e Fechar"
         >
-          {saveStatus === 'saving' ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Check className="w-4 h-4" />
-          )}
-          <span className="hidden md:inline">Save & Close</span>
+          Save & Close
         </button>
       </div>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import '@/styles/flow-builder.css';
@@ -91,6 +91,31 @@ export function FlowBuilder({
 
     fetchAnalytics();
   }, [showAnalytics, savedAutomationId, analyticsTimeframe, setAnalyticsData]);
+
+  // Auto-save: debounced save when flow changes
+  const isDirty = useFlowStore((state) => state.isDirty);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!isDirty || !savedAutomationId || savedAutomationId === 'new') return;
+
+    // Clear previous timer
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+
+    // Debounce: save after 2 seconds of no changes
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await onSave();
+        useFlowStore.getState().setDirty(false);
+      } catch {
+        // Silent fail — user can still manual save
+      }
+    }, 2000);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [isDirty, savedAutomationId, onSave]);
 
   // Convert legacy nodes to new format
   const convertLegacyNodes = useCallback((legacyNodes: any[]): FlowNode[] => {

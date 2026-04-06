@@ -2257,24 +2257,9 @@ function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<s
         </select>
         {loadingTemplates && <p className="text-xs text-gray-400 mt-1">Carregando...</p>}
 
-        {/* Template preview thumbnail */}
+        {/* Template preview */}
         {config.templateId && (
-          <div className="mt-3 rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
-            <div className="p-4 flex items-center justify-center min-h-[120px]">
-              {templates.find(t => t.id === config.templateId)?.thumbnail_url ? (
-                <img
-                  src={templates.find(t => t.id === config.templateId)?.thumbnail_url}
-                  alt="Template preview"
-                  className="max-h-[200px] rounded shadow-sm"
-                />
-              ) : (
-                <div className="text-center">
-                  <Mail className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                  <p className="text-xs text-gray-400">Preview do template</p>
-                </div>
-              )}
-            </div>
-          </div>
+          <EmailTemplatePreview templateId={config.templateId} />
         )}
 
         {/* HTML editor when no template */}
@@ -2726,6 +2711,55 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ============================================
+// EMAIL TEMPLATE PREVIEW
+// ============================================
+
+function EmailTemplatePreview({ templateId }: { templateId: string }) {
+  const [html, setHtml] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!templateId) return;
+    setLoading(true);
+    fetch(`/api/email/templates/${templateId}`)
+      .then(r => r.json())
+      .then(data => {
+        setHtml(data.template?.html || data.html || null);
+      })
+      .catch(() => setHtml(null))
+      .finally(() => setLoading(false));
+  }, [templateId]);
+
+  if (loading) {
+    return (
+      <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-6 flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!html) {
+    return (
+      <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
+        <Mail className="w-6 h-6 text-gray-300 mx-auto mb-1" />
+        <p className="text-xs text-gray-400">Sem preview disponivel</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-gray-200 overflow-hidden bg-white">
+      <iframe
+        srcDoc={html}
+        className="w-full h-[200px] border-0"
+        sandbox="allow-same-origin"
+        title="Email preview"
+      />
     </div>
   );
 }

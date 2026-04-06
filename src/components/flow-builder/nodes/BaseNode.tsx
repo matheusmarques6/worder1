@@ -176,11 +176,11 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
       {/* Card */}
       <div
         className={cn(
-          'w-[280px] bg-white rounded-xl border overflow-hidden',
+          'w-[300px] bg-white rounded-xl border overflow-hidden',
           'transition-shadow duration-150',
           selected
-            ? 'border-blue-500 shadow-lg shadow-blue-500/10'
-            : 'border-gray-200/80 shadow-md shadow-black/[0.04] hover:shadow-lg hover:shadow-black/[0.06]',
+            ? 'border-blue-500 shadow-lg shadow-blue-100'
+            : 'border-gray-200 shadow-sm hover:shadow-md',
         )}
       >
         <div className="p-4 flex items-start gap-3">
@@ -207,33 +207,30 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
           </button>
         </div>
 
-        {/* Metrics row (Omnisend style) */}
-        {/* Metrics */}
-        {nodeMetrics && (category === 'action') && (
+        {/* Metrics — shown when analytics toggle is ON */}
+        {showAnalytics && category === 'action' && (
           <div className="px-4 pb-3 pt-0">
             <div className="flex items-center gap-5 border-t border-gray-100 pt-2.5">
               <div>
                 <p className="text-[10px] text-gray-400">Sent</p>
-                <p className="text-sm font-bold text-gray-900">{nodeMetrics.sent}</p>
+                <p className="text-sm font-bold text-gray-900">{nodeMetrics?.sent ?? 0}</p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-400">Opened</p>
                 <p className="text-sm font-bold text-gray-900">
-                  {nodeMetrics.sent > 0 ? `${Math.round(nodeMetrics.opened / nodeMetrics.sent * 100)}%` : '0%'}
+                  {(nodeMetrics?.sent ?? 0) > 0 ? `${Math.round((nodeMetrics?.opened ?? 0) / nodeMetrics!.sent * 100)}%` : '0%'}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-400">Clicked</p>
                 <p className="text-sm font-bold text-gray-900">
-                  {nodeMetrics.sent > 0 ? `${Math.round(nodeMetrics.clicked / nodeMetrics.sent * 100)}%` : '0%'}
+                  {(nodeMetrics?.sent ?? 0) > 0 ? `${Math.round((nodeMetrics?.clicked ?? 0) / nodeMetrics!.sent * 100)}%` : '0%'}
                 </p>
               </div>
-              {nodeMetrics.revenue > 0 && (
-                <div>
-                  <p className="text-[10px] text-gray-400">Sales</p>
-                  <p className="text-sm font-bold text-emerald-600">R${nodeMetrics.revenue.toFixed(0)}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-[10px] text-gray-400">Sales</p>
+                <p className="text-sm font-bold text-emerald-600">R${(nodeMetrics?.revenue ?? 0).toFixed(0)}</p>
+              </div>
             </div>
           </div>
         )}

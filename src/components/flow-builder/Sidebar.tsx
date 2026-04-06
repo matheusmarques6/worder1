@@ -36,7 +36,6 @@ import {
   Code,
   Timer,
   LogOut,
-  Settings,
   Eye,
   PlusCircle,
   FileText,
@@ -49,7 +48,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, FlowNode } from '@/stores/flowStore';
-import { CredentialSelector } from './panels/CredentialSelector';
 
 // ============================================
 // TIPOS E INTERFACES
@@ -165,13 +163,10 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
     return LIBRARY_SECTIONS.filter(s => s.defaultExpanded).map(s => s.id);
   });
   const [searchQuery, setSearchQuery] = useState('');
-  const [showConfig, setShowConfig] = useState(false);
   const triggerAddedRef = useRef(false);
 
   const addNode = useFlowStore((state) => state.addNode);
   const nodes = useFlowStore((state) => state.nodes);
-  const automationConfig = useFlowStore((state) => state.automationConfig);
-  const setAutomationConfig = useFlowStore((state) => state.setAutomationConfig);
 
   // Trigger selecionado
   const currentTrigger = TRIGGER_OPTIONS.find(t => t.type === selectedTrigger) || TRIGGER_OPTIONS[0];
@@ -427,76 +422,8 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
         )}
       </div>
 
-      {/* Configurações Globais da Automação */}
-      <div className="border-b border-gray-200">
-        <button
-          onClick={() => setShowConfig(!showConfig)}
-          className={cn(
-            'w-full flex items-center justify-between px-4 py-3',
-            'hover:bg-white transition-colors'
-          )}
-        >
-          <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4 text-gray-500" />
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Configurações da Automação
-            </span>
-          </div>
-          <ChevronDown
-            className={cn(
-              'w-4 h-4 text-gray-500 transition-transform duration-200',
-              showConfig && 'rotate-180'
-            )}
-          />
-        </button>
-
-        <AnimatePresence>
-          {showConfig && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <div className="px-4 pb-4 space-y-4">
-                {/* WhatsApp Padrão */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-gray-500 flex items-center gap-1.5">
-                    <MessageCircle className="w-3.5 h-3.5 text-green-500" />
-                    WhatsApp Padrão
-                  </label>
-                  <CredentialSelector
-                    connectionType="whatsapp"
-                    value={automationConfig?.whatsappCredentialId}
-                    onChange={(id) => setAutomationConfig({ whatsappCredentialId: id })}
-                    label=""
-                    placeholder="Selecione..."
-                  />
-                </div>
-
-                {/* Email Padrão */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-gray-500 flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 text-blue-500" />
-                    Email Padrão
-                  </label>
-                  <CredentialSelector
-                    connectionType="email"
-                    value={automationConfig?.emailCredentialId}
-                    onChange={(id) => setAutomationConfig({ emailCredentialId: id })}
-                    label=""
-                    placeholder="Selecione..."
-                  />
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
       {/* Busca */}
-      <div className="px-4 py-3 border-b border-gray-200">
+      <div className="px-3 py-2.5 border-b border-gray-100">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
