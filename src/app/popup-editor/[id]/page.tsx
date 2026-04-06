@@ -131,6 +131,9 @@ function BlockPreview({ block }: { block: Block }) {
     marginTop: p.marginTop || 0, marginBottom: p.marginBottom ?? 8,
     padding: p.blockPadding || 0, backgroundColor: p.blockBg || undefined,
     borderRadius: p.blockRadius || 0,
+    border: p.borderWidth ? `${p.borderWidth}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}` : undefined,
+    boxShadow: p.shadow || undefined,
+    opacity: p.opacity != null ? p.opacity / 100 : undefined,
   }
   const inputStyle = "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white placeholder-gray-400 outline-none"
   switch (block.type) {
@@ -447,14 +450,105 @@ function BlockEditor({ block, onChange, onDelete }: { block: Block; onChange: (b
       {tab === 'props' ? (
         <div className="space-y-3 px-1">{renderProps()}</div>
       ) : (
-        <div className="space-y-3 px-1">
-          <Field label="Margem superior (px)"><input type="number" className={inp} value={p.marginTop ?? 0} onChange={e => up('marginTop', +e.target.value)} /></Field>
-          <Field label="Margem inferior (px)"><input type="number" className={inp} value={p.marginBottom ?? 8} onChange={e => up('marginBottom', +e.target.value)} /></Field>
-          <Field label="Padding (px)"><input type="number" className={inp} value={p.blockPadding ?? 0} onChange={e => up('blockPadding', +e.target.value)} /></Field>
-          <ColorField label="Cor de fundo" value={p.blockBg || ''} onChange={v => up('blockBg', v)} />
-          <Field label="Raio borda"><input type="number" className={inp} value={p.blockRadius ?? 0} onChange={e => up('blockRadius', +e.target.value)} /></Field>
-          <button onClick={onDelete} className="w-full py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 mt-4">
-            Remover bloco
+        <div className="space-y-1 px-1">
+          {/* Fill */}
+          <div className="border border-gray-100 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-gray-700">Fill</span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => up('blockBg', p.blockBg ? '' : '#F3F4F6')} className="text-gray-400 hover:text-gray-600"><Plus className="w-3.5 h-3.5" /></button>
+              </div>
+            </div>
+            {p.blockBg ? (
+              <div className="flex items-center gap-2">
+                <input type="color" value={p.blockBg} onChange={e => up('blockBg', e.target.value)} className="w-7 h-7 rounded border border-gray-200 p-0.5 cursor-pointer flex-shrink-0" />
+                <input className="flex-1 px-2 py-1 border border-gray-200 rounded text-xs font-mono" value={p.blockBg} onChange={e => up('blockBg', e.target.value)} />
+                <span className="text-xs text-gray-400 w-8">100%</span>
+                <button onClick={() => up('blockBg', '')} className="text-gray-400 hover:text-red-500"><Minus className="w-3.5 h-3.5" /></button>
+              </div>
+            ) : <p className="text-xs text-gray-400">Sem preenchimento</p>}
+          </div>
+
+          {/* Stroke */}
+          <div className="border border-gray-100 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-gray-700">Stroke</span>
+              <button onClick={() => up('borderWidth', p.borderWidth ? 0 : 1)} className="text-gray-400 hover:text-gray-600"><Plus className="w-3.5 h-3.5" /></button>
+            </div>
+            {(p.borderWidth || 0) > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input type="color" value={p.borderColor || '#E5E7EB'} onChange={e => up('borderColor', e.target.value)} className="w-7 h-7 rounded border border-gray-200 p-0.5 cursor-pointer flex-shrink-0" />
+                  <input className="flex-1 px-2 py-1 border border-gray-200 rounded text-xs font-mono" value={p.borderColor || '#E5E7EB'} onChange={e => up('borderColor', e.target.value)} />
+                  <button onClick={() => up('borderWidth', 0)} className="text-gray-400 hover:text-red-500"><Minus className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select className="px-2 py-1 border border-gray-200 rounded text-xs bg-white" value={p.borderStyle || 'solid'} onChange={e => up('borderStyle', e.target.value)}>
+                    <option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option>
+                  </select>
+                  <input type="number" className="w-14 px-2 py-1 border border-gray-200 rounded text-xs" value={p.borderWidth || 1} onChange={e => up('borderWidth', +e.target.value)} min={0} max={10} />
+                </div>
+              </div>
+            ) : <p className="text-xs text-gray-400">Sem borda</p>}
+          </div>
+
+          {/* Effects */}
+          <div className="border border-gray-100 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-gray-700">Effects</span>
+              <button onClick={() => up('shadow', p.shadow ? '' : '0 2px 8px rgba(0,0,0,0.1)')} className="text-gray-400 hover:text-gray-600"><Plus className="w-3.5 h-3.5" /></button>
+            </div>
+            {p.shadow ? (
+              <div className="flex items-center gap-2">
+                <select className="flex-1 px-2 py-1 border border-gray-200 rounded text-xs bg-white" value={p.shadow} onChange={e => up('shadow', e.target.value)}>
+                  <option value="0 1px 3px rgba(0,0,0,0.08)">Sutil</option>
+                  <option value="0 2px 8px rgba(0,0,0,0.1)">Média</option>
+                  <option value="0 4px 16px rgba(0,0,0,0.15)">Grande</option>
+                  <option value="0 8px 32px rgba(0,0,0,0.2)">Extra</option>
+                  <option value="inset 0 2px 4px rgba(0,0,0,0.06)">Inner</option>
+                </select>
+                <button onClick={() => up('shadow', '')} className="text-gray-400 hover:text-red-500"><Minus className="w-3.5 h-3.5" /></button>
+              </div>
+            ) : <p className="text-xs text-gray-400">Sem efeito</p>}
+          </div>
+
+          {/* Layout */}
+          <div className="border border-gray-100 rounded-lg p-3">
+            <span className="text-xs font-semibold text-gray-700 block mb-2">Layout</span>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <span className="text-[10px] text-gray-400">Margem T</span>
+                <input type="number" className="w-full px-2 py-1 border border-gray-200 rounded text-xs" value={p.marginTop ?? 0} onChange={e => up('marginTop', +e.target.value)} />
+              </div>
+              <div>
+                <span className="text-[10px] text-gray-400">Margem B</span>
+                <input type="number" className="w-full px-2 py-1 border border-gray-200 rounded text-xs" value={p.marginBottom ?? 8} onChange={e => up('marginBottom', +e.target.value)} />
+              </div>
+              <div>
+                <span className="text-[10px] text-gray-400">Padding</span>
+                <input type="number" className="w-full px-2 py-1 border border-gray-200 rounded text-xs" value={p.blockPadding ?? 0} onChange={e => up('blockPadding', +e.target.value)} />
+              </div>
+              <div>
+                <span className="text-[10px] text-gray-400">Raio</span>
+                <input type="number" className="w-full px-2 py-1 border border-gray-200 rounded text-xs" value={p.blockRadius ?? 0} onChange={e => up('blockRadius', +e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          {/* Appearance */}
+          <div className="border border-gray-100 rounded-lg p-3">
+            <span className="text-xs font-semibold text-gray-700 block mb-2">Appearance</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <Eye className="w-3.5 h-3.5 text-gray-400" />
+                <input type="number" className="w-14 px-2 py-1 border border-gray-200 rounded text-xs" value={p.opacity ?? 100} onChange={e => up('opacity', +e.target.value)} min={0} max={100} />
+                <span className="text-xs text-gray-400">%</span>
+              </div>
+            </div>
+          </div>
+
+          <button onClick={onDelete} className="w-full py-2.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 mt-2 flex items-center justify-center gap-2">
+            <Trash2 className="w-4 h-4" /> Remover bloco
           </button>
         </div>
       )}
