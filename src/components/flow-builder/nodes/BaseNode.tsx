@@ -124,10 +124,30 @@ function getNodeSummary(nodeType: string, config: Record<string, any>): string |
 // BASE NODE COMPONENT (Klaviyo/Omnisend style)
 // ============================================
 
+// Fallback icon by nodeType when icon field is missing
+const nodeTypeIconFallback: Record<string, LucideIcon> = {
+  trigger_abandon: ShoppingCart, trigger_checkout_abandoned: CreditCard,
+  trigger_order: Package, trigger_order_paid: CreditCard,
+  trigger_fulfilled_order: Truck, trigger_cancelled_order: XCircle,
+  trigger_viewed_product: Eye, trigger_added_to_cart: PlusCircle,
+  trigger_signup: UserPlus, trigger_form_submitted: FileText,
+  trigger_segment: Users, trigger_tag: Tag, trigger_date: Calendar,
+  trigger_custom_event: Zap, trigger_webhook: Webhook,
+  trigger_deal_created: Briefcase, trigger_deal_stage: ArrowRight,
+  trigger_deal_won: Trophy, trigger_deal_lost: XCircle,
+  trigger_whatsapp: MessageSquare,
+  action_email: Mail, action_whatsapp: MessageCircle, action_sms: Smartphone,
+  action_webhook: Send, action_notify: Bell,
+  action_tag: Tag, action_remove_tag: UserMinus, action_update: UserCog,
+  action_add_to_list: List, action_remove_from_list: List,
+  action_move_deal: ArrowRight,
+  control_delay: Clock, condition_field: GitBranch, logic_split: Shuffle,
+};
+
 function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
   const { category, label, icon, disabled, nodeType, config: nodeConfig, status } = data;
   const cat = categoryConfig[category] || categoryConfig.action;
-  const IconComponent = icon ? (iconMap[icon] || Zap) : Zap;
+  const IconComponent = icon ? (iconMap[icon] || nodeTypeIconFallback[nodeType] || Zap) : (nodeTypeIconFallback[nodeType] || Zap);
   const selectNode = useFlowStore((s) => s.selectNode);
   const showAnalytics = useFlowStore((s) => s.showAnalytics);
   const analyticsData = useFlowStore((s) => s.analyticsData);

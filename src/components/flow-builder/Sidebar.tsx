@@ -199,6 +199,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
             description: trigger.description,
             category: 'trigger',
             nodeType: trigger.type,
+            icon: trigger.icon?.name || 'Zap',
             config: {},
           },
         };
@@ -326,6 +327,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
         description: nodeDef.description,
         category: nodeDef.category,
         nodeType: nodeDef.type,
+        icon: nodeDef.icon?.name || 'Zap',
         config: {},
       },
     };
