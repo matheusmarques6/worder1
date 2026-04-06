@@ -18,10 +18,17 @@ import {
   Trash2,
   Edit,
   CheckCircle,
+  ShoppingCart,
+  UserPlus,
+  Package,
+  ArrowRight,
+  Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { FlowBuilder, getFlowDataForSave } from '@/components/flow-builder';
+import { FLOW_TEMPLATES } from '@/lib/automation/flow-templates';
+import type { FlowTemplate } from '@/lib/automation/flow-templates';
 
 // ============================================
 // TYPES
@@ -72,36 +79,18 @@ function formatCurrency(value: number): string {
 // TEMPLATES
 // ============================================
 
-const AUTOMATION_TEMPLATES = [
-  {
-    id: 'welcome',
-    name: 'Boas-vindas',
-    description: 'Enviar email de boas-vindas para novos contatos',
-    trigger: 'trigger_signup',
-    icon: '👋',
-  },
-  {
-    id: 'abandoned',
-    name: 'Carrinho Abandonado',
-    description: 'Recuperar carrinhos abandonados com email',
-    trigger: 'trigger_abandon',
-    icon: '🛒',
-  },
-  {
-    id: 'order',
-    name: 'Pedido Realizado',
-    description: 'Notificar equipe sobre novos pedidos',
-    trigger: 'trigger_order',
-    icon: '📦',
-  },
-  {
-    id: 'deal',
-    name: 'Deal Criado',
-    description: 'Criar tarefas quando deal for criado',
-    trigger: 'trigger_deal_created',
-    icon: '💼',
-  },
-];
+// Icon mapping for flow templates
+const TEMPLATE_ICONS: Record<string, typeof ShoppingCart> = {
+  'abandoned-cart': ShoppingCart,
+  'welcome-series': UserPlus,
+  'post-purchase': Package,
+  'winback': ArrowRight,
+  'browse-abandonment': Eye,
+};
+
+function getTemplateIcon(templateId: string) {
+  return TEMPLATE_ICONS[templateId] || Zap;
+}
 
 // ============================================
 // MAIN COMPONENT
@@ -182,21 +171,14 @@ export default function AutomationsPage() {
 
   // Handle new from template
   const handleNewFromTemplate = (templateId: string) => {
-    const template = AUTOMATION_TEMPLATES.find((t) => t.id === templateId);
+    const template = FLOW_TEMPLATES.find((t) => t.id === templateId);
     if (template) {
       setEditingAutomation({
         id: 'new',
         name: template.name,
         status: 'draft',
-        trigger_type: template.trigger,
-        nodes: [
-          {
-            id: `node-${Date.now()}`,
-            type: template.trigger,
-            position: { x: 250, y: 50 },
-            data: { label: '', config: {} },
-          },
-        ],
+        trigger_type: template.triggerType,
+        nodes: template.nodes,
         edges: [],
       });
       setShowNewModal(false);
@@ -504,7 +486,7 @@ export default function AutomationsPage() {
             className={cn(
               'w-full pl-10 pr-4 py-2.5 rounded-xl',
               'bg-white border border-gray-200',
-              'text-gray-900 placeholder-dark-500',
+              'text-gray-900 placeholder-gray-400',
               'focus:outline-none focus:border-brand-400',
               'transition-colors'
             )}
@@ -522,7 +504,7 @@ export default function AutomationsPage() {
                   'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                   statusFilter === status
                     ? 'bg-primary-500 text-white'
-                    : 'text-gray-500 hover:text-white hover:bg-gray-100'
+                    : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
                 )}
               >
                 {status === 'all' && 'Todas'}
@@ -539,7 +521,7 @@ export default function AutomationsPage() {
               onClick={() => setView('list')}
               className={cn(
                 'p-2 rounded-lg transition-all',
-                view === 'list' ? 'bg-white/10 text-white' : 'text-white/30 hover:text-white'
+                view === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-900'
               )}
             >
               <List className="w-4 h-4" />
@@ -548,7 +530,7 @@ export default function AutomationsPage() {
               onClick={() => setView('grid')}
               className={cn(
                 'p-2 rounded-lg transition-all',
-                view === 'grid' ? 'bg-white/10 text-white' : 'text-white/30 hover:text-white'
+                view === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-900'
               )}
             >
               <LayoutGrid className="w-4 h-4" />
@@ -618,14 +600,37 @@ interface AutomationCardProps {
   onToggleStatus: () => void;
 }
 
-function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: AutomationCardProps) {
-  const statusConfig = {
-    active: { label: 'Ativa', color: 'bg-success-500/20 text-success-400 border-success-500/30' },
-    paused: { label: 'Pausada', color: 'bg-warning-500/20 text-warning-400 border-warning-500/30' },
-    draft: { label: 'Rascunho', color: 'bg-gray-200/50 text-gray-500 border-gray-300/30' },
-  };
+// Trigger type to icon mapping
+const TRIGGER_ICON_MAP: Record<string, typeof ShoppingCart> = {
+  trigger_abandon: ShoppingCart,
+  trigger_checkout_abandoned: ShoppingCart,
+  trigger_order: Package,
+  trigger_order_paid: Package,
+  trigger_signup: UserPlus,
+  trigger_form_submitted: Mail,
+  trigger_viewed_product: Eye,
+  trigger_segment: Users,
+};
 
-  const { label, color } = statusConfig[automation.status];
+function formatTimeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'agora';
+  if (mins < 60) return `${mins}min atrás`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h atrás`;
+  const days = Math.floor(hours / 24);
+  return `${days}d atrás`;
+}
+
+function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: AutomationCardProps) {
+  const statusColors: Record<string, string> = {
+    active: 'bg-green-50 text-green-700 border-green-200',
+    paused: 'bg-amber-50 text-amber-700 border-amber-200',
+    draft: 'bg-gray-50 text-gray-500 border-gray-200',
+  };
+  const statusLabels: Record<string, string> = { active: 'Ativa', paused: 'Pausada', draft: 'Rascunho' };
+  const TriggerIcon = TRIGGER_ICON_MAP[automation.trigger_type] || Zap;
 
   return (
     <motion.div
@@ -633,24 +638,31 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
       animate={{ opacity: 1, y: 0 }}
       className={cn(
         'bg-white border border-gray-200 rounded-xl',
-        'hover:border-gray-300 transition-colors',
+        'hover:border-gray-300 hover:shadow-sm transition-all',
         view === 'list' ? 'p-4' : 'p-5'
       )}
     >
       <div className={cn('flex', view === 'list' ? 'items-center justify-between' : 'flex-col gap-4')}>
         {/* Info */}
         <div className={cn('flex items-center gap-4', view === 'grid' && 'w-full')}>
-          <div className="p-3 bg-primary-500/15 rounded-xl">
-            <Zap className="w-5 h-5 text-brand-600" />
+          <div className="p-3 bg-emerald-50 rounded-xl">
+            <TriggerIcon className="w-5 h-5 text-emerald-600" />
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-gray-900 truncate">{automation.name}</h3>
-            {automation.description && (
-              <p className="text-sm text-gray-500 truncate">{automation.description}</p>
-            )}
+            <div className="flex items-center gap-2 mt-0.5">
+              {automation.description && (
+                <p className="text-sm text-gray-500 truncate">{automation.description}</p>
+              )}
+              {automation.last_run_at && (
+                <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                  {formatTimeAgo(automation.last_run_at)}
+                </span>
+              )}
+            </div>
           </div>
-          <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-medium border', color)}>
-            {label}
+          <span className={cn('px-2.5 py-1 rounded-full text-[10px] font-medium border', statusColors[automation.status] || statusColors.draft)}>
+            {statusLabels[automation.status] || 'Rascunho'}
           </span>
         </div>
 
@@ -664,7 +676,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
               </span>
             )}
             {automation.successful_runs !== undefined && (
-              <span className="flex items-center gap-1 text-success-400">
+              <span className="flex items-center gap-1 text-green-600">
                 <CheckCircle className="w-3 h-3" />
                 {automation.successful_runs}
               </span>
@@ -679,7 +691,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             disabled={automation.status === 'draft'}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-gray-100 text-gray-500 hover:text-white',
+              'hover:bg-gray-100 text-gray-500 hover:text-gray-900',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
@@ -693,7 +705,7 @@ function AutomationCard({ automation, view, onEdit, onDelete, onToggleStatus }: 
             onClick={onEdit}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              'hover:bg-gray-100 text-gray-500 hover:text-white'
+              'hover:bg-gray-100 text-gray-500 hover:text-gray-900'
             )}
           >
             <Edit className="w-4 h-4" />
@@ -744,7 +756,7 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
           <h2 className="text-lg font-semibold text-gray-900">Nova Automação</h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -779,24 +791,38 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-3">Ou escolha um template</h3>
             <div className="grid grid-cols-2 gap-3">
-              {AUTOMATION_TEMPLATES.map((template) => (
-                <button
-                  key={template.id}
-                  onClick={() => onSelectTemplate(template.id)}
-                  className={cn(
-                    'p-4 rounded-xl text-left',
-                    'bg-white border border-gray-200',
-                    'hover:border-gray-300 hover:bg-gray-100/30',
-                    'transition-colors group'
-                  )}
-                >
-                  <div className="text-2xl mb-2">{template.icon}</div>
-                  <h4 className="font-medium text-gray-900 group-hover:text-brand-600 transition-colors">
-                    {template.name}
-                  </h4>
-                  <p className="text-xs text-gray-400 mt-1">{template.description}</p>
-                </button>
-              ))}
+              {FLOW_TEMPLATES.map((template) => {
+                const Icon = getTemplateIcon(template.id);
+                const emailCount = template.nodes.filter(n => n.data.category === 'action').length;
+                return (
+                  <button
+                    key={template.id}
+                    onClick={() => onSelectTemplate(template.id)}
+                    className={cn(
+                      'p-4 rounded-xl text-left',
+                      'bg-white border border-gray-200',
+                      'hover:border-blue-300 hover:bg-blue-50/30',
+                      'transition-colors group'
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="p-1.5 rounded-lg bg-emerald-50">
+                        <Icon className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      {template.tags.includes('Recomendado') && (
+                        <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Recomendado</span>
+                      )}
+                    </div>
+                    <h4 className="font-medium text-gray-900 group-hover:text-blue-700 transition-colors text-sm">
+                      {template.name}
+                    </h4>
+                    <p className="text-xs text-gray-400 mt-1 line-clamp-2">{template.description}</p>
+                    <p className="text-[10px] text-gray-400 mt-2">
+                      {emailCount} email{emailCount !== 1 ? 's' : ''}
+                    </p>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

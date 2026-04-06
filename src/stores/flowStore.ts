@@ -119,6 +119,9 @@ interface FlowStore {
   showTestModal: boolean;
   showCredentialsModal: boolean;
   isFullscreen: boolean;
+  showAnalytics: boolean;
+  analyticsData: Record<string, { sent: number; opened: number; clicked: number; revenue: number }>;
+  analyticsTimeframe: '7d' | '30d' | '90d' | 'all';
   
   // Test execution
   testExecution: TestExecution;
@@ -177,6 +180,9 @@ interface FlowStore {
   togglePropertiesPanel: () => void;
   toggleHistoryPanel: () => void;
   toggleTestModal: () => void;
+  toggleAnalytics: () => void;
+  setAnalyticsData: (data: FlowStore['analyticsData']) => void;
+  setAnalyticsTimeframe: (tf: FlowStore['analyticsTimeframe']) => void;
   toggleCredentialsModal: () => void;
   toggleFullscreen: () => void;
   openPropertiesPanel: () => void;
@@ -236,6 +242,9 @@ const initialState = {
   showTestModal: false,
   showCredentialsModal: false,
   isFullscreen: false,
+  showAnalytics: false,
+  analyticsData: {},
+  analyticsTimeframe: '30d' as const,
   testExecution: {
     isRunning: false,
     steps: [],
@@ -512,6 +521,9 @@ export const useFlowStore = create<FlowStore>()(
       togglePropertiesPanel: () => set((state) => ({ showPropertiesPanel: !state.showPropertiesPanel })),
       toggleHistoryPanel: () => set((state) => ({ showHistoryPanel: !state.showHistoryPanel })),
       toggleTestModal: () => set((state) => ({ showTestModal: !state.showTestModal })),
+      toggleAnalytics: () => set((state) => ({ showAnalytics: !state.showAnalytics })),
+      setAnalyticsData: (data) => set({ analyticsData: data }),
+      setAnalyticsTimeframe: (tf) => set({ analyticsTimeframe: tf }),
       toggleCredentialsModal: () => set((state) => ({ showCredentialsModal: !state.showCredentialsModal })),
       toggleFullscreen: () => set((state) => ({ isFullscreen: !state.isFullscreen })),
       openPropertiesPanel: () => set({ showPropertiesPanel: true }),

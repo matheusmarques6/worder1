@@ -566,9 +566,13 @@ function BaseNodeComponent(props: BaseNodeProps) {
   const statusCfg = statusConfig[status as keyof typeof statusConfig] || statusConfig.idle;
   const IconComponent = icon ? iconMap[icon] : Zap;
   const selectNode = useFlowStore((s) => s.selectNode);
+  const showAnalytics = useFlowStore((s) => s.showAnalytics);
+  const analyticsData = useFlowStore((s) => s.analyticsData);
 
   const isExecuting = status === 'running';
   const hasResult = status === 'success' || status === 'error' || status === 'skipped';
+  const nodeMetrics = showAnalytics ? analyticsData[id] : null;
+  const isActionNode = category === 'action';
 
   const renderPreview = () => {
     const cfg = nodeConfig || {};
@@ -664,6 +668,36 @@ function BaseNodeComponent(props: BaseNodeProps) {
         </div>
 
         {renderPreview()}
+
+        {/* Analytics overlay */}
+        {nodeMetrics && isActionNode && (
+          <div className="mt-2 pt-2 border-t border-gray-100">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">Enviados</span>
+                <span className="text-[10px] font-medium text-gray-700">{nodeMetrics.sent}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">Abertos</span>
+                <span className="text-[10px] font-medium text-gray-700">
+                  {nodeMetrics.opened} {nodeMetrics.sent > 0 && <span className="text-gray-400">({Math.round(nodeMetrics.opened / nodeMetrics.sent * 100)}%)</span>}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">Clicados</span>
+                <span className="text-[10px] font-medium text-gray-700">
+                  {nodeMetrics.clicked} {nodeMetrics.sent > 0 && <span className="text-gray-400">({Math.round(nodeMetrics.clicked / nodeMetrics.sent * 100)}%)</span>}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">Revenue</span>
+                <span className="text-[10px] font-medium text-emerald-600">
+                  {nodeMetrics.revenue > 0 ? `R$${nodeMetrics.revenue.toFixed(0)}` : '-'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {hasResult && executionTime !== undefined && (
           <motion.div

@@ -62,9 +62,35 @@ export function FlowBuilder({
   const showHistoryPanel = useFlowStore((state) => state.showHistoryPanel);
   const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
   const isFullscreen = useFlowStore((state) => state.isFullscreen);
+  const showAnalytics = useFlowStore((state) => state.showAnalytics);
+  const setAnalyticsData = useFlowStore((state) => state.setAnalyticsData);
+  const analyticsTimeframe = useFlowStore((state) => state.analyticsTimeframe);
 
   // Local state for saved automation ID
   const [savedAutomationId, setSavedAutomationId] = useState<string | undefined>(automationId);
+
+  // Fetch analytics when toggle is on
+  useEffect(() => {
+    if (!showAnalytics || !savedAutomationId || savedAutomationId === 'new') return;
+
+    const fetchAnalytics = async () => {
+      try {
+        const res = await fetch(
+          `/api/automations/${savedAutomationId}/stats?timeframe=${analyticsTimeframe}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.nodeStats) {
+            setAnalyticsData(data.nodeStats);
+          }
+        }
+      } catch {
+        // Non-blocking
+      }
+    };
+
+    fetchAnalytics();
+  }, [showAnalytics, savedAutomationId, analyticsTimeframe, setAnalyticsData]);
 
   // Convert legacy nodes to new format
   const convertLegacyNodes = useCallback((legacyNodes: any[]): FlowNode[] => {

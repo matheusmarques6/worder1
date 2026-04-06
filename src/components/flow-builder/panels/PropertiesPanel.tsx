@@ -509,6 +509,18 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               </>
             )}
 
+            {/* ============================== */}
+            {/* UNIVERSAL TRIGGER CONFIG       */}
+            {/* Shown for ALL trigger nodes    */}
+            {/* ============================== */}
+            {selectedNode.data.category === 'trigger' && (
+              <TriggerFiltersConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                triggerType={selectedNode.data.nodeType || ''}
+              />
+            )}
+
             {/* ACTION: UPDATE CONTACT */}
             {selectedNode.data.nodeType === 'action_update' && (
               <ContactFieldsEditor
@@ -2299,6 +2311,360 @@ function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<s
       </div>
     </div>
   )
+}
+
+// ============================================
+// TRIGGER FILTERS CONFIG (Universal)
+// Shown for all trigger nodes
+// ============================================
+
+const TRIGGER_FILTER_FIELDS: Record<string, Array<{ value: string; label: string }>> = {
+  trigger_abandon: [
+    { value: 'cart_value', label: 'Valor do Carrinho' },
+    { value: 'item_count', label: 'Qtd. de Itens' },
+    { value: 'product_names', label: 'Nomes dos Produtos' },
+    { value: 'currency', label: 'Moeda' },
+  ],
+  trigger_checkout_abandoned: [
+    { value: 'cart_value', label: 'Valor do Checkout' },
+    { value: 'item_count', label: 'Qtd. de Itens' },
+    { value: 'currency', label: 'Moeda' },
+  ],
+  trigger_order: [
+    { value: 'order_value', label: 'Valor do Pedido' },
+    { value: 'discount_code', label: 'Código de Desconto' },
+    { value: 'payment_method', label: 'Método de Pagamento' },
+    { value: 'item_count', label: 'Qtd. de Itens' },
+  ],
+  trigger_order_paid: [
+    { value: 'order_value', label: 'Valor do Pedido' },
+    { value: 'payment_method', label: 'Método de Pagamento' },
+  ],
+  trigger_viewed_product: [
+    { value: 'product_name', label: 'Nome do Produto' },
+    { value: 'product_price', label: 'Preço do Produto' },
+    { value: 'product_category', label: 'Categoria' },
+    { value: 'brand', label: 'Marca' },
+  ],
+  trigger_form_submitted: [
+    { value: 'form_name', label: 'Nome do Formulário' },
+    { value: 'source', label: 'Origem' },
+  ],
+  trigger_signup: [
+    { value: 'source', label: 'Origem' },
+    { value: 'tags', label: 'Tags' },
+  ],
+};
+
+const AUDIENCE_FIELDS = [
+  { value: 'email', label: 'Email' },
+  { value: 'first_name', label: 'Nome' },
+  { value: 'last_name', label: 'Sobrenome' },
+  { value: 'phone', label: 'Telefone' },
+  { value: 'city', label: 'Cidade' },
+  { value: 'state', label: 'Estado' },
+  { value: 'country', label: 'País' },
+  { value: 'tags', label: 'Tags' },
+  { value: 'lifecycle_stage', label: 'Estágio do Ciclo de Vida' },
+  { value: 'total_orders', label: 'Total de Pedidos' },
+  { value: 'total_spent', label: 'Total Gasto' },
+  { value: 'aov', label: 'Ticket Médio' },
+  { value: 'last_order_at', label: 'Data Último Pedido' },
+  { value: 'created_at', label: 'Data de Cadastro' },
+];
+
+const TRIGGER_FILTER_OPERATORS = [
+  { value: 'equals', label: 'Igual a' },
+  { value: 'not_equals', label: 'Diferente de' },
+  { value: 'greater_than', label: 'Maior que' },
+  { value: 'less_than', label: 'Menor que' },
+  { value: 'greater_or_equal', label: 'Maior ou igual' },
+  { value: 'less_or_equal', label: 'Menor ou igual' },
+  { value: 'contains', label: 'Contém' },
+  { value: 'not_contains', label: 'Não contém' },
+  { value: 'starts_with', label: 'Começa com' },
+  { value: 'ends_with', label: 'Termina com' },
+  { value: 'is_set', label: 'Está definido' },
+  { value: 'is_not_set', label: 'Não está definido' },
+  { value: 'in_list', label: 'Está na lista' },
+  { value: 'in_last_x_days', label: 'Nos últimos X dias' },
+];
+
+interface FilterRow {
+  field: string;
+  operator: string;
+  value: string;
+}
+
+interface ExitCondition {
+  type: 'event' | 'property';
+  eventType?: string;
+  field?: string;
+  operator?: string;
+  value?: string;
+}
+
+function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+  triggerType: string;
+}) {
+  const [expandedSections, setExpandedSections] = useState<string[]>([]);
+
+  const toggleSection = (id: string) => {
+    setExpandedSections(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    );
+  };
+
+  const triggerFields = TRIGGER_FILTER_FIELDS[triggerType] || [
+    { value: 'value', label: 'Valor' },
+    { value: 'source', label: 'Origem' },
+  ];
+
+  // Trigger Filters
+  const triggerFilters: FilterRow[] = config.triggerFilters || [];
+  const addTriggerFilter = () => {
+    if (triggerFilters.length >= 5) return;
+    onUpdate('triggerFilters', [...triggerFilters, { field: '', operator: 'equals', value: '' }]);
+  };
+  const updateTriggerFilter = (idx: number, patch: Partial<FilterRow>) => {
+    const updated = triggerFilters.map((f, i) => i === idx ? { ...f, ...patch } : f);
+    onUpdate('triggerFilters', updated);
+  };
+  const removeTriggerFilter = (idx: number) => {
+    onUpdate('triggerFilters', triggerFilters.filter((_, i) => i !== idx));
+  };
+
+  // Audience Filters
+  const audienceFilters: FilterRow[] = config.audienceFilters || [];
+  const addAudienceFilter = () => {
+    if (audienceFilters.length >= 5) return;
+    onUpdate('audienceFilters', [...audienceFilters, { field: '', operator: 'equals', value: '' }]);
+  };
+  const updateAudienceFilter = (idx: number, patch: Partial<FilterRow>) => {
+    const updated = audienceFilters.map((f, i) => i === idx ? { ...f, ...patch } : f);
+    onUpdate('audienceFilters', updated);
+  };
+  const removeAudienceFilter = (idx: number) => {
+    onUpdate('audienceFilters', audienceFilters.filter((_, i) => i !== idx));
+  };
+
+  // Exit Conditions
+  const exitConditions: ExitCondition[] = config.exitConditions || [];
+  const addExitCondition = () => {
+    if (exitConditions.length >= 4) return;
+    onUpdate('exitConditions', [...exitConditions, { type: 'event', eventType: 'placed_order' }]);
+  };
+  const updateExitCondition = (idx: number, patch: Partial<ExitCondition>) => {
+    const updated = exitConditions.map((c, i) => i === idx ? { ...c, ...patch } : c);
+    onUpdate('exitConditions', updated);
+  };
+  const removeExitCondition = (idx: number) => {
+    onUpdate('exitConditions', exitConditions.filter((_, i) => i !== idx));
+  };
+
+  const inputCls = cn(
+    'w-full px-2 py-1.5 rounded-md',
+    'bg-white border border-gray-200',
+    'text-xs text-gray-700 placeholder-gray-400',
+    'focus:outline-none focus:border-blue-500/50'
+  );
+
+  return (
+    <div className="space-y-1 mt-2">
+      {/* ---- TRIGGER FILTERS ---- */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSection('tf')}
+          className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 transition-colors"
+        >
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Filtros do Trigger {triggerFilters.length > 0 && `(${triggerFilters.length})`}
+          </span>
+          <ChevronDown className={cn('w-3.5 h-3.5 text-gray-400 transition-transform', expandedSections.includes('tf') && 'rotate-180')} />
+        </button>
+        {expandedSections.includes('tf') && (
+          <div className="px-3 pb-3 space-y-2 border-t border-gray-100">
+            <p className="text-[10px] text-gray-400 mt-2">Filtrar por dados do evento (até 5)</p>
+            {triggerFilters.map((filter, idx) => (
+              <div key={idx} className="flex gap-1.5 items-start">
+                <div className="flex-1 space-y-1">
+                  <select value={filter.field} onChange={(e) => updateTriggerFilter(idx, { field: e.target.value })} className={inputCls}>
+                    <option value="">Campo...</option>
+                    {triggerFields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                  <select value={filter.operator} onChange={(e) => updateTriggerFilter(idx, { operator: e.target.value })} className={inputCls}>
+                    {TRIGGER_FILTER_OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  {!['is_set', 'is_not_set'].includes(filter.operator) && (
+                    <input type="text" value={filter.value} onChange={(e) => updateTriggerFilter(idx, { value: e.target.value })}
+                      placeholder="Valor" className={inputCls} />
+                  )}
+                </div>
+                <button onClick={() => removeTriggerFilter(idx)} className="p-1 text-gray-400 hover:text-red-500 mt-1">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            {triggerFilters.length < 5 && (
+              <button onClick={addTriggerFilter}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                + Adicionar Filtro
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ---- AUDIENCE FILTERS ---- */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSection('af')}
+          className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 transition-colors"
+        >
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Filtros de Audiência {audienceFilters.length > 0 && `(${audienceFilters.length})`}
+          </span>
+          <ChevronDown className={cn('w-3.5 h-3.5 text-gray-400 transition-transform', expandedSections.includes('af') && 'rotate-180')} />
+        </button>
+        {expandedSections.includes('af') && (
+          <div className="px-3 pb-3 space-y-2 border-t border-gray-100">
+            <p className="text-[10px] text-gray-400 mt-2">Filtrar por dados do perfil do contato</p>
+            {audienceFilters.map((filter, idx) => (
+              <div key={idx} className="flex gap-1.5 items-start">
+                <div className="flex-1 space-y-1">
+                  <select value={filter.field} onChange={(e) => updateAudienceFilter(idx, { field: e.target.value })} className={inputCls}>
+                    <option value="">Campo...</option>
+                    {AUDIENCE_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                  <select value={filter.operator} onChange={(e) => updateAudienceFilter(idx, { operator: e.target.value })} className={inputCls}>
+                    {TRIGGER_FILTER_OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  {!['is_set', 'is_not_set'].includes(filter.operator) && (
+                    <input type="text" value={filter.value} onChange={(e) => updateAudienceFilter(idx, { value: e.target.value })}
+                      placeholder="Valor" className={inputCls} />
+                  )}
+                </div>
+                <button onClick={() => removeAudienceFilter(idx)} className="p-1 text-gray-400 hover:text-red-500 mt-1">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            {audienceFilters.length < 5 && (
+              <button onClick={addAudienceFilter}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                + Adicionar Filtro
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ---- EXIT CONDITIONS ---- */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSection('ec')}
+          className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 transition-colors"
+        >
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Condições de Saída {exitConditions.length > 0 && `(${exitConditions.length})`}
+          </span>
+          <ChevronDown className={cn('w-3.5 h-3.5 text-gray-400 transition-transform', expandedSections.includes('ec') && 'rotate-180')} />
+        </button>
+        {expandedSections.includes('ec') && (
+          <div className="px-3 pb-3 space-y-2 border-t border-gray-100">
+            <p className="text-[10px] text-gray-400 mt-2">Cancelam o fluxo quando satisfeitas (até 4)</p>
+            {exitConditions.map((cond, idx) => (
+              <div key={idx} className="flex gap-1.5 items-start">
+                <div className="flex-1 space-y-1">
+                  <select value={cond.type} onChange={(e) => updateExitCondition(idx, { type: e.target.value as 'event' | 'property' })} className={inputCls}>
+                    <option value="event">Evento ocorreu</option>
+                    <option value="property">Propriedade mudou</option>
+                  </select>
+                  {cond.type === 'event' && (
+                    <select value={cond.eventType || ''} onChange={(e) => updateExitCondition(idx, { eventType: e.target.value })} className={inputCls}>
+                      <option value="placed_order">Realizou Pedido</option>
+                      <option value="added_to_cart">Adicionou ao Carrinho</option>
+                      <option value="checkout_completed">Completou Checkout</option>
+                      <option value="form_submitted">Enviou Formulário</option>
+                      <option value="unsubscribed">Descadastrou</option>
+                    </select>
+                  )}
+                  {cond.type === 'property' && (
+                    <>
+                      <select value={cond.field || ''} onChange={(e) => updateExitCondition(idx, { field: e.target.value })} className={inputCls}>
+                        <option value="">Campo...</option>
+                        {AUDIENCE_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                      </select>
+                      <input type="text" value={cond.value || ''} onChange={(e) => updateExitCondition(idx, { value: e.target.value })}
+                        placeholder="Novo valor" className={inputCls} />
+                    </>
+                  )}
+                </div>
+                <button onClick={() => removeExitCondition(idx)} className="p-1 text-gray-400 hover:text-red-500 mt-1">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            {exitConditions.length < 4 && (
+              <button onClick={addExitCondition}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                + Adicionar Condição de Saída
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ---- FREQUENCY ---- */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSection('freq')}
+          className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 transition-colors"
+        >
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Frequência</span>
+          <ChevronDown className={cn('w-3.5 h-3.5 text-gray-400 transition-transform', expandedSections.includes('freq') && 'rotate-180')} />
+        </button>
+        {expandedSections.includes('freq') && (
+          <div className="px-3 pb-3 space-y-3 border-t border-gray-100 mt-0 pt-2">
+            <div className="space-y-1.5">
+              {[
+                { value: 'once', label: 'Uma vez por contato' },
+                { value: 'interval', label: 'A cada intervalo' },
+                { value: 'unlimited', label: 'Sem limite' },
+              ].map(opt => (
+                <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="frequency"
+                    checked={(config.frequencyType || 'once') === opt.value}
+                    onChange={() => onUpdate('frequencyType', opt.value)}
+                    className="w-3.5 h-3.5 text-blue-500 border-gray-300"
+                  />
+                  <span className="text-xs text-gray-700">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+            {config.frequencyType === 'interval' && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">A cada</span>
+                <input type="number" min="1" value={config.frequencyValue || 4}
+                  onChange={(e) => onUpdate('frequencyValue', parseInt(e.target.value) || 1)}
+                  className="w-16 px-2 py-1.5 rounded-md bg-white border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500/50" />
+                <select value={config.frequencyUnit || 'hours'}
+                  onChange={(e) => onUpdate('frequencyUnit', e.target.value)}
+                  className="px-2 py-1.5 rounded-md bg-white border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500/50">
+                  <option value="hours">horas</option>
+                  <option value="days">dias</option>
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default PropertiesPanel;

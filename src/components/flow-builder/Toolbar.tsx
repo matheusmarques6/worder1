@@ -44,6 +44,8 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   const redo = useFlowStore((state) => state.redo);
   const canUndo = useFlowStore((state) => state.canUndo);
   const canRedo = useFlowStore((state) => state.canRedo);
+  const showAnalytics = useFlowStore((state) => state.showAnalytics);
+  const toggleAnalytics = useFlowStore((state) => state.toggleAnalytics);
 
   const { valid, errors } = useIsValidFlow();
 
@@ -243,6 +245,27 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           </div>
         )}
 
+        {/* Analytics Toggle */}
+        <button
+          onClick={toggleAnalytics}
+          className={cn(
+            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
+            'text-sm transition-colors',
+            showAnalytics
+              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+              : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'
+          )}
+          title="Mostrar Métricas"
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span className="hidden lg:inline">Métricas</span>
+        </button>
+
+        {/* Analytics Timeframe (shown when analytics active) */}
+        {showAnalytics && (
+          <AnalyticsTimeframeSelector />
+        )}
+
         {/* History */}
         <button
           onClick={toggleHistoryPanel}
@@ -402,6 +425,41 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
         )}
       </AnimatePresence>
     </button>
+  );
+}
+
+// ============================================
+// ANALYTICS TIMEFRAME SELECTOR
+// ============================================
+
+function AnalyticsTimeframeSelector() {
+  const timeframe = useFlowStore((state) => state.analyticsTimeframe);
+  const setTimeframe = useFlowStore((state) => state.setAnalyticsTimeframe);
+
+  const options: Array<{ value: '7d' | '30d' | '90d' | 'all'; label: string }> = [
+    { value: '7d', label: '7d' },
+    { value: '30d', label: '30d' },
+    { value: '90d', label: '90d' },
+    { value: 'all', label: 'Tudo' },
+  ];
+
+  return (
+    <div className="hidden sm:flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => setTimeframe(opt.value)}
+          className={cn(
+            'px-2 py-1 rounded-md text-[10px] font-medium transition-colors',
+            timeframe === opt.value
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
