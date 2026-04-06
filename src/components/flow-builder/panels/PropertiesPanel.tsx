@@ -506,6 +506,30 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             )}
 
             {/* ============================== */}
+            {/* GENERIC TRIGGER INFO          */}
+            {/* For triggers without specific config */}
+            {/* ============================== */}
+            {selectedNode.data.category === 'trigger' && ![
+              'trigger_webhook', 'trigger_date', 'trigger_whatsapp', 'trigger_abandon',
+              'trigger_order', 'trigger_order_paid', 'trigger_deal_stage', 'trigger_deal_created',
+              'trigger_deal_won', 'trigger_deal_lost', 'trigger_tag',
+            ].includes(selectedNode.data.nodeType) && (
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-xs text-gray-600">
+                  {selectedNode.data.nodeType === 'trigger_signup' && 'Dispara quando um novo contato e criado no sistema.'}
+                  {selectedNode.data.nodeType === 'trigger_segment' && 'Dispara quando um contato entra em um segmento dinamico.'}
+                  {selectedNode.data.nodeType === 'trigger_viewed_product' && 'Dispara quando um contato visualiza um produto na loja.'}
+                  {selectedNode.data.nodeType === 'trigger_added_to_cart' && 'Dispara quando um produto e adicionado ao carrinho.'}
+                  {selectedNode.data.nodeType === 'trigger_checkout_abandoned' && 'Dispara quando um checkout e abandonado (sem conclusao).'}
+                  {selectedNode.data.nodeType === 'trigger_fulfilled_order' && 'Dispara quando um pedido e marcado como enviado/entregue.'}
+                  {selectedNode.data.nodeType === 'trigger_cancelled_order' && 'Dispara quando um pedido e cancelado.'}
+                  {selectedNode.data.nodeType === 'trigger_form_submitted' && 'Dispara quando um formulario e enviado.'}
+                  {selectedNode.data.nodeType === 'trigger_custom_event' && 'Dispara quando um evento personalizado e recebido via API.'}
+                </p>
+              </div>
+            )}
+
+            {/* ============================== */}
             {/* UNIVERSAL TRIGGER CONFIG       */}
             {/* Shown for ALL trigger nodes    */}
             {/* ============================== */}
