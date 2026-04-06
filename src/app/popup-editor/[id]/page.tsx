@@ -59,22 +59,22 @@ const BLOCK_TYPES = [
 ]
 
 const defaultProps: Record<string, Record<string, any>> = {
-  email: { placeholder: 'Seu email', label: 'Email', required: true },
-  phone: { placeholder: 'WhatsApp', label: 'Telefone' },
-  'name-input': { placeholder: 'Seu nome', label: 'Nome' },
-  'text-input': { placeholder: 'Digite aqui...', label: 'Campo' },
-  'date-input': { label: 'Data' },
-  dropdown: { label: 'Selecione', options: ['Opção 1', 'Opção 2'] },
-  radio: { label: 'Escolha', options: ['Opção 1', 'Opção 2'] },
+  email: { placeholder: 'Seu email', label: 'Email', required: true, showLabel: false },
+  phone: { placeholder: 'WhatsApp', label: 'Telefone', countryCode: '+55', showLabel: false },
+  'name-input': { placeholder: 'Seu nome', label: 'Nome', showLabel: false },
+  'text-input': { placeholder: 'Digite aqui...', label: 'Campo', showLabel: true },
+  'date-input': { label: 'Data de nascimento', showLabel: true },
+  dropdown: { label: 'Selecione', options: ['Opção 1', 'Opção 2'], placeholder: 'Escolha...' },
+  radio: { label: 'Escolha', options: ['Opção 1', 'Opção 2'], layout: 'vertical' },
   checkbox: { label: 'Escolha', options: ['Opção 1', 'Opção 2'] },
-  'legal-consent': { text: 'Aceito receber comunicações.', required: true },
-  text: { content: 'Ganhe 10% de desconto!', fontSize: 24, color: '#111827', fontWeight: 'bold', align: 'center' },
-  button: { text: 'QUERO MEU DESCONTO', bgColor: '#F97316', textColor: '#fff', borderRadius: 8, fullWidth: true },
-  image: { src: '', alt: 'Imagem', width: '100%' },
+  'legal-consent': { text: 'Aceito receber comunicações e concordo com a política de privacidade.', required: true, fontSize: 12, color: '#6B7280' },
+  text: { content: 'Ganhe 10% de desconto!', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center', tag: 'h2', lineHeight: 1.3 },
+  button: { text: 'QUERO MEU DESCONTO', bgColor: '#F97316', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 },
+  image: { src: '', alt: '', imgWidth: 100, maxHeight: 300, borderRadius: 0, align: 'center', padding: 0 },
   spacer: { height: 24 },
-  line: { color: '#E5E7EB', thickness: 1 },
-  coupon: { code: 'DESCONTO10', description: 'Copie o código acima' },
-  countdown: { minutes: 15, label: 'Oferta expira em:' },
+  line: { color: '#E5E7EB', thickness: 1, style: 'solid' },
+  coupon: { code: 'DESCONTO10', description: 'Seu cupom de desconto:', bgColor: '#FFF7ED', borderColor: '#F97316', fontSize: 20 },
+  countdown: { endDate: '', style: 'dark', numberColor: '#FFFFFF', labelColor: '#9CA3AF', boxColor: '#1F2937', fontSize: 28, labels: { days: 'DIAS', hours: 'HORAS', minutes: 'MIN', seconds: 'SEG' } },
 }
 
 const defaultDesign: PopupDesign = {
@@ -127,22 +127,44 @@ const sel = inp + " bg-white"
 // ── Block Renderer (canvas) ────────────────────────────────────────────────────
 function BlockPreview({ block }: { block: Block }) {
   const p = block.props
+  const blockStyle: React.CSSProperties = {
+    marginTop: p.marginTop || 0, marginBottom: p.marginBottom ?? 8,
+    padding: p.blockPadding || 0, backgroundColor: p.blockBg || undefined,
+    borderRadius: p.blockRadius || 0,
+  }
+  const inputStyle = "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white placeholder-gray-400 outline-none"
   switch (block.type) {
-    case 'text': return <div style={{ fontSize: p.fontSize, color: p.color, fontWeight: p.fontWeight, textAlign: p.align }}>{p.content}</div>
-    case 'email': case 'phone': case 'name-input': case 'text-input':
-      return <input readOnly placeholder={p.placeholder} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white" />
-    case 'date-input': return <input type="date" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white" />
-    case 'button': return <button style={{ backgroundColor: p.bgColor, color: p.textColor, borderRadius: p.borderRadius, width: p.fullWidth ? '100%' : 'auto' }} className="px-6 py-2.5 font-semibold text-sm">{p.text}</button>
-    case 'image': return p.src ? <img src={p.src} alt={p.alt} style={{ width: (p.imgWidth || 100) + '%', maxHeight: p.maxHeight || 300, objectFit: 'contain' as const, borderRadius: p.borderRadius || 0, display: 'block', margin: p.align === 'center' ? '0 auto' : p.align === 'right' ? '0 0 0 auto' : '0' }} /> : <div className="w-full h-24 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">Imagem</div>
-    case 'spacer': return <div style={{ height: p.height }} />
-    case 'line': return <hr style={{ borderColor: p.color, borderWidth: p.thickness }} />
-    case 'coupon': return <div className="border-2 border-dashed border-orange-300 rounded-lg p-3 text-center"><code className="text-lg font-bold text-orange-600">{p.code}</code><p className="text-xs text-gray-500 mt-1">{p.description}</p></div>
-    case 'countdown': return <div className="text-center"><span className="text-xs text-gray-500">{p.label}</span><span className="block text-2xl font-mono font-bold">{p.minutes}:00</span></div>
-    case 'legal-consent': return <label className="flex items-start gap-2 text-xs text-gray-600"><input type="checkbox" className="mt-0.5" />{p.text}</label>
-    case 'dropdown': return <select className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"><option>{p.label}</option>{(p.options as string[]).map((o: string) => <option key={o}>{o}</option>)}</select>
-    case 'radio': return <div className="space-y-1">{(p.options as string[]).map((o: string) => <label key={o} className="flex items-center gap-2 text-sm"><input type="radio" name={block.id} />{o}</label>)}</div>
-    case 'checkbox': return <div className="space-y-1">{(p.options as string[]).map((o: string) => <label key={o} className="flex items-center gap-2 text-sm"><input type="checkbox" />{o}</label>)}</div>
-    default: return <div className="text-xs text-gray-400">[{block.type}]</div>
+    case 'text': return <div style={{ ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit' }}>{p.content}</div>
+    case 'email':
+      return <div style={blockStyle}>{p.showLabel && <label className="block text-sm font-medium text-gray-700 mb-1">{p.label}</label>}<input readOnly placeholder={p.placeholder || 'Seu email'} className={inputStyle} /></div>
+    case 'phone':
+      return <div style={blockStyle}>{p.showLabel && <label className="block text-sm font-medium text-gray-700 mb-1">{p.label}</label>}<div className="flex gap-2"><span className="flex items-center px-3 border border-gray-200 rounded-lg text-sm text-gray-500 bg-gray-50">{p.countryCode || '+55'}</span><input readOnly placeholder={p.placeholder || 'Telefone'} className={inputStyle} /></div></div>
+    case 'name-input': case 'text-input':
+      return <div style={blockStyle}>{p.showLabel && <label className="block text-sm font-medium text-gray-700 mb-1">{p.label}</label>}<input readOnly placeholder={p.placeholder} className={inputStyle} /></div>
+    case 'date-input':
+      return <div style={blockStyle}>{p.showLabel && <label className="block text-sm font-medium text-gray-700 mb-1">{p.label}</label>}<input type="date" className={inputStyle} /></div>
+    case 'button':
+      return <div style={{ ...blockStyle, textAlign: p.fullWidth ? undefined : (p.align || 'center') as any }}><button style={{ backgroundColor: p.bgColor || '#F97316', color: p.textColor || '#fff', borderRadius: p.borderRadius || 8, width: p.fullWidth ? '100%' : 'auto', fontSize: p.fontSize || 15, fontWeight: 700, padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`, border: 'none', cursor: 'pointer' }}>{p.text || 'Enviar'}</button></div>
+    case 'image':
+      return <div style={{ ...blockStyle, textAlign: (p.align || 'center') as any, padding: p.padding || 0 }}>{p.src ? <img src={p.src} alt={p.alt} style={{ width: `${p.imgWidth || 100}%`, maxHeight: p.maxHeight || 300, objectFit: 'contain', borderRadius: p.borderRadius || 0, display: 'inline-block' }} /> : <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300"><ImageIcon className="w-10 h-10" /></div>}</div>
+    case 'spacer': return <div style={{ ...blockStyle, height: p.height || 24 }} />
+    case 'line': return <div style={blockStyle}><hr style={{ border: 'none', borderTop: `${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`, margin: 0 }} /></div>
+    case 'coupon':
+      return <div style={{ ...blockStyle, padding: '16px', border: `2px dashed ${p.borderColor || '#F97316'}`, borderRadius: 8, textAlign: 'center', background: p.bgColor || '#FFF7ED' }}><p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 4px' }}>{p.description}</p><p style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: '#F97316', letterSpacing: 2, margin: 0 }}>{p.code}</p></div>
+    case 'countdown': {
+      const vals = ['03', '12', '45', '30']
+      const lbls = p.labels || { days: 'DIAS', hours: 'HORAS', minutes: 'MIN', seconds: 'SEG' }
+      return <div style={{ ...blockStyle, textAlign: 'center', padding: '16px', backgroundColor: p.boxColor || '#1F2937', borderRadius: 8 }}><div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>{vals.map((v, i) => (<span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{i > 0 && <span style={{ color: p.labelColor || '#9CA3AF', fontSize: 20, fontWeight: 700 }}>:</span>}<span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}><span style={{ fontSize: p.fontSize || 28, fontWeight: 800, color: p.numberColor || '#FFFFFF', lineHeight: 1 }}>{v}</span><span style={{ fontSize: 9, color: p.labelColor || '#9CA3AF', marginTop: 4, letterSpacing: 1 }}>{[lbls.days, lbls.hours, lbls.minutes, lbls.seconds][i]}</span></span></span>))}</div></div>
+    }
+    case 'legal-consent':
+      return <div style={blockStyle}><label className="flex items-start gap-2" style={{ fontSize: p.fontSize || 12, color: p.color || '#6B7280', lineHeight: 1.4 }}><input type="checkbox" className="mt-0.5 flex-shrink-0" /><span>{p.text}</span></label></div>
+    case 'dropdown':
+      return <div style={blockStyle}><select className={inputStyle}><option>{p.placeholder || p.label}</option>{(p.options || []).map((o: string) => <option key={o}>{o}</option>)}</select></div>
+    case 'radio':
+      return <div style={blockStyle}><div style={{ display: 'flex', flexDirection: p.layout === 'horizontal' ? 'row' : 'column', gap: p.layout === 'horizontal' ? 12 : 6 }}>{(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="text-brand-500" />{o}</label>)}</div></div>
+    case 'checkbox':
+      return <div style={blockStyle}><div className="space-y-2">{(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="rounded text-brand-500" />{o}</label>)}</div></div>
+    default: return <div className="text-xs text-gray-400 p-2">[{block.type}]</div>
   }
 }
 
@@ -269,6 +291,10 @@ function BlockEditor({ block, onChange, onDelete }: { block: Block; onChange: (b
             <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 15} onChange={e => up('fontSize', +e.target.value)} /></Field>
             <Field label="Raio borda"><input type="number" className={inp} value={p.borderRadius || 8} onChange={e => up('borderRadius', +e.target.value)} /></Field>
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Padding V"><input type="number" className={inp} value={p.paddingV || 14} onChange={e => up('paddingV', +e.target.value)} min={4} max={40} /></Field>
+            <Field label="Padding H"><input type="number" className={inp} value={p.paddingH || 28} onChange={e => up('paddingH', +e.target.value)} min={4} max={60} /></Field>
+          </div>
           <Field label="Alinhamento"><AlignButtons value={p.fullWidth ? 'full' : (p.align || 'full')} onChange={v => { up('fullWidth', v === 'full'); if (v !== 'full') up('align', v) }} /></Field>
           <ColorField label="Cor hover" value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
         </>
@@ -376,6 +402,29 @@ function BlockEditor({ block, onChange, onDelete }: { block: Block; onChange: (b
         return <>
           <ColorField label="Cor" value={p.color || '#E5E7EB'} onChange={v => up('color', v)} />
           <Field label="Espessura"><input type="number" className={inp} value={p.thickness || 1} onChange={e => up('thickness', +e.target.value)} min={1} max={5} /></Field>
+          <Field label="Estilo">
+            <select className={sel} value={p.style || 'solid'} onChange={e => up('style', e.target.value)}>
+              <option value="solid">Sólido</option><option value="dashed">Tracejado</option><option value="dotted">Pontilhado</option>
+            </select>
+          </Field>
+        </>
+
+      case 'countdown':
+        return <>
+          <Field label="Data de término"><input type="datetime-local" className={inp} value={p.endDate || ''} onChange={e => up('endDate', e.target.value)} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <ColorField label="Cor números" value={p.numberColor || '#FFFFFF'} onChange={v => up('numberColor', v)} />
+            <ColorField label="Cor labels" value={p.labelColor || '#9CA3AF'} onChange={v => up('labelColor', v)} />
+          </div>
+          <ColorField label="Cor fundo" value={p.boxColor || '#1F2937'} onChange={v => up('boxColor', v)} />
+          <Field label="Tamanho números"><input type="number" className={inp} value={p.fontSize || 28} onChange={e => up('fontSize', +e.target.value)} min={16} max={48} /></Field>
+          <div className="grid grid-cols-4 gap-1">
+            {['days', 'hours', 'minutes', 'seconds'].map(k => (
+              <Field key={k} label={k === 'days' ? 'Dias' : k === 'hours' ? 'Horas' : k === 'minutes' ? 'Min' : 'Seg'}>
+                <input className={inp} value={(p.labels || {})[k] || ''} onChange={e => up('labels', { ...(p.labels || {}), [k]: e.target.value })} />
+              </Field>
+            ))}
+          </div>
         </>
 
       default:
