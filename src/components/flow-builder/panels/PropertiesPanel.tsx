@@ -113,17 +113,11 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         className="w-[340px] bg-white border-l border-gray-200 flex flex-col h-full shrink-0 overflow-hidden"
       >
-        {/* Header - Omnisend style */}
+        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900">
-              {selectedNode.data.nodeType === 'action_email' ? 'Edit email' :
-               selectedNode.data.nodeType === 'control_delay' ? 'Edit delay' :
-               selectedNode.data.nodeType === 'condition_field' ? 'Edit condition' :
-               selectedNode.data.nodeType === 'logic_split' ? 'Edit A/B test' :
-               definition?.label || 'Configurar'}
-            </h3>
-          </div>
+          <h3 className="text-base font-semibold text-gray-900">
+            {selectedNode.data.label || definition?.label || 'Configurar'}
+          </h3>
           <button
             onClick={handleClose}
             className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
@@ -133,51 +127,20 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
-          {/* Basic Info */}
-          <section className="space-y-3">
-            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-              Informações Básicas
-            </h4>
-            
-            <div className="space-y-2">
-              <label className="text-xs text-gray-600/60">Nome do Nó</label>
-              <input
-                type="text"
-                value={selectedNode.data.label || ''}
-                onChange={(e) => handleLabelChange(e.target.value)}
-                placeholder={definition?.label}
-                className={cn(
-                  'w-full px-3 py-2 rounded-lg',
-                  'bg-white border border-gray-200',
-                  'text-sm text-gray-700 placeholder-gray-400',
-                  'focus:outline-none focus:border-blue-500/50'
-                )}
-              />
-            </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {/* Description — shown below header as gray text */}
+          <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+            <input
+              type="text"
+              value={selectedNode.data.description || ''}
+              onChange={(e) => handleDescriptionChange(e.target.value)}
+              placeholder="Adicionar descricao..."
+              className="w-full bg-transparent text-sm text-gray-600 placeholder-gray-400 focus:outline-none"
+            />
+          </div>
 
-            <div className="space-y-2">
-              <label className="text-xs text-gray-600/60">Descrição (opcional)</label>
-              <textarea
-                value={selectedNode.data.description || ''}
-                onChange={(e) => handleDescriptionChange(e.target.value)}
-                placeholder="Adicionar descrição..."
-                rows={2}
-                className={cn(
-                  'w-full px-3 py-2 rounded-lg resize-none',
-                  'bg-white border border-gray-200',
-                  'text-sm text-gray-700 placeholder-gray-400',
-                  'focus:outline-none focus:border-blue-500/50'
-                )}
-              />
-            </div>
-          </section>
-
-          {/* Dynamic Config based on node type */}
-          <section className="space-y-3">
-            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-              Configuração
-            </h4>
+          {/* Dynamic Config */}
+          <section className="space-y-4">
 
             {/* WEBHOOK TRIGGER */}
             {selectedNode.data.nodeType === 'trigger_webhook' && (
@@ -1284,8 +1247,8 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             onClick={handleDelete}
             className={cn(
               'flex-1 flex items-center justify-center gap-2 py-2 rounded-lg',
-              'bg-red-500/10 hover:bg-red-500/20',
-              'text-sm text-red-400 hover:text-red-300',
+              'bg-red-50 hover:bg-red-100',
+              'text-sm text-red-600 hover:text-red-700',
               'transition-colors'
             )}
           >
@@ -1907,98 +1870,52 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
 
   useEffect(() => {
     if (organizationId) {
-      fetchStores();
+      setLoadingStores(true);
+      fetch(`/api/stores?organizationId=${organizationId}`)
+        .then(r => r.ok ? r.json() : { stores: [] })
+        .then(data => setStores(data.stores || []))
+        .catch(() => {})
+        .finally(() => setLoadingStores(false));
     }
   }, [organizationId]);
 
-  const fetchStores = async () => {
-    if (!organizationId) return;
-    setLoadingStores(true);
-    try {
-      const res = await fetch(`/api/stores?organizationId=${organizationId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setStores(data.stores || []);
-      }
-    } catch (e) {
-      console.error('Error fetching stores:', e);
-    } finally {
-      setLoadingStores(false);
-    }
-  };
+  const selectCls = cn(
+    'w-full px-3 py-2.5 rounded-md appearance-none',
+    'bg-white border border-gray-200',
+    'text-sm text-gray-900',
+    'focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500',
+  );
+
+  const inputCls = cn(
+    'w-full px-3 py-2.5 rounded-md',
+    'bg-white border border-gray-200',
+    'text-sm text-gray-900 placeholder-gray-400',
+    'focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500',
+  );
 
   return (
-    <div className="space-y-4">
-      {/* Store Filter */}
-      <div className="space-y-2">
-        <label className="text-xs text-gray-600/60">Loja (opcional)</label>
-        <div className="relative">
-          <select
-            value={config.storeId || ''}
-            onChange={(e) => onUpdate('storeId', e.target.value)}
-            disabled={loadingStores}
-            className={cn(
-              'w-full px-3 py-2 rounded-lg appearance-none',
-              'bg-white border border-gray-200',
-              'text-sm text-gray-700',
-              'focus:outline-none focus:border-blue-500/50',
-              'disabled:opacity-50'
-            )}
-          >
-            <option value="">Todas as lojas</option>
-            {stores.map((store) => (
-              <option key={store.id} value={store.id}>
-                {store.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-        </div>
+    <div className="space-y-5">
+      {/* Store filter */}
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-gray-700">Loja</label>
+        <select
+          value={config.storeId || ''}
+          onChange={(e) => onUpdate('storeId', e.target.value)}
+          disabled={loadingStores}
+          className={selectCls}
+        >
+          <option value="">Todas as lojas</option>
+          {stores.map((store) => (
+            <option key={store.id} value={store.id}>{store.name}</option>
+          ))}
+        </select>
       </div>
 
-      {/* Abandonment Time */}
-      <div className="space-y-2">
-        <label className="text-xs text-gray-600/60">Tempo de Abandono</label>
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            type="number"
-            min="1"
-            value={config.abandonTime || 30}
-            onChange={(e) => onUpdate('abandonTime', parseInt(e.target.value) || 30)}
-            className={cn(
-              'px-3 py-2 rounded-lg',
-              'bg-white border border-gray-200',
-              'text-sm text-gray-700',
-              'focus:outline-none focus:border-blue-500/50'
-            )}
-          />
-          <div className="relative">
-            <select
-              value={config.abandonUnit || 'minutes'}
-              onChange={(e) => onUpdate('abandonUnit', e.target.value)}
-              className={cn(
-                'w-full px-3 py-2 rounded-lg appearance-none',
-                'bg-white border border-gray-200',
-                'text-sm text-gray-700',
-                'focus:outline-none focus:border-blue-500/50'
-              )}
-            >
-              <option value="minutes">Minutos</option>
-              <option value="hours">Horas</option>
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-          </div>
-        </div>
-        <p className="text-[10px] text-gray-400">
-          Dispara após este tempo sem finalizar a compra
-        </p>
-      </div>
-
-      {/* Minimum Value */}
-      <div className="space-y-2">
-        <label className="text-xs text-gray-600/60">Valor Mínimo do Carrinho (opcional)</label>
+      {/* Minimum cart value */}
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-gray-700">Valor minimo do carrinho</label>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-700/40">R$</span>
+          <span className="text-sm text-gray-500">R$</span>
           <input
             type="number"
             min="0"
@@ -2006,47 +1923,35 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             value={config.minValue || ''}
             onChange={(e) => onUpdate('minValue', e.target.value ? parseFloat(e.target.value) : null)}
             placeholder="0.00"
-            className={cn(
-              'flex-1 px-3 py-2 rounded-lg',
-              'bg-white border border-gray-200',
-              'text-sm text-gray-700 placeholder-gray-400',
-              'focus:outline-none focus:border-blue-500/50'
-            )}
+            className={inputCls}
           />
         </div>
+        <p className="text-xs text-gray-400">Deixe vazio para qualquer valor</p>
       </div>
 
+      <hr className="border-gray-100" />
+
       {/* Options */}
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 cursor-pointer">
+      <div className="space-y-3">
+        <label className="flex items-center gap-2.5 cursor-pointer">
           <input
             type="checkbox"
             checked={config.onlyWithEmail || false}
             onChange={(e) => onUpdate('onlyWithEmail', e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 bg-transparent text-amber-500"
+            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
-          <span className="text-xs text-gray-600/60">
-            Apenas carrinhos com email identificado
-          </span>
+          <span className="text-sm text-gray-700">Apenas carrinhos com email identificado</span>
         </label>
 
-        <label className="flex items-center gap-2 cursor-pointer">
+        <label className="flex items-center gap-2.5 cursor-pointer">
           <input
             type="checkbox"
-            checked={config.excludeRecovered || true}
+            checked={config.excludeRecovered !== false}
             onChange={(e) => onUpdate('excludeRecovered', e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 bg-transparent text-amber-500"
+            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
-          <span className="text-xs text-gray-600/60">
-            Não disparar se carrinho já foi recuperado
-          </span>
+          <span className="text-sm text-gray-700">Nao disparar se carrinho ja foi recuperado</span>
         </label>
-      </div>
-
-      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-        <p className="text-[11px] text-amber-700">
-          Dispara quando cliente abandona o carrinho após {config.abandonTime || 30} {config.abandonUnit === 'hours' ? 'horas' : 'minutos'}
-        </p>
       </div>
     </div>
   );
