@@ -11,6 +11,7 @@ import { CredentialSelector } from './CredentialSelector';
 import { MessageEditor, VariableButton } from '../variables';
 import { WhatsAppTemplateEditor } from '../whatsapp';
 import { EmailPreviewMode } from './EmailPreviewMode';
+import { EmailEditorOverlay } from './EmailEditorOverlay';
 
 // ============================================
 // TYPES
@@ -2086,6 +2087,7 @@ function EmailActionConfig({ config, onUpdate, triggerType, organizationId }: { 
   const [showSubjectEdit, setShowSubjectEdit] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showPreviewMode, setShowPreviewMode] = useState(false)
+  const [showEmailEditor, setShowEmailEditor] = useState(false)
   const storeId = useFlowStore.getState().automationConfig?.storeId;
 
   useEffect(() => {
@@ -2226,19 +2228,38 @@ function EmailActionConfig({ config, onUpdate, triggerType, organizationId }: { 
         {config.templateId && config.templateId !== '__new__' && (
           <EmailTemplatePreview
             templateId={config.templateId}
-            onEdit={() => {
-              // Navigate to email editor in new tab
-              const url = `/email/templates/${config.templateId}/edit`;
-              window.open(url, '_blank');
-            }}
+            onEdit={() => setShowEmailEditor(true)}
           />
         )}
 
-        {/* New email from scratch */}
+        {/* New email — create template then open editor */}
         {config.templateId === '__new__' && (
-          <div className="mt-2">
-            <MessageEditor value={config.html || ''} onChange={(v) => onUpdate('html', v)} triggerType={triggerType}
-              label="Corpo do Email" placeholder="<p>Ola {{ contact.first_name }}!</p>" rows={8} />
+          <div className="mt-3">
+            <button
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/email/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name: config.emailName || 'Novo Email',
+                      store_id: storeId,
+                    }),
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    const newId = data.template?.id;
+                    if (newId) {
+                      onUpdate('templateId', newId);
+                      setTimeout(() => setShowEmailEditor(true), 100);
+                    }
+                  }
+                } catch {}
+              }}
+              className="w-full py-3 rounded-lg border-2 border-dashed border-gray-300 text-sm font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+            >
+              Abrir editor de email
+            </button>
           </div>
         )}
 
@@ -2336,6 +2357,14 @@ function EmailActionConfig({ config, onUpdate, triggerType, organizationId }: { 
           triggerType={triggerType}
           organizationId={organizationId}
           onClose={() => setShowPreviewMode(false)}
+        />
+      )}
+
+      {/* Email Editor fullscreen (opens INSIDE the flow, not new tab) */}
+      {showEmailEditor && config.templateId && config.templateId !== '__new__' && (
+        <EmailEditorOverlay
+          templateId={config.templateId}
+          onClose={() => setShowEmailEditor(false)}
         />
       )}
     </div>
