@@ -10,6 +10,7 @@ import { WebhookConfig } from './WebhookConfig';
 import { CredentialSelector } from './CredentialSelector';
 import { MessageEditor, VariableButton } from '../variables';
 import { WhatsAppTemplateEditor } from '../whatsapp';
+import { EmailPreviewMode } from './EmailPreviewMode';
 
 // ============================================
 // TYPES
@@ -689,6 +690,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 config={selectedNode.data.config || {}}
                 onUpdate={handleUpdate}
                 triggerType={triggerType}
+                organizationId={organizationId}
               />
             )}
 
@@ -2078,11 +2080,12 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
 // ============================================
 // EMAIL ACTION CONFIG (template selector, not credentials)
 // ============================================
-function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<string, any>; onUpdate: (key: string, value: any) => void; triggerType: string }) {
+function EmailActionConfig({ config, onUpdate, triggerType, organizationId }: { config: Record<string, any>; onUpdate: (key: string, value: any) => void; triggerType: string; organizationId?: string }) {
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; thumbnail_url?: string }>>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [showSubjectEdit, setShowSubjectEdit] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showPreviewMode, setShowPreviewMode] = useState(false)
   const storeId = useFlowStore.getState().automationConfig?.storeId;
 
   useEffect(() => {
@@ -2306,16 +2309,35 @@ function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<s
         </div>
       </div>
 
-      {/* === Bottom actions (Klaviyo style) === */}
-      <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
-        <button onClick={() => {/* close panel */}}
-          className="px-4 py-2 rounded-md border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
-          Cancel
-        </button>
-        <button className="px-4 py-2 rounded-md bg-gray-200 text-sm font-medium text-gray-400 cursor-default">
-          Save
-        </button>
+      {/* === Bottom actions === */}
+      <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+        {config.templateId && config.templateId !== '__new__' && (
+          <button
+            onClick={() => setShowPreviewMode(true)}
+            className="px-4 py-2 rounded-md border border-blue-200 bg-blue-50 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+          >
+            Preview & Test
+          </button>
+        )}
+        <div className="flex items-center gap-3 ml-auto">
+          <button className="px-4 py-2 rounded-md border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            Cancel
+          </button>
+          <button className="px-4 py-2 rounded-md bg-gray-900 text-sm font-medium text-white hover:bg-gray-800">
+            Save
+          </button>
+        </div>
       </div>
+
+      {/* Preview Mode fullscreen */}
+      {showPreviewMode && config.templateId && organizationId && (
+        <EmailPreviewMode
+          templateId={config.templateId}
+          triggerType={triggerType}
+          organizationId={organizationId}
+          onClose={() => setShowPreviewMode(false)}
+        />
+      )}
     </div>
   )
 }
