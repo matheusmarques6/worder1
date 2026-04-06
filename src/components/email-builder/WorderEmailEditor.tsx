@@ -864,13 +864,59 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       {/* ── Main Layout ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left Sidebar ── */}
-        <div className="w-[280px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+        <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
           <div className="flex border-b border-gray-200 flex-shrink-0">
             <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[12px] font-semibold transition-colors ${leftTab === 'content' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Conteúdo</button>
             <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[12px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Estilos</button>
           </div>
           <div className="flex-1 overflow-hidden">
-            {leftTab === 'content' ? (
+            {/* Block properties on the LEFT (Klaviyo-style) */}
+            {selectedBlock ? (
+              <div className="flex flex-col h-full">
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-200">
+                  <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded"><ArrowLeft size={16} /></button>
+                  <span className="text-sm font-semibold text-gray-900">{BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}</span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3">
+                  <BlockProperties
+                    block={selectedBlock}
+                    onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
+                    onSaveAsReusable={() => { setSaveBlockName(''); setShowSaveBlockModal(true) }}
+                  />
+                </div>
+              </div>
+            ) : selectedSection ? (
+              <div className="flex flex-col h-full">
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-200">
+                  <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded"><ArrowLeft size={16} /></button>
+                  <span className="text-sm font-semibold text-gray-900">Seção</span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3">
+                  <SectionProperties
+                    section={selectedSection}
+                    onStyleChange={(key, value) => updateSectionStyles(selectedSection.id, { [key]: value })}
+                    onColumnLayoutChange={(cols) => {
+                      setDoc(prev => ({
+                        ...prev,
+                        sections: prev.sections.map(s => {
+                          if (s.id !== selectedSection.id) return s
+                          const newCols = cols.map((w, i) => ({
+                            id: s.columns[i]?.id || ('c_' + Date.now().toString(36) + '_' + i),
+                            width: w,
+                            blocks: s.columns[i]?.blocks || [],
+                          }))
+                          if (s.columns.length > cols.length) {
+                            const overflow = s.columns.slice(cols.length).flatMap(c => c.blocks)
+                            newCols[newCols.length - 1].blocks.push(...overflow)
+                          }
+                          return { ...s, columns: newCols }
+                        })
+                      }))
+                    }}
+                  />
+                </div>
+              </div>
+            ) : leftTab === 'content' ? (
               <div className="flex flex-col h-full overflow-y-auto">
                 {/* Layout section — Columns + Section like Klaviyo */}
                 <div className="p-3 border-b border-gray-100">
@@ -1036,57 +1082,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           </div>
         </div>
 
-        {/* ── Right Sidebar ── */}
-        <div className="w-[340px] bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
-          <div className="py-2.5 px-4 border-b border-gray-200 flex-shrink-0">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-              {selectedBlock ? (BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type)
-                : selectedSection ? 'Secao' : 'Propriedades'}
-            </p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3">
-            {selectedBlock ? (
-              <BlockProperties
-                block={selectedBlock}
-                onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
-                onSaveAsReusable={() => {
-                  setSaveBlockName('')
-                  setShowSaveBlockModal(true)
-                }}
-              />
-            ) : selectedSection ? (
-              <SectionProperties
-                section={selectedSection}
-                onStyleChange={(key, value) => updateSectionStyles(selectedSection.id, { [key]: value })}
-                onColumnLayoutChange={(cols) => {
-                  setDoc(prev => ({
-                    ...prev,
-                    sections: prev.sections.map(s => {
-                      if (s.id !== selectedSection.id) return s
-                      const newCols = cols.map((w, i) => ({
-                        id: s.columns[i]?.id || ('c_' + Date.now().toString(36) + '_' + i),
-                        width: w,
-                        blocks: s.columns[i]?.blocks || [],
-                      }))
-                      // Move overflow blocks to last column
-                      if (s.columns.length > cols.length) {
-                        const overflow = s.columns.slice(cols.length).flatMap(c => c.blocks)
-                        newCols[newCols.length - 1].blocks.push(...overflow)
-                      }
-                      return { ...s, columns: newCols }
-                    })
-                  }))
-                }}
-              />
-            ) : (
-              <div className="text-center py-16 text-gray-400">
-                <span className="block mb-3"><Palette className="w-8 h-8 text-gray-300 mx-auto" /></span>
-                <p className="text-xs font-medium text-gray-500">Selecione um bloco ou secao</p>
-                <p className="text-[10px] text-gray-400 mt-1">para editar suas propriedades</p>
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Right sidebar removed — properties now on the left (Klaviyo-style) */}
       </div>
 
       {/* ── Preview Modal ── */}

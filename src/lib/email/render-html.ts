@@ -65,9 +65,14 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     }
 
     case 'image': {
-      const img = `<img src="${p.src || ''}" alt="${p.alt || ''}" width="${p.width || 600}" style="max-width:100%;height:auto;display:block;margin:0 auto;border:0;outline:0;vertical-align:bottom;${p.borderRadius ? `border-radius:${p.borderRadius}px;` : ''}" />`
+      const imgW = p.fillColumn ? '100%' : (p.width || 600)
+      const imgStyle = `max-width:100%;height:auto;display:block;${p.fillColumn ? 'width:100%;' : `width:${imgW}px;`}margin:${p.align === 'left' ? '0 auto 0 0' : p.align === 'right' ? '0 0 0 auto' : '0 auto'};border:0;outline:0;vertical-align:bottom;${p.borderRadius ? `border-radius:${p.borderRadius}px;` : ''}${p.border?.width ? `border:${p.border.width}px solid ${p.border.color || '#E5E7EB'};` : ''}`
+      const img = `<img src="${p.src || ''}" alt="${p.alt || ''}" width="${p.fillColumn ? '100%' : imgW}" style="${imgStyle}" />`
       const linked = p.href ? `<a href="${p.href}" target="_blank" style="text-decoration:none;display:block;line-height:0;font-size:0;">${img}</a>` : img
-      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:0;font-size:0;${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${linked}</td></tr>`
+      const blockBg = p.blockBgColor ? `background-color:${p.blockBgColor};` : ''
+      const blockPadStyle = p.blockPadding ? `padding:${p.blockPadding.top || 0}px ${p.blockPadding.right || 0}px ${p.blockPadding.bottom || 0}px ${p.blockPadding.left || 0}px;` : ''
+      const vis = p.visibility === 'desktop' ? ' class="worder-desktop-only"' : p.visibility === 'mobile' ? ' class="worder-mobile-only"' : ''
+      return `<tr${vis}><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:0;font-size:0;${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}${blockBg}${blockPadStyle}">${linked}</td></tr>`
     }
 
     case 'button':
@@ -314,7 +319,10 @@ table,td{mso-table-lspace:0pt;mso-table-rspace:0pt}
 img{-ms-interpolation-mode:bicubic;border:0;height:auto;line-height:100%;outline:none;text-decoration:none;display:block}
 body{margin:0;padding:0;width:100%!important}
 a{color:${s.textStyles?.link?.color || '#F97316'};${s.textStyles?.link?.underline !== false ? 'text-decoration:underline;' : 'text-decoration:none;'}}
+.worder-mobile-only{display:none!important;max-height:0;overflow:hidden}
 @media only screen and (max-width:620px){
+  .worder-desktop-only{display:none!important;max-height:0;overflow:hidden}
+  .worder-mobile-only{display:table-row!important;max-height:none!important}
   .email-container{width:100%!important;max-width:100%!important}
   .worder-section-stack td{display:block!important;width:100%!important}
   .worder-countdown-wrap td{padding:2px!important}
