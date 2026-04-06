@@ -121,14 +121,26 @@ export default function EmailTemplatesPage() {
               { name: 'Aniversário', desc: 'Email de aniversário com cupom', cat: 'marketing', color: 'bg-pink-50 border-pink-200' },
               { name: 'Em Branco', desc: 'Comece do zero', cat: 'custom', color: 'bg-gray-50 border-gray-200' },
             ].map(t => (
-              <Link key={t.name} href={`/email/templates/new?template=${encodeURIComponent(t.name)}&category=${t.cat}`}
-                className={`p-4 rounded-xl border ${t.color} hover:shadow-md transition-all group`}>
+              <button key={t.name} onClick={async () => {
+                try {
+                  const res = await fetch('/api/email/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: t.name, category: t.cat }),
+                  })
+                  if (res.ok) {
+                    const data = await res.json()
+                    window.location.href = `/email/templates/${data.template?.id || data.id}/edit`
+                  }
+                } catch {}
+              }}
+                className={`p-4 rounded-xl border ${t.color} hover:shadow-md transition-all group text-left cursor-pointer`}>
                 <div className="w-8 h-8 rounded-lg bg-white/60 flex items-center justify-center mb-2">
                   <Mail className="w-4 h-4 text-gray-500" />
                 </div>
                 <p className="text-sm font-semibold text-gray-900 group-hover:text-brand-600">{t.name}</p>
                 <p className="text-[11px] text-gray-500 mt-0.5">{t.desc}</p>
-              </Link>
+              </button>
             ))}
           </div>
         </div>

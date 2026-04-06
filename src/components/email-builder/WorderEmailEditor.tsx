@@ -391,14 +391,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
 
   const addPrebuiltSection = useCallback((type: string) => {
     const section = createSection([100])
+    // Todas as seções prontas vêm com cor de fundo branca por padrão
+    section.styles.contentBackgroundColor = '#FFFFFF'
     const blocks: any[] = []
     const bid = () => 'b_' + Math.random().toString(36).substring(2, 9)
     switch (type) {
       case 'hero':
+        section.styles.backgroundColor = '#F97316'
+        section.styles.contentBackgroundColor = '#FFFFFF'
         blocks.push(
-          { id: bid(), type: 'image', props: { src: '', alt: 'Hero', width: 600, fillColumn: true, padding: { top: 0, right: 0, bottom: 0, left: 0 }, backgroundColor: '' } },
-          { id: bid(), type: 'text', props: { contentHtml: '<h1 style="text-align:center;font-size:32px;font-weight:bold;color:#111827;">Título Principal</h1>', fontSize: 32, color: '#111827', lineHeight: 1.3, align: 'center', padding: { top: 24, right: 24, bottom: 8, left: 24 } } },
-          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;color:#6B7280;">Subtítulo com descrição do conteúdo principal do email.</p>', fontSize: 16, color: '#6B7280', lineHeight: 1.6, align: 'center', padding: { top: 0, right: 24, bottom: 16, left: 24 } } },
+          { id: bid(), type: 'text', props: { contentHtml: '<h1 style="text-align:center;font-size:32px;font-weight:bold;color:#111827;">Título Principal</h1>', fontSize: 32, color: '#111827', lineHeight: 1.3, align: 'center', padding: { top: 32, right: 24, bottom: 8, left: 24 }, backgroundColor: '' } },
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;color:#6B7280;">Subtítulo com descrição do conteúdo principal do email.</p>', fontSize: 16, color: '#6B7280', lineHeight: 1.6, align: 'center', padding: { top: 0, right: 24, bottom: 16, left: 24 }, backgroundColor: '' } },
+          { id: bid(), type: 'button', props: { text: 'SAIBA MAIS', href: '#', bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 32, paddingV: 14, fullWidth: false, align: 'center', padding: { top: 0, right: 24, bottom: 32, left: 24 }, backgroundColor: '' } },
           { id: bid(), type: 'button', props: { text: 'SAIBA MAIS', href: '#', bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 32, paddingV: 14, fullWidth: false, align: 'center', padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
         )
         break
@@ -456,6 +460,14 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   // ── Block Operations ──
   const addBlock = useCallback((type: string, targetSectionId?: string, targetColumnId?: string) => {
     const block = createBlock(type as any)
+    // Apply global button styles as defaults for new button blocks
+    if (type === 'button' && doc.settings.buttonStyles?.primary) {
+      const bs = doc.settings.buttonStyles.primary
+      if (bs.bgColor) block.props.bgColor = bs.bgColor
+      if (bs.textColor) block.props.textColor = bs.textColor
+      if (bs.borderRadius != null) block.props.borderRadius = bs.borderRadius
+      if (bs.fontWeight) block.props.fontWeight = bs.fontWeight
+    }
     const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
 
     if (targetSectionId && targetColumnId) {
