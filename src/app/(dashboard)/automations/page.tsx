@@ -515,62 +515,123 @@ export default function AutomationsPage() {
             ))}
           </div>
 
-          {/* View Toggle */}
-          <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1">
-            <button
-              onClick={() => setView('list')}
-              className={cn(
-                'p-2 rounded-lg transition-all',
-                view === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-900'
-              )}
-            >
-              <List className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setView('grid')}
-              className={cn(
-                'p-2 rounded-lg transition-all',
-                view === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-900'
-              )}
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* Automations List */}
+      {/* Automations Table — Omnisend/Klaviyo style */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : filteredAutomations.length === 0 ? (
-        <div className="text-center py-20">
-          <Zap className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500">Nenhuma automação encontrada</p>
+        <div className="text-center py-20 bg-white rounded-xl border border-gray-200">
+          <Zap className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Nenhuma automacao encontrada</p>
           <button
             onClick={() => setShowNewModal(true)}
-            className="mt-4 text-blue-600 hover:text-blue-500 text-sm"
+            className="mt-3 text-blue-600 hover:text-blue-700 text-sm font-medium"
           >
-            Criar sua primeira automação
+            Criar sua primeira automacao
           </button>
         </div>
       ) : (
-        <div
-          className={cn(
-            view === 'list' ? 'space-y-3' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'
-          )}
-        >
-          {filteredAutomations.map((automation) => (
-            <AutomationCard
-              key={automation.id}
-              automation={automation}
-              view={view}
-              onEdit={() => handleEdit(automation)}
-              onDelete={() => handleDelete(automation.id)}
-              onToggleStatus={() => handleToggleStatus(automation)}
-            />
-          ))}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {/* Table header */}
+          <div className="grid grid-cols-12 gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <div className="col-span-4">Workflow</div>
+            <div className="col-span-1 text-center">Status</div>
+            <div className="col-span-2">Data</div>
+            <div className="col-span-1 text-right">Enviados</div>
+            <div className="col-span-1 text-right">Abertura</div>
+            <div className="col-span-1 text-right">Cliques</div>
+            <div className="col-span-1 text-right">Receita</div>
+            <div className="col-span-1"></div>
+          </div>
+
+          {/* Table rows */}
+          {filteredAutomations.map((automation) => {
+            const TriggerIcon = TRIGGER_ICON_MAP[automation.trigger_type] || Zap;
+            const statusColors: Record<string, string> = {
+              active: 'bg-green-50 text-green-700',
+              paused: 'bg-amber-50 text-amber-700',
+              draft: 'bg-gray-100 text-gray-500',
+            };
+            const statusLabels: Record<string, string> = {
+              active: 'Ativa', paused: 'Pausada', draft: 'Rascunho',
+            };
+
+            return (
+              <div
+                key={automation.id}
+                className="grid grid-cols-12 gap-4 px-5 py-4 border-b border-gray-50 hover:bg-gray-50/50 transition-colors cursor-pointer items-center"
+                onClick={() => handleEdit(automation)}
+              >
+                {/* Name + trigger type */}
+                <div className="col-span-4 flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                    <TriggerIcon className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{automation.name}</p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {automation.description || automation.trigger_type?.replace('trigger_', '').replace(/_/g, ' ')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div className="col-span-1 flex justify-center">
+                  <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-medium', statusColors[automation.status] || statusColors.draft)}>
+                    {statusLabels[automation.status] || 'Rascunho'}
+                  </span>
+                </div>
+
+                {/* Date */}
+                <div className="col-span-2 text-xs text-gray-500">
+                  {automation.updated_at
+                    ? new Date(automation.updated_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : '--'}
+                </div>
+
+                {/* Sent */}
+                <div className="col-span-1 text-right text-sm text-gray-700 font-medium">
+                  {automation.total_runs || '--'}
+                </div>
+
+                {/* Open rate */}
+                <div className="col-span-1 text-right text-sm text-gray-700">
+                  --
+                </div>
+
+                {/* Click rate */}
+                <div className="col-span-1 text-right text-sm text-gray-700">
+                  --
+                </div>
+
+                {/* Revenue */}
+                <div className="col-span-1 text-right text-sm text-gray-700">
+                  R$0
+                </div>
+
+                {/* Actions */}
+                <div className="col-span-1 flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => handleToggleStatus(automation)}
+                    disabled={automation.status === 'draft'}
+                    className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                  >
+                    {automation.status === 'active' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(automation.id)}
+                    className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
