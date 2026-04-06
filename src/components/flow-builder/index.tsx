@@ -239,18 +239,19 @@ export function FlowBuilder({
 
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar - hidden in fullscreen */}
-          {!isFullscreen && <Sidebar />}
+          {/* Left panel: Sidebar OR Properties Panel (Klaviyo style) */}
+          {!isFullscreen && (
+            showPropertiesPanel ? (
+              <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} />
+            ) : (
+              <Sidebar />
+            )
+          )}
 
           {/* Canvas */}
           <div className="flex-1 relative">
             <Canvas />
           </div>
-
-          {/* Properties Panel - hidden in fullscreen */}
-          {showPropertiesPanel && !isFullscreen && (
-            <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} />
-          )}
         </div>
 
         {/* Execution Panel */}

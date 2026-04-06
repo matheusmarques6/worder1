@@ -176,7 +176,7 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
       {/* Card */}
       <div
         className={cn(
-          'w-[300px] bg-white rounded-xl border overflow-hidden',
+          'w-[270px] bg-white rounded-xl border overflow-hidden',
           'transition-shadow duration-150',
           selected
             ? 'border-blue-500 shadow-lg shadow-blue-100'
