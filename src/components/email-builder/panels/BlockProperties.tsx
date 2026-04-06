@@ -231,86 +231,207 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
         </div>
       )
 
-    case 'image':
+    case 'image': {
+      const [imgTab, setImgTab] = useState<'styles' | 'display'>('styles')
       return (
-        <div className="space-y-3">
-          {/* Upload zone or preview */}
-          {p.src ? (
-            <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
-              <img src={p.src} alt={p.alt || ''} className="w-full h-32 object-contain" />
-              <div className="flex gap-1 p-2 border-t border-gray-100">
-                <label className="flex-1 py-1.5 text-[10px] font-medium text-gray-600 bg-white border border-gray-200 rounded text-center cursor-pointer hover:bg-gray-50 transition-colors">
-                  Trocar
-                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                    const file = e.target.files?.[0]; if (!file) return
-                    const form = new FormData(); form.append('file', file)
-                    try {
-                      const res = await fetch('/api/images/upload', { method: 'POST', body: form })
-                      const data = await res.json()
-                      if (data.url) onChange('src', data.url)
-                      else alert(data.error || 'Erro no upload')
-                    } catch { alert('Erro no upload') }
-                  }} />
-                </label>
-                <button onClick={() => onChange('src', '')} className="flex-1 py-1.5 text-[10px] font-medium text-red-600 bg-red-50 rounded hover:bg-red-100 transition-colors">Remover</button>
+        <div className="space-y-0">
+          {/* Tabs: Styles | Display */}
+          <div className="flex border-b border-gray-200 mb-4">
+            <button onClick={() => setImgTab('styles')} className={`flex-1 py-2.5 text-xs font-semibold ${imgTab === 'styles' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}>Estilos</button>
+            <button onClick={() => setImgTab('display')} className={`flex-1 py-2.5 text-xs font-semibold ${imgTab === 'display' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}>Exibição</button>
+          </div>
+
+          {imgTab === 'styles' ? (
+            <div className="space-y-4">
+              {/* Image upload */}
+              <div>
+                <p className="text-xs font-semibold text-gray-700 mb-1">Imagem</p>
+                <p className="text-[10px] text-gray-400 mb-2">Enviar uma imagem</p>
+                {p.src ? (
+                  <div className="space-y-2">
+                    <img src={p.src} alt={p.alt || ''} className="w-full h-32 object-contain bg-gray-50 rounded-lg border border-gray-200" />
+                    <div className="flex gap-2">
+                      <label className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                        Trocar
+                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                          const file = e.target.files?.[0]; if (!file) return
+                          const form = new FormData(); form.append('file', file)
+                          try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('src', data.url) } catch { alert('Erro') }
+                        }} />
+                      </label>
+                      <button onClick={() => onChange('src', '')} className="flex-1 py-2 text-xs font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center bg-gray-50 hover:border-gray-400 transition-colors">
+                    <p className="text-sm font-medium text-gray-600 mb-1">Arraste e solte ou selecione</p>
+                    <p className="text-[10px] text-gray-400 mb-3">Aceita .png, .jpg, .jpeg, .gif, .webp<br/>Tamanho máximo: 10 MB</p>
+                    <div className="flex justify-center gap-2">
+                      <label className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                        Selecionar imagem
+                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                          const file = e.target.files?.[0]; if (!file) return
+                          const form = new FormData(); form.append('file', file)
+                          try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('src', data.url) } catch { alert('Erro') }
+                        }} />
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
+
+              <div className="border-t border-gray-100 pt-4">
+                <Field label="URL da Imagem"><TextInput value={p.src} onChange={v => onChange('src', v)} placeholder="https://..." /></Field>
+              </div>
+              <Field label="Texto Alt"><TextInput value={p.alt} onChange={v => onChange('alt', v)} placeholder="Descrição da imagem" /></Field>
+              <Field label="Link"><TextInput value={p.href} onChange={v => onChange('href', v)} placeholder="https:// ou {{merge_tag}}" /></Field>
+
+              {/* Image layout */}
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-700 mb-3">Layout da imagem</p>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div>
+                    <span className="text-[10px] text-gray-400">L</span>
+                    <div className="flex items-center gap-1">
+                      <input type="number" value={p.width || 'auto'} onChange={e => onChange('width', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="auto" min={50} max={600}
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                      <span className="text-[10px] text-gray-400">px</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400">A</span>
+                    <div className="flex items-center gap-1">
+                      <input type="number" value={p.height || 'auto'} onChange={e => onChange('height', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="auto" min={20} max={800}
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                      <span className="text-[10px] text-gray-400">px</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Alignment */}
+                <div className="flex border border-gray-200 rounded-lg overflow-hidden mb-3">
+                  {[{ v: 'left', label: '◀' }, { v: 'center', label: '◆' }, { v: 'right', label: '▶' }].map(a => (
+                    <button key={a.v} onClick={() => onChange('align', a.v)}
+                      className={`flex-1 py-2 text-xs ${p.align === a.v ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+                      {a.v === 'left' ? 'Esquerda' : a.v === 'center' ? 'Centro' : 'Direita'}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-700">Preencher coluna</span>
+                    <div className={`relative w-9 h-5 rounded-full cursor-pointer transition-colors ${p.fillColumn ? 'bg-brand-500' : 'bg-gray-200'}`} onClick={() => onChange('fillColumn', !p.fillColumn)}>
+                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${p.fillColumn ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-700">Largura total no mobile</span>
+                    <div className={`relative w-9 h-5 rounded-full cursor-pointer transition-colors ${p.fullWidthMobile !== false ? 'bg-brand-500' : 'bg-gray-200'}`} onClick={() => onChange('fullWidthMobile', p.fullWidthMobile === false)}>
+                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${p.fullWidthMobile !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Image area padding */}
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-700 mb-2">Padding da área da imagem</p>
+                <PaddingInput value={p.padding} onChange={v => onChange('padding', v)} />
+              </div>
+
+              {/* Image area background color */}
+              <div className="border-t border-gray-100 pt-3">
+                <details className="group">
+                  <summary className="flex items-center justify-between cursor-pointer text-xs font-semibold text-gray-700 hover:text-gray-900">
+                    Cor de fundo da área <span className="text-gray-300 text-lg">+</span>
+                  </summary>
+                  <div className="mt-2">
+                    <ColorInput value={p.backgroundColor || ''} onChange={v => onChange('backgroundColor', v)} />
+                  </div>
+                </details>
+              </div>
+
+              {/* Image area border */}
+              <div className="border-t border-gray-100 pt-3">
+                <details className="group">
+                  <summary className="flex items-center justify-between cursor-pointer text-xs font-semibold text-gray-700 hover:text-gray-900">
+                    Borda da imagem <span className="text-gray-300 text-lg">+</span>
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    <Field label="Largura"><NumberInput value={p.border?.width || 0} onChange={v => onChange('border', { ...(p.border || {}), width: v })} min={0} max={10} /></Field>
+                    <Field label="Cor"><ColorInput value={p.border?.color || '#E5E7EB'} onChange={v => onChange('border', { ...(p.border || {}), color: v })} /></Field>
+                    <Field label="Raio"><NumberInput value={p.borderRadius} onChange={v => onChange('borderRadius', v)} min={0} max={100} /></Field>
+                  </div>
+                </details>
+              </div>
+
+              {/* Block background color */}
+              <div className="border-t border-gray-100 pt-3">
+                <details className="group">
+                  <summary className="flex items-center justify-between cursor-pointer text-xs font-semibold text-gray-700 hover:text-gray-900">
+                    Cor de fundo do bloco <span className="text-gray-300 text-lg">+</span>
+                  </summary>
+                  <div className="mt-2">
+                    <ColorInput value={p.blockBgColor || ''} onChange={v => onChange('blockBgColor', v)} />
+                  </div>
+                </details>
+              </div>
+
+              {/* Block padding */}
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-700 mb-2">Padding do bloco</p>
+                <PaddingInput value={p.blockPadding || { top: 0, right: 0, bottom: 0, left: 0 }} onChange={v => onChange('blockPadding', v)} />
+              </div>
+
+              {conditionalSection}
+              {saveButton}
             </div>
           ) : (
-            <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center bg-gray-50 hover:border-brand-400 hover:bg-brand-50/20 transition-colors">
-              <p className="text-xs font-medium text-gray-600 mb-1">Enviar imagem</p>
-              <p className="text-[10px] text-gray-400 mb-3">Arraste e solte ou selecione a imagem<br/>Aceita .png, .jpg, .gif, .webp. Máx 5MB.</p>
-              <div className="flex justify-center gap-2">
-                <label className="px-3 py-1.5 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                  Selecionar imagem
-                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                    const file = e.target.files?.[0]; if (!file) return
-                    const form = new FormData(); form.append('file', file)
-                    try {
-                      const res = await fetch('/api/images/upload', { method: 'POST', body: form })
-                      const data = await res.json()
-                      if (data.url) onChange('src', data.url)
-                      else alert(data.error || 'Erro no upload')
-                    } catch { alert('Erro no upload') }
-                  }} />
-                </label>
+            <div className="space-y-4">
+              {/* Visibility */}
+              <div>
+                <p className="text-xs font-semibold text-gray-700 mb-2">Visibilidade</p>
+                <div className="space-y-1">
+                  {[
+                    { v: 'all', label: 'Todos dispositivos', icon: '🖥📱' },
+                    { v: 'desktop', label: 'Apenas desktop', icon: '🖥' },
+                    { v: 'mobile', label: 'Apenas mobile', icon: '📱' },
+                  ].map(opt => (
+                    <label key={opt.v} className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${(p.visibility || 'all') === opt.v ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <input type="radio" name={`vis-${block.id}`} checked={(p.visibility || 'all') === opt.v}
+                        onChange={() => onChange('visibility', opt.v)} className="w-4 h-4 text-brand-500" />
+                      <span className="text-xs text-gray-700">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Show/hide logic */}
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-700 mb-1">Lógica mostrar/ocultar</p>
+                <p className="text-[10px] text-gray-400 mb-3">Personalize o email mostrando ou ocultando conteúdo baseado nas propriedades ou eventos do contato.</p>
+                <div className="flex gap-2">
+                  <button className="px-3 py-1.5 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                    Usar construtor
+                  </button>
+                  <button className="px-3 py-1.5 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                    Usar código
+                  </button>
+                </div>
+              </div>
+
+              {/* Content repeat */}
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-700 mb-1">Repetição de conteúdo</p>
+                <p className="text-[10px] text-gray-400 mb-3">Para repetir este conteúdo, especifique uma variável para iterar e um alias para usar no template.</p>
+                <button className="px-3 py-1.5 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                  Adicionar repetição
+                </button>
               </div>
             </div>
           )}
-          <Field label="URL da Imagem"><TextInput value={p.src} onChange={v => onChange('src', v)} placeholder="https://..." /></Field>
-          <Field label="Texto Alt"><TextInput value={p.alt} onChange={v => onChange('alt', v)} placeholder="Descrição da imagem" /></Field>
-          <Field label="Link"><TextInput value={p.href} onChange={v => onChange('href', v)} placeholder="https:// ou {{merge_tag}}" /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Largura"><NumberInput value={p.width} onChange={v => onChange('width', v)} min={50} max={600} /></Field>
-            <Field label="Raio da Borda"><NumberInput value={p.borderRadius} onChange={v => onChange('borderRadius', v)} min={0} max={100} /></Field>
-          </div>
-          <Field label="Alinhamento"><SelectInput value={p.align} onChange={v => onChange('align', v)} options={ALIGN_OPTIONS} /></Field>
-          <Toggle value={p.fillColumn} onChange={v => onChange('fillColumn', v)} label="Preencher coluna" />
-          <Toggle value={p.fullWidthMobile !== false} onChange={v => onChange('fullWidthMobile', v)} label="Largura total no mobile" />
-          {/* Advanced */}
-          <div className="border border-gray-100 rounded-lg">
-            <details className="group">
-              <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
-                Borda da Imagem <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
-              </summary>
-              <div className="px-3 pb-3 space-y-2">
-                <Field label="Largura"><NumberInput value={p.border?.width || 0} onChange={v => onChange('border', { ...(p.border || {}), width: v })} min={0} max={10} /></Field>
-                <Field label="Cor"><ColorInput value={p.border?.color || '#E5E7EB'} onChange={v => onChange('border', { ...(p.border || {}), color: v })} /></Field>
-              </div>
-            </details>
-          </div>
-          <div className="border border-gray-100 rounded-lg">
-            <details className="group">
-              <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
-                Cor de fundo <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
-              </summary>
-              <div className="px-3 pb-3">
-                <Field label="Cor de Fundo"><ColorInput value={p.backgroundColor || ''} onChange={v => onChange('backgroundColor', v)} /></Field>
-              </div>
-            </details>
-          </div>
-          {commonTail()}
         </div>
       )
+    }
 
     case 'button':
       return (
