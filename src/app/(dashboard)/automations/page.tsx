@@ -367,7 +367,7 @@ export default function AutomationsPage() {
           onClick={() => setShowNewModal(true)}
           className={cn(
             'flex items-center gap-2 px-4 py-2.5 rounded-xl',
-            'bg-primary-500 hover:bg-primary-600 text-white font-medium',
+            'bg-blue-600 hover:bg-blue-700 text-white font-medium',
             'transition-colors'
           )}
         >
@@ -385,8 +385,8 @@ export default function AutomationsPage() {
           className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <Zap className="w-5 h-5 text-brand-600" />
+            <div className="p-2.5 rounded-lg bg-blue-50">
+              <Zap className="w-5 h-5 text-blue-600" />
             </div>
             <div>
               {statsLoading ? (
@@ -409,8 +409,8 @@ export default function AutomationsPage() {
           className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <Mail className="w-5 h-5 text-brand-600" />
+            <div className="p-2.5 rounded-lg bg-blue-50">
+              <Mail className="w-5 h-5 text-blue-600" />
             </div>
             <div>
               {statsLoading ? (
@@ -433,8 +433,8 @@ export default function AutomationsPage() {
           className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <Users className="w-5 h-5 text-brand-600" />
+            <div className="p-2.5 rounded-lg bg-blue-50">
+              <Users className="w-5 h-5 text-blue-600" />
             </div>
             <div>
               {statsLoading ? (
@@ -457,8 +457,8 @@ export default function AutomationsPage() {
           className="p-4 bg-white border border-gray-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-primary-500/15">
-              <DollarSign className="w-5 h-5 text-brand-600" />
+            <div className="p-2.5 rounded-lg bg-blue-50">
+              <DollarSign className="w-5 h-5 text-blue-600" />
             </div>
             <div>
               {statsLoading ? (
@@ -487,7 +487,7 @@ export default function AutomationsPage() {
               'w-full pl-10 pr-4 py-2.5 rounded-xl',
               'bg-white border border-gray-200',
               'text-gray-900 placeholder-gray-400',
-              'focus:outline-none focus:border-brand-400',
+              'focus:outline-none focus:border-blue-400',
               'transition-colors'
             )}
           />
@@ -503,7 +503,7 @@ export default function AutomationsPage() {
                 className={cn(
                   'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                   statusFilter === status
-                    ? 'bg-primary-500 text-white'
+                    ? 'bg-blue-600 text-white'
                     : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
                 )}
               >
@@ -542,7 +542,7 @@ export default function AutomationsPage() {
       {/* Automations List */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : filteredAutomations.length === 0 ? (
         <div className="text-center py-20">
@@ -550,7 +550,7 @@ export default function AutomationsPage() {
           <p className="text-gray-500">Nenhuma automação encontrada</p>
           <button
             onClick={() => setShowNewModal(true)}
-            className="mt-4 text-brand-600 hover:text-brand-500 text-sm"
+            className="mt-4 text-blue-600 hover:text-blue-500 text-sm"
           >
             Criar sua primeira automação
           </button>
@@ -770,16 +770,16 @@ function NewAutomationModal({ onClose, onSelectTemplate, onSelectBlank }: NewAut
             className={cn(
               'w-full p-4 rounded-xl text-left',
               'bg-white border border-gray-200',
-              'hover:border-brand-400 hover:bg-primary-500/5',
+              'hover:border-blue-300 hover:bg-blue-50',
               'transition-colors group'
             )}
           >
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-primary-500/15 rounded-xl">
-                <Plus className="w-5 h-5 text-brand-600" />
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <Plus className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900 group-hover:text-brand-600 transition-colors">
+                <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
                   Começar do Zero
                 </h3>
                 <p className="text-sm text-gray-500">Criar uma automação em branco</p>

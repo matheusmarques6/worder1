@@ -1251,15 +1251,15 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
           </section>
 
           {/* Variables hint */}
-          <section className="p-3 bg-brand-50 border border-primary-500/20 rounded-lg">
+          <section className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
             <div className="flex items-start gap-2">
-              <Sparkles className="w-4 h-4 text-brand-600 mt-0.5 flex-shrink-0" />
+              <Sparkles className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
               <div className="space-y-1">
-                <p className="text-[11px] text-brand-500 font-medium">
-                  Personalização com Variáveis
+                <p className="text-[11px] text-blue-700 font-medium">
+                  Personalizacao com Variaveis
                 </p>
-                <p className="text-[10px] text-brand-500/70">
-                  Clique em <span className="bg-brand-100 px-1 rounded">Personalizar</span> para inserir dados dinâmicos como nome do contato, dados do pedido, etc.
+                <p className="text-[10px] text-blue-600/70">
+                  Use variaveis como <span className="bg-blue-100 px-1 rounded font-mono">{'{{contact.first_name}}'}</span> para dados dinamicos.
                 </p>
               </div>
             </div>

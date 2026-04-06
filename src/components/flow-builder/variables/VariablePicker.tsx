@@ -131,7 +131,7 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-brand-600" />
+            <Sparkles className="w-5 h-5 text-blue-600" />
             <h2 className="text-lg font-semibold text-gray-900">Personalização</h2>
           </div>
           <button
@@ -155,7 +155,7 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
                 'w-full pl-10 pr-4 py-2.5 rounded-lg',
                 'bg-white border border-gray-300',
                 'text-gray-900 placeholder-gray-400',
-                'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
+                'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20',
                 'transition-all'
               )}
               autoFocus
@@ -181,7 +181,7 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="p-1.5 rounded-lg bg-gray-100 text-brand-600">
+                    <div className="p-1.5 rounded-lg bg-gray-100 text-blue-600">
                       {getCategoryIcon(category.id)}
                     </div>
                     <div className="text-left">
@@ -239,7 +239,7 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
         {/* Footer */}
         <div className="p-4 border-t border-gray-200 bg-gray-50">
           <p className="text-xs text-gray-500">
-            Clique em uma variável para inserir ou use o botão de copiar. Use <code className="text-brand-600 bg-gray-100 px-1 rounded">|default:'valor'</code> para valores padrão.
+            Clique em uma variável para inserir ou use o botão de copiar. Use <code className="text-blue-600 bg-gray-100 px-1 rounded">|default:'valor'</code> para valores padrão.
           </p>
         </div>
       </motion.div>
@@ -299,7 +299,7 @@ function VariableItem({
             )}
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <code className="text-xs text-brand-600 bg-gray-100 px-1.5 py-0.5 rounded font-mono">
+            <code className="text-xs text-blue-600 bg-gray-100 px-1.5 py-0.5 rounded font-mono">
               {`{{ ${variable.key} }}`}
             </code>
             {realValue && (
@@ -366,7 +366,7 @@ function VariableItem({
                   'flex-1 px-3 py-2 rounded-lg',
                   'bg-white border border-gray-300',
                   'text-sm text-gray-700 placeholder-gray-400',
-                  'focus:outline-none focus:border-primary-500'
+                  'focus:outline-none focus:border-blue-500'
                 )}
                 onClick={(e) => e.stopPropagation()}
               />
@@ -378,7 +378,7 @@ function VariableItem({
                 disabled={!defaultValue}
                 className={cn(
                   'px-3 py-2 rounded-lg text-sm font-medium',
-                  'bg-primary-500 hover:bg-primary-600 text-white',
+                  'bg-blue-600 hover:bg-blue-700 text-white',
                   'transition-colors',
                   'disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
