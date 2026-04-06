@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, Palette, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star } from 'lucide-react'
 import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDroppable, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
@@ -90,6 +90,136 @@ function DroppableColumn({ columnId, sectionId, children }: { columnId: string; 
     <div ref={setNodeRef} className={`${isOver ? 'ring-2 ring-brand-400 ring-inset bg-brand-50/30' : ''}`}>
       {children}
     </div>
+  )
+}
+
+// ── Palette Drop Column (HTML5 DnD wrapper with drop indicator) ──
+function PaletteDropColumn({ columnId, sectionId, blocks, onDrop, children }: {
+  columnId: string; sectionId: string; blocks: EmailBlock[];
+  onDrop: (type: string, sectionId: string, columnId: string) => void; children: React.ReactNode
+}) {
+  const [dragOver, setDragOver] = useState(false)
+  const [indicatorIndex, setIndicatorIndex] = useState<number>(-1)
+  const colRef = useRef<HTMLDivElement>(null)
+  const dragCountRef = useRef(0)
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'copy'
+    setDragOver(true)
+
+    // Calculate which block gap the cursor is nearest
+    if (blocks.length > 0 && colRef.current) {
+      const blockEls = colRef.current.querySelectorAll(':scope > [data-palette-drop-zone] > div, :scope > div > div')
+      const mouseY = e.clientY
+      let idx = blocks.length // default: append at end
+      for (let i = 0; i < blockEls.length; i++) {
+        const rect = blockEls[i].getBoundingClientRect()
+        const midY = rect.top + rect.height / 2
+        if (mouseY < midY) { idx = i; break }
+      }
+      setIndicatorIndex(idx)
+    } else {
+      setIndicatorIndex(0)
+    }
+  }, [blocks.length])
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCountRef.current++
+    setDragOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.stopPropagation()
+    dragCountRef.current--
+    if (dragCountRef.current <= 0) {
+      dragCountRef.current = 0
+      setDragOver(false)
+      setIndicatorIndex(-1)
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCountRef.current = 0
+    setDragOver(false)
+    setIndicatorIndex(-1)
+    const type = e.dataTransfer.getData('blockType')
+    if (type) onDrop(type, sectionId, columnId)
+  }, [onDrop, sectionId, columnId])
+
+  return (
+    <div
+      ref={colRef}
+      className={`relative transition-all duration-150 ${dragOver ? 'email-column-dragover' : ''}`}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drop indicator rendered at the calculated position */}
+      {dragOver && blocks.length > 0 && indicatorIndex >= 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 0,
+            zIndex: 50,
+            pointerEvents: 'none',
+          }}
+        >
+          <DropIndicatorLine colRef={colRef} index={indicatorIndex} blockCount={blocks.length} />
+        </div>
+      )}
+      {children}
+    </div>
+  )
+}
+
+// ── Positioned drop indicator line ──
+function DropIndicatorLine({ colRef, index, blockCount }: { colRef: React.RefObject<HTMLDivElement | null>; index: number; blockCount: number }) {
+  const [top, setTop] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!colRef.current) return
+    const container = colRef.current
+    const containerRect = container.getBoundingClientRect()
+    // Find block children within the sortable context
+    const sortableWrapper = container.querySelector('[data-palette-drop-zone]')
+    const blockEls = sortableWrapper
+      ? sortableWrapper.children
+      : container.children
+
+    if (blockCount === 0) {
+      setTop(0)
+      return
+    }
+
+    if (index >= blockEls.length) {
+      // After last block
+      const lastEl = blockEls[blockEls.length - 1]
+      if (lastEl) {
+        const rect = lastEl.getBoundingClientRect()
+        setTop(rect.bottom - containerRect.top)
+      }
+    } else {
+      const el = blockEls[index]
+      if (el) {
+        const rect = el.getBoundingClientRect()
+        setTop(rect.top - containerRect.top)
+      }
+    }
+  }, [colRef, index, blockCount])
+
+  if (top === null) return null
+
+  return (
+    <div className="email-drop-indicator" style={{ position: 'absolute', top: top - 2, left: 0, right: 0 }} />
   )
 }
 
@@ -319,6 +449,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   })
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
+  const [lastDroppedBlockId, setLastDroppedBlockId] = useState<string | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -479,6 +610,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           column.blocks.push(block)
           updateDoc({ ...doc, sections })
           selectBlock(block.id)
+          setLastDroppedBlockId(block.id)
+          setTimeout(() => setLastDroppedBlockId(null), 400)
           return
         }
       }
@@ -494,6 +627,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     }
     updateDoc({ ...doc, sections })
     selectBlock(block.id)
+    setLastDroppedBlockId(block.id)
+    setTimeout(() => setLastDroppedBlockId(null), 400)
   }, [doc, updateDoc, selectBlock])
 
   const addSavedBlock = useCallback((blockJson: any) => {
@@ -850,18 +985,17 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                         {section.columns.map((column) => {
                           const colBlocks = column.blocks
                           return (
-                            <div key={column.id} style={{ width: `${column.width}%`, minHeight: 40 }} className="relative"
-                              onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30') }}
-                              onDragLeave={e => { e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30') }}
-                              onDrop={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30'); const type = e.dataTransfer.getData('blockType'); if (type) addBlock(type, section.id, column.id) }}
-                            >
+                            <div key={column.id} style={{ width: `${column.width}%`, minHeight: 40 }} className="relative">
+                              <PaletteDropColumn columnId={column.id} sectionId={section.id} blocks={colBlocks} onDrop={addBlock}>
                               {colBlocks.length === 0 ? (
                                 <DroppableColumn columnId={column.id} sectionId={section.id}>
-                                  <div className="flex items-center justify-center h-full min-h-[60px] border border-dashed border-gray-300 bg-gray-50/50 text-gray-400 text-xs gap-2 rounded">
+                                  <div className="email-empty-column-placeholder flex items-center justify-center h-full min-h-[60px] border border-dashed border-gray-300 bg-gray-50/50 text-gray-400 text-xs gap-2 rounded transition-colors duration-150">
+                                    <Plus className="w-4 h-4 opacity-50" />
                                     <span>Solte conteúdo aqui</span>
                                   </div>
                                 </DroppableColumn>
                               ) : (
+                                <div data-palette-drop-zone>
                                 <SortableContext items={colBlocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
                                   {colBlocks.map((block) => (
                                     <SortableBlock
@@ -872,6 +1006,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                       onClone={() => cloneBlock(block.id)}
                                       onDelete={() => removeBlock(block.id)}
                                     >
+                                      <div className={lastDroppedBlockId === block.id ? 'email-block-dropped' : ''}>
                                       <BlockPreview
                                         block={block}
                                         selected={selectedBlockId === block.id}
@@ -879,10 +1014,13 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                         onClone={() => cloneBlock(block.id)}
                                         onDelete={() => removeBlock(block.id)}
                                       />
+                                      </div>
                                     </SortableBlock>
                                   ))}
                                 </SortableContext>
+                                </div>
                               )}
+                              </PaletteDropColumn>
                             </div>
                           )
                         })}

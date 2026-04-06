@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent, DragOverlay, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
@@ -137,7 +137,9 @@ function BlockPreview({ block }: { block: Block }) {
   }
   const inputStyle = "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white placeholder-gray-400 outline-none"
   switch (block.type) {
-    case 'text': return <div style={{ ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit' }}>{p.content}</div>
+    case 'text': return <div contentEditable suppressContentEditableWarning
+      onBlur={e => { const newText = e.currentTarget.textContent || ''; if (newText !== p.content) { block.props.content = newText } }}
+      style={{ ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', outline: 'none', cursor: 'text', minHeight: '1em' }}>{p.content}</div>
     case 'email':
       return <div style={blockStyle}>{p.showLabel && <label className="block text-sm font-medium text-gray-700 mb-1">{p.label}</label>}<input readOnly placeholder={p.placeholder || 'Seu email'} className={inputStyle} /></div>
     case 'phone':
@@ -172,7 +174,7 @@ function BlockPreview({ block }: { block: Block }) {
 }
 
 // ── Block Props Editor (Omnisend-style per-block panels) ──────────────────────
-function BlockEditor({ block, onChange, onDelete }: { block: Block; onChange: (b: Block) => void; onDelete: () => void }) {
+function BlockEditor({ block, onChange, onDelete, onOpenMedia }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void }) {
   const up = (key: string, val: any) => onChange({ ...block, props: { ...block.props, [key]: val } })
   const p = block.props
   const [tab, setTab] = useState<'props' | 'layout'>('props')
@@ -309,27 +311,19 @@ function BlockEditor({ block, onChange, onDelete }: { block: Block; onChange: (b
             <div className="space-y-2">
               <img src={p.src} alt="" className="w-full h-24 object-contain bg-gray-50 rounded-lg border" />
               <div className="flex gap-2">
-                <label className="flex-1 py-1.5 text-xs font-medium text-center text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <button onClick={() => onOpenMedia?.(url => up('src', url))}
+                  className="flex-1 py-1.5 text-xs font-medium text-center text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
                   Trocar
-                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                    const file = e.target.files?.[0]; if (!file) return
-                    const form = new FormData(); form.append('file', file)
-                    try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) up('src', data.url) } catch {}
-                  }} />
-                </label>
+                </button>
                 <button onClick={() => up('src', '')} className="flex-1 py-1.5 text-xs font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
               </div>
             </div>
           ) : (
-            <label className="block border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-brand-400">
+            <button onClick={() => onOpenMedia?.(url => up('src', url))}
+              className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-brand-400">
               <ImageIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-              <span className="text-xs text-gray-500">Clique para enviar imagem</span>
-              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                const file = e.target.files?.[0]; if (!file) return
-                const form = new FormData(); form.append('file', file)
-                try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) up('src', data.url) } catch {}
-              }} />
-            </label>
+              <span className="text-xs text-gray-500">Clique para escolher imagem</span>
+            </button>
           )}
           <Field label="URL da imagem"><input className={inp} value={p.src || ''} onChange={e => up('src', e.target.value)} placeholder="https://" /></Field>
           <Field label="Texto alternativo"><input className={inp} value={p.alt || ''} onChange={e => up('alt', e.target.value)} placeholder="Descreva a imagem" /></Field>
@@ -663,7 +657,7 @@ function BehaviorPanel({ beh, onChange }: { beh: PopupDesign['behavior']; onChan
 }
 
 // ── Theme Panel ────────────────────────────────────────────────────────────────
-function ThemePanel({ design, onChange }: { design: PopupDesign; onChange: (d: PopupDesign) => void }) {
+function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; onChange: (d: PopupDesign) => void; onOpenMedia?: (cb: (url: string) => void) => void }) {
   const s = design.styles
   const setS = (val: Partial<PopupDesign['styles']>) => onChange({ ...design, styles: { ...s, ...val } })
   const setOv = (val: Partial<PopupDesign['styles']['overlay']>) => onChange({ ...design, styles: { ...s, overlay: { ...s.overlay, ...val } } })
@@ -707,27 +701,19 @@ function ThemePanel({ design, onChange }: { design: PopupDesign; onChange: (d: P
             <div className="space-y-2">
               <img src={s.sideImage.src} alt="" className="w-full h-24 object-cover rounded-lg border" />
               <div className="flex gap-2">
-                <label className="flex-1 py-1.5 text-xs font-medium text-center text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <button onClick={() => onOpenMedia?.(url => setSi({ src: url }))}
+                  className="flex-1 py-1.5 text-xs font-medium text-center text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
                   Trocar
-                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                    const file = e.target.files?.[0]; if (!file) return
-                    const form = new FormData(); form.append('file', file)
-                    try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) setSi({ src: data.url }) } catch {}
-                  }} />
-                </label>
+                </button>
                 <button onClick={() => setSi({ src: '' })} className="flex-1 py-1.5 text-xs font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
               </div>
             </div>
           ) : (
-            <label className="block border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-brand-400">
+            <button onClick={() => onOpenMedia?.(url => setSi({ src: url }))}
+              className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-brand-400">
               <Upload className="w-6 h-6 text-gray-300 mx-auto mb-2" />
-              <span className="text-xs text-gray-500">Clique para enviar imagem</span>
-              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                const file = e.target.files?.[0]; if (!file) return
-                const form = new FormData(); form.append('file', file)
-                try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) setSi({ src: data.url }) } catch {}
-              }} />
-            </label>
+              <span className="text-xs text-gray-500">Clique para escolher imagem</span>
+            </button>
           )}
           <Field label="Posição">
             <div className="flex border border-gray-200 rounded-lg overflow-hidden">
@@ -772,6 +758,64 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
   )
 }
 
+// ── Media Library Modal ───────────────────────────────────────────────────────
+function MediaLibraryModal({ onSelect, onClose }: { onSelect: (url: string) => void; onClose: () => void }) {
+  const [images, setImages] = useState<{ url: string; name?: string }[]>([])
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    fetch('/api/content/media').then(r => r.json()).then(data => {
+      setImages(Array.isArray(data) ? data : data.images || data.media || [])
+    }).catch(() => {})
+  }, [])
+
+  const handleUpload = async (file: File) => {
+    setUploading(true)
+    const form = new FormData(); form.append('file', file)
+    try {
+      const res = await fetch('/api/images/upload', { method: 'POST', body: form })
+      const data = await res.json()
+      if (data.url) {
+        setImages(prev => [{ url: data.url, name: file.name }, ...prev])
+      }
+    } catch {} finally { setUploading(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-[640px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-800">Biblioteca de Imagens</h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X className="w-4 h-4 text-gray-500" /></button>
+        </div>
+        <div className="px-5 py-3 border-b border-gray-100">
+          <button onClick={() => fileRef.current?.click()} disabled={uploading}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-50">
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {uploading ? 'Enviando...' : 'Enviar imagem'}
+          </button>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = '' }} />
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {images.length === 0 ? (
+            <div className="py-12 text-center text-sm text-gray-400">Nenhuma imagem encontrada</div>
+          ) : (
+            <div className="grid grid-cols-4 gap-3">
+              {images.map((img, i) => (
+                <button key={i} onClick={() => { onSelect(img.url); onClose() }}
+                  className="group aspect-square rounded-lg border-2 border-gray-200 hover:border-orange-400 overflow-hidden transition-colors">
+                  <img src={img.url} alt={img.name || ''} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PopupEditorPage() {
   const params = useParams()
@@ -787,6 +831,10 @@ export default function PopupEditorPage() {
   const [showSuccess, setShowSuccess] = useState(false)
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [rightTab, setRightTab] = useState<'block' | 'behavior' | 'theme'>('theme')
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false)
+  const mediaCallbackRef = useRef<((url: string) => void) | null>(null)
   // Undo/Redo
   const [history, setHistory] = useState<string[]>([])
   const [historyIdx, setHistoryIdx] = useState(-1)
@@ -892,6 +940,11 @@ export default function PopupEditorPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [undo, redo, handleSave])
 
+  const openMediaLibrary = useCallback((callback: (url: string) => void) => {
+    mediaCallbackRef.current = callback
+    setShowMediaLibrary(true)
+  }, [])
+
   const addStep = () => {
     const s: Step = { id: uid(), name: `Etapa ${design.steps.length + 1}`, blocks: [] }
     setDesign(d => ({ ...d, steps: [...d.steps, s] }))
@@ -925,6 +978,9 @@ export default function PopupEditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 px-4 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
+            <Eye className="w-4 h-4" /> Preview
+          </button>
           <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar
           </button>
@@ -1052,16 +1108,96 @@ export default function PopupEditorPage() {
           </div>
           <div className="flex-1 overflow-y-auto">
             {rightTab === 'block' && selectedBlock && (
-              <div className="p-4"><BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} /></div>
+              <div className="p-4"><BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} /></div>
             )}
             {rightTab === 'block' && !selectedBlock && (
               <div className="p-8 text-center text-sm text-gray-400">Selecione um bloco no canvas</div>
             )}
             {rightTab === 'behavior' && <BehaviorPanel beh={design.behavior} onChange={b => setDesign(d => ({ ...d, behavior: b }))} />}
-            {rightTab === 'theme' && <ThemePanel design={design} onChange={setDesign} />}
+            {rightTab === 'theme' && <ThemePanel design={design} onChange={setDesign} onOpenMedia={openMediaLibrary} />}
           </div>
         </aside>
       </div>
+
+      {/* Preview Mode Overlay */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex flex-col">
+          {/* Preview toolbar */}
+          <div className="flex items-center justify-between px-6 py-3 bg-gray-900 shrink-0">
+            <span className="text-sm font-medium text-white">Preview Mode</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5 bg-gray-800 rounded-lg p-0.5">
+                <button onClick={() => setPreviewDevice('desktop')} className={`px-3 py-1.5 rounded text-xs font-medium ${previewDevice === 'desktop' ? 'bg-white text-gray-900' : 'text-gray-400 hover:text-white'}`}>
+                  <Monitor className="w-4 h-4 inline mr-1" />Desktop
+                </button>
+                <button onClick={() => setPreviewDevice('mobile')} className={`px-3 py-1.5 rounded text-xs font-medium ${previewDevice === 'mobile' ? 'bg-white text-gray-900' : 'text-gray-400 hover:text-white'}`}>
+                  <Smartphone className="w-4 h-4 inline mr-1" />Mobile
+                </button>
+              </div>
+            </div>
+            <button onClick={() => setShowPreview(false)} className="flex items-center gap-2 px-4 py-1.5 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-100">
+              <X className="w-4 h-4" /> Fechar Preview
+            </button>
+          </div>
+          {/* Simulated website background */}
+          <div className="flex-1 overflow-auto bg-gray-200" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 40px, #d1d5db 40px, #d1d5db 41px)' }}>
+            {/* Fake website content */}
+            <div className="max-w-4xl mx-auto px-8 py-12">
+              <div className="h-8 w-48 bg-gray-300 rounded mb-8" />
+              <div className="flex gap-6 mb-6">
+                <div className="h-4 flex-1 bg-gray-300 rounded" /><div className="h-4 w-24 bg-gray-300 rounded" /><div className="h-4 w-32 bg-gray-300 rounded" />
+              </div>
+              <div className="space-y-3 mb-8">
+                <div className="h-3 w-full bg-gray-300/60 rounded" /><div className="h-3 w-5/6 bg-gray-300/60 rounded" /><div className="h-3 w-4/6 bg-gray-300/60 rounded" />
+              </div>
+              <div className="h-48 bg-gray-300/40 rounded-lg mb-8" />
+              <div className="space-y-3">
+                <div className="h-3 w-full bg-gray-300/60 rounded" /><div className="h-3 w-3/4 bg-gray-300/60 rounded" /><div className="h-3 w-5/6 bg-gray-300/60 rounded" />
+              </div>
+            </div>
+            {/* Popup overlay */}
+            <div className="fixed inset-0 top-[52px] flex items-center justify-center" style={{ zIndex: 10 }}>
+              {s.overlay.enabled && <div className="absolute inset-0" style={{ backgroundColor: s.overlay.color, opacity: s.overlay.opacity / 100 }} />}
+              <div className="relative flex overflow-hidden shadow-2xl" style={{
+                width: previewDevice === 'mobile' ? 360 : s.width + (s.sideImage.enabled && s.sideImage.src ? s.sideImage.width : 0),
+                maxWidth: '95%', borderRadius: s.borderRadius,
+                animation: s.animation === 'fade' ? 'fadeIn 0.3s ease' : s.animation === 'slide-up' ? 'slideUp 0.3s ease' : undefined,
+              }}>
+                {s.closeButton.show && (
+                  <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/30 flex items-center justify-center z-20">
+                    <X style={{ color: s.closeButton.color || '#FFFFFF' }} className="w-4 h-4" />
+                  </button>
+                )}
+                {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && previewDevice !== 'mobile' && (
+                  <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="overflow-hidden">
+                    <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
+                  </div>
+                )}
+                <div style={{ backgroundColor: s.backgroundColor, padding: s.padding, fontFamily: s.fontFamily, flexGrow: 1, minHeight: 200 }}>
+                  {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} />)}
+                </div>
+                {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && previewDevice !== 'mobile' && (
+                  <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="overflow-hidden">
+                    <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <style>{`
+            @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+            @keyframes slideUp { from { opacity: 0; transform: translateY(30px) } to { opacity: 1; transform: translateY(0) } }
+          `}</style>
+        </div>
+      )}
+
+      {/* Media Library Modal */}
+      {showMediaLibrary && (
+        <MediaLibraryModal
+          onSelect={(url) => { mediaCallbackRef.current?.(url); mediaCallbackRef.current = null }}
+          onClose={() => { setShowMediaLibrary(false); mediaCallbackRef.current = null }}
+        />
+      )}
     </div>
   )
 }

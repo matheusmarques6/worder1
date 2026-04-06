@@ -506,3 +506,55 @@
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 300ms;
 }
+
+/* ── Email builder: palette drag-and-drop feedback ── */
+
+/* Drop indicator line shown between blocks */
+.email-drop-indicator {
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, #3b82f6 15%, #3b82f6 85%, transparent 100%);
+  border-radius: 2px;
+  margin: 2px 8px;
+  pointer-events: none;
+  animation: dropIndicatorPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes dropIndicatorPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Column highlight when dragging over */
+.email-column-dragover {
+  outline: 2px dashed #3b82f6;
+  outline-offset: -2px;
+  background-color: rgba(59, 130, 246, 0.04);
+  border-radius: 4px;
+  transition: background-color 0.15s ease, outline-color 0.15s ease;
+}
+
+/* Empty column highlight when dragging over */
+.email-column-dragover .email-empty-column-placeholder {
+  border-color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.08);
+  color: #3b82f6;
+}
+
+/* Subtle pop-in animation for newly dropped blocks */
+@keyframes blockDropIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  60% {
+    transform: scale(1.01) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.email-block-dropped {
+  animation: blockDropIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
