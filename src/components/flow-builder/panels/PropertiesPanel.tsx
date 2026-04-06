@@ -1917,14 +1917,40 @@ function EmailActionConfig({ config, onUpdate, triggerType }: { config: any; onU
   return (
     <>
       <div className="space-y-2">
-        <label className="text-xs font-medium text-gray-500">Template de Email</label>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-gray-500">Template</label>
+          {config.templateId && (
+            <a href={`/email/templates/${config.templateId}/edit`} target="_blank" rel="noopener"
+              className="text-[10px] font-medium text-brand-600 hover:text-brand-700">Editar</a>
+          )}
+        </div>
         <select value={config.templateId || ''} onChange={(e) => onUpdate('templateId', e.target.value)}
           className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-brand-500">
-          <option value="">Nenhum (usar HTML abaixo)</option>
+          <option value="">Selecionar template...</option>
           {templates.map((t: any) => (<option key={t.id} value={t.id}>{t.name}</option>))}
         </select>
         {loadingTemplates && <p className="text-[10px] text-gray-400">Carregando...</p>}
       </div>
+
+      {!config.templateId && (
+        <div className="space-y-2">
+          <button onClick={async () => {
+            try {
+              const res = await fetch('/api/email/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Email - ' + (config.subject || 'Novo') }) })
+              if (res.ok) {
+                const data = await res.json()
+                const id = data.template?.id || data.id
+                onUpdate('templateId', id)
+                window.open(`/email/templates/${id}/edit`, '_blank')
+              }
+            } catch {}
+          }} className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors">
+            Criar email no editor visual
+          </button>
+          <p className="text-[10px] text-gray-400 text-center">ou use HTML customizado abaixo</p>
+        </div>
+      )}
+
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label className="text-xs font-medium text-gray-500">Assunto</label>
@@ -1939,8 +1965,12 @@ function EmailActionConfig({ config, onUpdate, triggerType }: { config: any; onU
           label="Corpo do Email (HTML)" placeholder="<p>Olá {{ contact.first_name }}!</p>" rows={6} />
       )}
       {config.templateId && (
-        <div className="p-3 bg-brand-50 border border-brand-200 rounded-lg">
-          <p className="text-[11px] text-brand-700">📧 Usando template salvo. Conteúdo será carregado no envio.</p>
+        <div className="space-y-2">
+          <a href={`/email/templates/${config.templateId}/edit`} target="_blank" rel="noopener"
+            className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-brand-600 bg-brand-50 border border-brand-200 rounded-lg hover:bg-brand-100 transition-colors">
+            Editar template no editor visual
+          </a>
+          <p className="text-[10px] text-gray-400">O conteúdo do template será usado no envio.</p>
         </div>
       )}
       <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
