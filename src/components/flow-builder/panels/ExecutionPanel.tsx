@@ -632,7 +632,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                               <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">
                                 Output
                               </p>
-                              <pre className="text-xs text-gray-600/60 overflow-x-auto bg-black/40 p-2 rounded max-h-40">
+                              <pre className="text-xs text-gray-600/60 overflow-x-auto bg-gray-100 p-2 rounded max-h-40">
                                 {JSON.stringify(step.output, null, 2)}
                               </pre>
                             </div>
