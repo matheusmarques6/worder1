@@ -537,14 +537,15 @@ export default function AutomationsPage() {
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {/* Table header */}
-          <div className="grid grid-cols-12 gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            <div className="col-span-4">Workflow</div>
+          <div className="grid grid-cols-12 gap-4 px-5 py-3 border-b border-gray-200 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+            <div className="col-span-4">Flow</div>
+            <div className="col-span-1 text-center">Type</div>
             <div className="col-span-1 text-center">Status</div>
-            <div className="col-span-2">Data</div>
-            <div className="col-span-1 text-right">Enviados</div>
-            <div className="col-span-1 text-right">Abertura</div>
-            <div className="col-span-1 text-right">Cliques</div>
-            <div className="col-span-1 text-right">Receita</div>
+            <div className="col-span-1">Date</div>
+            <div className="col-span-1 text-right">Sent</div>
+            <div className="col-span-1 text-right">Open rate</div>
+            <div className="col-span-1 text-right">Click rate</div>
+            <div className="col-span-1 text-right">Revenue</div>
             <div className="col-span-1"></div>
           </div>
 
@@ -552,69 +553,103 @@ export default function AutomationsPage() {
           {filteredAutomations.map((automation) => {
             const TriggerIcon = TRIGGER_ICON_MAP[automation.trigger_type] || Zap;
             const statusColors: Record<string, string> = {
-              active: 'bg-green-50 text-green-700',
-              paused: 'bg-amber-50 text-amber-700',
-              draft: 'bg-gray-100 text-gray-500',
+              active: 'bg-green-50 text-green-700 border border-green-200',
+              paused: 'bg-amber-50 text-amber-700 border border-amber-200',
+              draft: 'bg-gray-50 text-gray-500 border border-gray-200',
             };
             const statusLabels: Record<string, string> = {
               active: 'Ativa', paused: 'Pausada', draft: 'Rascunho',
             };
+            const statusDots: Record<string, string> = {
+              active: 'bg-green-500',
+              paused: 'bg-amber-500',
+              draft: 'bg-gray-400',
+            };
+
+            // Map trigger_type to readable event name
+            const triggerEventNames: Record<string, string> = {
+              trigger_abandon: 'Abandoned Cart',
+              trigger_checkout_abandoned: 'Checkout Started',
+              trigger_order: 'Placed Order',
+              trigger_order_paid: 'Order Paid',
+              trigger_fulfilled_order: 'Fulfilled Order',
+              trigger_cancelled_order: 'Cancelled Order',
+              trigger_viewed_product: 'Viewed Product',
+              trigger_added_to_cart: 'Added to Cart',
+              trigger_signup: 'Customer Created',
+              trigger_form_submitted: 'Form Submitted',
+              trigger_segment: 'Entered Segment',
+              trigger_tag: 'Tag Added',
+              trigger_date: 'Date Property',
+              trigger_custom_event: 'Custom Event',
+              trigger_webhook: 'Webhook',
+              trigger_deal_created: 'Deal Created',
+              trigger_deal_stage: 'Deal Stage Changed',
+              trigger_deal_won: 'Deal Won',
+              trigger_deal_lost: 'Deal Lost',
+              trigger_whatsapp: 'WhatsApp Received',
+            };
+            const eventName = triggerEventNames[automation.trigger_type] || automation.trigger_type?.replace('trigger_', '').replace(/_/g, ' ');
 
             return (
               <div
                 key={automation.id}
-                className="grid grid-cols-12 gap-4 px-5 py-4 border-b border-gray-50 hover:bg-gray-50/50 transition-colors cursor-pointer items-center"
+                className="grid grid-cols-12 gap-4 px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors cursor-pointer items-center"
                 onClick={() => handleEdit(automation)}
               >
-                {/* Name + trigger type */}
+                {/* Name + event name */}
                 <div className="col-span-4 flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                    <TriggerIcon className="w-4 h-4 text-blue-600" />
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                    <TriggerIcon className="w-4.5 h-4.5 text-blue-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{automation.name}</p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {automation.description || automation.trigger_type?.replace('trigger_', '').replace(/_/g, ' ')}
-                    </p>
+                    <p className="text-sm font-medium text-blue-600 hover:text-blue-700 truncate">{automation.name}</p>
+                    <p className="text-xs text-gray-400 truncate">{eventName}</p>
                   </div>
+                </div>
+
+                {/* Type icon */}
+                <div className="col-span-1 flex justify-center">
+                  <Mail className="w-4 h-4 text-gray-400" />
                 </div>
 
                 {/* Status */}
                 <div className="col-span-1 flex justify-center">
-                  <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-medium', statusColors[automation.status] || statusColors.draft)}>
+                  <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium', statusColors[automation.status] || statusColors.draft)}>
+                    <span className={cn('w-1.5 h-1.5 rounded-full', statusDots[automation.status] || statusDots.draft)} />
                     {statusLabels[automation.status] || 'Rascunho'}
                   </span>
                 </div>
 
                 {/* Date */}
-                <div className="col-span-2 text-xs text-gray-500">
+                <div className="col-span-1 text-xs text-gray-500">
                   {automation.updated_at
-                    ? new Date(automation.updated_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+                    ? new Date(automation.updated_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
                     : '--'}
                 </div>
 
                 {/* Sent */}
-                <div className="col-span-1 text-right text-sm text-gray-700 font-medium">
+                <div className="col-span-1 text-right text-sm text-gray-700 font-medium tabular-nums">
                   {automation.total_runs || '--'}
                 </div>
 
                 {/* Open rate */}
-                <div className="col-span-1 text-right text-sm text-gray-700">
+                <div className="col-span-1 text-right text-sm text-gray-700 tabular-nums">
                   --
                 </div>
 
                 {/* Click rate */}
-                <div className="col-span-1 text-right text-sm text-gray-700">
+                <div className="col-span-1 text-right text-sm text-gray-700 tabular-nums">
                   --
                 </div>
 
                 {/* Revenue */}
-                <div className="col-span-1 text-right text-sm text-gray-700">
-                  R$0
+                <div className="col-span-1 text-right text-sm font-medium text-gray-900 tabular-nums">
+                  R$0.00
                 </div>
 
                 {/* Actions */}
-                <div className="col-span-1 flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                <div className="col-span-1 flex justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => handleToggleStatus(automation)}
                     disabled={automation.status === 'draft'}
