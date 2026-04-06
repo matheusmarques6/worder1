@@ -656,7 +656,33 @@ export const useFlowStore = create<FlowStore>()(
             errors.push(`O gatilho "${trigger.data.label}" precisa estar conectado a um próximo nó`);
           }
         }
-        
+
+        // Check email nodes have subject
+        const emailNodes = nodes.filter((n) => n.data.nodeType === 'action_email');
+        for (const emailNode of emailNodes) {
+          const cfg = emailNode.data.config || {};
+          if (!cfg.subject && !cfg.templateId) {
+            errors.push(`Email "${emailNode.data.label}" precisa de um assunto ou template`);
+          }
+        }
+
+        // Check condition nodes have field configured
+        const conditionNodes = nodes.filter((n) => n.data.nodeType === 'condition_field');
+        for (const condNode of conditionNodes) {
+          const cfg = condNode.data.config || {};
+          if (!cfg.field) {
+            errors.push(`Condição "${condNode.data.label}" precisa de um campo configurado`);
+          }
+        }
+
+        // Check condition nodes have both outputs connected
+        for (const condNode of nodes.filter((n) => n.data.category === 'condition')) {
+          const outEdges = edges.filter((e) => e.source === condNode.id);
+          if (outEdges.length < 2) {
+            errors.push(`Condição "${condNode.data.label}" precisa de conexões Sim e Não`);
+          }
+        }
+
         return {
           valid: errors.length === 0,
           errors,

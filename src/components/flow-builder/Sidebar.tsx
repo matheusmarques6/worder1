@@ -155,9 +155,15 @@ interface SidebarProps {
 export function Sidebar({ onTriggerSelect }: SidebarProps) {
   const [selectedTrigger, setSelectedTrigger] = useState<string>('trigger_abandon');
   const [isTriggerDropdownOpen, setIsTriggerDropdownOpen] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<string[]>(
-    LIBRARY_SECTIONS.filter(s => s.defaultExpanded).map(s => s.id)
-  );
+  const [expandedSections, setExpandedSections] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('fb-sidebar-sections');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return LIBRARY_SECTIONS.filter(s => s.defaultExpanded).map(s => s.id);
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [showConfig, setShowConfig] = useState(false);
   const triggerAddedRef = useRef(false);
@@ -250,11 +256,13 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
     onTriggerSelect?.(newTrigger);
   };
 
-  // Toggle seção
+  // Toggle seção (persist to localStorage)
   const toggleSection = (id: string) => {
-    setExpandedSections(prev =>
-      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
-    );
+    setExpandedSections(prev => {
+      const next = prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id];
+      try { localStorage.setItem('fb-sidebar-sections', JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   // Filtrar por busca

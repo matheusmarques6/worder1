@@ -179,7 +179,7 @@ export default function AutomationsPage() {
         status: 'draft',
         trigger_type: template.triggerType,
         nodes: template.nodes,
-        edges: [],
+        edges: template.edges,
       });
       setShowNewModal(false);
     }

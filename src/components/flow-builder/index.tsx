@@ -144,8 +144,30 @@ export function FlowBuilder({
       edges: convertedEdges,
     });
 
+    // Keyboard shortcuts
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger in input/textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        useFlowStore.getState().undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        useFlowStore.getState().redo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        useFlowStore.getState().redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     // Cleanup on unmount
     return () => {
+      window.removeEventListener('keydown', handleKeyDown);
       resetStore();
     };
   }, []);
