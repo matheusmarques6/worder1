@@ -42,7 +42,19 @@ const abandonedCart: FlowTemplate = {
   nodes: [
     {
       id: 'n1', type: 'trigger_abandon', position: { x: 400, y: 80 },
-      data: { label: 'Carrinho Abandonado', description: 'Dispara quando cliente abandona carrinho', category: 'trigger', nodeType: 'trigger_abandon', icon: 'ShoppingCart', config: {} },
+      data: {
+        label: 'Carrinho Abandonado', description: 'Dispara quando cliente abandona carrinho',
+        category: 'trigger', nodeType: 'trigger_abandon', icon: 'ShoppingCart',
+        config: {
+          exitConditions: [
+            { type: 'event', eventType: 'placed_order' },
+            { type: 'event', eventType: 'checkout_completed' },
+          ],
+          frequencyType: 'interval',
+          frequencyValue: 4,
+          frequencyUnit: 'hours',
+        },
+      },
     },
     {
       id: 'n2', type: 'control_delay', position: { x: 400, y: 220 },
@@ -102,7 +114,7 @@ const welcomeSeries: FlowTemplate = {
   nodes: [
     {
       id: 'n1', type: 'trigger_signup', position: { x: 400, y: 80 },
-      data: { label: 'Contato Criado', description: 'Quando novo contato e criado', category: 'trigger', nodeType: 'trigger_signup', icon: 'UserPlus', config: {} },
+      data: { label: 'Contato Criado', description: 'Quando novo contato e criado', category: 'trigger', nodeType: 'trigger_signup', icon: 'UserPlus', config: { frequencyType: 'once' } },
     },
     {
       id: 'n2', type: 'action_email', position: { x: 400, y: 220 },

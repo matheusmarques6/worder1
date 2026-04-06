@@ -411,15 +411,6 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
             )}
           </AnimatePresence>
         </div>
-
-        {/* Opções condicionais do gatilho */}
-        {selectedTrigger === 'trigger_abandon' && (
-          <div className="mt-3 space-y-2">
-            <ToggleOption label="Remover se houver carrinho novo" />
-            <ToggleOption label="Remover se houver pedido novo" />
-            <ToggleOption label="Remover se houver pedido pago" />
-          </div>
-        )}
       </div>
 
       {/* Busca */}
@@ -464,44 +455,6 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
         ))}
       </div>
     </div>
-  );
-}
-
-// ============================================
-// TOGGLE OPTION COMPONENT
-// ============================================
-
-function ToggleOption({ label }: { label: string }) {
-  const [enabled, setEnabled] = useState(false);
-
-  return (
-    <button
-      onClick={() => setEnabled(!enabled)}
-      className="w-full flex items-center gap-2.5 text-left py-1"
-    >
-      <div className={cn(
-        'w-8 h-5 rounded-full transition-colors relative shrink-0',
-        enabled ? 'bg-emerald-500' : 'bg-gray-200'
-      )}>
-        <div className={cn(
-          'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
-          enabled ? 'translate-x-3.5' : 'translate-x-0.5'
-        )} />
-      </div>
-      <span className="text-xs text-gray-600 flex-1 leading-tight">{label}</span>
-      <HelpCircle className="w-4 h-4 text-gray-400 shrink-0" />
-    </button>
-  );
-}
-
-// Ícone de ajuda simples
-function HelpCircle({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-      <path d="M12 17h.01"/>
-    </svg>
   );
 }
 
