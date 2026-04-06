@@ -58,6 +58,7 @@ export default function FormsPage() {
   const [newFormName, setNewFormName] = useState('')
   const [newFormDescription, setNewFormDescription] = useState('')
   const [newFormType, setNewFormType] = useState('popup')
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [copiedEmbed, setCopiedEmbed] = useState<string | null>(null)
@@ -82,9 +83,49 @@ export default function FormsPage() {
     fetchForms()
   }, [fetchForms])
 
+  const POPUP_TEMPLATES: Record<string, { name: string; desc: string; design: any }> = {
+    discount: { name: 'Popup de Desconto', desc: 'Captura email com cupom de desconto', design: {
+      formType: 'popup', steps: [{ id: '1', name: 'Etapa 1', blocks: [
+        { id: 'h', type: 'text', props: { content: 'Ganhe 10% OFF', fontSize: 32, color: '#111827', fontWeight: 'bold', align: 'center', tag: 'h2' } },
+        { id: 's', type: 'text', props: { content: 'Inscreva-se e receba um cupom exclusivo no seu email!', fontSize: 15, color: '#6B7280', align: 'center', tag: 'p' } },
+        { id: 'e', type: 'email', props: { placeholder: 'Seu melhor email', required: true, showLabel: false } },
+        { id: 'b', type: 'button', props: { text: 'QUERO MEU CUPOM', bgColor: '#F97316', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 } },
+        { id: 'l', type: 'legal-consent', props: { text: 'Aceito receber emails promocionais.', required: true, fontSize: 11, color: '#9CA3AF' } },
+      ] }], successStep: { id: 'ok', name: 'Sucesso', blocks: [
+        { id: 'ok1', type: 'text', props: { content: 'Pronto! 🎉', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center' } },
+        { id: 'ok2', type: 'coupon', props: { code: 'DESCONTO10', description: 'Use este cupom:', bgColor: '#FFF7ED', borderColor: '#F97316', fontSize: 24 } },
+      ] }, styles: { width: 420, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 32, fontFamily: 'Inter, sans-serif', overlay: { enabled: true, color: '#000', opacity: 50, closeOnClick: true }, closeButton: { show: true, color: '#fff', size: 24 }, sideImage: { enabled: false, src: '', position: 'right', width: 200 }, animation: 'fade' },
+      behavior: { display: { trigger: 'time_delay', delay: 5, scrollPercent: 50 }, visibility: { devices: 'all', visitorType: 'all', hideFromSubscribers: false }, frequency: { showAfterDays: 7, stopAfterSubmission: true }, targeting: { pages: 'all', pageUrls: [], excludeUrls: [] }, scheduling: { enabled: false, startDate: '', endDate: '' }, audience: { tags: [], listId: '', doubleOptIn: false } },
+    }},
+    newsletter: { name: 'Newsletter', desc: 'Captura simples de email para newsletter', design: {
+      formType: 'popup', steps: [{ id: '1', name: 'Etapa 1', blocks: [
+        { id: 'h', type: 'text', props: { content: 'Fique por dentro!', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center' } },
+        { id: 's', type: 'text', props: { content: 'Receba novidades e promoções exclusivas.', fontSize: 14, color: '#6B7280', align: 'center', tag: 'p' } },
+        { id: 'e', type: 'email', props: { placeholder: 'Seu email', required: true, showLabel: false } },
+        { id: 'b', type: 'button', props: { text: 'INSCREVER-SE', bgColor: '#111827', textColor: '#fff', fontSize: 14, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 12, paddingH: 24 } },
+      ] }], successStep: { id: 'ok', name: 'Sucesso', blocks: [
+        { id: 'ok1', type: 'text', props: { content: 'Obrigado! Você foi inscrito.', fontSize: 20, color: '#111827', fontWeight: 'bold', align: 'center' } },
+      ] }, styles: { width: 400, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 28, fontFamily: 'Inter, sans-serif', overlay: { enabled: true, color: '#000', opacity: 40, closeOnClick: true }, closeButton: { show: true, color: '#9CA3AF', size: 20 }, sideImage: { enabled: false, src: '', position: 'right', width: 200 }, animation: 'slide-up' },
+      behavior: { display: { trigger: 'time_delay', delay: 10, scrollPercent: 50 }, visibility: { devices: 'all', visitorType: 'new', hideFromSubscribers: true }, frequency: { showAfterDays: 30, stopAfterSubmission: true }, targeting: { pages: 'all', pageUrls: [], excludeUrls: [] }, scheduling: { enabled: false, startDate: '', endDate: '' }, audience: { tags: ['newsletter'], listId: '', doubleOptIn: false } },
+    }},
+    exit_intent: { name: 'Exit Intent', desc: 'Popup quando visitante vai sair da página', design: {
+      formType: 'popup', steps: [{ id: '1', name: 'Etapa 1', blocks: [
+        { id: 'h', type: 'text', props: { content: 'Espere! Não vá embora', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center' } },
+        { id: 's', type: 'text', props: { content: 'Temos uma oferta especial para você!', fontSize: 15, color: '#6B7280', align: 'center', tag: 'p' } },
+        { id: 'e', type: 'email', props: { placeholder: 'Seu email', required: true, showLabel: false } },
+        { id: 'b', type: 'button', props: { text: 'VER OFERTA', bgColor: '#DC2626', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 } },
+      ] }], successStep: { id: 'ok', name: 'Sucesso', blocks: [
+        { id: 'ok1', type: 'text', props: { content: 'Confira seu email! 📧', fontSize: 22, color: '#111827', fontWeight: 'bold', align: 'center' } },
+      ] }, styles: { width: 440, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 32, fontFamily: 'Inter, sans-serif', overlay: { enabled: true, color: '#000', opacity: 60, closeOnClick: true }, closeButton: { show: true, color: '#fff', size: 24 }, sideImage: { enabled: false, src: '', position: 'right', width: 200 }, animation: 'scale' },
+      behavior: { display: { trigger: 'exit_intent', delay: 5, scrollPercent: 50, exitEnabled: true }, visibility: { devices: 'desktop', visitorType: 'all', hideFromSubscribers: false }, frequency: { showAfterDays: 3, stopAfterSubmission: true }, targeting: { pages: 'all', pageUrls: [], excludeUrls: [] }, scheduling: { enabled: false, startDate: '', endDate: '' }, audience: { tags: [], listId: '', doubleOptIn: false } },
+    }},
+    blank: { name: 'Em Branco', desc: 'Comece do zero', design: {} },
+  }
+
   const createForm = async () => {
     if (!newFormName.trim()) return
     setCreating(true)
+    const template = selectedTemplate ? POPUP_TEMPLATES[selectedTemplate] : null
     try {
       const res = await fetch('/api/forms', {
         method: 'POST',
@@ -92,18 +133,17 @@ export default function FormsPage() {
         body: JSON.stringify({
           name: newFormName,
           description: newFormDescription,
+          form_type: newFormType,
+          design_json: template?.design || {},
           theme: {
             formType: newFormType,
-            popupType: newFormType === 'popup' || newFormType === 'flyout' || newFormType === 'fullscreen' || newFormType === 'bar' ? newFormType : undefined,
-            primaryColor: '#6366f1',
+            primaryColor: '#F97316',
             backgroundColor: '#ffffff',
             textColor: '#1f2937',
             borderRadius: 12,
             fontFamily: 'Inter',
             fontSize: 14,
             buttonText: 'Enviar',
-            headline: '',
-            subheadline: '',
           },
         }),
       })
@@ -520,6 +560,20 @@ export default function FormsPage() {
                         </button>
                       )
                     })}
+                  </div>
+                </div>
+
+                {/* Template Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Começar com template</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(POPUP_TEMPLATES).map(([key, tmpl]) => (
+                      <button key={key} onClick={() => { setSelectedTemplate(key); if (!newFormName && key !== 'blank') setNewFormName(tmpl.name) }}
+                        className={`text-left p-3 rounded-xl border-2 transition-all ${selectedTemplate === key ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        <p className="text-sm font-semibold text-gray-900">{tmpl.name}</p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">{tmpl.desc}</p>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
