@@ -2076,13 +2076,13 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
 function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<string, any>; onUpdate: (key: string, value: any) => void; triggerType: string }) {
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; thumbnail_url?: string }>>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [showSubjectEdit, setShowSubjectEdit] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const storeId = useFlowStore.getState().automationConfig?.storeId;
 
   useEffect(() => {
     setLoadingTemplates(true)
-    const url = storeId
-      ? `/api/email/templates?storeId=${storeId}`
-      : '/api/email/templates';
+    const url = storeId ? `/api/email/templates?storeId=${storeId}` : '/api/email/templates';
     fetch(url)
       .then(r => r.json())
       .then(data => setTemplates(data.templates || data || []))
@@ -2093,116 +2093,226 @@ function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<s
   const inputCls = 'w-full px-3 py-2.5 rounded-md bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500';
 
   return (
-    <div className="space-y-5">
-      {/* CONTENT section header */}
-      <div>
-        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Conteudo</h4>
+    <div className="space-y-0">
 
-        {/* Subject line - like Omnisend */}
-        <div className="space-y-1.5 mb-4">
-          <label className="text-sm font-medium text-gray-700">Subject line</label>
-          <div className="relative">
-            <input type="text" value={config.subject || ''} onChange={(e) => onUpdate('subject', e.target.value)}
-              placeholder="Ainda pensando naquela camisa?"
-              className={inputCls} />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              <VariableButton triggerType={triggerType} onSelect={(v) => onUpdate('subject', (config.subject || '') + v)} className="scale-75" />
-            </div>
+      {/* === SECTION: Email name + Status (Klaviyo style) === */}
+      <div className="flex items-start gap-3 pb-5">
+        <div className="flex-1 space-y-1">
+          <label className="text-xs font-medium text-gray-500">Email name</label>
+          <input type="text" value={config.emailName || ''} onChange={(e) => onUpdate('emailName', e.target.value)}
+            placeholder="Email #01 Carrinho Abandonado" className={inputCls} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500">Status</label>
+          <select value={config.emailStatus || 'draft'} onChange={(e) => onUpdate('emailStatus', e.target.value)}
+            className="px-3 py-2.5 rounded-md bg-white border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="draft">Draft</option>
+            <option value="live">Live</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+      </div>
+
+      <hr className="border-gray-200" />
+
+      {/* === SECTION: Performance (Klaviyo style) === */}
+      <div className="py-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900">Performance</h4>
+            <p className="text-xs text-gray-400">Based on the last 30 days</p>
           </div>
         </div>
-
-        {/* Preheader - like Omnisend */}
-        <div className="space-y-1.5 mb-4">
-          <label className="text-sm font-medium text-gray-700">Preheader</label>
-          <div className="relative">
-            <input type="text" value={config.preheader || ''} onChange={(e) => onUpdate('preheader', e.target.value)}
-              placeholder="Salvamos ela pra voce + mais 3 modelos..."
-              className={inputCls} />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2">
-              <VariableButton triggerType={triggerType} onSelect={(v) => onUpdate('preheader', (config.preheader || '') + v)} className="scale-75" />
-            </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">Open rate</span>
+            <span className="text-sm text-gray-400">--</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">Click rate</span>
+            <span className="text-sm text-gray-400">--</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">Revenue</span>
+            <span className="text-sm text-gray-400">--</span>
           </div>
         </div>
+      </div>
 
-        {/* Sender's name */}
-        <div className="space-y-1.5 mb-4">
-          <label className="text-sm font-medium text-gray-700">Sender's name</label>
-          <input type="text" value={config.senderName || ''} onChange={(e) => onUpdate('senderName', e.target.value)}
-            placeholder="Minha Loja" className={inputCls} />
+      <hr className="border-gray-200" />
+
+      {/* === SECTION: Subject and sender (Klaviyo style) === */}
+      <div className="py-5">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-sm font-semibold text-gray-900">Subject and sender</h4>
+          <button onClick={() => setShowSubjectEdit(!showSubjectEdit)}
+            className="px-3 py-1 rounded-md border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50">
+            {showSubjectEdit ? 'Done' : 'Edit'}
+          </button>
         </div>
 
-        {/* Sender's email */}
-        <div className="space-y-1.5 mb-4">
-          <label className="text-sm font-medium text-gray-700">Sender's email address</label>
-          <input type="email" value={config.senderEmail || ''} onChange={(e) => onUpdate('senderEmail', e.target.value)}
-            placeholder="contato@minhaloja.com.br" className={inputCls} />
-        </div>
-
-        {/* Reply-to checkbox */}
-        <label className="flex items-center gap-2 cursor-pointer mb-4">
-          <input type="checkbox" checked={config.useReplyTo || false} onChange={(e) => onUpdate('useReplyTo', e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500" />
-          <span className="text-sm text-gray-700">Receive replies to a different email address</span>
-        </label>
-        {config.useReplyTo && (
-          <div className="space-y-1.5 mb-4">
-            <input type="email" value={config.replyToEmail || ''} onChange={(e) => onUpdate('replyToEmail', e.target.value)}
-              placeholder="Choose a reply-to email" className={inputCls} />
+        {showSubjectEdit ? (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Subject line</label>
+              <div className="relative">
+                <input type="text" value={config.subject || ''} onChange={(e) => onUpdate('subject', e.target.value)}
+                  placeholder="Voce esqueceu algo no carrinho" className={inputCls} />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                  <VariableButton triggerType={triggerType} onSelect={(v) => onUpdate('subject', (config.subject || '') + v)} className="scale-75" />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Preview text</label>
+              <input type="text" value={config.preheader || ''} onChange={(e) => onUpdate('preheader', e.target.value)}
+                placeholder="Aproveite! Seu desconto espera por voce!" className={inputCls} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Sender name</label>
+              <input type="text" value={config.senderName || ''} onChange={(e) => onUpdate('senderName', e.target.value)}
+                placeholder="Minha Loja" className={inputCls} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Sender email address</label>
+              <input type="email" value={config.senderEmail || ''} onChange={(e) => onUpdate('senderEmail', e.target.value)}
+                placeholder="contato@minhaloja.com.br" className={inputCls} />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-start justify-between">
+              <span className="text-sm text-gray-500 w-24 shrink-0">Subject line</span>
+              <span className="text-sm text-gray-900 text-right">{config.subject || <span className="text-gray-400 italic">Not set</span>}</span>
+            </div>
+            <div className="flex items-start justify-between">
+              <span className="text-sm text-gray-500 w-24 shrink-0">Preview text</span>
+              <span className="text-sm text-gray-900 text-right">{config.preheader || <span className="text-gray-400 italic">Not set</span>}</span>
+            </div>
+            <div className="flex items-start justify-between">
+              <span className="text-sm text-gray-500 w-24 shrink-0">Sender name</span>
+              <span className="text-sm text-gray-900 text-right">{config.senderName || <span className="text-gray-400 italic">Not set</span>}</span>
+            </div>
+            <div className="flex items-start justify-between">
+              <span className="text-sm text-gray-500 w-24 shrink-0">Sender email</span>
+              <span className="text-sm text-gray-900 text-right">{config.senderEmail || <span className="text-gray-400 italic">Not set</span>}</span>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Template selection */}
-      <div>
-        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Template</h4>
+      <hr className="border-gray-200" />
+
+      {/* === SECTION: Template (Klaviyo style) === */}
+      <div className="py-5">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-semibold text-gray-900">Template</h4>
+          {config.templateId && (
+            <div className="flex items-center gap-1">
+              <button className="px-3 py-1 rounded-md border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                Edit
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Template selector */}
         <select value={config.templateId || ''} onChange={(e) => onUpdate('templateId', e.target.value)}
-          className={inputCls}>
-          <option value="">Nenhum (usar HTML abaixo)</option>
+          className={cn(inputCls, 'mb-3')}>
+          <option value="">Escolher template...</option>
+          <option value="__new__">+ Criar novo email</option>
           {templates.map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
         </select>
-        {loadingTemplates && <p className="text-xs text-gray-400 mt-1">Carregando...</p>}
+        {loadingTemplates && <p className="text-xs text-gray-400">Carregando...</p>}
 
         {/* Template preview */}
-        {config.templateId && (
+        {config.templateId && config.templateId !== '__new__' && (
           <EmailTemplatePreview templateId={config.templateId} />
         )}
 
-        {/* HTML editor when no template */}
-        {!config.templateId && (
-          <div className="mt-3">
+        {/* New email from scratch */}
+        {config.templateId === '__new__' && (
+          <div className="mt-2">
             <MessageEditor value={config.html || ''} onChange={(v) => onUpdate('html', v)} triggerType={triggerType}
-              label="Corpo do Email (HTML)" placeholder="<p>Ola {{ contact.first_name }}!</p>" rows={6} />
+              label="Corpo do Email" placeholder="<p>Ola {{ contact.first_name }}!</p>" rows={8} />
           </div>
         )}
-      </div>
 
-      {/* Smart Sending */}
-      <div>
-        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Envio</h4>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={config.smartSending || false} onChange={(e) => onUpdate('smartSending', e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500" />
-          <span className="text-sm text-gray-700">Smart Sending</span>
-        </label>
-        {config.smartSending && (
-          <div className="flex items-center gap-2 mt-2 ml-6">
-            <span className="text-xs text-gray-500">Pular se recebeu nas ultimas</span>
-            <input type="number" min="1" value={config.smartSendingHours || 16} onChange={(e) => onUpdate('smartSendingHours', parseInt(e.target.value) || 16)}
-              className="w-14 px-2 py-1 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
-            <span className="text-xs text-gray-500">horas</span>
+        {/* No template selected */}
+        {!config.templateId && (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-center">
+            <Mail className="w-6 h-6 text-blue-400 mx-auto mb-2" />
+            <p className="text-xs text-blue-600">Selecione um template existente ou crie um novo email</p>
           </div>
         )}
+
+        <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-2">
+          <div className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center shrink-0 mt-0.5">
+            <span className="text-[10px] text-blue-600 font-bold">i</span>
+          </div>
+          <p className="text-xs text-blue-600">Dynamic content may not appear completely in previews.</p>
+        </div>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex gap-2 pt-2 border-t border-gray-100">
-        <button className="text-xs text-red-500 hover:text-red-700 font-medium">Delete</button>
-        <div className="flex-1" />
-        <button
-          onClick={() => {/* handled by parent save */}}
-          className="px-4 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors"
-        >
-          Update
+      <hr className="border-gray-200" />
+
+      {/* === SECTION: Settings (Klaviyo style) === */}
+      <div className="py-5">
+        <h4 className="text-sm font-semibold text-gray-900 mb-4">Settings</h4>
+
+        <div className="space-y-4">
+          {/* Smart Sending */}
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={config.smartSending || false} onChange={(e) => onUpdate('smartSending', e.target.checked)}
+              className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+            <div>
+              <p className="text-sm text-gray-900">Skip recently emailed profiles</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                <span className="text-blue-600">Smart Sending</span> will skip anyone who received an email within the last {config.smartSendingHours || 16} hours.
+              </p>
+            </div>
+          </label>
+          {config.smartSending && (
+            <div className="flex items-center gap-2 ml-6">
+              <span className="text-xs text-gray-500">Skip window:</span>
+              <input type="number" min="1" value={config.smartSendingHours || 16} onChange={(e) => onUpdate('smartSendingHours', parseInt(e.target.value) || 16)}
+                className="w-14 px-2 py-1 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
+              <span className="text-xs text-gray-500">hours</span>
+            </div>
+          )}
+
+          {/* UTM Tracking */}
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={config.utmTracking || false} onChange={(e) => onUpdate('utmTracking', e.target.checked)}
+              className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+            <div>
+              <p className="text-sm text-gray-900">Enable UTM Tracking</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Links will include additional tracking information, called <span className="text-blue-600">UTM parameters</span>.
+              </p>
+            </div>
+          </label>
+          {config.utmTracking && (
+            <div className="space-y-2 ml-6">
+              <input type="text" value={config.utmSource || 'worder'} onChange={(e) => onUpdate('utmSource', e.target.value)}
+                placeholder="utm_source" className="w-full px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
+              <input type="text" value={config.utmMedium || 'email'} onChange={(e) => onUpdate('utmMedium', e.target.value)}
+                placeholder="utm_medium" className="w-full px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
+              <input type="text" value={config.utmCampaign || ''} onChange={(e) => onUpdate('utmCampaign', e.target.value)}
+                placeholder="utm_campaign" className="w-full px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* === Bottom actions (Klaviyo style) === */}
+      <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
+        <button onClick={() => {/* close panel */}}
+          className="px-4 py-2 rounded-md border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          Cancel
+        </button>
+        <button className="px-4 py-2 rounded-md bg-gray-200 text-sm font-medium text-gray-400 cursor-default">
+          Save
         </button>
       </div>
     </div>
