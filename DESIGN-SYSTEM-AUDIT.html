@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Worder - Design System Audit Completo</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans','Segoe UI',sans-serif;background:#f9fafb;color:#1f2937;line-height:1.6}
+.container{max-width:1200px;margin:0 auto;padding:32px 24px}
+h1{font-size:32px;font-weight:700;color:#111827;margin-bottom:8px}
+h2{font-size:24px;font-weight:700;color:#f97316;margin:48px 0 16px;padding-bottom:8px;border-bottom:3px solid #f97316}
+h3{font-size:20px;font-weight:600;color:#111827;margin:32px 0 12px}
+h4{font-size:16px;font-weight:600;color:#374151;margin:24px 0 8px}
+p{margin-bottom:12px;color:#4b5563}
+.subtitle{font-size:16px;color:#6b7280;margin-bottom:32px}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600}
+.badge-orange{background:#fff7ed;color:#ea580c;border:1px solid #fed7aa}
+.badge-red{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.badge-green{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
+.badge-blue{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe}
+.badge-gray{background:#f3f4f6;color:#4b5563;border:1px solid #d1d5db}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin:16px 0}
+.card-warn{border-left:4px solid #f59e0b}
+.card-error{border-left:4px solid #ef4444}
+.card-info{border-left:4px solid #3b82f6}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+th{background:#f9fafb;text-align:left;padding:10px 14px;font-weight:600;color:#374151;border-bottom:2px solid #e5e7eb;font-size:12px;text-transform:uppercase;letter-spacing:0.05em}
+td{padding:10px 14px;border-bottom:1px solid #f3f4f6;color:#4b5563}
+tr:hover{background:#f9fafb}
+code{background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:13px;font-family:'JetBrains Mono',monospace;color:#dc2626}
+pre{background:#1f2937;color:#e5e7eb;padding:16px;border-radius:8px;overflow-x:auto;font-size:13px;margin:12px 0;font-family:'JetBrains Mono',monospace}
+.color-swatch{display:inline-block;width:20px;height:20px;border-radius:4px;border:1px solid #d1d5db;vertical-align:middle;margin-right:6px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.toc{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin:24px 0}
+.toc a{color:#f97316;text-decoration:none;display:block;padding:4px 0;font-size:14px}
+.toc a:hover{text-decoration:underline}
+.section-num{color:#f97316;font-weight:700;margin-right:8px}
+.issue{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 16px;margin:8px 0;font-size:14px;color:#991b1b}
+.issue::before{content:"⚠ ";font-weight:700}
+.ok{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin:8px 0;font-size:14px;color:#166534}
+.ok::before{content:"✓ "}
+@media(max-width:768px){.grid-2,.grid-3{grid-template-columns:1fr}h1{font-size:24px}h2{font-size:20px}}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Worder Design System Audit</h1>
+<p class="subtitle">Auditoria completa do estado atual do design system — Branch: <code>claude/merge-branches-unified-0aI2u</code> — Data: 06/04/2026</p>
+
+<div class="toc">
+<h3 style="margin-top:0">Indice</h3>
+<a href="#s1"><span class="section-num">1.</span> Configuracao Global (Tailwind, CSS, Fonts)</a>
+<a href="#s2"><span class="section-num">2.</span> Paleta de Cores</a>
+<a href="#s3"><span class="section-num">3.</span> Tipografia</a>
+<a href="#s4"><span class="section-num">4.</span> Layout, Sidebar e Header</a>
+<a href="#s5"><span class="section-num">5.</span> Componentes UI Base</a>
+<a href="#s6"><span class="section-num">6.</span> Cards e Paineis</a>
+<a href="#s7"><span class="section-num">7.</span> Modais</a>
+<a href="#s8"><span class="section-num">8.</span> Formularios e Inputs</a>
+<a href="#s9"><span class="section-num">9.</span> Tabelas</a>
+<a href="#s10"><span class="section-num">10.</span> Email Builder</a>
+<a href="#s11"><span class="section-num">11.</span> Popup Editor</a>
+<a href="#s12"><span class="section-num">12.</span> Flow Builder</a>
+<a href="#s13"><span class="section-num">13.</span> Dashboards e Relatorios</a>
+<a href="#s14"><span class="section-num">14.</span> WhatsApp Inbox e Chat</a>
+<a href="#s15"><span class="section-num">15.</span> CRM (Kanban, Drawers, Deals)</a>
+<a href="#s16"><span class="section-num">16.</span> AI Agents</a>
+<a href="#s17"><span class="section-num">17.</span> Inconsistencias Criticas</a>
+<a href="#s18"><span class="section-num">18.</span> Tokens de Referencia Consolidados</a>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECAO 1: CONFIGURACAO GLOBAL -->
+<!-- ============================================================ -->
+<h2 id="s1"><span class="section-num">1.</span> Configuracao Global</h2>
+
+<h3>1.1 Tailwind Config</h3>
+<p>Arquivo: <code>tailwind.config.ts</code></p>
+
+<h4>Fontes Customizadas</h4>
+<table>
+<tr><th>Token</th><th>Familia</th><th>Uso</th></tr>
+<tr><td><code>font-sans</code></td><td>"DM Sans", system-ui, sans-serif</td><td>Fonte principal do app inteiro</td></tr>
+<tr><td><code>font-mono</code></td><td>"JetBrains Mono", Consolas, monospace</td><td>Codigos, scores RFM, hex de cores</td></tr>
+<tr><td><code>font-display</code></td><td>"DM Sans" (identico ao sans)</td><td>Titulos de pagina (redundante)</td></tr>
+</table>
+
+<h4>Cores Customizadas no Tailwind</h4>
+<table>
+<tr><th>Token</th><th>Escala</th><th>Cor Base (500)</th><th>Uso</th></tr>
+<tr><td><code>primary-*</code></td><td>50-950</td><td><span class="color-swatch" style="background:#f97316"></span>#F97316 (laranja)</td><td>Botoes, focus, active states</td></tr>
+<tr><td><code>brand-*</code></td><td>50-900</td><td><span class="color-swatch" style="background:#f97316"></span>#F97316 (laranja)</td><td>DUPLICATA do primary — mesma cor</td></tr>
+<tr><td><code>accent-*</code></td><td>50-950</td><td><span class="color-swatch" style="background:#eab308"></span>#EAB308 (amarelo/dourado)</td><td>Gradientes secundarios, destaques</td></tr>
+<tr><td><code>sidebar-*</code></td><td>DEFAULT/hover/active/border</td><td><span class="color-swatch" style="background:#1a1d21"></span>#1A1D21 (escuro)</td><td>Background do sidebar</td></tr>
+<tr><td><code>dark-*</code></td><td>50-950</td><td>Zinc-like</td><td>Resquicio de tema escuro — nao usar</td></tr>
+<tr><td><code>success-*</code></td><td>400/500/600</td><td><span class="color-swatch" style="background:#22c55e"></span>#22C55E (verde)</td><td>Status de sucesso</td></tr>
+<tr><td><code>warning-*</code></td><td>400/500/600</td><td><span class="color-swatch" style="background:#f59e0b"></span>#F59E0B (amber)</td><td>Alertas</td></tr>
+<tr><td><code>error-*</code></td><td>400/500/600</td><td><span class="color-swatch" style="background:#ef4444"></span>#EF4444 (vermelho)</td><td>Erros, delete, danger</td></tr>
+<tr><td><code>worder-*</code></td><td>Nomes (orange, gold, black...)</td><td>Varias</td><td>Cores de conveniencia da marca</td></tr>
+</table>
+<div class="issue">Os tokens <code>primary-*</code> e <code>brand-*</code> sao IDENTICOS. Redundancia que causa confusao — componentes usam um ou outro sem padrao.</div>
+
+<h4>Sombras Customizadas</h4>
+<table>
+<tr><th>Token</th><th>Valor</th><th>Uso Real</th></tr>
+<tr><td><code>shadow-glow</code></td><td>0 0 20px rgba(249,115,22,0.3)</td><td>Efeito glow laranja</td></tr>
+<tr><td><code>shadow-glow-lg</code></td><td>0 0 40px rgba(249,115,22,0.4)</td><td>Glow maior</td></tr>
+<tr><td><code>shadow-glow-accent</code></td><td>0 0 20px rgba(234,179,8,0.3)</td><td>Glow amarelo</td></tr>
+<tr><td><code>shadow-card</code></td><td>0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)</td><td>NAO usado nos componentes (definido mas ignorado)</td></tr>
+<tr><td><code>shadow-card-hover</code></td><td>0 4px 12px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06)</td><td>NAO usado nos componentes</td></tr>
+</table>
+<div class="issue"><code>shadow-card</code> e <code>shadow-card-hover</code> estao definidos no Tailwind config mas NAO sao usados em nenhum componente. O codigo usa <code>shadow-sm</code> e <code>shadow-md</code> do Tailwind padrao.</div>
+
+<h4>Animacoes Customizadas</h4>
+<table>
+<tr><th>Nome</th><th>Duracao</th><th>Descricao</th></tr>
+<tr><td><code>fade-in</code></td><td>0.5s</td><td>Fade de opacidade</td></tr>
+<tr><td><code>slide-up</code></td><td>0.5s</td><td>Slide de baixo para cima</td></tr>
+<tr><td><code>slide-down</code></td><td>0.3s</td><td>Slide de cima para baixo</td></tr>
+<tr><td><code>scale-in</code></td><td>0.2s</td><td>Escala de 0.95 para 1</td></tr>
+<tr><td><code>pulse-slow</code></td><td>3s</td><td>Pulse lento</td></tr>
+<tr><td><code>shimmer</code></td><td>2s linear infinite</td><td>Efeito shimmer/skeleton</td></tr>
+<tr><td><code>float</code></td><td>6s ease-in-out infinite</td><td>Flutuacao suave</td></tr>
+<tr><td><code>glow</code> / <code>glow-orange</code></td><td>2s alternate</td><td>Pulse de box-shadow laranja</td></tr>
+</table>
+
+<h4>Outros</h4>
+<table>
+<tr><th>Token</th><th>Valor</th></tr>
+<tr><td><code>rounded-4xl</code></td><td>2rem (32px)</td></tr>
+<tr><td><code>backdrop-blur-xs</code></td><td>2px</td></tr>
+</table>
+
+<h3>1.2 CSS Global (<code>globals.css</code>)</h3>
+
+<h4>Variaveis CSS (:root)</h4>
+<table>
+<tr><th>Variavel</th><th>Valor RGB</th><th>Hex</th></tr>
+<tr><td><code>--primary</code></td><td>249 115 22</td><td>#F97316</td></tr>
+<tr><td><code>--accent</code></td><td>234 179 8</td><td>#EAB308</td></tr>
+<tr><td><code>--background</code></td><td>255 255 255</td><td>#FFFFFF</td></tr>
+<tr><td><code>--foreground</code></td><td>17 24 39</td><td>#111827</td></tr>
+<tr><td><code>--secondary</code></td><td>243 244 246</td><td>#F3F4F6</td></tr>
+<tr><td><code>--destructive</code></td><td>239 68 68</td><td>#EF4444</td></tr>
+<tr><td><code>--border</code></td><td>229 231 235</td><td>#E5E7EB</td></tr>
+<tr><td><code>--ring</code></td><td>249 115 22</td><td>#F97316</td></tr>
+<tr><td><code>--radius</code></td><td>0.75rem</td><td>12px</td></tr>
+</table>
+
+<h4>Classes Utilitarias Globais (pré-definidas no CSS)</h4>
+<table>
+<tr><th>Classe</th><th>Descricao</th></tr>
+<tr><td><code>.glass</code></td><td>bg-white/80 backdrop-blur-xl border border-gray-200</td></tr>
+<tr><td><code>.glass-card</code></td><td>glass + rounded-2xl p-6</td></tr>
+<tr><td><code>.gradient-border</code></td><td>Borda gradiente laranja-para-amarelo via pseudo-element</td></tr>
+<tr><td><code>.stat-card</code></td><td>bg-white rounded-2xl p-5 border border-gray-200 shadow-sm hover:border-brand-500/30</td></tr>
+<tr><td><code>.input-field</code></td><td>bg-white border border-gray-300 rounded-xl px-4 py-3 focus:border-brand-500</td></tr>
+<tr><td><code>.sidebar-item</code></td><td>px-4 py-3 rounded-xl text-gray-400 hover:bg-sidebar-hover</td></tr>
+<tr><td><code>.chat-bubble-sent</code></td><td>bg-primary-600 text-white rounded-2xl rounded-br-md</td></tr>
+<tr><td><code>.chat-bubble-received</code></td><td>bg-gray-100 text-gray-900 rounded-2xl rounded-bl-md</td></tr>
+<tr><td><code>.kanban-card</code></td><td>bg-white rounded-xl p-4 border border-gray-200</td></tr>
+<tr><td><code>.data-table</code></td><td>Header bg-gray-50, rows border-b border-gray-100, hover bg-gray-50</td></tr>
+</table>
+
+<h4>Estilos Globais do Body</h4>
+<ul>
+<li>Scrollbar: 6px, track <code>bg-gray-100</code>, thumb <code>bg-gray-300 rounded-full hover:bg-gray-400</code></li>
+<li>Selection: <code>bg-brand-500/20 text-brand-900</code></li>
+<li>Antialiased: sim</li>
+<li>Font-feature-settings: "rlig" 1, "calt" 1</li>
+</ul>
+
+<!-- ============================================================ -->
+<!-- SECAO 2: PALETA DE CORES -->
+<!-- ============================================================ -->
+<h2 id="s2"><span class="section-num">2.</span> Paleta de Cores</h2>
+
+<h3>2.1 Superficies</h3>
+<table>
+<tr><th>Superficie</th><th>Cor</th><th>Classe</th></tr>
+<tr><td>Fundo da pagina</td><td><span class="color-swatch" style="background:#f9fafb"></span>#F9FAFB</td><td><code>bg-gray-50</code></td></tr>
+<tr><td>Cards / Header</td><td><span class="color-swatch" style="background:#fff"></span>#FFFFFF</td><td><code>bg-white</code></td></tr>
+<tr><td>Sidebar</td><td><span class="color-swatch" style="background:#1b1f23"></span>#1B1F23</td><td><code>bg-[#1B1F23]</code></td></tr>
+<tr><td>Sidebar hover</td><td><span class="color-swatch" style="background:#2c3035"></span>#2C3035 / white/5</td><td><code>hover:bg-white/5</code></td></tr>
+<tr><td>Sidebar active</td><td><span class="color-swatch" style="background:#35393e"></span>#35393E / white/10</td><td><code>bg-white/10</code></td></tr>
+<tr><td>Inputs bg</td><td>Varia: white, gray-50, gray-100</td><td>INCONSISTENTE</td></tr>
+<tr><td>Modais</td><td><span class="color-swatch" style="background:#fff"></span>#FFFFFF</td><td><code>bg-white</code></td></tr>
+<tr><td>Footer de modais</td><td><span class="color-swatch" style="background:#f9fafb"></span>#F9FAFB (as vezes)</td><td><code>bg-gray-50</code> (inconsistente)</td></tr>
+</table>
+
+<h3>2.2 Bordas</h3>
+<table>
+<tr><th>Contexto</th><th>Cor</th><th>Classe</th></tr>
+<tr><td>Borda padrao</td><td><span class="color-swatch" style="background:#e5e7eb"></span>#E5E7EB</td><td><code>border-gray-200</code></td></tr>
+<tr><td>Borda sutil</td><td><span class="color-swatch" style="background:#f3f4f6"></span>#F3F4F6</td><td><code>border-gray-100</code></td></tr>
+<tr><td>Borda inputs</td><td>Varia: gray-200 ou gray-300</td><td>INCONSISTENTE</td></tr>
+<tr><td>Borda sidebar</td><td>gray-800/50</td><td><code>border-gray-800/50</code></td></tr>
+</table>
+
+<h3>2.3 Texto</h3>
+<table>
+<tr><th>Nivel</th><th>Cor</th><th>Classe</th></tr>
+<tr><td>Headings</td><td><span class="color-swatch" style="background:#111827"></span>#111827</td><td><code>text-gray-900</code></td></tr>
+<tr><td>Body primario</td><td><span class="color-swatch" style="background:#374151"></span>#374151</td><td><code>text-gray-700</code></td></tr>
+<tr><td>Body secundario</td><td><span class="color-swatch" style="background:#4b5563"></span>#4B5563</td><td><code>text-gray-600</code></td></tr>
+<tr><td>Labels</td><td><span class="color-swatch" style="background:#6b7280"></span>#6B7280</td><td><code>text-gray-500</code></td></tr>
+<tr><td>Placeholders / Muted</td><td><span class="color-swatch" style="background:#9ca3af"></span>#9CA3AF</td><td><code>text-gray-400</code></td></tr>
+<tr><td>Sidebar nav</td><td><span class="color-swatch" style="background:#9ca3af"></span>gray-400 (default), white (active)</td><td><code>text-gray-400</code> / <code>text-white</code></td></tr>
+</table>
+
+<h3>2.4 Cores Semanticas</h3>
+<div class="grid-2">
+<div class="card">
+<h4>Sucesso / Positivo</h4>
+<p><span class="color-swatch" style="background:#22c55e"></span><code>success-500</code> #22C55E — Token custom</p>
+<p><span class="color-swatch" style="background:#10b981"></span><code>emerald-500</code> #10B981 — Tailwind padrao</p>
+<p><span class="color-swatch" style="background:#16a34a"></span><code>green-600</code> — Tailwind padrao</p>
+<div class="issue">3 verdes diferentes para "sucesso" usados no mesmo app</div>
+</div>
+<div class="card">
+<h4>Erro / Negativo</h4>
+<p><span class="color-swatch" style="background:#ef4444"></span><code>error-500</code> #EF4444 — Token custom</p>
+<p><span class="color-swatch" style="background:#ef4444"></span><code>red-500</code> #EF4444 — Tailwind padrao (mesmo valor)</p>
+<div class="ok">Consistente no valor final, mas codigo mistura tokens</div>
+</div>
+<div class="card">
+<h4>Alerta / Warning</h4>
+<p><span class="color-swatch" style="background:#f59e0b"></span><code>warning-500</code> #F59E0B — Token custom</p>
+<p><span class="color-swatch" style="background:#f59e0b"></span><code>amber-500</code> #F59E0B — Tailwind padrao</p>
+<div class="ok">Consistente no valor final</div>
+</div>
+<div class="card">
+<h4>Info</h4>
+<p><span class="color-swatch" style="background:#3b82f6"></span><code>blue-500</code> #3B82F6 — Tailwind padrao</p>
+<p>Nao existe token custom para "info"</p>
+</div>
+</div>
+
+<h3>2.5 Cores de Data Visualization</h3>
+<table>
+<tr><th>Serie</th><th>Cor</th><th>Uso</th></tr>
+<tr><td>Serie 1 / Email</td><td><span class="color-swatch" style="background:#f26b2a"></span>#F26B2A</td><td>Canal Email (nao e brand-500!)</td></tr>
+<tr><td>Serie 2 / WhatsApp</td><td><span class="color-swatch" style="background:#25d366"></span>#25D366</td><td>Canal WhatsApp</td></tr>
+<tr><td>Serie 3 / SMS</td><td><span class="color-swatch" style="background:#8b5cf6"></span>#8B5CF6</td><td>Canal SMS</td></tr>
+<tr><td>Serie 4 / Chat</td><td><span class="color-swatch" style="background:#3b82f6"></span>#3B82F6</td><td>Canal Chat Web</td></tr>
+<tr><td>Serie 5</td><td><span class="color-swatch" style="background:#ec4899"></span>#EC4899</td><td>Graficos genericos</td></tr>
+<tr><td>Serie 6</td><td><span class="color-swatch" style="background:#eab308"></span>#EAB308</td><td>Graficos genericos</td></tr>
+<tr><td>Variacao positiva</td><td>emerald-400, green-400 ou emerald-600</td><td>INCONSISTENTE entre paginas</td></tr>
+<tr><td>Variacao negativa</td><td>red-400 ou red-500</td><td>Levemente inconsistente</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECAO 3: TIPOGRAFIA -->
+<!-- ============================================================ -->
+<h2 id="s3"><span class="section-num">3.</span> Tipografia</h2>
+
+<h3>3.1 Escala de Tamanhos Usados</h3>
+<table>
+<tr><th>Tamanho</th><th>Classe Tailwind</th><th>Onde e Usado</th></tr>
+<tr><td>9px</td><td><code>text-[9px]</code></td><td>Badges "WORDER", labels micro do email builder</td></tr>
+<tr><td>10px</td><td><code>text-[10px]</code></td><td>Section labels, role badges, "by Convertfy", status labels, node descriptions</td></tr>
+<tr><td>11px</td><td><code>text-[11px]</code></td><td>User role header, store domain, tabs de sidebars, labels de campos</td></tr>
+<tr><td>12px</td><td><code>text-xs</code></td><td>Timestamps, badges, counts, tab labels, shortcuts, headers de tabela</td></tr>
+<tr><td>13px</td><td><code>text-[13px]</code></td><td>Nav items do sidebar, store name</td></tr>
+<tr><td>14px</td><td><code>text-sm</code></td><td>Body principal, items de menu, inputs, labels de form, titulos de notificacao</td></tr>
+<tr><td>16px</td><td><code>text-base</code></td><td>Body default (raramente explicito), botoes lg</td></tr>
+<tr><td>18px</td><td><code>text-lg</code></td><td>Titulos de modais, titulos de pagina em Header</td></tr>
+<tr><td>20px</td><td><code>text-xl</code></td><td>Titulo de Settings</td></tr>
+<tr><td>24px</td><td><code>text-2xl</code></td><td>Valores de KPI, titulos de paginas</td></tr>
+<tr><td>32px</td><td><code>text-3xl</code></td><td>Heading H1 em emails</td></tr>
+</table>
+
+<h3>3.2 Pesos</h3>
+<table>
+<tr><th>Peso</th><th>Classe</th><th>Uso</th></tr>
+<tr><td>400 (Regular)</td><td><code>font-normal</code></td><td>Texto body padrao</td></tr>
+<tr><td>500 (Medium)</td><td><code>font-medium</code></td><td>Nav items, labels, botoes, nomes</td></tr>
+<tr><td>600 (Semibold)</td><td><code>font-semibold</code></td><td>Titulos, section labels, tabs ativas</td></tr>
+<tr><td>700 (Bold)</td><td><code>font-bold</code></td><td>KPI values, iniciais de avatar, uppercase headers</td></tr>
+</table>
+
+<h3>3.3 Letter Spacing</h3>
+<table>
+<tr><th>Classe</th><th>Uso</th></tr>
+<tr><td><code>tracking-wider</code></td><td>Section labels do sidebar, uppercase headers</td></tr>
+<tr><td><code>tracking-[0.08em]</code></td><td>Section labels do dashboard layout</td></tr>
+<tr><td><code>tracking-[0.06em]</code></td><td>Categorias do block palette</td></tr>
+<tr><td><code>tracking-tight</code></td><td>Metric values</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECAO 4: LAYOUT, SIDEBAR E HEADER -->
+<!-- ============================================================ -->
+<h2 id="s4"><span class="section-num">4.</span> Layout, Sidebar e Header</h2>
+
+<h3>4.1 Layout Principal</h3>
+<div class="card">
+<p><strong>Estrutura:</strong> Sidebar fixo esquerdo + Area de conteudo com margin-left</p>
+<p><strong>Body:</strong> <code>min-h-screen bg-gray-50</code></p>
+<p><strong>Conteudo:</strong> <code>p-4 lg:p-6</code></p>
+<p><strong>Breakpoint responsivo:</strong> <code>lg:</code> (1024px) — unico breakpoint para sidebar/header</p>
+<p><strong>Sem CSS Grid</strong> — Layout puramente flexbox</p>
+<p><strong>HTML lang:</strong> <code>pt-BR</code></p>
+<p><strong>Dark mode:</strong> NAO implementado. Toggle existe no UI mas nenhuma classe <code>dark:</code> e usada.</p>
+</div>
+
+<h3>4.2 Sidebar (DUAS implementacoes!)</h3>
+<div class="grid-2">
+<div class="card card-info">
+<h4>Dashboard Layout (ATIVO)</h4>
+<p>Expandido: <strong>256px</strong> / Colapsado: <strong>72px</strong> / Mobile: <strong>240px</strong></p>
+<p>Background: <code>bg-[#1B1F23]</code></p>
+<p>Nav items: <code>mx-2 px-3 py-2 rounded-md text-[13px] font-medium</code></p>
+<p>Active: <code>bg-white/10 text-white</code></p>
+<p>Hover: <code>hover:text-gray-200 hover:bg-white/5</code></p>
+<p>Icons: <code>w-[17px] h-[17px]</code></p>
+<p>Section labels: <code>text-[10px] font-semibold text-gray-500 uppercase tracking-[0.08em]</code></p>
+</div>
+<div class="card card-warn">
+<h4>Standalone Sidebar.tsx (NAO USADO)</h4>
+<p>Expandido: <strong>280px</strong> / Colapsado: <strong>80px</strong></p>
+<p>Background: <code>bg-sidebar</code> (#1A1D21)</p>
+<p>Nav items: <code>px-4 py-3 rounded-xl</code></p>
+<p>Active: <code>bg-sidebar-active text-white border-l-[3px] border-brand-500</code></p>
+<div class="issue">Implementacao duplicada com medidas e estilos diferentes. A versao standalone nao e renderizada.</div>
+</div>
+</div>
+
+<h3>4.3 Header</h3>
+<div class="card">
+<h4>Desktop Header (dashboard layout)</h4>
+<p><strong>Posicao:</strong> <code>sticky top-0 z-30</code></p>
+<p><strong>Altura:</strong> Implicita (padding <code>px-6 py-3</code>) ~56px</p>
+<p><strong>Background:</strong> <code>bg-white</code></p>
+<p><strong>Borda:</strong> <code>border-b border-gray-200</code></p>
+<p><strong>Search:</strong> <code>bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-brand-500</code></p>
+<p><strong>User avatar:</strong> <code>w-8 h-8 rounded-full bg-brand-500 text-white font-semibold text-xs</code></p>
+<p><strong>Divider:</strong> <code>w-px h-8 bg-gray-200</code></p>
+
+<h4>Mobile Header</h4>
+<p><code>lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 p-4</code></p>
+</div>
+
+<h3>4.4 Store Selector (bottom do sidebar)</h3>
+<div class="card">
+<p>Avatar da loja: <code>w-8 h-8 rounded bg-brand-500 text-white font-semibold text-xs</code></p>
+<p>Nome: <code>text-[13px] font-medium text-gray-300</code></p>
+<p>Dropdown: <code>bg-[#252A2F] border border-gray-700/50 rounded-lg shadow-xl</code></p>
+<p>Item ativo: <code>bg-brand-500/10 text-brand-400</code></p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECAO 5: COMPONENTES UI BASE -->
+<!-- ============================================================ -->
+<h2 id="s5"><span class="section-num">5.</span> Componentes UI Base (<code>/components/ui/</code>)</h2>
+
+<h3>5.1 Button</h3>
+<div class="card">
+<p><strong>Base:</strong> <code>inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-300</code></p>
+<p><strong>Active:</strong> <code>active:scale-[0.98]</code></p>
+<p><strong>Focus:</strong> <code>focus:outline-none focus:ring-2 focus:ring-offset-2</code></p>
+<table>
+<tr><th>Variant</th><th>Classes</th></tr>
+<tr><td>primary</td><td><code>bg-brand-500 text-white hover:bg-brand-600 shadow-sm</code> — focus ring: <code>primary-500/50</code></td></tr>
+<tr><td>secondary</td><td><code>bg-white text-gray-700 border border-gray-300 hover:bg-gray-50</code></td></tr>
+<tr><td>ghost</td><td><code>text-gray-600 hover:bg-gray-100 hover:text-gray-900</code></td></tr>
+<tr><td>danger</td><td><code>bg-red-500 text-white hover:bg-red-600 shadow-sm</code></td></tr>
+<tr><td>success</td><td><code>bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm</code></td></tr>
+</table>
+<table>
+<tr><th>Size</th><th>Classes</th></tr>
+<tr><td>sm</td><td><code>px-3 py-1.5 text-sm</code></td></tr>
+<tr><td>md (default)</td><td><code>px-5 py-2.5 text-sm</code></td></tr>
+<tr><td>lg</td><td><code>px-6 py-3 text-base</code></td></tr>
+</table>
+<div class="issue">Mistura tokens: primary usa <code>bg-brand-500</code> mas focus ring usa <code>ring-primary-500</code>. Danger usa <code>bg-red-500</code> mas focus usa <code>ring-error-500</code>.</div>
+</div>
+
+<h3>5.2 Input / Textarea</h3>
+<div class="card">
+<p><strong>Label:</strong> <code>block text-sm font-medium text-gray-700 mb-2</code></p>
+<p><strong>Campo:</strong> <code>w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-gray-900 placeholder:text-gray-400</code></p>
+<p><strong>Focus:</strong> <code>focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20</code></p>
+<p><strong>Erro:</strong> <code>border-error-500 focus:ring-error-500/20</code> + mensagem <code>mt-1.5 text-sm text-error-400</code></p>
+<div class="ok">Input e Textarea sao 100% consistentes entre si.</div>
+</div>
+
+<h3>5.3 Card</h3>
+<div class="card">
+<p><strong>Base:</strong> <code>rounded-2xl p-6</code> (usa framer-motion)</p>
+<table>
+<tr><th>Variant</th><th>Classes</th></tr>
+<tr><td>default</td><td><code>bg-white border border-gray-200 shadow-sm</code></td></tr>
+<tr><td>glass</td><td><code>bg-white/80 backdrop-blur-xl border border-gray-200</code></td></tr>
+<tr><td>gradient</td><td><code>gradient-border bg-white shadow-sm</code></td></tr>
+</table>
+<p><strong>Hoverable:</strong> <code>hover:shadow-md cursor-pointer transition-all duration-300</code></p>
+<div class="issue">Usa <code>rounded-2xl</code> (16px) enquanto Button/Input usam <code>rounded-xl</code> (12px). Nao usa os custom shadows shadow-card/shadow-card-hover.</div>
+</div>
+
+<h3>5.4 Badge</h3>
+<div class="card">
+<p><strong>Base:</strong> <code>inline-flex items-center rounded-full font-medium</code></p>
+<table>
+<tr><th>Variant</th><th>Classes</th></tr>
+<tr><td>default</td><td><code>bg-gray-100 text-gray-700</code></td></tr>
+<tr><td>primary</td><td><code>bg-orange-50 text-orange-700 border border-orange-200</code></td></tr>
+<tr><td>success</td><td><code>bg-emerald-50 text-emerald-700 border border-emerald-200</code></td></tr>
+<tr><td>warning</td><td><code>bg-amber-50 text-amber-700 border border-amber-200</code></td></tr>
+<tr><td>error</td><td><code>bg-red-50 text-red-700 border border-red-200</code></td></tr>
+<tr><td>accent</td><td><code>bg-amber-50 text-amber-700 border border-amber-200</code></td></tr>
+</table>
+<div class="issue">Badge usa cores PADRAO do Tailwind (orange-*, emerald-*, amber-*) ao inves dos tokens custom (brand-*, success-*, warning-*). "accent" e identico a "warning" — redundante.</div>
+</div>
+
+<h3>5.5 Avatar</h3>
+<div class="card">
+<table>
+<tr><th>Size</th><th>Dimensao</th><th>Texto</th></tr>
+<tr><td>sm</td><td>w-8 h-8</td><td>text-xs</td></tr>
+<tr><td>md</td><td>w-10 h-10</td><td>text-sm</td></tr>
+<tr><td>lg</td><td>w-12 h-12</td><td>text-base</td></tr>
+<tr><td>xl</td><td>w-16 h-16</td><td>text-lg</td></tr>
+</table>
+<p><strong>Shape:</strong> <code>rounded-full</code></p>
+<p><strong>Fallback:</strong> <code>bg-brand-100 text-brand-700 font-medium</code></p>
+<p><strong>Status dot:</strong> <code>w-3 h-3 rounded-full border-2 border-white</code> (online=success-500, offline=gray-300, busy=error-500, away=warning-500)</p>
+</div>
+
+<h3>5.6 Outros Componentes UI</h3>
+<table>
+<tr><th>Componente</th><th>Detalhes Chave</th></tr>
+<tr><td>Toast</td><td>Posicao: <code>fixed bottom-4 right-4 z-[100]</code>. Items: <code>p-4 rounded-xl border backdrop-blur-sm shadow-lg</code>. 4 tipos com cores PADRAO Tailwind (nao custom tokens). Animacao framer-motion.</td></tr>
+<tr><td>Tooltip</td><td><code>bg-gray-100 text-gray-800 rounded-lg shadow-lg</code>. Light tooltip (incomum). Sem animacao, sem seta, sem acessibilidade via teclado.</td></tr>
+<tr><td>Spinner</td><td><code>animate-spin text-brand-500</code>. Usa Loader2 do lucide-react. 3 sizes: sm(16px), md(24px), lg(32px).</td></tr>
+<tr><td>Skeleton</td><td><code>animate-pulse bg-gray-200</code>. 3 variants: text(rounded 4px), circular(rounded-full), rectangular(rounded-xl).</td></tr>
+<tr><td>EmptyState</td><td>Icon box <code>w-16 h-16 rounded-2xl bg-gray-100</code>. Title <code>text-lg font-semibold text-gray-800</code>. Description <code>text-gray-500 max-w-sm</code>.</td></tr>
+<tr><td>Divider</td><td><code>h-px bg-gray-200</code>. Com label: <code>text-sm text-gray-400</code>.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECAO 6: CARDS E PAINEIS -->
+<!-- ============================================================ -->
+<h2 id="s6"><span class="section-num">6.</span> Cards e Paineis</h2>
+
+<h3>6.1 Padroes de Card Encontrados (5+ variacoes!)</h3>
+<table>
+<tr><th>Padrao</th><th>Classes</th><th>Onde e Usado</th></tr>
+<tr><td>A — Translucido</td><td><code>bg-white/50 border border-gray-200 rounded-xl p-4</code></td><td>Analytics overview, cohort, deliverability, funnel</td></tr>
+<tr><td>B — Solido + Shadow</td><td><code>bg-white border border-gray-200 rounded-xl shadow-sm p-6</code></td><td>Email analytics, dashboard, metrics detail</td></tr>
+<tr><td>C — Gray bg</td><td><code>bg-gray-50 rounded-2xl border border-gray-200/30 p-5</code></td><td>Shopify analytics, sales, advanced</td></tr>
+<tr><td>D — Dark</td><td><code>bg-[#1a1a2e] rounded-xl p-6</code></td><td>RFMDashboard, CohortMatrix (tema escuro isolado)</td></tr>
+<tr><td>E — Sutil</td><td><code>bg-gray-100/30 rounded-xl border border-gray-300/50 p-4</code></td><td>RFMSection, CohortSection</td></tr>
+<tr><td>F — Dashboard KPI</td><td><code>bg-white border border-gray-200 rounded-xl p-5</code></td><td>Dashboard principal</td></tr>
+</table>
+<div class="issue">6 padroes diferentes de card para o mesmo tipo de conteudo. Mistura de rounded-xl (12px) e rounded-2xl (16px). Alguns com shadow, maioria sem. O Card component de /ui/ usa rounded-2xl mas os cards inline usam rounded-xl.</div>
+
+<h3>6.2 KPI / Metric Cards</h3>
+<div class="card">
+<p><strong>Valor:</strong> Geralmente <code>text-2xl font-bold text-gray-900</code> (consistente)</p>
+<p><strong>Label:</strong> <code>text-sm text-gray-500</code> ou <code>text-xs text-gray-400</code> (varia)</p>
+<p><strong>Variacao positiva:</strong> <code>text-emerald-400</code> OU <code>text-green-400</code> OU <code>text-emerald-600</code> (3 verdes!)</p>
+<p><strong>Variacao negativa:</strong> <code>text-red-400</code> ou <code>text-red-500</code></p>
+<p><strong>Icon container:</strong> Varia entre paginas — nenhum padrao unificado</p>
+</div>
+
+<h3>6.3 Grids de Layout</h3>
+<table>
+<tr><th>Contexto</th><th>Grid</th><th>Gap</th></tr>
+<tr><td>KPIs 6 colunas</td><td><code>grid-cols-2 md:grid-cols-3 lg:grid-cols-6</code></td><td>gap-4</td></tr>
+<tr><td>KPIs 4 colunas</td><td><code>grid-cols-1 sm:grid-cols-2 lg:grid-cols-4</code></td><td>gap-4</td></tr>
+<tr><td>Charts 2+1</td><td><code>grid-cols-1 lg:grid-cols-3</code> (col-span-2 + 1)</td><td>gap-6</td></tr>
+<tr><td>Charts 50/50</td><td><code>grid-cols-1 lg:grid-cols-2</code></td><td>gap-6</td></tr>
+<tr><td>Quick actions</td><td><code>grid-cols-1 sm:grid-cols-3</code></td><td>gap-4</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECAO 7: MODAIS -->
+<!-- ============================================================ -->
+<h2 id="s7"><span class="section-num">7.</span> Modais</h2>
+
+<h3>7.1 Estrutura Comum</h3>
+<div class="card">
+<p><strong>Backdrop:</strong> <code>fixed inset-0 bg-black/60 backdrop-blur-sm z-50</code></p>
+<p><strong>Panel:</strong> <code>bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden</code></p>
+<p><strong>Header:</strong> <code>flex items-center justify-between p-5 ou p-6 border-b border-gray-200</code></p>
+<p><strong>Title:</strong> <code>text-lg font-semibold text-gray-900</code></p>
+<p><strong>Content:</strong> <code>p-5 ou p-6 space-y-4 ou space-y-5</code></p>
+<p><strong>Footer:</strong> <code>flex items-center justify-end gap-3 p-5 ou p-6 border-t border-gray-200</code> (as vezes com <code>bg-gray-50</code>)</p>
+<p><strong>Animacao:</strong> Framer-motion <code>scale: 0.95 → 1, opacity: 0 → 1, y: 20 → 0</code></p>
+</div>
+
+<h3>7.2 Inconsistencias nos Modais</h3>
+<table>
+<tr><th>Propriedade</th><th>Variacoes Encontradas</th></tr>
+<tr><td>Backdrop opacity</td><td><code>bg-black/50</code>, <code>bg-black/60</code>, <code>bg-black/70</code> (3 valores)</td></tr>
+<tr><td>Max-width</td><td>max-w-md, max-w-lg, max-w-xl, max-w-2xl, max-w-3xl (5 tamanhos)</td></tr>
+<tr><td>Padding header/content</td><td>p-5 ou p-6 (sem padrao)</td></tr>
+<tr><td>Footer bg</td><td>Alguns com <code>bg-gray-50</code>, maioria sem</td></tr>
+<tr><td>Botao fechar</td><td>5 padroes diferentes! Alguns com bug <code>hover:bg-white</code> (invisivel) e <code>hover:text-white</code> (invisivel)</td></tr>
+<tr><td>Botao cancel</td><td>5+ padroes. Varios com bug <code>text-white</code> em fundo branco</td></tr>
+<tr><td>Botao primario</td><td><code>bg-primary-500</code>, <code>bg-primary-600</code>, <code>bg-blue-500</code>, <code>bg-gray-900</code>, <code>bg-brand-500</code> (5+ cores!)</td></tr>
+</table>
+<div class="issue">BUG CRITICO: Multiplos modais CRM tem <code>text-white</code> em inputs sobre fundo claro — texto INVISIVEL. Resquicio de migracao dark-to-light theme.</div>
+
+<!-- ============================================================ -->
+<!-- SECAO 8: FORMULARIOS E INPUTS -->
+<!-- ============================================================ -->
+<h2 id="s8"><span class="section-num">8.</span> Formularios e Inputs</h2>
+
+<h3>8.1 Padroes de Input (6 variacoes!)</h3>
+<table>
+<tr><th>Padrao</th><th>Classes Chave</th><th>Problema</th></tr>
+<tr><td>A — CRM modals</td><td><code>bg-gray-50 border-gray-200 rounded-xl py-3 text-white</code></td><td><span class="badge badge-red">BUG</span> text-white em fundo claro</td></tr>
+<tr><td>B — UI Input</td><td><code>bg-white border-gray-300 rounded-xl py-3 text-gray-900</code></td><td><span class="badge badge-green">OK</span></td></tr>
+<tr><td>C — Tasks</td><td><code>bg-gray-100 border-gray-300 rounded-xl py-2.5 text-white</code></td><td><span class="badge badge-red">BUG</span> text-white</td></tr>
+<tr><td>D — AddStore</td><td><code>border-gray-200 rounded-lg py-2.5 text-gray-900 text-sm</code></td><td>rounded-lg diferente</td></tr>
+<tr><td>E — Contacts search</td><td><code>bg-white border-gray-200 rounded-lg py-2 text-sm</code></td><td>Dimensoes menores</td></tr>
+<tr><td>F — CustomFields</td><td><code>bg-gray-100 border-gray-300 rounded-lg px-3 py-2 text-white</code></td><td><span class="badge badge-red">BUG</span> text-white</td></tr>
+</table>
+<div class="issue">O componente <code>Input</code> do /ui/ e bem feito, mas a maioria dos modais CRM NAO o utiliza — usam inputs inline com estilos inconsistentes e bugs de cor de texto.</div>
+
+<h3>8.2 Labels</h3>
+<table>
+<tr><th>Onde</th><th>Classes</th></tr>
+<tr><td>UI Input (referencia)</td><td><code>text-sm font-medium text-gray-700 mb-2</code></td></tr>
+<tr><td>CRM modals</td><td><code>text-sm font-medium text-gray-600 mb-2</code> ou <code>mb-1.5</code></td></tr>
+<tr><td>AddStore</td><td><code>text-sm font-medium text-gray-700 mb-1.5</code></td></tr>
+<tr><td>MoveStage</td><td><code>text-sm text-gray-500 mb-2</code> (sem font-medium)</td></tr>
+</table>
+
+<h3>8.3 Selects</h3>
+<p>3+ padroes diferentes de <code>&lt;select&gt;</code>: cores de bg (white, gray-100), border-radius (rounded-lg, rounded-xl), e focus colors diferentes.</p>
+
+<h3>8.4 Toggles / Switches</h3>
+<p>Sem componente compartilhado. Pelo menos 4 implementacoes diferentes ao longo do codebase com dimensoes, cores de ON (brand-500, emerald-500, green-500, primary-500), e translates diferentes.</p>
+
+<h3>8.5 Checkboxes</h3>
+<p>Tamanho varia: <code>w-4 h-4</code> ou <code>w-5 h-5</code>. Cor checked: <code>text-primary-500</code> ou <code>text-green-500</code>.</p>
+
+<h3>8.6 Validacao de Erros (5 padroes)</h3>
+<table>
+<tr><th>Padrao</th><th>Classes</th></tr>
+<tr><td>A — CRM</td><td><code>p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400</code></td></tr>
+<tr><td>B — Rounded-xl</td><td><code>p-3 bg-red-500/10 border border-red-500/20 rounded-xl</code></td></tr>
+<tr><td>C — Com icone</td><td><code>bg-error-500/10 border-error-500/20 rounded-xl text-error-400</code> (usa tokens custom)</td></tr>
+<tr><td>D — Light</td><td><code>bg-red-50 border-red-200 rounded-lg text-red-700</code> (tailwind padrao)</td></tr>
+<tr><td>E — Input inline</td><td><code>mt-1.5 text-sm text-error-400</code> (UI Input component)</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECAO 9: TABELAS -->
+<!-- ============================================================ -->
+<h2 id="s9"><span class="section-num">9.</span> Tabelas</h2>
+
+<h3>9.1 Padroes de Tabela (4 variacoes)</h3>
+<table>
+<tr><th>Padrao</th><th>Header</th><th>Rows</th><th>Hover</th><th>Onde</th></tr>
+<tr><td>A — Minimal</td><td><code>border-b border-gray-200</code>, <code>text-xs text-gray-500 font-medium pb-3</code></td><td><code>border-b border-gray-200/50</code></td><td><code>hover:bg-gray-50/30</code></td><td>Analytics overview</td></tr>
+<tr><td>B — Email/Dashboard</td><td><code>bg-gray-50 border-b border-gray-100</code>, <code>text-xs font-semibold uppercase tracking-wider px-6 py-3</code></td><td><code>border-b border-gray-50</code></td><td><code>hover:bg-gray-50</code></td><td>Email, dashboard</td></tr>
+<tr><td>C — Sales</td><td><code>border-b border-gray-200</code>, <code>text-xs font-medium uppercase px-5 py-3</code></td><td><code>border-b border-gray-200/30</code></td><td><code>hover:bg-gray-100/20</code></td><td>Sales CRM</td></tr>
+<tr><td>D — Contacts</td><td><code>bg-gray-50/80</code>, <code>text-[11px] font-semibold uppercase tracking-wider px-4 py-2.5</code></td><td><code>border-b border-gray-100</code></td><td><code>hover:bg-gray-50/50</code></td><td>Contatos page</td></tr>
+</table>
+
+<h3>9.2 Table Wrapper</h3>
+<table>
+<tr><th>Estilo</th><th>Onde</th></tr>
+<tr><td><code>bg-white rounded-xl border border-gray-200 overflow-hidden</code></td><td>Ads, Campaigns</td></tr>
+<tr><td><code>bg-gray-50 rounded-xl border border-gray-200 overflow-hidden</code></td><td>WhatsApp Campaigns</td></tr>
+<tr><td><code>bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden</code></td><td>Sales CRM</td></tr>
+<tr><td>Sem wrapper (tabela inline)</td><td>Analytics overview</td></tr>
+</table>
+
+<h3>9.3 Paginacao</h3>
+<div class="card">
+<p><strong>Container:</strong> <code>flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50/50</code></p>
+<p><strong>Info:</strong> <code>text-xs text-gray-500</code></p>
+<p><strong>Botoes:</strong> <code>p-1.5 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-30</code></p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECAO 10: EMAIL BUILDER -->
+<!-- ============================================================ -->
+<h2 id="s10"><span class="section-num">10.</span> Email Builder</h2>
+
+<h3>10.1 Layout Geral</h3>
+<div class="card">
+<p><strong>Toolbar:</strong> <code>h-[52px] bg-white border-b border-gray-200 z-20</code></p>
+<p><strong>Sidebar Esquerdo:</strong> <code>w-[280px] bg-white border-r border-gray-200</code></p>
+<p><strong>Sidebar Direito:</strong> <code>w-[340px] bg-white border-l border-gray-200</code></p>
+<p><strong>Canvas bg:</strong> Dinamico (default <code>#f3f4f6</code>)</p>
+<p><strong>Canvas width:</strong> Desktop 600px, Mobile 375px</p>
+</div>
+
+<h3>10.2 Toolbar</h3>
+<div class="card">
+<p><strong>Template name:</strong> <code>text-sm font-semibold text-gray-900 truncate max-w-[250px]</code></p>
+<p><strong>Badge:</strong> <code>text-[9px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded font-bold tracking-wider</code></p>
+<p><strong>Device toggle ativo:</strong> <code>text-brand-600 bg-brand-50</code></p>
+<p><strong>Botoes secundarios:</strong> <code>border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50</code></p>
+<p><strong>Botao Salvar:</strong> <code>bg-brand-500 text-white text-xs font-semibold rounded-lg hover:bg-brand-600</code></p>
+</div>
+
+<h3>10.3 Block Palette</h3>
+<div class="card">
+<p><strong>Grid:</strong> <code>grid-cols-2 gap-1.5</code></p>
+<p><strong>Block button:</strong> <code>bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm cursor-grab active:cursor-grabbing active:scale-95</code></p>
+<p><strong>Icon:</strong> <code>w-5 h-5 text-gray-500</code></p>
+<p><strong>Label:</strong> <code>text-[10px] font-medium text-gray-600</code></p>
+<p><strong>Category header:</strong> <code>text-[10px] font-bold text-gray-400 uppercase tracking-[0.06em]</code></p>
+<p><strong>Tabs ativas:</strong> <code>text-brand-600 border-b-2 border-brand-500</code></p>
+</div>
+
+<h3>10.4 Blocos do Email (19 tipos)</h3>
+<table>
+<tr><th>Categoria</th><th>Blocos</th></tr>
+<tr><td>Conteudo</td><td>text, image, button, divider, spacer, social, video, html, split, header-bar, drop-shadow, table, review-quote, countdown</td></tr>
+<tr><td>E-commerce</td><td>product-grid, abandoned-cart, coupon</td></tr>
+<tr><td>Estrutura</td><td>header, footer</td></tr>
+</table>
+<p><strong>Renderizacao:</strong> Todos os blocos usam inline styles (nao Tailwind) pois representam HTML de email.</p>
+<p><strong>Cor brand nos blocos:</strong> <code>#F97316</code> hardcoded em botoes, precos, links, CTAs, coupons.</p>
+
+<h3>10.5 Selecao de Blocos no Canvas</h3>
+<div class="card">
+<p><strong>Bloco selecionado:</strong> <code>ring-2 ring-brand-500 ring-offset-1</code></p>
+<p><strong>Bloco hover:</strong> <code>hover:ring-1 hover:ring-brand-300</code></p>
+<p><strong>Secao selecionada:</strong> <code>ring-2 ring-indigo-400 ring-inset</code></p>
+<p><strong>Toolbar de secao:</strong> Label <code>bg-indigo-500 text-white text-[10px]</code></p>
+</div>
+
+<h3>10.6 Campos de Propriedade (Right Sidebar)</h3>
+<table>
+<tr><th>Widget</th><th>Visual</th></tr>
+<tr><td>Toggle</td><td>Pill 20x36px. ON: <code>bg-brand-500</code>, OFF: <code>bg-gray-200</code></td></tr>
+<tr><td>Color picker</td><td>Swatch <code>w-7 h-7 rounded border-gray-200</code> + input <code>font-mono</code></td></tr>
+<tr><td>Alignment</td><td>3-btn segmented. Active: <code>bg-brand-500 text-white shadow-sm</code></td></tr>
+<tr><td>Padding</td><td>4-input grid com lock button linked: <code>text-brand-500 bg-brand-50</code></td></tr>
+<tr><td>Slider</td><td><code>accent-brand-500</code> + value <code>text-xs text-gray-600</code></td></tr>
+</table>
+
+<h3>10.7 Rich Text Editor (TipTap)</h3>
+<div class="card">
+<p><strong>Wrapper:</strong> <code>border border-gray-200 rounded-lg overflow-hidden bg-white</code></p>
+<p><strong>Toolbar:</strong> <code>px-1.5 py-1 border-b border-gray-100 bg-gray-50</code></p>
+<p><strong>Botao ativo:</strong> <code>bg-brand-100 text-brand-700</code></p>
+<p><strong>Botao inativo:</strong> <code>text-gray-400 hover:text-gray-700 hover:bg-gray-100</code></p>
+<p><strong>Icons:</strong> <code>w-3.5 h-3.5</code></p>
+<p><strong>Area editor:</strong> <code>prose prose-sm min-h-[80px] px-3 py-2 text-gray-900</code></p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECAO 11: POPUP EDITOR -->
+<!-- ============================================================ -->
+<h2 id="s11"><span class="section-num">11.</span> Popup Editor</h2>
+
+<h3>11.1 Layout (3 editores coexistentes!)</h3>
+<table>
+<tr><th>Editor</th><th>Path</th><th>Features</th></tr>
+<tr><td>Avancado (popup-editor)</td><td><code>/app/popup-editor/[id]/page.tsx</code></td><td>DnD com @dnd-kit, sidebar 240px, right panel 320px, blocos com sub-tabs</td></tr>
+<tr><td>Simples (editor)</td><td><code>/app/(dashboard)/forms/[id]/editor/page.tsx</code></td><td>Sem DnD, mesmo layout, blocos mais simples</td></tr>
+<tr><td>Legado (edit)</td><td><code>/app/(dashboard)/forms/[id]/edit/page.tsx</code></td><td>Campos fixos, sem blocos, sidebar 280px</td></tr>
+</table>
+<div class="issue">3 editores distintos para a mesma entidade (popup/form) com modelos de dados diferentes e estilos parcialmente diferentes.</div>
+
+<h3>11.2 Blocos do Popup (16 tipos)</h3>
+<table>
+<tr><th>Tipo</th><th>Descricao</th></tr>
+<tr><td>email, phone, name-input, text-input, date-input</td><td>Inputs de formulario. Render: <code>border border-gray-300 rounded-md px-3 py-2 text-sm bg-white</code></td></tr>
+<tr><td>dropdown, radio, checkbox</td><td>Inputs de selecao</td></tr>
+<tr><td>legal-consent</td><td>Checkbox + texto legal</td></tr>
+<tr><td>text</td><td>Texto livre com inline styles (fontSize, color, fontWeight, align)</td></tr>
+<tr><td>button</td><td>CTA com inline bgColor (#F97316), textColor, borderRadius</td></tr>
+<tr><td>image</td><td>Imagem ou placeholder <code>bg-gray-100 rounded text-gray-400</code></td></tr>
+<tr><td>spacer, line</td><td>Espacamento e separador</td></tr>
+<tr><td>coupon</td><td><code>border-2 border-dashed border-orange-300 rounded-lg</code> + <code>text-lg font-bold text-orange-600</code></td></tr>
+<tr><td>countdown</td><td><code>text-2xl font-mono font-bold</code></td></tr>
+</table>
+
+<h3>11.3 DnD Visual (popup-editor)</h3>
+<div class="card">
+<p><strong>Grab handle:</strong> GripVertical <code>w-3.5 h-3.5 text-gray-300 hover:text-gray-500</code>, <code>opacity-0 group-hover:opacity-100 cursor-grab</code></p>
+<p><strong>Dragging:</strong> <code>opacity: 0.4</code></p>
+<p><strong>Selecao:</strong> <code>ring-2 ring-orange-400 ring-offset-1</code></p>
+<p><strong>Hover:</strong> <code>hover:ring-1 hover:ring-gray-300</code></p>
+<p><strong>Delete overlay:</strong> <code>bg-white border border-gray-200 rounded-md shadow-sm</code> com Trash2 <code>text-gray-400 hover:text-red-500</code></p>
+</div>
+
+<h3>11.4 Right Sidebar Tabs</h3>
+<div class="card">
+<p><strong>3 tabs:</strong> Bloco / Comportamento / Tema</p>
+<p><strong>Tab ativa:</strong> <code>text-orange-600 border-b-2 border-orange-500</code></p>
+<p><strong>Sub-tab ativa (block):</strong> <code>text-gray-900 border-b-2 border-gray-900</code></p>
+<p><strong>Collapsible sections:</strong> <code>border-b border-gray-100</code>, header <code>px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50</code></p>
+<p><strong>Toggle ON:</strong> <code>bg-emerald-500</code> (diferente do email builder que usa <code>bg-brand-500</code>!)</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECAO 12: FLOW BUILDER -->
+<!-- ============================================================ -->
+<h2 id="s12"><span class="section-num">12.</span> Flow Builder</h2>
+
+<h3>12.1 Layout</h3>
+<div class="card">
+<p><strong>Root:</strong> <code>h-screen w-screen flex flex-col bg-white overflow-hidden</code></p>
+<p><strong>Toolbar:</strong> <code>h-14 bg-white border-b border-gray-200</code></p>
+<p><strong>Sidebar:</strong> <code>w-96 bg-white border-r border-gray-200</code></p>
+<p><strong>Properties panel:</strong> <code>w-80 bg-gray-50 border-l border-gray-200</code></p>
+<p><strong>Canvas bg:</strong> <code>bg-[#FAFBFC]</code> com dots grid (gap=20, color=#d1d5db)</p>
+<p><strong>Snap grid:</strong> 16x16px</p>
+</div>
+
+<h3>12.2 Nodes — Cores por Categoria</h3>
+<table>
+<tr><th>Categoria</th><th>Gradiente</th><th>Borda</th><th>Icone</th><th>Hex</th></tr>
+<tr><td>Trigger</td><td><code>from-emerald-500/20 to-emerald-600/10</code></td><td><code>border-emerald-500/30</code></td><td><code>text-emerald-400</code></td><td><span class="color-swatch" style="background:#10b981"></span>#10b981</td></tr>
+<tr><td>Action</td><td><code>from-blue-500/20 to-blue-600/10</code></td><td><code>border-blue-500/30</code></td><td><code>text-blue-400</code></td><td><span class="color-swatch" style="background:#3b82f6"></span>#3b82f6</td></tr>
+<tr><td>Condition</td><td><code>from-amber-500/20 to-amber-600/10</code></td><td><code>border-amber-500/30</code></td><td><code>text-amber-400</code></td><td><span class="color-swatch" style="background:#f59e0b"></span>#f59e0b</td></tr>
+<tr><td>Control</td><td><code>from-purple-500/20 to-purple-600/10</code></td><td><code>border-purple-500/30</code></td><td><code>text-purple-400</code></td><td><span class="color-swatch" style="background:#a855f7"></span>#a855f7</td></tr>
+<tr><td>Transform</td><td><code>from-pink-500/20 to-pink-600/10</code></td><td><code>border-pink-500/30</code></td><td><code>text-pink-400</code></td><td><span class="color-swatch" style="background:#ec4899"></span>#ec4899</td></tr>
+</table>
+
+<h3>12.3 Node Shape</h3>
+<div class="card">
+<p><strong>Container:</strong> <code>rounded-xl border backdrop-blur-sm bg-gradient-to-br min-w-[280px] max-w-[360px] p-3</code></p>
+<p><strong>Icon box:</strong> <code>p-2 rounded-lg bg-gray-50 border border-gray-200</code></p>
+<p><strong>Label:</strong> <code>text-sm font-medium text-gray-900 truncate</code></p>
+<p><strong>Description:</strong> <code>text-[10px] text-gray-500 line-clamp-1</code></p>
+<p><strong>Selecao:</strong> <code>ring-2 ring-gray-400/50</code> + shadow por categoria</p>
+<p><strong>Animacao entrada:</strong> <code>scale: 0.8 → 1, opacity: 0 → 1</code></p>
+</div>
+
+<h3>12.4 Edges (conexoes)</h3>
+<div class="card">
+<p><strong>Path:</strong> SmoothStep com borderRadius: 16</p>
+<p><strong>Stroke default:</strong> <code>#525252</code> width 1.5</p>
+<p><strong>Stroke selected:</strong> <code>#60a5fa</code> (blue-400) width 2</p>
+<p><strong>Dot animado:</strong> Circle r=3 fill=#60a5fa com animateMotion 2s infinite</p>
+<p><strong>Handles:</strong> <code>w-3 h-3 border-2 bg-white border-gray-300</code></p>
+<p><strong>Handle "Sim":</strong> <code>border-green-500/50 bg-green-500/30</code> + label <code>text-[10px] text-green-400</code></p>
+<p><strong>Handle "Nao":</strong> <code>border-red-500/50 bg-red-500/30</code> + label <code>text-[10px] text-red-400</code></p>
+</div>
+
+<h3>12.5 Status de Execucao nos Nodes</h3>
+<table>
+<tr><th>Status</th><th>Badge bg</th><th>Icon color</th><th>Extra</th></tr>
+<tr><td>running</td><td><code>bg-blue-500/20 border-blue-500/50</code></td><td><code>text-blue-400</code></td><td>Pulse ring + icon spin</td></tr>
+<tr><td>success</td><td><code>bg-green-500/20 border-green-500/50</code></td><td><code>text-green-400</code></td><td>—</td></tr>
+<tr><td>error</td><td><code>bg-red-500/20 border-red-500/50</code></td><td><code>text-red-400</code></td><td>Tooltip de erro</td></tr>
+<tr><td>warning</td><td><code>bg-amber-500/20 border-amber-500/50</code></td><td><code>text-amber-400</code></td><td>—</td></tr>
+<tr><td>skipped</td><td><code>bg-slate-500/20 border-slate-500/50</code></td><td><code>text-gray-500</code></td><td>—</td></tr>
+</table>
+
+<h3>12.6 Previews Especificos nos Nodes</h3>
+<table>
+<tr><th>Tipo</th><th>Visual</th></tr>
+<tr><td>WhatsApp</td><td>Bubble <code>bg-[#005c4b] rounded-lg p-2</code>, variaveis <code>bg-green-400/30 text-green-300</code></td></tr>
+<tr><td>SMS</td><td><code>bg-purple-600/30 border-purple-500/30 rounded-lg p-2</code></td></tr>
+<tr><td>Email</td><td><code>bg-blue-600/20 border-blue-500/30 rounded-lg p-2</code></td></tr>
+<tr><td>Delay</td><td><code>bg-purple-600/30 border-purple-500/40 rounded-lg</code> com Clock icon</td></tr>
+<tr><td>Tag add</td><td>Pill <code>bg-blue-500/20 border-blue-500/30 text-blue-300</code></td></tr>
+<tr><td>Tag remove</td><td>Pill <code>bg-red-500/20 border-red-500/30 text-red-300</code></td></tr>
+<tr><td>Condition A/B</td><td>Barras <code>bg-green-500/20</code> e <code>bg-amber-500/20</code></td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECAO 13: DASHBOARDS E RELATORIOS -->
+<!-- ============================================================ -->
+<h2 id="s13"><span class="section-num">13.</span> Dashboards e Relatorios</h2>
+
+<h3>13.1 Tooltip de Graficos (3 temas!)</h3>
+<table>
+<tr><th>Tema</th><th>Estilo</th><th>Onde</th></tr>
+<tr><td>Dark A</td><td><code>bg: #18181b, border: #3f3f46, radius: 8px</code></td><td>Analytics overview, cohort, deliverability, funnel</td></tr>
+<tr><td>Dark B</td><td><code>bg: #1f2937, border: #374151, radius: 12px</code></td><td>Shopify, Sales CRM</td></tr>
+<tr><td>Light</td><td><code>bg: #fff, border: #e5e7eb, radius: 8px</code></td><td>Email, dashboard, metrics</td></tr>
+</table>
+
+<h3>13.2 Grid Lines (CartesianGrid)</h3>
+<table>
+<tr><th>Cor</th><th>Onde</th></tr>
+<tr><td><code>#27272a</code> (escuro)</td><td>Analytics overview, cohort, funnel</td></tr>
+<tr><td><code>#f3f4f6</code> (claro)</td><td>Email analytics, dashboard</td></tr>
+<tr><td><code>rgba(255,255,255,0.05)</code></td><td>Shopify analytics</td></tr>
+<tr><td><code>#374151</code></td><td>Sales CRM</td></tr>
+<tr><td><code>#333</code></td><td>RFM, CohortMatrix</td></tr>
+</table>
+<div class="issue">5 cores diferentes de grid line. Algumas sao de tema escuro em paginas de tema claro.</div>
+
+<h3>13.3 Eixos</h3>
+<table>
+<tr><th>Estilo</th><th>Onde</th></tr>
+<tr><td><code>stroke="#71717a" fontSize={12}</code></td><td>Analytics overview</td></tr>
+<tr><td><code>stroke="#9ca3af" fontSize={11}</code></td><td>Email analytics</td></tr>
+<tr><td><code>stroke="#6b7280" fontSize={12}</code></td><td>Shopify</td></tr>
+<tr><td><code>fill: '#6B7280' fontSize: 11, axisLine: '#E5E7EB'</code></td><td>Dashboard</td></tr>
+</table>
+
+<h3>13.4 Donut/Pie Charts</h3>
+<div class="card">
+<p><strong>Padrao:</strong> <code>innerRadius={50-60} outerRadius={80-100} paddingAngle={2-4}</code></p>
+<p><strong>Cores:</strong> <code>['#f97316', '#22c55e', '#3b82f6', '#eab308', '#ec4899', '#8b5cf6']</code></p>
+</div>
+
+<h3>13.5 Bar/Area Charts</h3>
+<div class="card">
+<p><strong>Bar radius:</strong> <code>[4, 4, 0, 0]</code> ou <code>[3, 3, 0, 0]</code> (top-rounded)</p>
+<p><strong>Area gradient:</strong> Opacity de 0.3 para 0</p>
+<p><strong>Line strokeWidth:</strong> 2 consistente, <code>dot={false}</code></p>
+</div>
+
+<h3>13.6 Period Selector (filtro de periodo)</h3>
+<table>
+<tr><th>Estilo Ativo</th><th>Onde</th></tr>
+<tr><td><code>bg-brand-500 text-white</code></td><td>Analytics overview</td></tr>
+<tr><td><code>bg-orange-500 text-white</code></td><td>Email analytics</td></tr>
+<tr><td><code>bg-gray-100 text-gray-900</code></td><td>Shopify</td></tr>
+<tr><td><code>bg-gray-900 text-white</code></td><td>Dashboard, metric detail</td></tr>
+</table>
+<div class="issue">4 estilos diferentes para o mesmo componente de filtro de periodo.</div>
+
+<h3>13.7 Heatmap de Cohort (3 implementacoes!)</h3>
+<table>
+<tr><th>Implementacao</th><th>Escala de Cores</th></tr>
+<tr><td>cohort/page.tsx</td><td>emerald-500/30, brand-500/30, yellow-500/20, red-500/20</td></tr>
+<tr><td>CohortMatrix.tsx</td><td>green-500, green-400, yellow-500, orange-500, red-500, gray-700</td></tr>
+<tr><td>CohortSection.tsx</td><td>primary-500, primary-400, accent-500, accent-400/70, gray-300, gray-100</td></tr>
+</table>
+<div class="issue">3 escalas de cores completamente diferentes para o mesmo tipo de visualizacao de cohort.</div>
+
+<h3>13.8 Status Badges (campanhas/automacoes)</h3>
+<table>
+<tr><th>Status</th><th>Estilo</th></tr>
+<tr><td>draft</td><td><code>bg-gray-100 text-gray-700</code></td></tr>
+<tr><td>sending / active</td><td><code>bg-green-100 text-green-700</code></td></tr>
+<tr><td>scheduled</td><td><code>bg-blue-50 text-blue-700</code> ou <code>bg-orange-100 text-orange-700</code></td></tr>
+<tr><td>sent / completed</td><td><code>bg-green-50 text-green-700</code></td></tr>
+<tr><td>paused</td><td><code>bg-yellow-100 text-yellow-700</code></td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECAO 14: WHATSAPP INBOX E CHAT -->
+<!-- ============================================================ -->
+<h2 id="s14"><span class="section-num">14.</span> WhatsApp Inbox e Chat</h2>
+
+<h3>14.1 Layout 3 Paineis</h3>
+<div class="card">
+<p><strong>Container:</strong> <code>flex h-[calc(100vh-4rem)] bg-gray-50 overflow-hidden</code></p>
+<p><strong>Conversas (esq):</strong> <code>w-80 border-r border-gray-200</code></p>
+<p><strong>Chat (centro):</strong> <code>flex-1 flex flex-col min-w-0</code></p>
+<p><strong>Contato (dir):</strong> <code>w-80</code> ou <code>lg:w-[380px]</code>, <code>border-l border-gray-200</code></p>
+</div>
+
+<h3>14.2 Lista de Conversas</h3>
+<div class="card">
+<p><strong>Item:</strong> <code>flex items-start gap-3 p-4 cursor-pointer border-b border-gray-200/30</code></p>
+<p><strong>Selecionado:</strong> <code>bg-brand-50 border-l-2 border-l-primary-500</code></p>
+<p><strong>Avatar:</strong> <code>w-12 h-12 rounded-full</code> com gradient fallback <code>from-primary-500 to-accent-500</code></p>
+<p><strong>Unread badge:</strong> <code>px-2 py-0.5 bg-primary-500 rounded-full text-[10px] font-bold</code></p>
+<p><strong>Tags:</strong> <code>px-2 py-0.5 bg-gray-100 rounded text-[10px] text-gray-600</code></p>
+</div>
+
+<h3>14.3 Message Bubbles</h3>
+<table>
+<tr><th>Tipo</th><th>Classes</th></tr>
+<tr><td>Enviada</td><td><code>bg-primary-500 text-white rounded-2xl rounded-tr-md px-4 py-2.5 max-w-[70%]</code></td></tr>
+<tr><td>Enviada (bot)</td><td><code>bg-gradient-to-r from-primary-500 to-primary-600</code></td></tr>
+<tr><td>Recebida</td><td><code>bg-white border border-gray-200 text-gray-800 rounded-2xl rounded-tl-md</code></td></tr>
+<tr><td>Falha</td><td><code>bg-red-900/50 border border-red-500/50</code></td></tr>
+<tr><td>Pendente</td><td><code>bg-gray-100 opacity-70</code></td></tr>
+</table>
+
+<h3>14.4 Status de Mensagem</h3>
+<table>
+<tr><th>Status</th><th>Icone</th><th>Cor</th></tr>
+<tr><td>pending</td><td>Clock</td><td><code>text-gray-400</code></td></tr>
+<tr><td>sent</td><td>Check</td><td><code>text-gray-400</code></td></tr>
+<tr><td>delivered</td><td>CheckCheck</td><td><code>text-gray-400</code></td></tr>
+<tr><td>read</td><td>CheckCheck</td><td><code>text-cyan-400</code></td></tr>
+<tr><td>failed</td><td>AlertCircle</td><td><code>text-error-400</code></td></tr>
+</table>
+
+<h3>14.5 Area de Input do Chat</h3>
+<div class="card">
+<p><strong>Container:</strong> <code>p-4 border-t border-gray-200 bg-gray-50</code></p>
+<p><strong>Textarea:</strong> <code>bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:border-brand-400</code></p>
+<p><strong>Botao enviar:</strong> <code>p-3 rounded-xl bg-primary-500 text-white hover:bg-primary-600</code></p>
+<div class="issue">Textarea do chat usa <code>text-white</code> e <code>placeholder-dark-400</code> — resquicio de dark theme.</div>
+</div>
+
+<h3>14.6 Painel de Contato</h3>
+<div class="card">
+<p><strong>Avatar grande:</strong> <code>w-20 h-20 rounded-full ring-4 ring-primary-500/20</code> com gradient</p>
+<p><strong>Tabs:</strong> <code>text-[11px] font-medium border-b-2</code>, ativa: <code>text-brand-600 border-primary-500</code></p>
+<p><strong>Info fields:</strong> <code>flex items-center gap-3 p-3 bg-gray-50 rounded-xl</code></p>
+<p><strong>Quick actions:</strong> Grid 2x2, <code>p-3 bg-gray-100 text-gray-600 rounded-xl</code></p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECAO 15: CRM -->
+<!-- ============================================================ -->
+<h2 id="s15"><span class="section-num">15.</span> CRM (Kanban, Drawers, Deals)</h2>
+
+<h3>15.1 MetricCard do CRM Dashboard</h3>
+<div class="card">
+<p>Usa <code>rounded-2xl border bg-gradient-to-br</code> com 5 variantes de cor:</p>
+<table>
+<tr><th>Cor</th><th>Gradiente</th></tr>
+<tr><td>primary</td><td><code>from-primary-500/20 to-primary-500/5 border-primary-500/30</code></td></tr>
+<tr><td>success</td><td><code>from-emerald-500/20 to-emerald-500/5 border-emerald-500/30</code></td></tr>
+<tr><td>warning</td><td><code>from-amber-500/20 to-amber-500/5 border-amber-500/30</code></td></tr>
+<tr><td>error</td><td><code>from-red-500/20 to-red-500/5 border-red-500/30</code></td></tr>
+<tr><td>info</td><td><code>from-blue-500/20 to-blue-500/5 border-blue-500/30</code></td></tr>
+</table>
+</div>
+
+<h3>15.2 Deal Drawer</h3>
+<div class="card">
+<p><strong>Overlay:</strong> <code>fixed inset-0 bg-black/60 backdrop-blur-sm z-40</code></p>
+<p><strong>Panel:</strong> <code>fixed right-0 top-0 h-full max-w-xl bg-white border-l border-gray-200 shadow-2xl z-50</code></p>
+<p><strong>Stage pills:</strong> Selecionado usa <code>style={{ backgroundColor: stage.color }}</code> + text-white</p>
+<p><strong>Probability bar:</strong> <code>h-2 bg-white rounded-full</code> fill <code>bg-gradient-to-r from-primary-500 to-accent-500</code></p>
+<p><strong>Won button:</strong> <code>bg-green-500 hover:bg-green-600 text-gray-900 shadow-lg shadow-green-500/20</code></p>
+<p><strong>Lost button:</strong> <code>bg-red-500 hover:bg-red-600 text-gray-900 shadow-lg shadow-red-500/20</code></p>
+</div>
+
+<h3>15.3 Contact Drawer</h3>
+<div class="card">
+<p><strong>RFM Segments:</strong> 10 segmentos, cada um com cores unicas (<code>bg-{color}-500/20 text-{color}-400 border-{color}-500/50</code>)</p>
+<p><strong>Tags com cores:</strong> 7 tags nomeadas (cliente=cyan, vip=amber, lead=blue, prospect=purple, inativo=red, novo=green, recorrente=pink)</p>
+<p><strong>Atividades:</strong> 16 tipos de atividade, cada um com icone e cor propria</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECAO 16: AI AGENTS -->
+<!-- ============================================================ -->
+<h2 id="s16"><span class="section-num">16.</span> AI Agents</h2>
+
+<h3>16.1 Agent Card</h3>
+<div class="card">
+<p><strong>Card:</strong> <code>bg-gray-50 border rounded-xl p-4 cursor-pointer</code></p>
+<p><strong>Avatar:</strong> <code>w-12 h-12 rounded-xl</code> gradient <code>from-primary-500/20 to-accent-500/20</code></p>
+<p><strong>Status ativo:</strong> <code>bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded-full</code></p>
+<p><strong>CTA:</strong> <code>bg-gradient-to-r from-primary-500 to-accent-500 text-white rounded-xl</code></p>
+</div>
+
+<h3>16.2 Agent Editor (Drawer)</h3>
+<div class="card">
+<p><strong>Drawer:</strong> <code>max-w-5xl bg-white border-l border-gray-200</code>, spring slide-in</p>
+<p><strong>Tabs com cores unicas:</strong></p>
+<table>
+<tr><th>Tab</th><th>Cor Inativa</th><th>Cor Ativa bg</th></tr>
+<tr><td>Sources</td><td><code>text-blue-400</code></td><td><code>bg-blue-500/20</code></td></tr>
+<tr><td>Actions</td><td><code>text-yellow-400</code></td><td><code>bg-yellow-500/20</code></td></tr>
+<tr><td>Integrations</td><td><code>text-green-400</code></td><td><code>bg-green-500/20</code></td></tr>
+<tr><td>Persona</td><td><code>text-purple-400</code></td><td><code>bg-purple-500/20</code></td></tr>
+<tr><td>Settings</td><td><code>text-orange-400</code></td><td><code>bg-orange-500/20</code></td></tr>
+</table>
+<p><strong>Save com mudancas:</strong> <code>bg-gradient-to-r from-primary-500 to-accent-500</code></p>
+<p><strong>Save sem mudancas:</strong> <code>bg-gray-100 text-gray-400 cursor-not-allowed</code></p>
+</div>
+
+<h3>16.3 Agent Preview Chat</h3>
+<div class="card">
+<p><strong>User bubble:</strong> <code>bg-blue-500 text-white rounded-br-md</code> (diferente do inbox que usa primary-500!)</p>
+<p><strong>Assistant bubble:</strong> <code>bg-white text-gray-700 rounded-bl-md</code></p>
+<p><strong>User avatar:</strong> <code>w-8 h-8 rounded-lg bg-blue-500/20</code></p>
+<p><strong>Bot avatar:</strong> <code>w-8 h-8 rounded-lg bg-purple-500/20</code></p>
+<p><strong>Send button:</strong> <code>bg-gradient-to-r from-primary-500 to-accent-500</code> (gradient, diferente do solid no inbox)</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECAO 17: INCONSISTENCIAS CRITICAS -->
+<!-- ============================================================ -->
+<h2 id="s17"><span class="section-num">17.</span> Inconsistencias Criticas</h2>
+
+<h3>17.1 BUGS — Texto Invisivel</h3>
+<div class="card card-error">
+<p><strong>Problema:</strong> Multiplos componentes usam <code>text-white</code> em fundos claros. Resultado: texto INVISIVEL.</p>
+<p><strong>Causa:</strong> Migracao incompleta de tema escuro para tema claro.</p>
+<table>
+<tr><th>Arquivo</th><th>Elemento</th><th>Bug</th></tr>
+<tr><td>CRM modals (4+ arquivos)</td><td>Inputs</td><td><code>text-white</code> em <code>bg-gray-50</code></td></tr>
+<tr><td>CRM modals (4+ arquivos)</td><td>Close button</td><td><code>hover:bg-white</code> e <code>hover:text-white</code></td></tr>
+<tr><td>CRM modals (4+ arquivos)</td><td>Cancel button</td><td><code>text-white</code> em <code>bg-white</code></td></tr>
+<tr><td>CreateTaskModal</td><td>Inputs</td><td><code>text-white</code> em <code>bg-gray-100</code></td></tr>
+<tr><td>CustomFieldsManager</td><td>Inputs</td><td><code>text-white</code> em <code>bg-gray-100</code></td></tr>
+<tr><td>Import preview table</td><td>Cells</td><td><code>text-white</code> em fundo claro</td></tr>
+<tr><td>MoveStageRuleModal</td><td>Select</td><td><code>text-white</code> em <code>bg-white</code></td></tr>
+<tr><td>ChatPanel textarea</td><td>Input de mensagem</td><td><code>text-white</code> em <code>bg-gray-50</code></td></tr>
+<tr><td>DealDrawer inputs</td><td>Form fields</td><td><code>text-white</code> em <code>bg-gray-50</code></td></tr>
+<tr><td>WhatsApp CampaignTable</td><td>tbody divider</td><td><code>divide-dark-700/50</code> (dark theme)</td></tr>
+</table>
+</div>
+
+<h3>17.2 Tokens Duplicados / Redundantes</h3>
+<div class="card card-warn">
+<table>
+<tr><th>Problema</th><th>Detalhes</th></tr>
+<tr><td><code>primary-*</code> vs <code>brand-*</code></td><td>Mesma cor (#F97316) com 2 nomes. Componentes misturam sem padrao.</td></tr>
+<tr><td>Tokens custom vs Tailwind padrao</td><td>Avatar usa <code>success-500</code>, Badge usa <code>emerald-500</code>, Toast usa <code>emerald-*</code> — tudo pra mesma semantica "sucesso".</td></tr>
+<tr><td>Badge <code>accent</code> = <code>warning</code></td><td>Duas variants identicas (ambas amber-50/amber-700).</td></tr>
+<tr><td>3 verdes para "positivo"</td><td><code>text-emerald-400</code>, <code>text-green-400</code>, <code>text-emerald-600</code> em diferentes paginas.</td></tr>
+</table>
+</div>
+
+<h3>17.3 Border Radius Inconsistente</h3>
+<div class="card card-warn">
+<table>
+<tr><th>Radius</th><th>Onde</th></tr>
+<tr><td><code>rounded-full</code></td><td>Avatar, Badge, dots de status</td></tr>
+<tr><td><code>rounded-2xl</code> (16px)</td><td>Card component, modais, EmptyState, cards Shopify/Sales</td></tr>
+<tr><td><code>rounded-xl</code> (12px)</td><td>Button, Input, Toast, Skeleton, cards da maioria das paginas</td></tr>
+<tr><td><code>rounded-lg</code> (8px)</td><td>Tooltip, close button Toast, AddStore inputs, tables search</td></tr>
+<tr><td><code>rounded-md</code> (6px)</td><td>Nav items dashboard, popup form inputs, dropdown items</td></tr>
+<tr><td><code>rounded</code> (4px)</td><td>Skeleton text</td></tr>
+<tr><td><code>8px</code> inline</td><td>InternationalPhoneInput</td></tr>
+</table>
+<p>O componente Card usa <code>rounded-2xl</code> mas Button/Input usam <code>rounded-xl</code>. Sidebar nav usa <code>rounded-md</code> no dashboard ativo mas <code>rounded-xl</code> no standalone.</p>
+</div>
+
+<h3>17.4 Implementacoes Duplicadas</h3>
+<div class="card card-warn">
+<table>
+<tr><th>Componente</th><th>Duplicatas</th></tr>
+<tr><td>Sidebar</td><td>2 implementacoes (dashboard layout vs Sidebar.tsx). Larguras: 256/72 vs 280/80.</td></tr>
+<tr><td>Header</td><td>2 implementacoes (dashboard layout vs Header.tsx).</td></tr>
+<tr><td>Popup/Form Editor</td><td>3 editores coexistentes com modelos de dados diferentes.</td></tr>
+<tr><td>Inbox</td><td>2 implementacoes de chat (page completa vs agent inbox simplificada).</td></tr>
+<tr><td>Toggle switch</td><td>4+ implementacoes inline sem componente compartilhado.</td></tr>
+<tr><td>Cohort heatmap</td><td>3 escalas de cores totalmente diferentes.</td></tr>
+</table>
+</div>
+
+<h3>17.5 Inconsistencia entre Editores</h3>
+<div class="card card-warn">
+<table>
+<tr><th>Propriedade</th><th>Email Builder</th><th>Popup Editor</th></tr>
+<tr><td>Sidebar esquerdo</td><td>280px</td><td>240px (avancado) / 280px (legado)</td></tr>
+<tr><td>Sidebar direito</td><td>340px</td><td>320px</td></tr>
+<tr><td>Selection ring</td><td><code>ring-brand-500</code> (blocos), <code>ring-indigo-400</code> (secoes)</td><td><code>ring-orange-400</code></td></tr>
+<tr><td>Toggle ON color</td><td><code>bg-brand-500</code></td><td><code>bg-emerald-500</code></td></tr>
+<tr><td>Tab ativa</td><td><code>text-brand-600 border-brand-500</code></td><td><code>text-orange-600 border-orange-500</code></td></tr>
+<tr><td>Toolbar height</td><td>52px</td><td>Variavel</td></tr>
+<tr><td>Canvas mobile width</td><td>375px</td><td>340px (legado) / 375px (avancado)</td></tr>
+</table>
+</div>
+
+<h3>17.6 Dark Mode Nao Implementado</h3>
+<div class="card card-info">
+<p>Um toggle de tema existe no <code>useUIStore</code> e aparece no UserMenu, mas:</p>
+<ul>
+<li>Nenhuma classe <code>dark:</code> do Tailwind e usada em NENHUM componente</li>
+<li>Nenhuma classe <code>.dark</code> e aplicada ao <code>&lt;html&gt;</code></li>
+<li>O sidebar usa fundo escuro como escolha de design, NAO como dark mode</li>
+<li>Varios resquicios de <code>text-white</code>, <code>placeholder-dark-*</code> e <code>divide-dark-*</code> indicam que o app foi originalmente dark e parcialmente migrado para light</li>
+</ul>
+</div>
+
+<h3>17.7 Bibliotecas de Icones Misturadas</h3>
+<div class="card card-warn">
+<p><strong>Lucide React:</strong> Usado em ~90% do app</p>
+<p><strong>Phosphor Icons:</strong> Usado em analytics overview, cohort, deliverability, funnel</p>
+<p>Isto cria inconsistencia visual pois Phosphor e Lucide tem estilos de linha diferentes.</p>
+</div>
+
+<h3>17.8 Strings Hardcoded em Portugues</h3>
+<div class="card card-info">
+<p>Todo o app usa strings em PT-BR hardcoded diretamente nos componentes. Nao ha sistema de i18n.</p>
+<p>Exemplos: "Buscar pais...", "Senhas coincidem", "(11) 99999-9999", "Arraste blocos aqui", "Selecione um bloco"</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECAO 18: TOKENS CONSOLIDADOS -->
+<!-- ============================================================ -->
+<h2 id="s18"><span class="section-num">18.</span> Tokens de Referencia Consolidados</h2>
+
+<h3>18.1 Spacing Scale (valores usados no codigo)</h3>
+<table>
+<tr><th>Token</th><th>Valor</th><th>Uso Principal</th></tr>
+<tr><td>p-2</td><td>8px</td><td>Icon containers, compact buttons</td></tr>
+<tr><td>p-3</td><td>12px</td><td>Sidebar panels, list items, compact cards</td></tr>
+<tr><td>p-4</td><td>16px</td><td>KPI cards, standard containers, modais header/content</td></tr>
+<tr><td>p-5</td><td>20px</td><td>Dashboard cards, modais (variante)</td></tr>
+<tr><td>p-6</td><td>24px</td><td>Cards grandes, modais (variante), drawers</td></tr>
+<tr><td>gap-2</td><td>8px</td><td>Botoes inline, sidebar nav</td></tr>
+<tr><td>gap-3</td><td>12px</td><td>Flex rows, form fields</td></tr>
+<tr><td>gap-4</td><td>16px</td><td>KPI grids, cards grids</td></tr>
+<tr><td>gap-6</td><td>24px</td><td>Chart grids, section spacing</td></tr>
+<tr><td>space-y-4</td><td>16px</td><td>Form fields em modais</td></tr>
+<tr><td>space-y-6</td><td>24px</td><td>Page sections</td></tr>
+</table>
+
+<h3>18.2 Z-Index Scale</h3>
+<table>
+<tr><th>Valor</th><th>Uso</th></tr>
+<tr><td>z-10</td><td>Overlays de bloco no canvas</td></tr>
+<tr><td>z-20</td><td>Toolbar do email builder, section labels</td></tr>
+<tr><td>z-30</td><td>Header sticky</td></tr>
+<tr><td>z-40</td><td>Deal drawer, test result panel</td></tr>
+<tr><td>z-50</td><td>Modais, drawers, backdrops, mobile header</td></tr>
+<tr><td>z-[60]</td><td>Modais nested (delete confirm dentro de drawer)</td></tr>
+<tr><td>z-[100]</td><td>Toast notifications</td></tr>
+</table>
+
+<h3>18.3 Breakpoints Responsivos</h3>
+<table>
+<tr><th>Breakpoint</th><th>Valor</th><th>Uso</th></tr>
+<tr><td><code>sm:</code></td><td>640px</td><td>KPI grids 2-col, botoes de toolbar</td></tr>
+<tr><td><code>md:</code></td><td>768px</td><td>KPI grids 3-col</td></tr>
+<tr><td><code>lg:</code></td><td>1024px</td><td>Sidebar show/hide, KPI grids 4-6 col, chart layouts</td></tr>
+</table>
+
+<h3>18.4 Transicoes / Animacoes</h3>
+<table>
+<tr><th>Padrao</th><th>Classes</th><th>Onde</th></tr>
+<tr><td>All properties 300ms</td><td><code>transition-all duration-300</code></td><td>Button, Input, Card, PasswordStrength</td></tr>
+<tr><td>Colors only 150ms</td><td><code>transition-colors</code></td><td>PhoneInput, Toast close, InternationalPhoneInput</td></tr>
+<tr><td>Framer spring (drawers)</td><td>damping: 25-30, stiffness: 300</td><td>Todos drawers e panels</td></tr>
+<tr><td>Framer spring (toggles)</td><td>stiffness: 500, damping: 30</td><td>Toggle thumbs</td></tr>
+<tr><td>Framer entrance</td><td>opacity 0→1, y 20→0 ou scale 0.95→1</td><td>Modais, cards, conversation items</td></tr>
+</table>
+
+<h3>18.5 Border Radius Recomendado (baseado na frequencia de uso)</h3>
+<table>
+<tr><th>Token</th><th>Valor</th><th>Uso Recomendado</th></tr>
+<tr><td><code>rounded-full</code></td><td>9999px</td><td>Avatars, badges, pills, dots</td></tr>
+<tr><td><code>rounded-2xl</code></td><td>16px</td><td>Cards, modais, containers grandes</td></tr>
+<tr><td><code>rounded-xl</code></td><td>12px</td><td>Buttons, inputs, toasts, items de lista</td></tr>
+<tr><td><code>rounded-lg</code></td><td>8px</td><td>Tooltips, dropdowns, elementos menores</td></tr>
+<tr><td><code>rounded-md</code></td><td>6px</td><td>Tags, mini badges</td></tr>
+</table>
+
+<h3>18.6 Shadow Scale Recomendado</h3>
+<table>
+<tr><th>Token</th><th>Uso Recomendado</th></tr>
+<tr><td><code>shadow-sm</code></td><td>Cards em repouso, botoes primarios</td></tr>
+<tr><td><code>shadow-md</code></td><td>Cards em hover</td></tr>
+<tr><td><code>shadow-lg</code></td><td>Dropdowns, menus, toasts</td></tr>
+<tr><td><code>shadow-xl</code></td><td>Menus contextuais grandes</td></tr>
+<tr><td><code>shadow-2xl</code></td><td>Modais, drawers, paineis flutuantes</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- FOOTER -->
+<!-- ============================================================ -->
+<div style="margin-top:64px;padding-top:32px;border-top:2px solid #e5e7eb;text-align:center;color:#9ca3af;font-size:12px">
+<p>Worder Design System Audit — Gerado automaticamente em 06/04/2026</p>
+<p>Branch: <code>claude/merge-branches-unified-0aI2u</code> | Commit: <code>e0ed077</code></p>
+<p>936 arquivos source analisados | 8 agentes de analise | ~220 componentes auditados</p>
+</div>
+
+</div><!-- /container -->
+</body>
+</html>
