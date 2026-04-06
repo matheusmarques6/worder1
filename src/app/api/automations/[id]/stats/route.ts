@@ -30,35 +30,61 @@ export async function GET(
   } else if (timeframe === '90d') {
     dateFilter = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
   }
-  // 'all' = no date filter
 
-  // Get automation runs for this automation
-  let runsQuery = supabase
-    .from('automation_runs')
-    .select('id')
-    .eq('automation_id', automationId);
+  try {
+    // Get automation runs for this automation
+    let runsQuery = supabase
+      .from('automation_runs')
+      .select('id')
+      .eq('automation_id', automationId);
 
-  if (dateFilter) {
-    runsQuery = runsQuery.gte('started_at', dateFilter);
-  }
+    if (dateFilter) {
+      runsQuery = runsQuery.gte('started_at', dateFilter);
+    }
 
-  const { data: runs } = await runsQuery;
-  const runIds = (runs || []).map(r => r.id);
+    const { data: runs, error: runsError } = await runsQuery;
 
-  if (runIds.length === 0) {
+    if (runsError) {
+      return NextResponse.json({ nodeStats: {}, totalRuns: 0, error: runsError.message });
+    }
+
+    const runIds = (runs || []).map(r => r.id);
+
+    if (runIds.length === 0) {
+      return NextResponse.json({ nodeStats: {}, totalRuns: 0 });
+    }
+
+    // Get step stats - select both 'result' and 'output' columns for compatibility
+    const { data: steps, error: stepsError } = await supabase
+      .from('automation_run_steps')
+      .select('node_id, node_type, status, result, output')
+      .in('run_id', runIds.slice(0, 500)); // Limit to prevent too-large IN clause
+
+    if (stepsError) {
+      // If 'result' column doesn't exist yet, try with just 'output'
+      const { data: fallbackSteps } = await supabase
+        .from('automation_run_steps')
+        .select('node_id, node_type, status, output')
+        .in('run_id', runIds.slice(0, 500));
+
+      return aggregateStats(fallbackSteps || [], runIds.length, timeframe, true);
+    }
+
+    return aggregateStats(steps || [], runIds.length, timeframe, false);
+  } catch (error) {
     return NextResponse.json({ nodeStats: {}, totalRuns: 0 });
   }
+}
 
-  // Get step stats grouped by node_id
-  const { data: steps } = await supabase
-    .from('automation_run_steps')
-    .select('node_id, node_type, status, result')
-    .in('run_id', runIds);
-
-  // Aggregate by node_id
+function aggregateStats(
+  steps: Array<Record<string, any>>,
+  totalRuns: number,
+  timeframe: string,
+  useOutput: boolean
+) {
   const nodeStats: Record<string, { sent: number; opened: number; clicked: number; revenue: number }> = {};
 
-  for (const step of steps || []) {
+  for (const step of steps) {
     if (!step.node_id) continue;
 
     if (!nodeStats[step.node_id]) {
@@ -71,8 +97,10 @@ export async function GET(
       stats.sent++;
     }
 
-    if (step.result) {
-      const result = typeof step.result === 'string' ? JSON.parse(step.result) : step.result;
+    // Use 'result' column if available, fallback to 'output'
+    const resultData = useOutput ? step.output : (step.result || step.output);
+    if (resultData) {
+      const result = typeof resultData === 'string' ? JSON.parse(resultData) : resultData;
       if (result.opened) stats.opened++;
       if (result.clicked) stats.clicked++;
       if (result.revenue) stats.revenue += Number(result.revenue) || 0;
@@ -81,7 +109,7 @@ export async function GET(
 
   return NextResponse.json({
     nodeStats,
-    totalRuns: runIds.length,
+    totalRuns,
     timeframe,
   });
 }

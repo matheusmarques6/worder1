@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     if (!auth) return authError();
 
     const { searchParams } = request.nextUrl;
-    const storeId = searchParams.get('store_id');
+    const storeId = searchParams.get('store_id') || searchParams.get('storeId');
 
     let query = supabaseAdmin
       .from('email_templates')
