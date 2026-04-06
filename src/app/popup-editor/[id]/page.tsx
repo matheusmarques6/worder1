@@ -6,8 +6,8 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  ArrowLeft, Save, Loader2, Monitor, Smartphone, Plus, Trash2, X,
-  ChevronDown, ChevronRight, GripVertical, Users, CalendarDays, Target,
+  ArrowLeft, Save, Loader2, Monitor, Smartphone, Plus, Trash2, X, Undo2, Redo2, Copy,
+  ChevronDown, ChevronRight, GripVertical, Users, CalendarDays, Target, Power,
   AtSign, ShieldCheck, Phone, TextCursorInput, User, Calendar,
   CircleDot, CheckSquare, Type, MousePointerClick, ImageIcon, Minus,
   GripHorizontal, Tag, Clock, Eye, Settings, Palette, Upload,
@@ -752,8 +752,8 @@ function ThemePanel({ design, onChange }: { design: PopupDesign; onChange: (d: P
 }
 
 // ── Sortable Block Wrapper ────────────────────────────────────────────────────
-function SortablePopupBlock({ block, isSelected, onSelect, onDelete }: {
-  block: Block; isSelected: boolean; onSelect: () => void; onDelete: () => void
+function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate }: {
+  block: Block; isSelected: boolean; onSelect: () => void; onDelete: () => void; onDuplicate: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
   return (
@@ -764,8 +764,9 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete }: {
         <GripVertical className="w-3.5 h-3.5" />
       </div>
       <BlockPreview block={block} />
-      <div className="absolute -top-2 right-2 hidden group-hover:flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5">
-        <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1 text-gray-400 hover:text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
+      <div className="absolute -top-2 right-2 hidden group-hover:flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5 z-10">
+        <button onClick={e => { e.stopPropagation(); onDuplicate() }} className="p-1 text-gray-400 hover:text-blue-500 rounded" title="Duplicar"><Plus className="w-3 h-3" /></button>
+        <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1 text-gray-400 hover:text-red-500 rounded" title="Remover"><Trash2 className="w-3 h-3" /></button>
       </div>
     </div>
   )
@@ -780,11 +781,15 @@ export default function PopupEditorPage() {
   const [design, setDesign] = useState<PopupDesign>(defaultDesign)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [formStatus, setFormStatus] = useState<'draft' | 'published'>('draft')
   const [preview, setPreview] = useState<'desktop' | 'mobile'>('desktop')
   const [activeStepIdx, setActiveStepIdx] = useState(0)
   const [showSuccess, setShowSuccess] = useState(false)
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [rightTab, setRightTab] = useState<'block' | 'behavior' | 'theme'>('theme')
+  // Undo/Redo
+  const [history, setHistory] = useState<string[]>([])
+  const [historyIdx, setHistoryIdx] = useState(-1)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   const activeStep = showSuccess ? design.successStep : design.steps[activeStepIdx]
@@ -800,10 +805,26 @@ export default function PopupEditorPage() {
     updateBlocks(arrayMove(blocks, oldIdx, newIdx))
   }, [activeStep])
 
+  const pushHistory = useCallback((d: PopupDesign) => {
+    const json = JSON.stringify(d)
+    setHistory(prev => [...prev.slice(0, historyIdx + 1), json].slice(-30))
+    setHistoryIdx(prev => prev + 1)
+  }, [historyIdx])
+
+  const undo = useCallback(() => {
+    if (historyIdx > 0) { setHistoryIdx(prev => prev - 1); setDesign(JSON.parse(history[historyIdx - 1])) }
+  }, [history, historyIdx])
+
+  const redo = useCallback(() => {
+    if (historyIdx < history.length - 1) { setHistoryIdx(prev => prev + 1); setDesign(JSON.parse(history[historyIdx + 1])) }
+  }, [history, historyIdx])
+
   // Load
   useEffect(() => {
     fetch(`/api/forms/${formId}`).then(r => r.json()).then(data => {
-      if (data.design_json) setDesign({ ...defaultDesign, ...data.design_json })
+      const form = data.form || data
+      if (form.design_json && Object.keys(form.design_json).length > 0) setDesign({ ...defaultDesign, ...form.design_json })
+      if (form.status) setFormStatus(form.status === 'published' ? 'published' : 'draft')
     }).catch(() => {}).finally(() => setLoading(false))
   }, [formId])
 
@@ -814,14 +835,30 @@ export default function PopupEditorPage() {
       await fetch(`/api/forms/${formId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ design_json: design, form_type: design.formType, behavior: design.behavior }),
+        body: JSON.stringify({ design_json: design, form_type: design.formType, behavior: design.behavior, status: formStatus }),
       })
     } finally { setSaving(false) }
-  }, [formId, design])
+  }, [formId, design, formStatus])
+
+  const handlePublish = useCallback(async () => {
+    const newStatus = formStatus === 'published' ? 'draft' : 'published'
+    setFormStatus(newStatus)
+    await fetch(`/api/forms/${formId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus, design_json: design, form_type: design.formType, behavior: design.behavior }),
+    })
+  }, [formId, design, formStatus])
 
   const updateBlocks = (blocks: Block[]) => {
-    if (showSuccess) setDesign(d => ({ ...d, successStep: { ...d.successStep, blocks } }))
-    else setDesign(d => ({ ...d, steps: d.steps.map((s, i) => i === activeStepIdx ? { ...s, blocks } : s) }))
+    const updater = (d: PopupDesign) => {
+      const newDesign = showSuccess
+        ? { ...d, successStep: { ...d.successStep, blocks } }
+        : { ...d, steps: d.steps.map((s, i) => i === activeStepIdx ? { ...s, blocks } : s) }
+      pushHistory(newDesign)
+      return newDesign
+    }
+    setDesign(updater)
   }
 
   const addBlock = (type: string) => {
@@ -831,8 +868,29 @@ export default function PopupEditorPage() {
     setRightTab('block')
   }
 
+  const duplicateBlock = (id: string) => {
+    const block = activeStep.blocks.find(b => b.id === id)
+    if (!block) return
+    const clone: Block = { id: uid(), type: block.type, props: { ...JSON.parse(JSON.stringify(block.props)) } }
+    const idx = activeStep.blocks.findIndex(b => b.id === id)
+    const newBlocks = [...activeStep.blocks]
+    newBlocks.splice(idx + 1, 0, clone)
+    updateBlocks(newBlocks)
+    setSelectedBlockId(clone.id)
+  }
+
   const updateBlock = (block: Block) => updateBlocks(activeStep.blocks.map(b => b.id === block.id ? block : b))
   const deleteBlock = (id: string) => { updateBlocks(activeStep.blocks.filter(b => b.id !== id)); if (selectedBlockId === id) setSelectedBlockId(null) }
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSave() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [undo, redo, handleSave])
 
   const addStep = () => {
     const s: Step = { id: uid(), name: `Etapa ${design.steps.length + 1}`, blocks: [] }
@@ -850,16 +908,30 @@ export default function PopupEditorPage() {
       {/* Top bar */}
       <header className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} className="p-1.5 rounded-md hover:bg-gray-100"><ArrowLeft className="w-5 h-5" /></button>
+          <button onClick={() => router.back()} className="p-1.5 rounded-md hover:bg-gray-100"><ArrowLeft className="w-5 h-5 text-gray-600" /></button>
+          <div className="h-5 w-px bg-gray-200" />
           <span className="text-sm font-semibold text-gray-800">Editor de Popup</span>
+          {formStatus === 'published' && <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 rounded-full">ATIVO</span>}
         </div>
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-          <button onClick={() => setPreview('desktop')} className={`p-1.5 rounded ${preview === 'desktop' ? 'bg-white shadow-sm' : ''}`}><Monitor className="w-4 h-4" /></button>
-          <button onClick={() => setPreview('mobile')} className={`p-1.5 rounded ${preview === 'mobile' ? 'bg-white shadow-sm' : ''}`}><Smartphone className="w-4 h-4" /></button>
+        <div className="flex items-center gap-2">
+          {/* Undo/Redo */}
+          <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Desfazer"><Undo2 className="w-4 h-4" /></button>
+          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Refazer"><Redo2 className="w-4 h-4" /></button>
+          <div className="h-5 w-px bg-gray-200" />
+          {/* Desktop/Mobile */}
+          <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+            <button onClick={() => setPreview('desktop')} className={`p-1.5 rounded ${preview === 'desktop' ? 'bg-white shadow-sm' : ''}`}><Monitor className="w-4 h-4" /></button>
+            <button onClick={() => setPreview('mobile')} className={`p-1.5 rounded ${preview === 'mobile' ? 'bg-white shadow-sm' : ''}`}><Smartphone className="w-4 h-4" /></button>
+          </div>
         </div>
-        <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-1.5 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar
+          </button>
+          <button onClick={handlePublish} className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${formStatus === 'published' ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}>
+            <Power className="w-4 h-4" /> {formStatus === 'published' ? 'Desativar' : 'Ativar'}
+          </button>
+        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -912,7 +984,8 @@ export default function PopupEditorPage() {
                       {activeStep.blocks.map(block => (
                         <SortablePopupBlock key={block.id} block={block} isSelected={selectedBlockId === block.id}
                           onSelect={() => { setSelectedBlockId(block.id); setRightTab('block') }}
-                          onDelete={() => deleteBlock(block.id)} />
+                          onDelete={() => deleteBlock(block.id)}
+                          onDuplicate={() => duplicateBlock(block.id)} />
                       ))}
                       {activeStep.blocks.length === 0 && (
                         <div className="py-16 text-center border-2 border-dashed border-gray-200 rounded-xl">
