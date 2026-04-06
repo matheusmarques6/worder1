@@ -69,6 +69,17 @@ export default function EditTemplatePage() {
     )
   }
 
+  const handleNameChange = async (name: string) => {
+    try {
+      await fetch(`/api/email/templates/${templateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      setTemplate((prev: any) => ({ ...prev, name }))
+    } catch {}
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-white">
       <WorderEditor
@@ -76,6 +87,7 @@ export default function EditTemplatePage() {
         design={template.design_json || template.design}
         onSave={handleSave}
         onBack={() => router.push('/email/templates')}
+        onNameChange={handleNameChange}
       />
     </div>
   )

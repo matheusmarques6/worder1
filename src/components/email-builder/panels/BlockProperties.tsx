@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import type { EmailBlock } from '../config/types'
 import { ViewFeedsModal, CreateFeedModal } from '../modals/ProductFeedModal'
 import { BrowseProductsModal, StaticProductsEditor } from '../modals/BrowseProductsModal'
+import { MediaLibraryModal } from '@/components/shared/MediaLibraryModal'
 
 const RichTextEditor = dynamic(() => import('../blocks/RichTextEditor').then(m => ({ default: m.RichTextEditor })), { ssr: false, loading: () => <div className="h-20 bg-gray-50 rounded-lg animate-pulse" /> })
 
@@ -233,6 +234,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
 
     case 'image': {
       const [imgTab, setImgTab] = useState<'styles' | 'display'>('styles')
+      const [showMediaLib, setShowMediaLib] = useState(false)
       return (
         <div className="space-y-0">
           {/* Tabs: Styles | Display */}
@@ -247,32 +249,33 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
               <div>
                 <p className="text-xs font-semibold text-gray-700 mb-1">Imagem</p>
                 <p className="text-[10px] text-gray-400 mb-2">Enviar uma imagem</p>
+                {showMediaLib && <MediaLibraryModal onSelect={(url) => { onChange('src', url); setShowMediaLib(false) }} onClose={() => setShowMediaLib(false)} />}
                 {p.src ? (
                   <div className="space-y-2">
                     <img src={p.src} alt={p.alt || ''} className="w-full h-32 object-contain bg-gray-50 rounded-lg border border-gray-200" />
                     <div className="flex gap-2">
-                      <label className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                        Trocar
-                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                          const file = e.target.files?.[0]; if (!file) return
-                          const form = new FormData(); form.append('file', file)
-                          try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('src', data.url) } catch { alert('Erro') }
-                        }} />
-                      </label>
+                      <button onClick={() => setShowMediaLib(true)} className="flex-1 py-2 text-xs font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600">Biblioteca</button>
                       <button onClick={() => onChange('src', '')} className="flex-1 py-2 text-xs font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
                     </div>
                   </div>
                 ) : (
-                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center bg-gray-50 hover:border-gray-400 transition-colors">
+                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center bg-gray-50 hover:border-gray-400 transition-colors"
+                    onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-brand-400', 'bg-brand-50') }}
+                    onDragLeave={e => { e.currentTarget.classList.remove('border-brand-400', 'bg-brand-50') }}
+                    onDrop={async e => { e.preventDefault(); e.currentTarget.classList.remove('border-brand-400', 'bg-brand-50'); const f = e.dataTransfer.files[0]; if (!f) return; const form = new FormData(); form.append('file', f); try { const res = await fetch('/api/content/media', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('src', data.url) } catch { alert('Erro') } }}
+                  >
                     <p className="text-sm font-medium text-gray-600 mb-1">Arraste e solte ou selecione</p>
-                    <p className="text-[10px] text-gray-400 mb-3">Aceita .png, .jpg, .jpeg, .gif, .webp<br/>Tamanho máximo: 10 MB</p>
+                    <p className="text-[10px] text-gray-400 mb-3">Aceita .png, .jpg, .jpeg, .gif, .webp<br/>Tamanho maximo: 10 MB</p>
                     <div className="flex justify-center gap-2">
+                      <button onClick={() => setShowMediaLib(true)} className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600">
+                        Biblioteca
+                      </button>
                       <label className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                        Selecionar imagem
+                        Upload
                         <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                           const file = e.target.files?.[0]; if (!file) return
                           const form = new FormData(); form.append('file', file)
-                          try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('src', data.url) } catch { alert('Erro') }
+                          try { const res = await fetch('/api/content/media', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('src', data.url) } catch { alert('Erro') }
                         }} />
                       </label>
                     </div>

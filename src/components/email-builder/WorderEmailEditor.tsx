@@ -23,6 +23,7 @@ interface WorderEmailEditorProps {
   design?: EmailDocument | Record<string, any>
   onSave: (design: Record<string, any>, html: string) => Promise<boolean>
   onBack: () => void
+  onNameChange?: (name: string) => void
 }
 
 // ── Sortable Block Wrapper (drag from anywhere on the block) ──
@@ -441,7 +442,7 @@ function allBlocks(doc: EmailDocument): EmailBlock[] {
 
 const LAYOUT_ICONS: Record<string, typeof Square> = { Square, Columns, PanelLeft, PanelRight, LayoutGrid }
 
-export default function WorderEmailEditor({ templateName, design, onSave, onBack }: WorderEmailEditorProps) {
+export default function WorderEmailEditor({ templateName, design, onSave, onBack, onNameChange }: WorderEmailEditorProps) {
   // ── State ──
   const [doc, setDoc] = useState<EmailDocument>(() => {
     if (design) return migrateV1toV2(design)
@@ -556,6 +557,24 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         blocks.push(
           { id: bid(), type: 'text', props: { contentHtml: '<h2 style="text-align:center;font-weight:bold;color:#111827;">Recomendados para você</h2>', fontSize: 22, color: '#111827', align: 'center', padding: { top: 24, right: 24, bottom: 16, left: 24 } } },
           { id: bid(), type: 'product-grid', props: { mode: 'static', columns: 2, rows: 1, showName: true, showPrice: true, showComparePrice: true, showButton: true, buttonText: 'Comprar', buttonColor: '#F97316', buttonTextColor: '#FFFFFF', stackOnMobile: true, padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
+        )
+        break
+      case 'image-hero':
+        section.styles.backgroundColor = '#111827'
+        section.styles.contentBackgroundColor = '#111827'
+        blocks.push(
+          { id: bid(), type: 'image', props: { src: '', alt: 'Hero Image', width: undefined, align: 'center', fillColumn: true, padding: { top: 0, right: 0, bottom: 0, left: 0 } } },
+          { id: bid(), type: 'text', props: { contentHtml: '<h1 style="text-align:center;font-size:28px;font-weight:bold;color:#FFFFFF;">Seu Titulo Aqui</h1>', fontSize: 28, color: '#FFFFFF', align: 'center', padding: { top: 24, right: 24, bottom: 8, left: 24 } } },
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;color:#D1D5DB;">Descricao breve do conteudo principal do email.</p>', fontSize: 15, color: '#D1D5DB', align: 'center', padding: { top: 0, right: 32, bottom: 16, left: 32 } } },
+          { id: bid(), type: 'button', props: { text: 'SAIBA MAIS', href: '#', bgColor: '#FFFFFF', textColor: '#111827', fontSize: 14, fontWeight: 'bold', borderRadius: 6, paddingH: 32, paddingV: 12, fullWidth: false, align: 'center', padding: { top: 0, right: 24, bottom: 32, left: 24 } } },
+        )
+        break
+      case 'testimonial':
+        section.styles.backgroundColor = '#F9FAFB'
+        section.styles.contentBackgroundColor = '#FFFFFF'
+        blocks.push(
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;font-size:18px;font-style:italic;color:#374151;line-height:1.7;">&ldquo;Este produto mudou completamente minha rotina. Recomendo para todos!&rdquo;</p>', fontSize: 18, color: '#374151', align: 'center', padding: { top: 32, right: 32, bottom: 8, left: 32 } } },
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;font-size:13px;color:#9CA3AF;font-weight:600;">— Maria Silva, Cliente</p>', fontSize: 13, color: '#9CA3AF', align: 'center', padding: { top: 0, right: 24, bottom: 32, left: 24 } } },
         )
         break
     }
@@ -765,7 +784,10 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   }, [doc, onSave, showToast])
 
   // ── Preview ──
+  const [previewLoading, setPreviewLoading] = useState(false)
   const handlePreview = useCallback(async () => {
+    if (showPreview || previewLoading) return
+    setPreviewLoading(true)
     // Resolve dynamic product blocks before rendering
     let resolvedDoc = doc
     const hasDynamicProducts = doc.sections?.some((s: any) =>
@@ -797,7 +819,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     html = html.replace(/\{\{view_in_browser_url\}\}/g, '#')
     setPreviewHtml(html)
     setShowPreview(true)
-  }, [doc])
+    setPreviewLoading(false)
+  }, [doc, showPreview, previewLoading])
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -832,7 +855,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
             <ArrowLeft size={18} />
           </button>
           <div className="h-5 w-px bg-gray-200" />
-          <span className="text-sm font-semibold text-gray-900 truncate max-w-[250px]">{templateName}</span>
+          {onNameChange ? (
+            <input
+              type="text"
+              defaultValue={templateName}
+              onBlur={e => { const v = e.target.value.trim(); if (v && v !== templateName) onNameChange(v) }}
+              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+              className="text-sm font-semibold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-brand-500 focus:outline-none truncate max-w-[250px] px-1 py-0.5 -ml-1 rounded"
+              title="Clique para editar o nome"
+            />
+          ) : (
+            <span className="text-sm font-semibold text-gray-900 truncate max-w-[250px]">{templateName}</span>
+          )}
           <span className="text-[9px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
@@ -848,8 +882,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           <button onClick={() => setShowMergeTags(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors" title="Merge Tags">
             <Tag size={14} /> Tags
           </button>
-          <button onClick={handlePreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-            <Eye size={14} /> Preview
+          <button onClick={handlePreview} disabled={previewLoading || showPreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50">
+            {previewLoading ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />} Preview
           </button>
           <button onClick={() => setShowSendTest(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
             <Send size={14} /> Teste
@@ -934,26 +968,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                     </button>
                   </div>
                 </div>
-                {/* Pre-built sections */}
-                <div className="p-3 border-b border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Seções Prontas</p>
-                  <div className="grid grid-cols-4 gap-1">
-                    {[
-                      { type: 'hero', label: 'Hero' },
-                      { type: 'cta', label: 'CTA' },
-                      { type: 'products', label: 'Produtos' },
-                      { type: 'footer', label: 'Rodapé' },
-                    ].map(s => (
-                      <button key={s.type} onClick={() => addPrebuiltSection(s.type)}
-                        className="flex flex-col items-center gap-1 py-2 px-1 rounded-lg hover:bg-gray-100 transition-all text-center">
-                        <div className="w-8 h-5 rounded bg-gray-200 border border-gray-300" />
-                        <span className="text-[9px] font-medium text-gray-600">{s.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {/* Block palette */}
-                <BlockPalette onAddBlock={addBlock} onAddSavedBlock={addSavedBlock} />
+                {/* Block palette with pre-built sections tab */}
+                <BlockPalette onAddBlock={addBlock} onAddSavedBlock={addSavedBlock} onAddPrebuiltSection={addPrebuiltSection} />
               </div>
             ) : (
               <StylesTab doc={doc} setDoc={setDoc} />

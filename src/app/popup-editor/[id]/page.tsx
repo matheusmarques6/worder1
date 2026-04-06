@@ -758,63 +758,8 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
   )
 }
 
-// ── Media Library Modal ───────────────────────────────────────────────────────
-function MediaLibraryModal({ onSelect, onClose }: { onSelect: (url: string) => void; onClose: () => void }) {
-  const [images, setImages] = useState<{ url: string; name?: string }[]>([])
-  const [uploading, setUploading] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    fetch('/api/content/media').then(r => r.json()).then(data => {
-      setImages(Array.isArray(data) ? data : data.images || data.media || [])
-    }).catch(() => {})
-  }, [])
-
-  const handleUpload = async (file: File) => {
-    setUploading(true)
-    const form = new FormData(); form.append('file', file)
-    try {
-      const res = await fetch('/api/images/upload', { method: 'POST', body: form })
-      const data = await res.json()
-      if (data.url) {
-        setImages(prev => [{ url: data.url, name: file.name }, ...prev])
-      }
-    } catch {} finally { setUploading(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-[640px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-800">Biblioteca de Imagens</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X className="w-4 h-4 text-gray-500" /></button>
-        </div>
-        <div className="px-5 py-3 border-b border-gray-100">
-          <button onClick={() => fileRef.current?.click()} disabled={uploading}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-50">
-            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {uploading ? 'Enviando...' : 'Enviar imagem'}
-          </button>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = '' }} />
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          {images.length === 0 ? (
-            <div className="py-12 text-center text-sm text-gray-400">Nenhuma imagem encontrada</div>
-          ) : (
-            <div className="grid grid-cols-4 gap-3">
-              {images.map((img, i) => (
-                <button key={i} onClick={() => { onSelect(img.url); onClose() }}
-                  className="group aspect-square rounded-lg border-2 border-gray-200 hover:border-orange-400 overflow-hidden transition-colors">
-                  <img src={img.url} alt={img.name || ''} className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
+// ── Media Library Modal (uses shared component) ─────────────────────────────
+import { MediaLibraryModal } from '@/components/shared/MediaLibraryModal'
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PopupEditorPage() {

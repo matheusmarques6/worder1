@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData()
     const file = formData.get('file') as File
+    const storeId = formData.get('store_id') as string | null
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
 
     const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
@@ -16,12 +17,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Tipo não permitido. Use JPG, PNG, GIF, WebP ou SVG.' }, { status: 400 })
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      return NextResponse.json({ error: 'Imagem muito grande. Máximo 5MB.' }, { status: 400 })
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Imagem muito grande. Máximo 10MB.' }, { status: 400 })
     }
 
     const ext = file.name.split('.').pop() || 'png'
-    const fileName = `${auth.user.organization_id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+
+    // Path: {org_id}/store_{store_id}/{file} or {org_id}/{file}
+    const folder = storeId
+      ? `${auth.user.organization_id}/store_${storeId}`
+      : auth.user.organization_id
+    const fileName = `${folder}/${uniqueName}`
+
     const buffer = Buffer.from(await file.arrayBuffer())
 
     const { error: uploadError } = await supabaseAdmin.storage
@@ -35,19 +43,12 @@ export async function POST(req: NextRequest) {
 
     const { data: urlData } = supabaseAdmin.storage.from('email-images').getPublicUrl(fileName)
 
-    // Save reference
-    try {
-      await supabaseAdmin.from('uploaded_images').insert({
-        organization_id: auth.user.organization_id,
-        file_name: file.name,
-        file_size: file.size,
-        mime_type: file.type,
-        url: urlData.publicUrl,
-        storage_path: fileName,
-      })
-    } catch {} // Table may not exist yet
-
-    return NextResponse.json({ url: urlData.publicUrl, fileName: file.name, size: file.size })
+    return NextResponse.json({
+      url: urlData.publicUrl,
+      fileName: file.name,
+      size: file.size,
+      storage_path: fileName,
+    })
   } catch (e: any) {
     console.error('[ImageUpload] Error:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })
