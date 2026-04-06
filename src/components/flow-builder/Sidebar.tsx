@@ -217,6 +217,17 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
     return () => clearTimeout(timer);
   }, [onTriggerSelect]);
 
+  // Keep sidebar trigger in sync with canvas trigger node
+  useEffect(() => {
+    const triggerNode = nodes.find(n => n.data?.category === 'trigger');
+    if (triggerNode) {
+      const triggerType = triggerNode.data?.nodeType || triggerNode.type || '';
+      if (triggerType && triggerType !== selectedTrigger && TRIGGER_OPTIONS.some(t => t.type === triggerType)) {
+        setSelectedTrigger(triggerType);
+      }
+    }
+  }, [nodes, selectedTrigger]);
+
   // Quando trocar o trigger, atualizar no canvas
   const handleTriggerChange = (triggerType: string) => {
     setSelectedTrigger(triggerType);
@@ -229,15 +240,26 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
     const existingTrigger = currentNodes.find(n => n.data.category === 'trigger');
 
     if (existingTrigger) {
-      // Atualizar o trigger existente
-      useFlowStore.getState().updateNode(existingTrigger.id, {
-        label: newTrigger.label,
-        description: newTrigger.description,
-        nodeType: newTrigger.type,
-        config: {},
-      });
+      // Update both node.type AND node.data for full sync
+      useFlowStore.getState().setNodes(
+        currentNodes.map(n =>
+          n.id === existingTrigger.id
+            ? {
+                ...n,
+                type: newTrigger.type,
+                data: {
+                  ...n.data,
+                  label: newTrigger.label,
+                  description: newTrigger.description,
+                  nodeType: newTrigger.type,
+                  icon: newTrigger.icon?.name || 'Zap',
+                  config: {},
+                },
+              }
+            : n
+        )
+      );
     } else {
-      // Criar novo trigger
       const triggerNode: FlowNode = {
         id: `trigger-${Date.now()}`,
         type: newTrigger.type,
@@ -247,6 +269,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
           description: newTrigger.description,
           category: 'trigger',
           nodeType: newTrigger.type,
+          icon: newTrigger.icon?.name || 'Zap',
           config: {},
         },
       };
@@ -310,7 +333,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
   };
 
   return (
-    <div className="w-[260px] bg-white border-r border-gray-200 flex flex-col h-full shrink-0">
+    <div className="w-[220px] bg-gray-50/80 border-r border-gray-200 flex flex-col h-full shrink-0">
       {/* Header - Seletor de Gatilho */}
       <div className="p-4 border-b border-gray-200">
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">

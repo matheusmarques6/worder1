@@ -252,21 +252,12 @@ const actionExecutors: Record<string, NodeExecutor> = {
     async execute({ config, context, credentials, isTest, supabase, organizationId }) {
       const email = context.contact?.email;
 
-      if (isTest) {
-        return {
-          status: 'success',
-          output: {
-            sent: true,
-            test: true,
-            to: email,
-            subject: config.subject,
-            templateId: config.templateId || null,
-          },
-        };
-      }
-
       if (!email) {
-        return { status: 'error', output: null, error: 'Contato sem email' };
+        return {
+          status: isTest ? 'success' : 'error',
+          output: isTest ? { sent: false, test: true, reason: 'Contato sem email' } : null,
+          error: isTest ? undefined : 'Contato sem email',
+        };
       }
 
       try {
@@ -303,8 +294,13 @@ const actionExecutors: Record<string, NodeExecutor> = {
           });
         };
 
-        const subject = resolveTags(config.subject || '');
+        let subject = resolveTags(config.subject || '');
         html = resolveTags(html);
+
+        // Annotate test emails
+        if (isTest) {
+          subject = `[TESTE] ${subject}`;
+        }
 
         // 3. Build sender info
         const senderName = config.senderName || (context as any).store?.name || 'Worder';
@@ -356,8 +352,8 @@ const actionExecutors: Record<string, NodeExecutor> = {
             return { status: 'error', output: result, error: result.message || 'Falha no envio Resend' };
           }
 
-          // 5. Record the send in email_sends table
-          if (organizationId) {
+          // 5. Record the send in email_sends table (skip for tests)
+          if (organizationId && !isTest) {
             await supabase.from('email_sends').insert({
               organization_id: organizationId,
               contact_id: context.contact?.id,
