@@ -90,39 +90,29 @@ const iconMap: Record<string, LucideIcon> = {
 
 const categoryConfig = {
   trigger: {
-    gradient: 'from-emerald-500/20 to-emerald-600/10',
-    border: 'border-emerald-500/30',
-    glow: 'shadow-emerald-500/20',
-    icon: 'text-emerald-400',
-    ring: 'ring-emerald-500/50',
+    leftBorder: 'border-l-emerald-500',
+    icon: 'text-emerald-600',
+    iconBg: 'bg-emerald-50',
   },
   action: {
-    gradient: 'from-blue-500/20 to-blue-600/10',
-    border: 'border-blue-500/30',
-    glow: 'shadow-blue-500/20',
-    icon: 'text-blue-400',
-    ring: 'ring-blue-500/50',
+    leftBorder: 'border-l-blue-500',
+    icon: 'text-blue-600',
+    iconBg: 'bg-blue-50',
   },
   condition: {
-    gradient: 'from-amber-500/20 to-amber-600/10',
-    border: 'border-amber-500/30',
-    glow: 'shadow-amber-500/20',
-    icon: 'text-amber-400',
-    ring: 'ring-amber-500/50',
+    leftBorder: 'border-l-amber-500',
+    icon: 'text-amber-600',
+    iconBg: 'bg-amber-50',
   },
   control: {
-    gradient: 'from-purple-500/20 to-purple-600/10',
-    border: 'border-purple-500/30',
-    glow: 'shadow-purple-500/20',
-    icon: 'text-purple-400',
-    ring: 'ring-purple-500/50',
+    leftBorder: 'border-l-purple-500',
+    icon: 'text-purple-600',
+    iconBg: 'bg-purple-50',
   },
   transform: {
-    gradient: 'from-pink-500/20 to-pink-600/10',
-    border: 'border-pink-500/30',
-    glow: 'shadow-pink-500/20',
-    icon: 'text-pink-400',
-    ring: 'ring-pink-500/50',
+    leftBorder: 'border-l-pink-500',
+    icon: 'text-pink-600',
+    iconBg: 'bg-pink-50',
   },
 };
 
@@ -243,16 +233,15 @@ const ExecutionOverlay = ({ status, executionTime, statusMessage }: {
 // PULSE ANIMATION RING
 // ============================================
 
-const PulseRing = ({ status, category }: { status?: string; category: string }) => {
+const PulseRing = ({ status }: { status?: string; category: string }) => {
   const cfg = statusConfig[status as keyof typeof statusConfig];
   if (!cfg?.pulse) return null;
 
   return (
     <motion.div
       className={cn(
-        'absolute inset-0 rounded-xl',
-        'ring-2',
-        status === 'running' ? 'ring-blue-500/50' : categoryConfig[category as keyof typeof categoryConfig]?.ring
+        'absolute inset-0 rounded-lg',
+        'ring-2 ring-blue-400/50',
       )}
       animate={{
         scale: [1, 1.05, 1],
@@ -284,7 +273,7 @@ const WhatsAppPreview = ({ config }: { config: Record<string, any> }) => {
     return text.split(/(\{\{[^}]+\}\})/).map((part, i) => {
       if (part.match(/\{\{[^}]+\}\}/)) {
         return (
-          <span key={i} className="bg-green-400/30 text-green-300 px-1 rounded text-[10px]">
+          <span key={i} className="bg-green-100 text-green-700 px-1 rounded text-[10px]">
             {part.replace(/\{\{|\}\}/g, '')}
           </span>
         );
@@ -295,7 +284,7 @@ const WhatsAppPreview = ({ config }: { config: Record<string, any> }) => {
 
   if (!message && !hasAudio && !hasMedia && !hasAttachment && !templateName) {
     return (
-      <div className="mt-2 pt-2 border-t border-gray-200">
+      <div className="mt-2 pt-2 border-t border-gray-100">
         <div className="text-[10px] text-gray-400 italic">
           Clique para configurar a mensagem
         </div>
@@ -304,7 +293,7 @@ const WhatsAppPreview = ({ config }: { config: Record<string, any> }) => {
   }
 
   return (
-    <div className="mt-2 pt-2 border-t border-gray-200">
+    <div className="mt-2 pt-2 border-t border-gray-100">
       {templateName && (
         <div className="text-[10px] text-gray-500 mb-1 flex items-center gap-1">
           <FileText className="w-3 h-3" />
@@ -312,9 +301,9 @@ const WhatsAppPreview = ({ config }: { config: Record<string, any> }) => {
         </div>
       )}
 
-      <div className="bg-[#005c4b] rounded-lg p-2 max-w-full relative">
+      <div className="bg-green-50 border border-green-200 rounded-lg p-2 max-w-full">
         {message && (
-          <p className="text-[11px] text-white/90 leading-relaxed break-words">
+          <p className="text-[11px] text-gray-700 leading-relaxed break-words">
             {highlightVariables(truncatedMessage)}
           </p>
         )}
@@ -341,13 +330,11 @@ const WhatsAppPreview = ({ config }: { config: Record<string, any> }) => {
         </div>
 
         {message && message.includes('http') && (
-          <div className="flex items-center gap-1 mt-1 text-[10px] text-blue-300">
+          <div className="flex items-center gap-1 mt-1 text-[10px] text-blue-600">
             <Link2 className="w-3 h-3" />
             <span>Contém link</span>
           </div>
         )}
-
-        <div className="absolute -left-1.5 top-2 w-3 h-3 bg-[#005c4b] transform rotate-45" />
       </div>
     </div>
   );
@@ -365,7 +352,7 @@ const SMSPreview = ({ config }: { config: Record<string, any> }) => {
     return text.split(/(\{\{[^}]+\}\})/).map((part, i) => {
       if (part.match(/\{\{[^}]+\}\}/)) {
         return (
-          <span key={i} className="bg-purple-400/30 text-purple-300 px-1 rounded text-[10px]">
+          <span key={i} className="bg-purple-100 text-purple-700 px-1 rounded text-[10px]">
             {part.replace(/\{\{|\}\}/g, '')}
           </span>
         );
@@ -376,7 +363,7 @@ const SMSPreview = ({ config }: { config: Record<string, any> }) => {
 
   if (!message) {
     return (
-      <div className="mt-2 pt-2 border-t border-gray-200">
+      <div className="mt-2 pt-2 border-t border-gray-100">
         <div className="text-[10px] text-gray-400 italic">
           Clique para configurar o SMS
         </div>
@@ -385,19 +372,19 @@ const SMSPreview = ({ config }: { config: Record<string, any> }) => {
   }
 
   return (
-    <div className="mt-2 pt-2 border-t border-gray-200">
-      <div className="bg-purple-600/30 border border-purple-500/30 rounded-lg p-2 max-w-full relative">
-        <div className="flex items-center gap-1 mb-1 text-[9px] text-purple-300 uppercase tracking-wider">
+    <div className="mt-2 pt-2 border-t border-gray-100">
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 max-w-full">
+        <div className="flex items-center gap-1 mb-1 text-[9px] text-purple-600 uppercase tracking-wider">
           <Phone className="w-3 h-3" />
           SMS
         </div>
-        <p className="text-[11px] text-white/90 leading-relaxed break-words">
+        <p className="text-[11px] text-gray-700 leading-relaxed break-words">
           {highlightVariables(truncatedMessage)}
         </p>
         <div className="text-right mt-1">
           <span className={cn(
             "text-[9px]",
-            message.length > 160 ? "text-amber-400" : "text-gray-400"
+            message.length > 160 ? "text-amber-600" : "text-gray-400"
           )}>
             {message.length}/160
           </span>
@@ -426,11 +413,11 @@ const EmailPreview = ({ config }: { config: Record<string, any> }) => {
   }
 
   return (
-    <div className="mt-2 pt-2 border-t border-gray-200">
-      <div className="bg-blue-600/20 border border-blue-500/30 rounded-lg p-2">
+    <div className="mt-2 pt-2 border-t border-gray-100">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
         {subject && (
           <div className="flex items-center gap-1 mb-1">
-            <Mail className="w-3 h-3 text-blue-400" />
+            <Mail className="w-3 h-3 text-blue-600" />
             <span className="text-[10px] text-gray-700 font-medium truncate">{subject}</span>
           </div>
         )}
@@ -465,10 +452,10 @@ const DelayPreview = ({ config }: { config: Record<string, any> }) => {
   };
 
   return (
-    <div className="mt-2 pt-2 border-t border-gray-200">
-      <div className="bg-purple-600/30 border border-purple-500/40 rounded-lg px-3 py-2 flex items-center justify-center gap-2">
-        <Clock className="w-4 h-4 text-purple-400" />
-        <span className="text-sm font-medium text-purple-300">
+    <div className="mt-2 pt-2 border-t border-gray-100">
+      <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 flex items-center justify-center gap-2">
+        <Clock className="w-4 h-4 text-purple-600" />
+        <span className="text-sm font-medium text-purple-700">
           {getTimeText()}
         </span>
       </div>
@@ -498,8 +485,8 @@ const TagPreview = ({ config, isRemove }: { config: Record<string, any>; isRemov
       <div className={cn(
         "inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs",
         isRemove
-          ? "bg-red-500/20 border border-red-500/30 text-red-300"
-          : "bg-blue-500/20 border border-blue-500/30 text-blue-300"
+          ? "bg-red-50 border border-red-200 text-red-700"
+          : "bg-blue-50 border border-blue-200 text-blue-700"
       )}>
         <Tag className="w-3 h-3" />
         <span>{tagName}</span>
@@ -523,11 +510,11 @@ const ConditionPreview = ({ config, nodeType }: { config: Record<string, any>; n
     return (
       <div className="mt-2 pt-2 border-t border-gray-200">
         <div className="flex items-center gap-2">
-          <div className="flex-1 bg-green-500/20 rounded px-2 py-1 text-center">
-            <span className="text-[10px] text-green-400 font-medium">{percentA}% A</span>
+          <div className="flex-1 bg-blue-50 border border-blue-200 rounded px-2 py-1 text-center">
+            <span className="text-[10px] text-blue-700 font-medium">{percentA}% A</span>
           </div>
-          <div className="flex-1 bg-amber-500/20 rounded px-2 py-1 text-center">
-            <span className="text-[10px] text-amber-400 font-medium">{100 - percentA}% B</span>
+          <div className="flex-1 bg-orange-50 border border-orange-200 rounded px-2 py-1 text-center">
+            <span className="text-[10px] text-orange-700 font-medium">{100 - percentA}% B</span>
           </div>
         </div>
       </div>
@@ -559,9 +546,9 @@ const ConditionPreview = ({ config, nodeType }: { config: Record<string, any>; n
 
   return (
     <div className="mt-2 pt-2 border-t border-gray-200">
-      <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-2 py-1.5 text-center">
+      <div className="bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-center">
         <span className="text-[10px] text-gray-700">
-          {field} <span className="text-amber-400 font-medium">{operatorLabels[operator] || operator}</span> {value}
+          {field} <span className="text-amber-700 font-medium">{operatorLabels[operator] || operator}</span> {value}
         </span>
       </div>
     </div>
@@ -575,7 +562,7 @@ const ConditionPreview = ({ config, nodeType }: { config: Record<string, any>; n
 function BaseNodeComponent(props: BaseNodeProps) {
   const { id, data, selected } = props;
   const { category, label, description, icon, status, executionTime, statusMessage, disabled, nodeType, config: nodeConfig } = data;
-  const catConfig = categoryConfig[category] || categoryConfig.action;
+  const catConfig = categoryConfig[category as keyof typeof categoryConfig] || categoryConfig.action;
   const statusCfg = statusConfig[status as keyof typeof statusConfig] || statusConfig.idle;
   const IconComponent = icon ? iconMap[icon] : Zap;
   const selectNode = useFlowStore((s) => s.selectNode);
@@ -616,23 +603,21 @@ function BaseNodeComponent(props: BaseNodeProps) {
 
   return (
     <motion.div
-      initial={{ scale: 0.8, opacity: 0 }}
+      initial={{ scale: 0.95, opacity: 0 }}
       animate={{
         scale: 1,
         opacity: disabled ? 0.5 : 1,
       }}
       className={cn(
         'relative min-w-[280px] max-w-[360px]',
-        'rounded-xl border backdrop-blur-sm',
-        'bg-gradient-to-br',
-        catConfig.gradient,
-        hasResult ? statusCfg.borderColor : catConfig.border,
-        selected && `ring-2 ring-gray-400/50 ${catConfig.glow} shadow-lg`,
-        isExecuting && 'shadow-xl shadow-blue-500/30',
-        hasResult && status === 'success' && 'shadow-lg shadow-green-500/20',
-        hasResult && status === 'error' && 'shadow-lg shadow-red-500/20',
-        'transition-all duration-300',
-        'hover:shadow-lg cursor-pointer'
+        'rounded-lg bg-white border border-gray-200 border-l-4 shadow-sm',
+        catConfig.leftBorder,
+        selected && 'ring-2 ring-blue-500 ring-offset-2 shadow-md',
+        isExecuting && 'shadow-md ring-2 ring-blue-400',
+        hasResult && status === 'success' && 'ring-2 ring-green-400',
+        hasResult && status === 'error' && 'ring-2 ring-red-400',
+        'transition-shadow duration-200',
+        'hover:shadow-md cursor-pointer'
       )}
       onClick={() => selectNode(id)}
     >
@@ -650,31 +635,26 @@ function BaseNodeComponent(props: BaseNodeProps) {
           position={Position.Top}
           className={cn(
             '!w-3 !h-3 !border-2 !bg-white !-top-1.5',
-            hasResult && status === 'success' ? '!border-green-500/50' : '!border-gray-300',
-            'hover:!bg-gray-100'
+            hasResult && status === 'success' ? '!border-green-500' : '!border-gray-300',
+            'hover:!bg-gray-50'
           )}
         />
       )}
 
       <div className="p-3">
         <div className="flex items-start gap-3">
-          <motion.div
+          <div
             className={cn(
-              'p-2 rounded-lg bg-gray-50 border border-gray-200',
-              isExecuting ? 'text-blue-400' : catConfig.icon,
-              hasResult && status === 'success' && 'text-green-400 border-green-500/30',
-              hasResult && status === 'error' && 'text-red-400 border-red-500/30',
+              'p-2 rounded-lg',
+              catConfig.iconBg,
+              isExecuting && 'text-blue-600 bg-blue-50',
+              !isExecuting && catConfig.icon,
+              hasResult && status === 'success' && 'text-green-600 bg-green-50',
+              hasResult && status === 'error' && 'text-red-600 bg-red-50',
             )}
-            animate={isExecuting ? {
-              scale: [1, 1.1, 1],
-            } : {}}
-            transition={{
-              duration: 0.5,
-              repeat: isExecuting ? Infinity : 0,
-            }}
           >
             {IconComponent && <IconComponent className="w-5 h-5" />}
-          </motion.div>
+          </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-medium text-gray-900 truncate">{label}</h3>
             {description && (
@@ -689,20 +669,20 @@ function BaseNodeComponent(props: BaseNodeProps) {
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
-            className="mt-2 pt-2 border-t border-gray-200"
+            className="mt-2 pt-2 border-t border-gray-100"
           >
             <div className="flex items-center justify-between">
               <span className={cn(
                 'text-xs font-medium',
-                status === 'success' && 'text-green-400',
-                status === 'error' && 'text-red-400',
+                status === 'success' && 'text-green-600',
+                status === 'error' && 'text-red-600',
                 status === 'skipped' && 'text-gray-500',
               )}>
-                {status === 'success' && '✓ Sucesso'}
-                {status === 'error' && '✗ Erro'}
-                {status === 'skipped' && '→ Pulado'}
+                {status === 'success' && 'Sucesso'}
+                {status === 'error' && 'Erro'}
+                {status === 'skipped' && 'Pulado'}
               </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-50 text-gray-400">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
                 {executionTime}ms
               </span>
             </div>
@@ -716,16 +696,16 @@ function BaseNodeComponent(props: BaseNodeProps) {
             type="source"
             position={Position.Bottom}
             id="true"
-            className="!w-3 !h-3 !border-2 !border-green-500/50 !bg-green-500/30 hover:!bg-green-500/50 !-bottom-1.5 !left-1/3"
+            className="!w-3 !h-3 !border-2 !border-green-500 !bg-green-100 hover:!bg-green-200 !-bottom-1.5 !left-1/3"
           />
           <Handle
             type="source"
             position={Position.Bottom}
             id="false"
-            className="!w-3 !h-3 !border-2 !border-red-500/50 !bg-red-500/30 hover:!bg-red-500/50 !-bottom-1.5 !left-2/3"
+            className="!w-3 !h-3 !border-2 !border-red-500 !bg-red-100 hover:!bg-red-200 !-bottom-1.5 !left-2/3"
           />
-          <div className="absolute -bottom-6 left-1/3 -translate-x-1/2 text-[10px] text-green-400">Sim</div>
-          <div className="absolute -bottom-6 left-2/3 -translate-x-1/2 text-[10px] text-red-400">Não</div>
+          <div className="absolute -bottom-6 left-1/3 -translate-x-1/2 text-[10px] text-green-600 font-medium">Sim</div>
+          <div className="absolute -bottom-6 left-2/3 -translate-x-1/2 text-[10px] text-red-600 font-medium">Não</div>
         </>
       ) : (
         <Handle
@@ -733,8 +713,8 @@ function BaseNodeComponent(props: BaseNodeProps) {
           position={Position.Bottom}
           className={cn(
             '!w-3 !h-3 !border-2 !bg-white !-bottom-1.5',
-            hasResult && status === 'success' ? '!border-green-500/50' : '!border-gray-300',
-            'hover:!bg-gray-100'
+            hasResult && status === 'success' ? '!border-green-500' : '!border-gray-300',
+            'hover:!bg-gray-50'
           )}
         />
       )}

@@ -10,8 +10,11 @@ import {
   Loader2,
   Check,
   AlertCircle,
-  Zap,
+  AlertTriangle,
   Pencil,
+  Undo2,
+  Redo2,
+  BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useIsValidFlow } from '@/stores/flowStore';
@@ -37,6 +40,10 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   const isDirty = useFlowStore((state) => state.isDirty);
   const setDirty = useFlowStore((state) => state.setDirty);
   const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
+  const undo = useFlowStore((state) => state.undo);
+  const redo = useFlowStore((state) => state.redo);
+  const canUndo = useFlowStore((state) => state.canUndo);
+  const canRedo = useFlowStore((state) => state.canRedo);
 
   const { valid, errors } = useIsValidFlow();
 
@@ -197,11 +204,42 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
 
       {/* Right Section - Actions */}
       <div className="flex items-center gap-1 sm:gap-2 lg:gap-3 flex-shrink-0">
-        {/* Validation indicator - hidden on small screens */}
+        {/* Undo/Redo */}
+        <div className="hidden sm:flex items-center gap-1">
+          <button
+            onClick={undo}
+            disabled={!canUndo()}
+            className={cn(
+              'p-2 rounded-lg transition-colors',
+              canUndo() ? 'hover:bg-gray-100 text-gray-500 hover:text-gray-900' : 'text-gray-300 cursor-not-allowed'
+            )}
+            title="Desfazer (Ctrl+Z)"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={redo}
+            disabled={!canRedo()}
+            className={cn(
+              'p-2 rounded-lg transition-colors',
+              canRedo() ? 'hover:bg-gray-100 text-gray-500 hover:text-gray-900' : 'text-gray-300 cursor-not-allowed'
+            )}
+            title="Refazer (Ctrl+Shift+Z)"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Validation indicator - Alerts */}
         {!valid && errors.length > 0 && (
-          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 border border-amber-500/30 rounded-lg">
-            <AlertCircle className="w-4 h-4 text-amber-400" />
-            <span className="text-xs text-amber-400 max-w-[200px] truncate">{errors[0]}</span>
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+            <span className="text-xs text-amber-700 max-w-[200px] truncate">{errors[0]}</span>
+            {errors.length > 1 && (
+              <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                +{errors.length - 1}
+              </span>
+            )}
           </div>
         )}
 

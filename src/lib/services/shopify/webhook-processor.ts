@@ -102,9 +102,40 @@ export async function processShopifyWebhook(
         result = { success: true, action: `ignored_unknown_topic: ${topic}` };
     }
     
+    // Insert event_log for automation event processor to pick up
+    const eventTypeMap: Record<string, string> = {
+      'customers/create': 'customer_created',
+      'customers/update': 'customer_updated',
+      'orders/create': 'placed_order',
+      'orders/paid': 'order_paid',
+      'orders/fulfilled': 'fulfilled_order',
+      'orders/cancelled': 'cancelled_order',
+      'checkouts/create': 'checkout_started',
+      'checkouts/update': 'checkout_started',
+    };
+
+    const automationEventType = eventTypeMap[topic];
+    if (automationEventType && result.success && result.contactId) {
+      const { error: eventLogError } = await supabase.from('event_logs').insert({
+        organization_id: store.organization_id,
+        event_type: automationEventType,
+        contact_id: result.contactId,
+        payload: {
+          ...payload,
+          store_id: storeId,
+          shopify_topic: topic,
+        },
+        source: 'shopify_webhook',
+        processed: false,
+      });
+      if (eventLogError) {
+        console.error('[Webhook] Failed to insert event_log for automation:', eventLogError.message);
+      }
+    }
+
     await markEventProcessed(eventId);
     return result;
-    
+
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
     console.error(`❌ Error processing webhook ${topic}:`, err);

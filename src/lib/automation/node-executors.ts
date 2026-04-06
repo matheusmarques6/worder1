@@ -103,6 +103,51 @@ const triggerExecutors: Record<string, NodeExecutor> = {
       return { status: 'success', output: context.trigger?.data || {} };
     },
   },
+  trigger_checkout_abandoned: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_fulfilled_order: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_cancelled_order: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_viewed_product: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_added_to_cart: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_form_submitted: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_custom_event: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_date: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_segment: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
 };
 
 // ============================================
@@ -204,17 +249,18 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
   // ========== EMAIL ==========
   action_email: {
-    async execute({ config, context, credentials, isTest }) {
+    async execute({ config, context, credentials, isTest, supabase, organizationId }) {
       const email = context.contact?.email;
 
       if (isTest) {
         return {
           status: 'success',
-          output: { 
-            sent: true, 
-            test: true, 
+          output: {
+            sent: true,
+            test: true,
             to: email,
             subject: config.subject,
+            templateId: config.templateId || null,
           },
         };
       }
@@ -223,11 +269,52 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Contato sem email' };
       }
 
-      const provider = credentials?.type || 'resend';
-
       try {
+        // 1. Resolve HTML content - fetch template if specified
+        let html: string;
+        if (config.templateId && config.templateId !== 'none') {
+          const { data: template, error: tplErr } = await supabase
+            .from('email_templates')
+            .select('design_json, html, name')
+            .eq('id', config.templateId)
+            .single();
+
+          if (tplErr || !template) {
+            return { status: 'error', output: null, error: `Template ${config.templateId} not found` };
+          }
+
+          // Use pre-rendered HTML from template
+          html = template.html || '';
+          if (!html) {
+            html = '<p>Template sem conteúdo HTML renderizado</p>';
+          }
+        } else {
+          html = config.html || config.body || '<p>Email sem conteúdo</p>';
+        }
+
+        // 2. Resolve merge tags in subject and html
+        const resolveTags = (text: string): string => {
+          return text.replace(/\{\{([\w.]+)\}\}/g, (match: string, path: string) => {
+            const parts = path.split('.');
+            if (parts[0] === 'contact') return (context.contact as Record<string, any>)?.[parts[1]] || '';
+            if (parts[0] === 'event') return context.trigger?.data?.[parts[1]] || '';
+            if (parts[0] === 'store') return (context as Record<string, any>).store?.[parts[1]] || '';
+            return match;
+          });
+        };
+
+        const subject = resolveTags(config.subject || '');
+        html = resolveTags(html);
+
+        // 3. Build sender info
+        const senderName = config.senderName || (context as any).store?.name || 'Worder';
+        const senderEmail = config.senderEmail || credentials?.defaultFrom || 'noreply@example.com';
+        const from = `${senderName} <${senderEmail}>`;
+
+        // 4. Send via Resend (default provider)
+        const provider = credentials?.type || 'resend';
+
         if (provider === 'emailSendgrid' || provider === 'sendgrid') {
-          // SendGrid
           const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
             method: 'POST',
             headers: {
@@ -236,22 +323,19 @@ const actionExecutors: Record<string, NodeExecutor> = {
             },
             body: JSON.stringify({
               personalizations: [{ to: [{ email }] }],
-              from: { email: config.from || credentials?.defaultFrom },
-              subject: config.subject,
-              content: [
-                { type: 'text/html', value: config.html || config.body },
-              ],
+              from: { email: senderEmail, name: senderName },
+              subject,
+              content: [{ type: 'text/html', value: html }],
             }),
           });
 
           if (!response.ok) {
             const error = await response.text();
-            return { status: 'error', output: { error }, error: 'Falha no envio' };
+            return { status: 'error', output: { error }, error: 'Falha no envio SendGrid' };
           }
 
-          return { status: 'success', output: { sent: true, provider: 'sendgrid' } };
+          return { status: 'success', output: { sent: true, provider: 'sendgrid', to: email } };
         } else {
-          // Resend (default)
           const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
@@ -259,21 +343,32 @@ const actionExecutors: Record<string, NodeExecutor> = {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              from: config.from || credentials?.defaultFrom || 'noreply@example.com',
+              from,
               to: email,
-              subject: config.subject,
-              html: config.html || config.body,
-              text: config.text,
+              subject,
+              html,
             }),
           });
 
           const result = await response.json();
-          
+
           if (!response.ok) {
-            return { status: 'error', output: result, error: result.message || 'Falha no envio' };
+            return { status: 'error', output: result, error: result.message || 'Falha no envio Resend' };
           }
 
-          return { status: 'success', output: { ...result, provider: 'resend' } };
+          // 5. Record the send in email_sends table
+          if (organizationId) {
+            await supabase.from('email_sends').insert({
+              organization_id: organizationId,
+              contact_id: context.contact?.id,
+              email_template_id: config.templateId || null,
+              subject,
+              status: 'sent',
+              resend_id: result?.id,
+            }).catch(() => {}); // non-blocking
+          }
+
+          return { status: 'success', output: { ...result, provider: 'resend', to: email } };
         }
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };

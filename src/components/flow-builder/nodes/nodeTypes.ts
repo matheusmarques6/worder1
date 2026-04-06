@@ -32,6 +32,16 @@ import {
   UserMinus,
   Target,
   Globe,
+  Eye,
+  PlusCircle,
+  FileText,
+  Package,
+  Truck,
+  Smartphone,
+  UserCog,
+  List,
+  Shuffle,
+  MessageCircle,
   LucideIcon,
 } from 'lucide-react';
 
@@ -199,7 +209,55 @@ export const triggerTypes: NodeTypeDefinition[] = [
     type: 'trigger_viewed_product',
     label: 'Visualizou Produto',
     description: 'Dispara quando contato visualiza um produto',
-    icon: Target,
+    icon: Eye,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_checkout_abandoned',
+    label: 'Checkout Abandonado',
+    description: 'Checkout iniciado sem conclusão',
+    icon: CreditCard,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_fulfilled_order',
+    label: 'Pedido Enviado',
+    description: 'Dispara quando pedido é enviado',
+    icon: Truck,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_cancelled_order',
+    label: 'Pedido Cancelado',
+    description: 'Dispara quando pedido é cancelado',
+    icon: XCircle,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_added_to_cart',
+    label: 'Produto Adicionado',
+    description: 'Produto adicionado ao carrinho',
+    icon: PlusCircle,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_form_submitted',
+    label: 'Formulário Enviado',
+    description: 'Dispara quando formulário é enviado',
+    icon: FileText,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_custom_event',
+    label: 'Evento Customizado',
+    description: 'Dispara em evento personalizado',
+    icon: Zap,
     category: 'trigger',
     color: '#10b981',
   },
@@ -284,11 +342,27 @@ export const actionTypes: NodeTypeDefinition[] = [
   },
   {
     type: 'action_webhook',
-    label: 'HTTP Request',
+    label: 'Enviar Webhook',
     description: 'Faz requisição HTTP externa',
-    icon: Globe,
+    icon: Send,
     category: 'action',
-    color: '#3b82f6',
+    color: '#f97316',
+  },
+  {
+    type: 'action_add_to_list',
+    label: 'Adicionar à Lista',
+    description: 'Adiciona contato a uma lista',
+    icon: List,
+    category: 'action',
+    color: '#64748b',
+  },
+  {
+    type: 'action_remove_from_list',
+    label: 'Remover da Lista',
+    description: 'Remove contato de uma lista',
+    icon: List,
+    category: 'action',
+    color: '#64748b',
   },
 ];
 
@@ -386,38 +460,52 @@ export const allNodeTypes: NodeTypeDefinition[] = [
 // ============================================
 
 export const nodeTypes: Record<string, any> = {
-  // Triggers
+  // Triggers - E-commerce
   trigger_order: TriggerNode,
   trigger_order_paid: TriggerNode,
   trigger_abandon: TriggerNode,
+  trigger_checkout_abandoned: TriggerNode,
+  trigger_fulfilled_order: TriggerNode,
+  trigger_cancelled_order: TriggerNode,
+  trigger_viewed_product: TriggerNode,
+  trigger_added_to_cart: TriggerNode,
+  // Triggers - Contato
   trigger_signup: TriggerNode,
+  trigger_form_submitted: TriggerNode,
   trigger_tag: TriggerNode,
+  trigger_segment: TriggerNode,
+  // Triggers - Especiais
+  trigger_date: TriggerNode,
+  trigger_custom_event: TriggerNode,
+  trigger_webhook: TriggerNode,
+  // Triggers - CRM
   trigger_deal_created: TriggerNode,
   trigger_deal_stage: TriggerNode,
   trigger_deal_won: TriggerNode,
   trigger_deal_lost: TriggerNode,
-  trigger_date: TriggerNode,
-  trigger_segment: TriggerNode,
-  trigger_webhook: TriggerNode,
   trigger_whatsapp: TriggerNode,
+  // Legacy
   trigger_list_added: TriggerNode,
   trigger_order_fulfilled: TriggerNode,
   trigger_order_pending: TriggerNode,
   trigger_inactivity: TriggerNode,
-  trigger_viewed_product: TriggerNode,
 
   // Actions
-  action_whatsapp: ActionNode,
   action_email: ActionNode,
+  action_whatsapp: ActionNode,
   action_sms: ActionNode,
+  action_webhook: ActionNode,
+  action_notify: ActionNode,
   action_tag: ActionNode,
   action_remove_tag: ActionNode,
   action_update: ActionNode,
   action_create_deal: ActionNode,
   action_move_deal: ActionNode,
-  action_notify: ActionNode,
-  action_webhook: ActionNode,
-  
+  action_add_to_list: ActionNode,
+  action_remove_from_list: ActionNode,
+  action_javascript: ActionNode,
+  action_chatgpt: ActionNode,
+
   // Conditions
   condition_has_tag: ConditionNode,
   condition_field: ConditionNode,
@@ -425,12 +513,16 @@ export const nodeTypes: Record<string, any> = {
   condition_order_value: ConditionNode,
   logic_split: ConditionNode,
   logic_filter: ConditionNode,
-  
+
   // Control
   control_delay: ControlNode,
   control_delay_until: ControlNode,
+  control_delay_condition: ControlNode,
+  control_delay_date: ControlNode,
+  control_delay_weekday: ControlNode,
+  control_exit: ControlNode,
   logic_delay: ControlNode,
-  
+
   // Generic fallbacks
   triggerNode: TriggerNode,
   actionNode: ActionNode,

@@ -103,6 +103,7 @@ interface FlowStore {
     whatsappCredentialId?: string;
     emailCredentialId?: string;
     smsCredentialId?: string;
+    storeId?: string;
   };
   
   // History (undo/redo)

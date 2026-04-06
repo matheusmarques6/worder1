@@ -19,6 +19,14 @@
     {
       "path": "/api/cron/check-dates",
       "schedule": "1 0 * * *"
+    },
+    {
+      "path": "/api/workers/automation-delay",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/workers/abandoned-cart",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

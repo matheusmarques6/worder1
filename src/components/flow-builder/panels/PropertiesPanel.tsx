@@ -258,9 +258,9 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
 
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                  <p className="text-[11px] text-emerald-300">
-                    🎂 Ideal para campanhas de aniversário, renovações, etc.
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <p className="text-[11px] text-emerald-700">
+                    Ideal para campanhas de aniversário, renovações, etc.
                   </p>
                 </div>
               </>
@@ -317,9 +317,9 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   </label>
                 </div>
 
-                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-                  <p className="text-[11px] text-green-300">
-                    💬 Dispara quando uma mensagem WhatsApp é recebida
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-[11px] text-green-700">
+                    Dispara quando uma mensagem WhatsApp é recebida
                   </p>
                 </div>
               </>
@@ -408,9 +408,9 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   </>
                 )}
                 
-                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                  <p className="text-[11px] text-blue-300">
-                    💡 Exemplo: Dispara quando deal mover de "Qualificação" para "Proposta"
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-[11px] text-blue-700">
+                    Exemplo: Dispara quando deal mover de "Qualificação" para "Proposta"
                   </p>
                 </div>
               </>
@@ -518,35 +518,108 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             )}
 
             {/* DELAY NODES */}
-            {(selectedNode.data.nodeType === 'control_delay' || 
+            {(selectedNode.data.nodeType === 'control_delay' ||
               selectedNode.data.nodeType === 'logic_delay') && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Tempo</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={selectedNode.data.config?.value || 1}
-                    onChange={(e) => handleUpdate('value', parseInt(e.target.value) || 1)}
-                    className={cn(
-                      'w-full px-3 py-2 rounded-lg',
-                      'bg-white border border-gray-200',
-                      'text-sm text-gray-700',
-                      'focus:outline-none focus:border-blue-500/50'
-                    )}
-                  />
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-xs text-gray-600/60">Duração</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={selectedNode.data.config?.value || 1}
+                      onChange={(e) => handleUpdate('value', parseInt(e.target.value) || 1)}
+                      className={cn(
+                        'w-full px-3 py-2 rounded-lg',
+                        'bg-white border border-gray-200',
+                        'text-sm text-gray-700',
+                        'focus:outline-none focus:border-blue-500/50'
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-gray-600/60">Unidade</label>
+                    <SelectField
+                      value={selectedNode.data.config?.unit || 'hours'}
+                      onChange={(v) => handleUpdate('unit', v)}
+                      options={[
+                        { value: 'minutes', label: 'Minutos' },
+                        { value: 'hours', label: 'Horas' },
+                        { value: 'days', label: 'Dias' },
+                        { value: 'weeks', label: 'Semanas' },
+                      ]}
+                    />
+                  </div>
                 </div>
+
+                {/* Day restrictions */}
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Unidade</label>
-                  <SelectField
-                    value={selectedNode.data.config?.unit || 'hours'}
-                    onChange={(v) => handleUpdate('unit', v)}
-                    options={[
-                      { value: 'minutes', label: 'Minutos' },
-                      { value: 'hours', label: 'Horas' },
-                      { value: 'days', label: 'Dias' },
-                    ]}
-                  />
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedNode.data.config?.restrictDays || false}
+                      onChange={(e) => handleUpdate('restrictDays', e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-500"
+                    />
+                    <span className="text-xs text-gray-600">Enviar apenas em dias específicos</span>
+                  </label>
+                  {selectedNode.data.config?.restrictDays && (
+                    <div className="flex gap-1 flex-wrap">
+                      {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((day, i) => {
+                        const days = selectedNode.data.config?.allowedDays || [0,1,2,3,4];
+                        const isSelected = days.includes(i);
+                        return (
+                          <button
+                            key={day}
+                            onClick={() => {
+                              const newDays = isSelected
+                                ? days.filter((d: number) => d !== i)
+                                : [...days, i].sort();
+                              handleUpdate('allowedDays', newDays);
+                            }}
+                            className={cn(
+                              'px-2 py-1 rounded text-xs font-medium border transition-colors',
+                              isSelected
+                                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                : 'bg-white border-gray-200 text-gray-400'
+                            )}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Time window */}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedNode.data.config?.restrictTime || false}
+                      onChange={(e) => handleUpdate('restrictTime', e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-500"
+                    />
+                    <span className="text-xs text-gray-600">Enviar dentro de horário específico</span>
+                  </label>
+                  {selectedNode.data.config?.restrictTime && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="time"
+                        value={selectedNode.data.config?.timeFrom || '09:00'}
+                        onChange={(e) => handleUpdate('timeFrom', e.target.value)}
+                        className="flex-1 px-2 py-1.5 rounded-md bg-white border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500/50 [color-scheme:light]"
+                      />
+                      <span className="text-xs text-gray-500">até</span>
+                      <input
+                        type="time"
+                        value={selectedNode.data.config?.timeTo || '21:00'}
+                        onChange={(e) => handleUpdate('timeTo', e.target.value)}
+                        className="flex-1 px-2 py-1.5 rounded-md bg-white border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500/50 [color-scheme:light]"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -604,7 +677,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
 
                 <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
                   <p className="text-[11px] text-purple-300">
-                    ⏰ A automação pausará neste ponto até a data/hora especificada
+                    A automação pausará neste ponto até a data/hora especificada
                   </p>
                 </div>
               </>
@@ -704,18 +777,63 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'condition_field' && (
               <>
                 <div className="space-y-2">
+                  <label className="text-xs text-gray-600/60">Nome da Condição</label>
+                  <input
+                    type="text"
+                    value={selectedNode.data.config?.conditionName || ''}
+                    onChange={(e) => handleUpdate('conditionName', e.target.value)}
+                    placeholder="Ex: Valor do carrinho alto?"
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg',
+                      'bg-white border border-gray-200',
+                      'text-sm text-gray-700 placeholder-gray-400',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-600/60">Tipo</label>
+                  <SelectField
+                    value={selectedNode.data.config?.conditionType || 'contact'}
+                    onChange={(v) => handleUpdate('conditionType', v)}
+                    options={[
+                      { value: 'contact', label: 'Perfil do Contato' },
+                      { value: 'event', label: 'Dados do Evento' },
+                      { value: 'message', label: 'Comportamento de Mensagem' },
+                    ]}
+                  />
+                </div>
+                <div className="space-y-2">
                   <label className="text-xs text-gray-600/60">Campo</label>
                   <SelectField
                     value={selectedNode.data.config?.field || ''}
                     onChange={(v) => handleUpdate('field', v)}
-                    options={[
+                    options={selectedNode.data.config?.conditionType === 'event' ? [
+                      { value: '', label: 'Selecione...' },
+                      { value: 'event.cart_value', label: 'Valor do Carrinho' },
+                      { value: 'event.order_value', label: 'Valor do Pedido' },
+                      { value: 'event.item_count', label: 'Qtd. de Itens' },
+                      { value: 'event.product_name', label: 'Nome do Produto' },
+                      { value: 'event.product_category', label: 'Categoria do Produto' },
+                      { value: 'event.discount_code', label: 'Código de Desconto' },
+                      { value: 'event.payment_method', label: 'Método de Pagamento' },
+                      { value: 'event.currency', label: 'Moeda' },
+                    ] : [
                       { value: '', label: 'Selecione...' },
                       { value: 'contact.email', label: 'Email' },
                       { value: 'contact.phone', label: 'Telefone' },
                       { value: 'contact.first_name', label: 'Nome' },
+                      { value: 'contact.last_name', label: 'Sobrenome' },
+                      { value: 'contact.city', label: 'Cidade' },
+                      { value: 'contact.state', label: 'Estado' },
+                      { value: 'contact.country', label: 'País' },
                       { value: 'contact.tags', label: 'Tags' },
+                      { value: 'contact.lifecycle_stage', label: 'Estágio do Ciclo de Vida' },
                       { value: 'contact.total_orders', label: 'Total de Pedidos' },
                       { value: 'contact.total_spent', label: 'Total Gasto' },
+                      { value: 'contact.aov', label: 'Ticket Médio' },
+                      { value: 'contact.last_order_at', label: 'Data Último Pedido' },
+                      { value: 'contact.created_at', label: 'Data de Cadastro' },
                     ]}
                   />
                 </div>
@@ -727,26 +845,87 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     options={[
                       { value: 'equals', label: 'Igual a' },
                       { value: 'not_equals', label: 'Diferente de' },
-                      { value: 'contains', label: 'Contém' },
                       { value: 'greater_than', label: 'Maior que' },
                       { value: 'less_than', label: 'Menor que' },
+                      { value: 'greater_or_equal', label: 'Maior ou igual a' },
+                      { value: 'less_or_equal', label: 'Menor ou igual a' },
+                      { value: 'contains', label: 'Contém' },
+                      { value: 'not_contains', label: 'Não contém' },
+                      { value: 'starts_with', label: 'Começa com' },
+                      { value: 'ends_with', label: 'Termina com' },
+                      { value: 'is_set', label: 'Está definido' },
+                      { value: 'is_not_set', label: 'Não está definido' },
+                      { value: 'in_list', label: 'Está na lista' },
+                      { value: 'not_in_list', label: 'Não está na lista' },
+                      { value: 'before_date', label: 'Antes de' },
+                      { value: 'after_date', label: 'Depois de' },
+                      { value: 'in_last_x_days', label: 'Nos últimos X dias' },
+                      { value: 'not_in_last_x_days', label: 'Fora dos últimos X dias' },
+                      { value: 'between', label: 'Entre' },
+                      { value: 'regex', label: 'Regex' },
                     ]}
                   />
                 </div>
+                {!['is_set', 'is_not_set'].includes(selectedNode.data.config?.operator || '') && (
+                  <div className="space-y-2">
+                    <label className="text-xs text-gray-600/60">Valor</label>
+                    <input
+                      type="text"
+                      value={selectedNode.data.config?.value || ''}
+                      onChange={(e) => handleUpdate('value', e.target.value)}
+                      placeholder="Valor para comparar"
+                      className={cn(
+                        'w-full px-3 py-2 rounded-lg',
+                        'bg-white border border-gray-200',
+                        'text-sm text-gray-700 placeholder-gray-400',
+                        'focus:outline-none focus:border-blue-500/50'
+                      )}
+                    />
+                  </div>
+                )}
+                {selectedNode.data.config?.operator === 'between' && (
+                  <div className="space-y-2">
+                    <label className="text-xs text-gray-600/60">Valor Máximo</label>
+                    <input
+                      type="text"
+                      value={selectedNode.data.config?.valueTo || ''}
+                      onChange={(e) => handleUpdate('valueTo', e.target.value)}
+                      placeholder="Valor máximo"
+                      className={cn(
+                        'w-full px-3 py-2 rounded-lg',
+                        'bg-white border border-gray-200',
+                        'text-sm text-gray-700 placeholder-gray-400',
+                        'focus:outline-none focus:border-blue-500/50'
+                      )}
+                    />
+                  </div>
+                )}
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Valor</label>
-                  <input
-                    type="text"
-                    value={selectedNode.data.config?.value || ''}
-                    onChange={(e) => handleUpdate('value', e.target.value)}
-                    placeholder="Valor para comparar"
-                    className={cn(
-                      'w-full px-3 py-2 rounded-lg',
-                      'bg-white border border-gray-200',
-                      'text-sm text-gray-700 placeholder-gray-400',
-                      'focus:outline-none focus:border-blue-500/50'
-                    )}
-                  />
+                  <label className="text-xs text-gray-600/60">Conector Lógico</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleUpdate('logicConnector', 'and')}
+                      className={cn(
+                        'flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                        (selectedNode.data.config?.logicConnector || 'and') === 'and'
+                          ? 'bg-blue-50 border-blue-300 text-blue-700'
+                          : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                      )}
+                    >
+                      E (AND)
+                    </button>
+                    <button
+                      onClick={() => handleUpdate('logicConnector', 'or')}
+                      className={cn(
+                        'flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                        selectedNode.data.config?.logicConnector === 'or'
+                          ? 'bg-blue-50 border-blue-300 text-blue-700'
+                          : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                      )}
+                    >
+                      OU (OR)
+                    </button>
+                  </div>
                 </div>
               </>
             )}
@@ -786,9 +965,9 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     )}
                   />
                 </div>
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                  <p className="text-[11px] text-amber-300">
-                    💡 Exemplo: "Maior que R$ 100" vai seguir o caminho "Sim" se o pedido for acima de R$ 100
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-[11px] text-amber-700">
+                    Exemplo: "Maior que R$ 100" vai seguir o caminho "Sim" se o pedido for acima de R$ 100
                   </p>
                 </div>
               </>
@@ -829,9 +1008,9 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     )}
                   />
                 </div>
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                  <p className="text-[11px] text-amber-300">
-                    💡 Exemplo: "Maior que R$ 5.000" vai seguir o caminho "Sim" se o deal for acima desse valor
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-[11px] text-amber-700">
+                    Exemplo: "Maior que R$ 5.000" vai seguir o caminho "Sim" se o deal for acima desse valor
                   </p>
                 </div>
               </>
@@ -849,21 +1028,66 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
 
             {/* A/B SPLIT */}
             {selectedNode.data.nodeType === 'logic_split' && (
-              <div className="space-y-2">
-                <label className="text-xs text-gray-600/60">
-                  Porcentagem A: {selectedNode.data.config?.percentageA || 50}%
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={selectedNode.data.config?.percentageA || 50}
-                  onChange={(e) => handleUpdate('percentageA', parseInt(e.target.value))}
-                  className="w-full accent-blue-500"
-                />
-                <div className="flex justify-between text-[10px] text-gray-400">
-                  <span>A: {selectedNode.data.config?.percentageA || 50}%</span>
-                  <span>B: {100 - (selectedNode.data.config?.percentageA || 50)}%</span>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-600/60">Proporção</label>
+                  <input
+                    type="range"
+                    min="5"
+                    max="95"
+                    step="5"
+                    value={selectedNode.data.config?.percentageA || 50}
+                    onChange={(e) => handleUpdate('percentageA', parseInt(e.target.value))}
+                    className="w-full accent-blue-500"
+                  />
+                  <div className="flex justify-between">
+                    <span className="text-xs font-medium text-blue-600">A: {selectedNode.data.config?.percentageA || 50}%</span>
+                    <span className="text-xs font-medium text-orange-600">B: {100 - (selectedNode.data.config?.percentageA || 50)}%</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-600/60">Nome do Caminho A</label>
+                  <input
+                    type="text"
+                    value={selectedNode.data.config?.labelA || ''}
+                    onChange={(e) => handleUpdate('labelA', e.target.value)}
+                    placeholder="Ex: Com Desconto"
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg',
+                      'bg-white border border-gray-200',
+                      'text-sm text-gray-700 placeholder-gray-400',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-600/60">Nome do Caminho B</label>
+                  <input
+                    type="text"
+                    value={selectedNode.data.config?.labelB || ''}
+                    onChange={(e) => handleUpdate('labelB', e.target.value)}
+                    placeholder="Ex: Sem Desconto"
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg',
+                      'bg-white border border-gray-200',
+                      'text-sm text-gray-700 placeholder-gray-400',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleUpdate('percentageA', 100)}
+                    className="flex-1 py-2 text-xs font-medium rounded-md bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors"
+                  >
+                    A como vencedor (100%)
+                  </button>
+                  <button
+                    onClick={() => handleUpdate('percentageA', 0)}
+                    className="flex-1 py-2 text-xs font-medium rounded-md bg-orange-50 border border-orange-200 text-orange-700 hover:bg-orange-100 transition-colors"
+                  >
+                    B como vencedor (100%)
+                  </button>
                 </div>
               </div>
             )}
@@ -976,7 +1200,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 </div>
                 <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
                   <p className="text-[11px] text-purple-300">
-                    📱 SMS será enviado para o telefone do contato
+                    SMS será enviado para o telefone do contato
                   </p>
                 </div>
               </>
@@ -1157,9 +1381,9 @@ function ContactFieldsEditor({ fields, onFieldsChange }: ContactFieldsEditorProp
         </div>
       ))}
       
-      <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-        <p className="text-[11px] text-blue-300">
-          💡 Use variáveis: <code className="bg-blue-500/20 px-1 rounded">{'{{trigger.new_name}}'}</code>
+      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <p className="text-[11px] text-blue-700">
+          Use variáveis: <code className="bg-blue-100 px-1 rounded">{'{{trigger.new_name}}'}</code>
         </p>
       </div>
     </div>
@@ -1337,9 +1561,9 @@ function FilterConditionsEditor({
       </button>
 
       {conditions.length === 0 && (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-          <p className="text-[11px] text-amber-300">
-            ⚠️ Adicione pelo menos uma condição para o filtro funcionar
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-[11px] text-amber-700">
+            Adicione pelo menos uma condição para o filtro funcionar
           </p>
         </div>
       )}
@@ -1465,9 +1689,9 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
         </div>
       )}
 
-      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-        <p className="text-[11px] text-emerald-300">
-          🛒 {label}: Dispara quando um pedido {label === 'Pedido Pago' ? 'for pago' : 'for criado'}
+      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+        <p className="text-[11px] text-emerald-700">
+          {label}: Dispara quando um pedido {label === 'Pedido Pago' ? 'for pago' : 'for criado'}
         </p>
       </div>
     </div>
@@ -1571,7 +1795,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
             <button
               type="button"
               onClick={selectAll}
-              className="text-[10px] text-blue-400 hover:text-blue-300"
+              className="text-[10px] text-blue-400 hover:text-blue-700"
             >
               Todos
             </button>
@@ -1615,9 +1839,9 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
         </p>
       </div>
 
-      <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-        <p className="text-[11px] text-blue-300">
-          🔔 A notificação aparecerá no sino de notificações dos usuários selecionados
+      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <p className="text-[11px] text-blue-700">
+          A notificação aparecerá no sino de notificações dos usuários selecionados
         </p>
       </div>
     </div>
@@ -1776,9 +2000,9 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
         </label>
       </div>
 
-      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-        <p className="text-[11px] text-amber-300">
-          🛒 Dispara quando cliente abandona o carrinho após {config.abandonTime || 30} {config.abandonUnit === 'hours' ? 'horas' : 'minutos'}
+      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <p className="text-[11px] text-amber-700">
+          Dispara quando cliente abandona o carrinho após {config.abandonTime || 30} {config.abandonUnit === 'hours' ? 'horas' : 'minutos'}
         </p>
       </div>
     </div>
@@ -1876,9 +2100,9 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
         )}
       </div>
 
-      <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-        <p className="text-[11px] text-green-300">
-          💬 WhatsApp será enviado para o número do contato
+      <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+        <p className="text-[11px] text-green-700">
+          WhatsApp será enviado para o número do contato
         </p>
       </div>
 
@@ -1901,52 +2125,179 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
 // ============================================
 // EMAIL ACTION CONFIG (template selector, not credentials)
 // ============================================
-function EmailActionConfig({ config, onUpdate, triggerType }: { config: any; onUpdate: (key: string, value: any) => void; triggerType: string }) {
-  const [templates, setTemplates] = useState<any[]>([])
+function EmailActionConfig({ config, onUpdate, triggerType }: { config: Record<string, any>; onUpdate: (key: string, value: any) => void; triggerType: string }) {
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showMergeTags, setShowMergeTags] = useState(false)
+  const storeId = useFlowStore.getState().automationConfig?.storeId;
 
   useEffect(() => {
     setLoadingTemplates(true)
-    fetch('/api/email/templates')
+    const url = storeId
+      ? `/api/email/templates?storeId=${storeId}`
+      : '/api/email/templates';
+    fetch(url)
       .then(r => r.json())
       .then(data => setTemplates(data.templates || data || []))
       .catch(() => {})
       .finally(() => setLoadingTemplates(false))
-  }, [])
+  }, [storeId])
+
+  const MERGE_TAGS = [
+    { group: 'Contato', tags: [
+      '{{contact.first_name}}', '{{contact.last_name}}', '{{contact.email}}',
+      '{{contact.phone}}', '{{contact.city}}', '{{contact.total_orders}}', '{{contact.total_spent}}',
+    ]},
+    { group: 'Evento', tags: [
+      '{{event.ProductName}}', '{{event.Price}}', '{{event.CartTotal}}',
+      '{{event.OrderId}}', '{{event.$value}}', '{{event.Currency}}',
+    ]},
+    { group: 'Loja', tags: [
+      '{{store.name}}', '{{store.domain}}',
+    ]},
+  ];
+
+  const insertTag = (field: string, tag: string) => {
+    onUpdate(field, ((config[field] as string) || '') + tag);
+    setShowMergeTags(false);
+  };
 
   return (
-    <>
+    <div className="space-y-4">
+      {/* Template Selection */}
       <div className="space-y-2">
         <label className="text-xs font-medium text-gray-500">Template de Email</label>
-        <select value={config.templateId || ''} onChange={(e) => onUpdate('templateId', e.target.value)}
-          className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-brand-500">
+        <select value={(config.templateId as string) || ''} onChange={(e) => onUpdate('templateId', e.target.value)}
+          className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-blue-500">
           <option value="">Nenhum (usar HTML abaixo)</option>
-          {templates.map((t: any) => (<option key={t.id} value={t.id}>{t.name}</option>))}
+          {templates.map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
         </select>
-        {loadingTemplates && <p className="text-[10px] text-gray-400">Carregando...</p>}
+        {loadingTemplates && <p className="text-[10px] text-gray-400">Carregando templates...</p>}
       </div>
+
+      {/* Subject */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label className="text-xs font-medium text-gray-500">Assunto</label>
-          <VariableButton triggerType={triggerType} onSelect={(v) => onUpdate('subject', (config.subject || '') + v)} className="scale-90" />
+          <VariableButton triggerType={triggerType} onSelect={(v) => insertTag('subject', v)} className="scale-90" />
         </div>
-        <input type="text" value={config.subject || ''} onChange={(e) => onUpdate('subject', e.target.value)}
+        <input type="text" value={(config.subject as string) || ''} onChange={(e) => onUpdate('subject', e.target.value)}
           placeholder="Ex: {{ contact.first_name }}, seu pedido foi confirmado!"
-          className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500" />
+          className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500" />
       </div>
+
+      {/* Preheader */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-gray-500">Preheader</label>
+          <VariableButton triggerType={triggerType} onSelect={(v) => insertTag('preheader', v)} className="scale-90" />
+        </div>
+        <input type="text" value={(config.preheader as string) || ''} onChange={(e) => onUpdate('preheader', e.target.value)}
+          placeholder="Texto de preview no inbox"
+          className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500" />
+      </div>
+
+      {/* HTML body when no template */}
       {!config.templateId && (
-        <MessageEditor value={config.html || ''} onChange={(v) => onUpdate('html', v)} triggerType={triggerType}
+        <MessageEditor value={(config.html as string) || ''} onChange={(v) => onUpdate('html', v)} triggerType={triggerType}
           label="Corpo do Email (HTML)" placeholder="<p>Olá {{ contact.first_name }}!</p>" rows={6} />
       )}
+
       {config.templateId && (
-        <div className="p-3 bg-brand-50 border border-brand-200 rounded-lg">
-          <p className="text-[11px] text-brand-700">📧 Usando template salvo. Conteúdo será carregado no envio.</p>
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-[11px] text-blue-700">Usando template salvo. Conteúdo será renderizado no envio.</p>
         </div>
       )}
-      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-        <p className="text-[11px] text-blue-700">✉️ Email enviado via Resend para o contato</p>
+
+      {/* Merge Tags Reference */}
+      <div className="space-y-2">
+        <button
+          onClick={() => setShowMergeTags(!showMergeTags)}
+          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+        >
+          {showMergeTags ? 'Ocultar variáveis' : 'Ver variáveis disponíveis'}
+        </button>
+        {showMergeTags && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
+            {MERGE_TAGS.map(group => (
+              <div key={group.group}>
+                <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1">{group.group}</p>
+                <div className="flex flex-wrap gap-1">
+                  {group.tags.map(tag => (
+                    <button
+                      key={tag}
+                      onClick={() => insertTag('subject', tag)}
+                      className="px-1.5 py-0.5 text-[10px] bg-white border border-gray-200 rounded text-gray-600 hover:bg-blue-50 hover:border-blue-200 transition-colors"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </>
+
+      {/* Advanced Settings */}
+      <div className="border-t border-gray-200 pt-3">
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 font-medium"
+        >
+          <ChevronDown className={cn('w-3 h-3 transition-transform', showAdvanced && 'rotate-180')} />
+          Configurações Avançadas
+        </button>
+        {showAdvanced && (
+          <div className="mt-3 space-y-3">
+            {/* Sender */}
+            <div className="space-y-2">
+              <label className="text-xs text-gray-600/60">Nome do Remetente</label>
+              <input type="text" value={(config.senderName as string) || ''} onChange={(e) => onUpdate('senderName', e.target.value)}
+                placeholder="Default da organização"
+                className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-gray-600/60">Email do Remetente</label>
+              <input type="email" value={(config.senderEmail as string) || ''} onChange={(e) => onUpdate('senderEmail', e.target.value)}
+                placeholder="Default do domínio verificado"
+                className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50" />
+            </div>
+            {/* Smart Sending */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={(config.smartSending as boolean) || false} onChange={(e) => onUpdate('smartSending', e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-blue-500" />
+              <span className="text-xs text-gray-600">Smart Sending (pular se recebeu email recentemente)</span>
+            </label>
+            {config.smartSending && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Pular se recebeu nas últimas</span>
+                <input type="number" min="1" value={(config.smartSendingHours as number) || 16} onChange={(e) => onUpdate('smartSendingHours', parseInt(e.target.value) || 16)}
+                  className="w-16 px-2 py-1 rounded-md bg-white border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500/50" />
+                <span className="text-xs text-gray-500">horas</span>
+              </div>
+            )}
+            {/* UTM Tracking */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={(config.utmTracking as boolean) || false} onChange={(e) => onUpdate('utmTracking', e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-blue-500" />
+              <span className="text-xs text-gray-600">UTM Tracking</span>
+            </label>
+            {config.utmTracking && (
+              <div className="space-y-2">
+                <input type="text" value={(config.utmSource as string) || 'worder'} onChange={(e) => onUpdate('utmSource', e.target.value)}
+                  placeholder="utm_source" className="w-full px-2 py-1.5 rounded-md bg-white border border-gray-200 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50" />
+                <input type="text" value={(config.utmMedium as string) || 'email'} onChange={(e) => onUpdate('utmMedium', e.target.value)}
+                  placeholder="utm_medium" className="w-full px-2 py-1.5 rounded-md bg-white border border-gray-200 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50" />
+                <input type="text" value={(config.utmCampaign as string) || ''} onChange={(e) => onUpdate('utmCampaign', e.target.value)}
+                  placeholder="utm_campaign" className="w-full px-2 py-1.5 rounded-md bg-white border border-gray-200 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50" />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
