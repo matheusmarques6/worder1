@@ -126,7 +126,7 @@ export default function EmailTemplatesPage() {
                   const res = await fetch('/api/email/templates', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: t.name, category: t.cat }),
+                    body: JSON.stringify({ name: t.name, category: t.cat, store_id: currentStore?.id || undefined }),
                   })
                   if (res.ok) {
                     const data = await res.json()

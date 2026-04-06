@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       .order('updated_at', { ascending: false });
 
     if (storeId) {
-      query = query.eq('store_id', storeId);
+      query = query.or(`store_id.eq.${storeId},store_id.is.null`);
     }
 
     const { data: templates, error } = await query;
