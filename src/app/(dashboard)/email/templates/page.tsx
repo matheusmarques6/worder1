@@ -105,6 +105,35 @@ export default function EmailTemplatesPage() {
         </Link>
       </div>
 
+      {/* Pre-built Templates */}
+      {templates.length === 0 && !loading && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-1">Começar com um template</h2>
+          <p className="text-sm text-gray-500 mb-4">Escolha um template pré-configurado ou comece do zero</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { name: 'Boas-vindas', desc: 'Email de boas-vindas para novos inscritos', cat: 'marketing', color: 'bg-blue-50 border-blue-200' },
+              { name: 'Carrinho Abandonado', desc: 'Recupere carrinhos abandonados', cat: 'marketing', color: 'bg-amber-50 border-amber-200' },
+              { name: 'Promoção', desc: 'Template para ofertas e promoções', cat: 'marketing', color: 'bg-rose-50 border-rose-200' },
+              { name: 'Newsletter', desc: 'Novidades e conteúdo periódico', cat: 'marketing', color: 'bg-emerald-50 border-emerald-200' },
+              { name: 'Confirmação Pedido', desc: 'Confirmação de compra', cat: 'transactional', color: 'bg-indigo-50 border-indigo-200' },
+              { name: 'Envio Rastreio', desc: 'Informações de entrega', cat: 'transactional', color: 'bg-cyan-50 border-cyan-200' },
+              { name: 'Aniversário', desc: 'Email de aniversário com cupom', cat: 'marketing', color: 'bg-pink-50 border-pink-200' },
+              { name: 'Em Branco', desc: 'Comece do zero', cat: 'custom', color: 'bg-gray-50 border-gray-200' },
+            ].map(t => (
+              <Link key={t.name} href={`/email/templates/new?template=${encodeURIComponent(t.name)}&category=${t.cat}`}
+                className={`p-4 rounded-xl border ${t.color} hover:shadow-md transition-all group`}>
+                <div className="w-8 h-8 rounded-lg bg-white/60 flex items-center justify-center mb-2">
+                  <Mail className="w-4 h-4 text-gray-500" />
+                </div>
+                <p className="text-sm font-semibold text-gray-900 group-hover:text-brand-600">{t.name}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{t.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
