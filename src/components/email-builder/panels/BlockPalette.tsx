@@ -49,10 +49,9 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock }: BlockPaletteProps)
         {([
           { id: 'blocks' as const, label: 'Blocos' },
           { id: 'saved' as const, label: 'Salvos' },
-          { id: 'tags' as const, label: 'Tags' },
         ]).map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${tab === t.id ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>
+            className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${tab === t.id ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>
             {t.label}
           </button>
         ))}
@@ -68,11 +67,11 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock }: BlockPaletteProps)
               return (
                 <div key={cat}>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.06em] mb-2">{cat}</p>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-3 gap-1">
                     {blocks.map(def => (
                       <button key={def.type} onClick={() => onAddBlock(def.type)} draggable onDragStart={(e) => handleDragStart(e, def)}
-                        className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing active:scale-95">
-                        <span className="text-lg leading-none select-none">{(() => { const Icon = ICON_MAP[def.icon]; return Icon ? <Icon className="w-5 h-5 text-gray-500" /> : <span>{def.icon}</span> })()}</span>
+                        className="flex flex-col items-center justify-center gap-1 py-2.5 px-1 bg-white border border-gray-100 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-all cursor-grab active:cursor-grabbing active:scale-95">
+                        <span className="select-none">{(() => { const Icon = ICON_MAP[def.icon]; return Icon ? <Icon className="w-5 h-5 text-gray-500" /> : <span>{def.icon}</span> })()}</span>
                         <span className="text-[10px] font-medium text-gray-600 leading-tight select-none">{def.label}</span>
                       </button>
                     ))}

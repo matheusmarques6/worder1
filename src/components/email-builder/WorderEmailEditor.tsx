@@ -397,22 +397,22 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     const bid = () => 'b_' + Math.random().toString(36).substring(2, 9)
     switch (type) {
       case 'hero':
-        section.styles.backgroundColor = '#F97316'
+        section.styles.backgroundColor = '#F9FAFB'
         section.styles.contentBackgroundColor = '#FFFFFF'
         blocks.push(
-          { id: bid(), type: 'text', props: { contentHtml: '<h1 style="text-align:center;font-size:32px;font-weight:bold;color:#111827;">Título Principal</h1>', fontSize: 32, color: '#111827', lineHeight: 1.3, align: 'center', padding: { top: 32, right: 24, bottom: 8, left: 24 }, backgroundColor: '' } },
-          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;color:#6B7280;">Subtítulo com descrição do conteúdo principal do email.</p>', fontSize: 16, color: '#6B7280', lineHeight: 1.6, align: 'center', padding: { top: 0, right: 24, bottom: 16, left: 24 }, backgroundColor: '' } },
-          { id: bid(), type: 'button', props: { text: 'SAIBA MAIS', href: '#', bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 32, paddingV: 14, fullWidth: false, align: 'center', padding: { top: 0, right: 24, bottom: 32, left: 24 }, backgroundColor: '' } },
-          { id: bid(), type: 'button', props: { text: 'SAIBA MAIS', href: '#', bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 32, paddingV: 14, fullWidth: false, align: 'center', padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
+          { id: bid(), type: 'text', props: { contentHtml: '<h1 style="text-align:center;font-size:32px;font-weight:bold;color:#111827;">Título Principal</h1>', fontSize: 32, color: '#111827', lineHeight: 1.3, align: 'center', padding: { top: 40, right: 24, bottom: 8, left: 24 }, backgroundColor: '' } },
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;color:#6B7280;">Subtítulo com descrição do conteúdo principal do email.</p>', fontSize: 16, color: '#6B7280', lineHeight: 1.6, align: 'center', padding: { top: 0, right: 32, bottom: 20, left: 32 }, backgroundColor: '' } },
+          { id: bid(), type: 'button', props: { text: 'VER MAIS', href: '#', bgColor: '#111827', textColor: '#FFFFFF', fontSize: 14, fontWeight: 'bold', borderRadius: 6, paddingH: 32, paddingV: 12, fullWidth: false, align: 'center', padding: { top: 0, right: 24, bottom: 40, left: 24 }, backgroundColor: '' } },
         )
         break
       case 'cta':
+        section.styles.backgroundColor = '#F9FAFB'
+        section.styles.contentBackgroundColor = '#FFFFFF'
         blocks.push(
           { id: bid(), type: 'text', props: { contentHtml: '<h2 style="text-align:center;font-size:24px;font-weight:bold;color:#111827;">Não perca esta oportunidade</h2>', fontSize: 24, color: '#111827', align: 'center', padding: { top: 32, right: 24, bottom: 8, left: 24 } } },
           { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;color:#6B7280;">Aproveite nossa oferta exclusiva por tempo limitado.</p>', fontSize: 15, color: '#6B7280', align: 'center', padding: { top: 0, right: 32, bottom: 16, left: 32 } } },
-          { id: bid(), type: 'button', props: { text: 'APROVEITAR AGORA', href: '#', bgColor: '#111827', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 40, paddingV: 16, fullWidth: true, padding: { top: 0, right: 24, bottom: 32, left: 24 } } },
+          { id: bid(), type: 'button', props: { text: 'APROVEITAR AGORA', href: '#', bgColor: '#111827', textColor: '#FFFFFF', fontSize: 14, fontWeight: 'bold', borderRadius: 6, paddingH: 40, paddingV: 14, fullWidth: true, padding: { top: 0, right: 24, bottom: 32, left: 24 } } },
         )
-        section.styles.backgroundColor = '#F9FAFB'
         break
       case 'footer':
         blocks.push(
@@ -731,8 +731,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         {/* ── Left Sidebar ── */}
         <div className="w-[280px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
           <div className="flex border-b border-gray-200 flex-shrink-0">
-            <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'content' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Content</button>
-            <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Styles</button>
+            <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[12px] font-semibold transition-colors ${leftTab === 'content' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Conteúdo</button>
+            <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[12px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Estilos</button>
           </div>
           <div className="flex-1 overflow-hidden">
             {leftTab === 'content' ? (
@@ -756,17 +756,17 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                 {/* Pre-built sections */}
                 <div className="p-3 border-b border-gray-100">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Seções Prontas</p>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-4 gap-1">
                     {[
-                      { type: 'hero', label: 'Hero', desc: 'Imagem + título' },
-                      { type: 'cta', label: 'CTA', desc: 'Chamada p/ ação' },
-                      { type: 'products', label: 'Produtos', desc: 'Grid de produtos' },
-                      { type: 'footer', label: 'Rodapé', desc: 'Social + links' },
+                      { type: 'hero', label: 'Hero' },
+                      { type: 'cta', label: 'CTA' },
+                      { type: 'products', label: 'Produtos' },
+                      { type: 'footer', label: 'Rodapé' },
                     ].map(s => (
                       <button key={s.type} onClick={() => addPrebuiltSection(s.type)}
-                        className="flex flex-col items-start gap-0.5 p-2.5 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all text-left">
-                        <span className="text-[11px] font-semibold text-gray-700">{s.label}</span>
-                        <span className="text-[9px] text-gray-400">{s.desc}</span>
+                        className="flex flex-col items-center gap-1 py-2 px-1 rounded-lg hover:bg-gray-100 transition-all text-center">
+                        <div className="w-8 h-5 rounded bg-gray-200 border border-gray-300" />
+                        <span className="text-[9px] font-medium text-gray-600">{s.label}</span>
                       </button>
                     ))}
                   </div>
