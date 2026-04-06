@@ -326,12 +326,12 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
               'bg-white border border-gray-300',
               'hover:border-gray-300 transition-all duration-200',
               'text-left',
-              isTriggerDropdownOpen && 'border-emerald-500 ring-2 ring-emerald-500/20'
+              isTriggerDropdownOpen && 'border-blue-500 ring-1 ring-blue-100'
             )}
           >
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded bg-emerald-500/20">
-                <currentTrigger.icon className="w-4 h-4 text-emerald-400" />
+              <div className="p-1.5 rounded-md bg-emerald-50">
+                <currentTrigger.icon className="w-4 h-4 text-emerald-600" />
               </div>
               <span className="text-sm text-gray-900 font-medium truncate">
                 {currentTrigger.label}
@@ -369,20 +369,20 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
                       key={trigger.type}
                       onClick={() => handleTriggerChange(trigger.type)}
                       className={cn(
-                        'w-full flex items-center gap-2.5 px-3 py-2.5 text-left',
-                        'hover:bg-gray-100 transition-colors',
-                        selectedTrigger === trigger.type && 'bg-emerald-500/10'
+                        'w-full flex items-center gap-2.5 px-3 py-2 text-left',
+                        'hover:bg-gray-50 transition-colors',
+                        selectedTrigger === trigger.type && 'bg-blue-50'
                       )}
                     >
-                      <trigger.icon className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <trigger.icon className="w-4 h-4 text-gray-500 shrink-0" />
                       <span className={cn(
-                        'text-sm truncate',
-                        selectedTrigger === trigger.type ? 'text-emerald-400 font-medium' : 'text-gray-700'
+                        'text-[13px] truncate',
+                        selectedTrigger === trigger.type ? 'text-blue-600 font-medium' : 'text-gray-700'
                       )}>
                         {trigger.label}
                       </span>
                       {selectedTrigger === trigger.type && (
-                        <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-auto" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 ml-auto" />
                       )}
                     </button>
                   ))}
@@ -567,16 +567,13 @@ interface SectionComponentProps {
 
 function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNode }: SectionComponentProps) {
   return (
-    <div className="border-b border-gray-200">
+    <div className="border-b border-gray-100">
       {/* Header da Seção */}
       <button
         onClick={onToggle}
-        className={cn(
-          'w-full flex items-center justify-between px-4 py-3',
-          'hover:bg-white transition-colors'
-        )}
+        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 transition-colors"
       >
-        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
           {section.label}
         </span>
         <ChevronDown

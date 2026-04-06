@@ -194,8 +194,8 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
 
           {/* Dirty indicator */}
           {isDirty && (
-            <span className="text-[10px] sm:text-xs text-amber-400 bg-amber-500/20 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-amber-500/30 flex-shrink-0 whitespace-nowrap">
-              Não salvo
+            <span className="text-[10px] sm:text-xs text-amber-700 bg-amber-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-amber-200 flex-shrink-0 whitespace-nowrap">
+              Nao salvo
             </span>
           )}
         </div>
@@ -322,8 +322,8 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           title="Salvar"
         >
           {saveStatus === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
-          {saveStatus === 'saved' && <Check className="w-4 h-4 text-green-400" />}
-          {saveStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
+          {saveStatus === 'saved' && <Check className="w-4 h-4 text-green-600" />}
+          {saveStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-600" />}
           {saveStatus === 'idle' && <Save className="w-4 h-4" />}
           <span className="hidden sm:inline">SALVAR</span>
         </button>
@@ -333,9 +333,9 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onClick={handleSaveAndClose}
           disabled={isSaving}
           className={cn(
-            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'bg-primary-500 hover:bg-primary-600',
-            'text-gray-700 text-sm font-medium',
+            'flex items-center gap-2 p-2 sm:px-4 sm:py-2 rounded-lg',
+            'bg-blue-600 hover:bg-blue-700',
+            'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
@@ -346,7 +346,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           ) : (
             <Check className="w-4 h-4" />
           )}
-          <span className="hidden md:inline">SALVAR E FECHAR</span>
+          <span className="hidden md:inline">Save & Close</span>
         </button>
       </div>
     </div>
@@ -374,8 +374,8 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
         'transition-all duration-300 border',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         isActive
-          ? 'bg-green-500/20 border-green-500/40 hover:bg-green-500/30'
-          : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
+          ? 'bg-green-50 border-green-200 hover:bg-green-100'
+          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
       )}
     >
       {/* Toggle Track */}
@@ -403,7 +403,7 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
       {/* Label */}
       <span className={cn(
         'text-sm font-medium',
-        isActive ? 'text-green-400' : 'text-gray-600'
+        isActive ? 'text-green-700' : 'text-gray-600'
       )}>
         {isLoading ? '...' : isActive ? 'Ativo' : 'Inativo'}
       </span>
