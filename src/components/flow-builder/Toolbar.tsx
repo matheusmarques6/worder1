@@ -177,18 +177,18 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
                 'px-3 py-1.5 rounded-lg',
                 'bg-white border border-gray-300',
                 'text-gray-900 text-base sm:text-lg font-semibold',
-                'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
+                'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20',
                 'w-[150px] sm:w-[200px]'
               )}
             />
           ) : (
             <button
               onClick={() => setIsEditing(true)}
-              className="flex items-center gap-2 text-base sm:text-lg font-semibold text-gray-900 hover:text-brand-600 transition-colors group truncate max-w-[150px] sm:max-w-[250px]"
+              className="flex items-center gap-2 text-base sm:text-lg font-semibold text-gray-900 hover:text-gray-700 transition-colors group truncate max-w-[150px] sm:max-w-[250px]"
               title={automationName}
             >
               <span className="truncate">{automationName}</span>
-              <Pencil className="w-4 h-4 text-gray-500 group-hover:text-brand-600 transition-colors flex-shrink-0" />
+              <Pencil className="w-4 h-4 text-gray-500 group-hover:text-gray-700 transition-colors flex-shrink-0" />
             </button>
           )}
 

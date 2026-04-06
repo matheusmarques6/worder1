@@ -135,7 +135,7 @@ export function Canvas() {
           type: 'smoothstep',
         }}
         proOptions={{ hideAttribution: true }}
-        className="bg-[#FAFBFC]"
+        className="bg-[#f5f5f7]"
       >
         {/* Background */}
         <Background

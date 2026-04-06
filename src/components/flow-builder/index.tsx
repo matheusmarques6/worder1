@@ -218,7 +218,7 @@ export function FlowBuilder({
           {!isFullscreen && <Sidebar />}
 
           {/* Canvas */}
-          <div className="flex-1 relative bg-white">
+          <div className="flex-1 relative">
             <Canvas />
           </div>
 

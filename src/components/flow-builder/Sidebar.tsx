@@ -335,7 +335,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
   };
 
   return (
-    <div className="w-[220px] bg-gray-50/80 border-r border-gray-200 flex flex-col h-full shrink-0">
+    <div className="w-[240px] bg-white border-r border-gray-200 flex flex-col h-full shrink-0 overflow-hidden">
       {/* Header - Seletor de Gatilho */}
       <div className="p-4 border-b border-gray-200">
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
@@ -508,7 +508,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
               'w-full pl-10 pr-10 py-2 rounded-lg',
               'bg-white border border-gray-300',
               'text-sm text-gray-900 placeholder-gray-400',
-              'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
+              'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20',
               'transition-all duration-200'
             )}
           />

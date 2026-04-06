@@ -169,79 +169,83 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
         <Handle
           type="target"
           position={Position.Top}
-          className="!w-2.5 !h-2.5 !border-2 !border-gray-300 !bg-white !-top-[5px] hover:!border-blue-400 !transition-colors"
+          className="!w-3 !h-3 !border-2 !border-gray-300 !bg-white !-top-1.5 hover:!border-blue-500 !transition-colors"
         />
       )}
 
       {/* Card */}
       <div
         className={cn(
-          'w-[260px] bg-white rounded-lg border overflow-hidden',
-          'transition-all duration-150',
+          'w-[280px] bg-white rounded-xl border overflow-hidden',
+          'transition-shadow duration-150',
           selected
-            ? 'border-blue-400 shadow-[0_0_0_2px_rgba(59,130,246,0.15)]'
-            : 'border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300',
+            ? 'border-blue-500 shadow-lg shadow-blue-500/10'
+            : 'border-gray-200/80 shadow-md shadow-black/[0.04] hover:shadow-lg hover:shadow-black/[0.06]',
         )}
       >
-        {/* Main content - Klaviyo style: icon + title + description */}
-        <div className="px-3 py-3 flex items-start gap-2.5">
-          <div className={cn('p-2 rounded-lg shrink-0', cat.iconBg)}>
-            <IconComponent className={cn('w-4.5 h-4.5', cat.iconColor)} />
+        <div className="p-4 flex items-start gap-3">
+          <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0', cat.iconBg)}>
+            <IconComponent className={cn('w-[18px] h-[18px]', cat.iconColor)} />
           </div>
-          <div className="flex-1 min-w-0 pt-0.5">
-            <p className="text-[13px] font-semibold text-gray-900 leading-tight">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 leading-snug">
               {label}
             </p>
             {summary && (
-              <p className="text-[11px] text-gray-500 mt-1 leading-snug line-clamp-2">
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">
                 {summary}
               </p>
             )}
             {!summary && data.description && (
-              <p className="text-[11px] text-gray-400 mt-0.5 leading-snug line-clamp-1">
+              <p className="text-xs text-gray-400 mt-0.5 leading-snug line-clamp-1">
                 {data.description}
               </p>
             )}
           </div>
-          <button className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-100 transition-opacity shrink-0 mt-0.5">
-            <MoreVertical className="w-3.5 h-3.5 text-gray-400" />
+          <button className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-gray-100 transition-opacity shrink-0">
+            <MoreVertical className="w-4 h-4 text-gray-400" />
           </button>
         </div>
 
         {/* Metrics row (Omnisend style) */}
+        {/* Metrics */}
         {nodeMetrics && (category === 'action') && (
-          <div className="px-3.5 pb-2.5 pt-1 border-t border-gray-100">
-            <div className="flex items-center gap-4">
+          <div className="px-4 pb-3 pt-0">
+            <div className="flex items-center gap-5 border-t border-gray-100 pt-2.5">
               <div>
-                <p className="text-[9px] text-gray-400 uppercase tracking-wider">Abertura</p>
-                <p className="text-xs font-semibold text-gray-900">
+                <p className="text-[10px] text-gray-400">Sent</p>
+                <p className="text-sm font-bold text-gray-900">{nodeMetrics.sent}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-400">Opened</p>
+                <p className="text-sm font-bold text-gray-900">
                   {nodeMetrics.sent > 0 ? `${Math.round(nodeMetrics.opened / nodeMetrics.sent * 100)}%` : '0%'}
                 </p>
               </div>
               <div>
-                <p className="text-[9px] text-gray-400 uppercase tracking-wider">Cliques</p>
-                <p className="text-xs font-semibold text-gray-900">
+                <p className="text-[10px] text-gray-400">Clicked</p>
+                <p className="text-sm font-bold text-gray-900">
                   {nodeMetrics.sent > 0 ? `${Math.round(nodeMetrics.clicked / nodeMetrics.sent * 100)}%` : '0%'}
                 </p>
               </div>
-              <div>
-                <p className="text-[9px] text-gray-400 uppercase tracking-wider">Receita</p>
-                <p className="text-xs font-semibold text-emerald-600">
-                  {nodeMetrics.revenue > 0 ? `R$ ${(nodeMetrics.revenue / 1000).toFixed(1)}k` : 'R$ 0'}
-                </p>
-              </div>
+              {nodeMetrics.revenue > 0 && (
+                <div>
+                  <p className="text-[10px] text-gray-400">Sales</p>
+                  <p className="text-sm font-bold text-emerald-600">R${nodeMetrics.revenue.toFixed(0)}</p>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Condition paths labels */}
+        {/* Condition split footer */}
         {category === 'condition' && (
           <div className="flex border-t border-gray-100">
-            <div className="flex-1 py-1.5 text-center border-r border-gray-100">
-              <span className="text-[10px] font-medium text-green-600">Sim</span>
+            <div className="flex-1 py-2 text-center border-r border-gray-100">
+              <span className="text-xs font-medium text-emerald-600">Sim</span>
             </div>
-            <div className="flex-1 py-1.5 text-center">
-              <span className="text-[10px] font-medium text-red-500">Nao</span>
+            <div className="flex-1 py-2 text-center">
+              <span className="text-xs font-medium text-red-500">Nao</span>
             </div>
           </div>
         )}
@@ -254,20 +258,20 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
             type="source"
             position={Position.Bottom}
             id="true"
-            className="!w-2.5 !h-2.5 !border-2 !border-green-400 !bg-white !-bottom-[5px] !left-[30%] hover:!border-green-600 !transition-colors"
+            className="!w-3 !h-3 !border-2 !border-emerald-400 !bg-white !-bottom-1.5 !left-[30%] hover:!border-emerald-600 !transition-colors"
           />
           <Handle
             type="source"
             position={Position.Bottom}
             id="false"
-            className="!w-2.5 !h-2.5 !border-2 !border-red-400 !bg-white !-bottom-[5px] !left-[70%] hover:!border-red-600 !transition-colors"
+            className="!w-3 !h-3 !border-2 !border-red-400 !bg-white !-bottom-1.5 !left-[70%] hover:!border-red-600 !transition-colors"
           />
         </>
       ) : (
         <Handle
           type="source"
           position={Position.Bottom}
-          className="!w-2.5 !h-2.5 !border-2 !border-gray-300 !bg-white !-bottom-[5px] hover:!border-blue-400 !transition-colors"
+          className="!w-3 !h-3 !border-2 !border-gray-300 !bg-white !-bottom-1.5 hover:!border-blue-500 !transition-colors"
         />
       )}
     </div>
